@@ -1,0 +1,1 @@
+-- Intentionally empty. Do not place real MAM staff or leave data in seed files.
