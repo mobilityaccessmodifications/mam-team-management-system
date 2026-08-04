@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# project-scoped deployment credentials
+.mam-secrets/
+
 # local browser-verification artifacts
 /output/
 /.playwright-cli/

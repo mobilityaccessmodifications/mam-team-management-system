@@ -21,6 +21,13 @@
 9. What counts as manager-ready versus all-staff-ready?
 10. Which exact email domain(s) may sign in?
 
+## Demo behaviour — not final payroll policy
+
+- The synthetic demo offers Annual leave, Sick leave, Carer's leave and Unpaid leave.
+- A part-day request can optionally specify a start and end time between 6:00 am and 6:00 pm in fixed 15-minute intervals when both dates are the same; leaving both times blank means full working days.
+- The demo derives elapsed hours from the selected times. Break deductions, standard daily hours, payroll treatment and evidence requirements still need confirmation before live use.
+- Manager review shows a calendar from three weeks before the requested start through three weeks after the requested end, rounded to full Monday-to-Sunday weeks. The applicant is highlighted, relevant team leave and public holidays are visible, and another employee's private reason is never shown.
+
 ## Data minimisation
 
 - The team calendar should show only what is required for coverage.

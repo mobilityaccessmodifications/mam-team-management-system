@@ -7,9 +7,18 @@ Give MAM employees, managers and accounts one reliable place to see leave, cover
 ## Phase 1
 
 - Establish the private web application, repository, deployment and database boundaries.
-- Provide passwordless work-email authentication.
+- Validate the complete leave workflow through an interactive synthetic-data demo.
+- Add password access only after management approves the demonstrated workflow.
 - Model employees, teams and employee-owned leave requests with RLS.
-- Validate the dashboard language and coverage view with management using synthetic data.
+- Validate employee submission, manager decisions, dashboard language and coverage visibility with management using synthetic data.
+
+## Current demo boundary
+
+- The demo runs entirely in the browser and resets on refresh.
+- It contains no real employee records and writes nothing to Supabase.
+- The top-right selector contains synthetic HR, Major Mod manager, Minor Mod manager and employee profiles for demonstrating role-based visibility; this is not authentication or a production identity system.
+- CRM-style record, board, calendar, people and activity views are navigation prototypes, not separate production data stores.
+- Approval and decline actions demonstrate the intended state changes but are not production decisions.
 
 ## Not yet in scope
 
