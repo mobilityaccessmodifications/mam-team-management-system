@@ -24,7 +24,8 @@ import { FormEvent, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import styles from "@/components/leave-demo.module.css";
 
-type AppView = "home" | "requests" | "approvals" | "calendar";
+type AppView = "home" | "leave" | "calendar";
+type LeaveSection = "requests" | "approvals";
 type RequestStatus = "Pending" | "Approved" | "Declined";
 type AccessRole = "hr" | "manager" | "employee";
 
@@ -305,11 +306,13 @@ function getCalendarDays() {
   });
 }
 
-function getViewTitles(profile: Profile): Record<AppView, { title: string; eyebrow: string }> {
+function getViewTitles(profile: Profile, leaveSection: LeaveSection): Record<AppView, { title: string; eyebrow: string }> {
   return {
     home: { title: `Good morning, ${profile.name.split(" ")[0]}`, eyebrow: "Tuesday · 4 August" },
-    requests: { title: profile.accessRole === "employee" ? "My leave" : profile.accessRole === "hr" ? "Leave register" : "Leave requests", eyebrow: profile.roleLabel },
-    approvals: { title: "Approvals", eyebrow: `${profile.team} decision queue` },
+    leave: {
+      title: profile.accessRole === "employee" ? "My leave" : "Leave",
+      eyebrow: leaveSection === "approvals" ? `${profile.team} decision queue` : profile.roleLabel,
+    },
     calendar: { title: "Team calendar", eyebrow: "August 2026" },
   };
 }
@@ -332,6 +335,7 @@ export function LeaveDemo() {
   const [activeProfileId, setActiveProfileId] = useState("taylor");
   const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests);
   const [selectedRequestId, setSelectedRequestId] = useState("MAM-2403");
+  const [leaveSection, setLeaveSection] = useState<LeaveSection>("requests");
   const [statusFilter, setStatusFilter] = useState<"All" | RequestStatus>("All");
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [managerNote, setManagerNote] = useState("");
@@ -340,7 +344,7 @@ export function LeaveDemo() {
   const [showProfiles, setShowProfiles] = useState(false);
 
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId) ?? profiles[1];
-  const viewTitles = getViewTitles(activeProfile);
+  const viewTitles = getViewTitles(activeProfile, leaveSection);
   const visibleRequests = getVisibleRequests(requests, activeProfile);
   const calendarRequests = getCalendarRequests(requests, activeProfile);
   const approvalQueue = activeProfile.accessRole === "manager"
@@ -357,17 +361,23 @@ export function LeaveDemo() {
     window.setTimeout(() => setToast(""), 3200);
   }
 
-  function navigate(view: AppView) {
-    if (view === "approvals" && activeProfile.accessRole !== "manager") return;
-    if (view === "approvals" && approvalQueue[0]) setSelectedRequestId(approvalQueue[0].id);
+  function chooseLeaveSection(section: LeaveSection) {
+    if (section === "approvals" && activeProfile.accessRole !== "manager") return;
+    if (section === "approvals" && approvalQueue[0]) setSelectedRequestId(approvalQueue[0].id);
+    setLeaveSection(section);
+  }
+
+  function navigate(view: AppView, section?: LeaveSection) {
+    if (view === "leave") chooseLeaveSection(section ?? "requests");
     setActiveView(view);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function selectRequest(id: string, view: AppView = "requests") {
+  function selectRequest(id: string, section: LeaveSection = "requests") {
     setSelectedRequestId(id);
     setManagerNote("");
-    setActiveView(view);
+    chooseLeaveSection(section);
+    setActiveView("leave");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -375,6 +385,7 @@ export function LeaveDemo() {
     setRequests(initialRequests);
     setSelectedRequestId("MAM-2403");
     setActiveView("home");
+    setLeaveSection("requests");
     setStatusFilter("All");
     setShowRequestForm(false);
     setManagerNote("");
@@ -385,6 +396,7 @@ export function LeaveDemo() {
   function switchProfile(profile: Profile) {
     setActiveProfileId(profile.id);
     setActiveView("home");
+    setLeaveSection("requests");
     setSelectedRequestId(initialRequests.find((request) => request.employee === profile.name)?.id ?? initialRequests[0].id);
     setStatusFilter("All");
     setManagerNote("");
@@ -458,7 +470,7 @@ export function LeaveDemo() {
     setShowRequestForm(false);
     setFormError("");
     form.reset();
-    navigate("requests");
+    navigate("leave");
     announce(`${next.id} sent to ${activeProfile.manager} for review.`);
   }
 
@@ -479,8 +491,7 @@ export function LeaveDemo() {
   const navGroups = [
     { label: "Leave", items: [
       { id: "home" as AppView, label: "Home", icon: LayoutDashboard },
-      { id: "requests" as AppView, label: activeProfile.accessRole === "employee" ? "My leave" : activeProfile.accessRole === "hr" ? "Leave register" : "Leave requests", icon: ClipboardList },
-      ...(activeProfile.accessRole === "manager" ? [{ id: "approvals" as AppView, label: "Approvals", icon: CheckCircle2, badge: approvalQueue.length }] : []),
+      { id: "leave" as AppView, label: "Leave", icon: ClipboardList, badge: activeProfile.accessRole === "manager" ? approvalQueue.length : undefined },
       { id: "calendar" as AppView, label: "Team calendar", icon: CalendarDays },
     ] },
   ];
@@ -529,8 +540,7 @@ export function LeaveDemo() {
           </section>
 
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} onNavigate={navigate} onSelect={selectRequest} /> : null}
-          {activeView === "requests" ? <RequestsView requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} onFilter={setStatusFilter} onSelect={(id) => selectRequest(id, "requests")} /> : null}
-          {activeView === "approvals" && activeProfile.accessRole === "manager" ? <ApprovalsView pending={approvalQueue} selected={selectedRequest} selectedId={selectedRequestId} note={managerNote} requests={calendarRequests} onNote={setManagerNote} onSelect={(id) => selectRequest(id, "approvals")} onDecision={decideRequest} /> : null}
+          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
           {activeView === "calendar" ? <CalendarView requests={calendarRequests} /> : null}
         </main>
       </div>
@@ -598,24 +608,24 @@ function StatusPill({ status }: { status: RequestStatus }) {
   return <span className={`${styles.status} ${styles[`status${status}`]}`}><i />{status}</span>;
 }
 
-function HomeView({ profile, requests, myRequests, pending, onNavigate, onSelect }: { profile: Profile; requests: LeaveRequest[]; myRequests: LeaveRequest[]; pending: LeaveRequest[]; onNavigate: (view: AppView) => void; onSelect: (id: string, view?: AppView) => void }) {
+function HomeView({ profile, requests, myRequests, pending, onNavigate, onSelect }: { profile: Profile; requests: LeaveRequest[]; myRequests: LeaveRequest[]; pending: LeaveRequest[]; onNavigate: (view: AppView, section?: LeaveSection) => void; onSelect: (id: string, section?: LeaveSection) => void }) {
   const nextOwn = myRequests.find((request) => request.status === "Pending") ?? myRequests[0];
   const attentionRequests = profile.accessRole === "manager" ? pending : profile.accessRole === "hr" ? requests.filter((request) => request.status === "Pending") : myRequests;
   const attentionTitle = profile.accessRole === "manager" ? "Your approval queue" : profile.accessRole === "hr" ? "Pending leave" : "My recent requests";
-  const recordDestination: AppView = profile.accessRole === "manager" ? "approvals" : "requests";
+  const recordSection: LeaveSection = profile.accessRole === "manager" ? "approvals" : "requests";
   return (
     <div className={styles.dashboard}>
       <div className={styles.homeGrid}>
         <section className={`${styles.panel} ${styles.attentionPanel}`}>
-          <PanelHeader kicker={profile.accessRole === "employee" ? "Personal" : "Needs attention"} title={attentionTitle} action="View all" onAction={() => onNavigate(recordDestination)} />
+          <PanelHeader kicker={profile.accessRole === "employee" ? "Personal" : "Needs attention"} title={attentionTitle} action="View all" onAction={() => onNavigate("leave", recordSection)} />
           <div className={styles.recordList}>
-            {attentionRequests.slice(0, 3).map((request) => <button type="button" onClick={() => onSelect(request.id, recordDestination)} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><span className={styles.dayCount}>{request.hours ?? request.days}<small>{request.hours ? (request.hours === 1 ? "hour" : "hours") : request.days === 1 ? "day" : "days"}</small></span><ChevronRight size={16} /></button>)}
+            {attentionRequests.slice(0, 3).map((request) => <button type="button" onClick={() => onSelect(request.id, recordSection)} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><span className={styles.dayCount}>{request.hours ?? request.days}<small>{request.hours ? (request.hours === 1 ? "hour" : "hours") : request.days === 1 ? "day" : "days"}</small></span><ChevronRight size={16} /></button>)}
             {!attentionRequests.length ? <div className={styles.emptyState}><CheckCircle2 size={24} /><strong>Nothing waiting</strong><span>This profile has no pending records.</span></div> : null}
           </div>
         </section>
 
         <section className={`${styles.panel} ${styles.myLeavePanel}`}>
-          <PanelHeader kicker="Personal" title="My leave" action="All requests" onAction={() => onNavigate("requests")} />
+          <PanelHeader kicker="Personal" title="My leave" action="All requests" onAction={() => onNavigate("leave")} />
           {nextOwn ? <div className={styles.nextLeave}><span className={styles.dateBlock}><strong>{nextOwn.startDate.slice(8)}</strong><small>{formatMonthCode(nextOwn.startDate)}</small></span><span><StatusPill status={nextOwn.status} /><h3>{nextOwn.leaveType}</h3><p>{nextOwn.dateLabel} · {formatDurationWithTime(nextOwn)}</p></span></div> : <div className={styles.emptyState}><CalendarDays size={24} /><strong>No leave requests yet</strong><span>Use “New leave request” to try the employee flow.</span></div>}
         </section>
       </div>
@@ -625,6 +635,26 @@ function HomeView({ profile, requests, myRequests, pending, onNavigate, onSelect
 
 function PanelHeader({ kicker, title, action, onAction }: { kicker: string; title: string; action?: string; onAction?: () => void }) {
   return <header className={styles.panelHeader}><div><span>{kicker}</span><h2>{title}</h2></div>{action && onAction ? <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button> : null}</header>;
+}
+
+function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, selectedId, note, calendarRequests, onFilter, onSection, onNote, onSelect, onDecision }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; selectedId: string; note: string; calendarRequests: LeaveRequest[]; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void }) {
+  const canApprove = profile.accessRole === "manager";
+  return (
+    <section className={styles.leaveDesk}>
+      {canApprove ? (
+        <div className={styles.leaveSwitch} aria-label="Leave workspace">
+          <button className={section === "requests" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "requests"} onClick={() => onSection("requests")}>
+            <span><strong>Requests</strong><small>Team leave records</small></span><i>{allRequests.length}</i>
+          </button>
+          <button className={section === "approvals" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "approvals"} onClick={() => onSection("approvals")}>
+            <span><strong>To approve</strong><small>Needs your decision</small></span><i>{pending.length}</i>
+          </button>
+        </div>
+      ) : null}
+      {section === "requests" ? <RequestsView requests={requests} allRequests={allRequests} selected={selected} filter={filter} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} /> : null}
+      {section === "approvals" && canApprove ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} requests={calendarRequests} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
+    </section>
+  );
 }
 
 function RequestsView({ requests, allRequests, selected, filter, onFilter, onSelect }: { requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected: LeaveRequest; filter: "All" | RequestStatus; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void }) {

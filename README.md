@@ -12,8 +12,8 @@ The repository currently contains a deployable foundation and an interactive, sy
 - Authentication: deliberately deferred for the demo
 - Demo data: synthetic and reset on refresh; no staff information is stored
 - Database: initial RLS-first migration, not applied to a remote project
-- GitHub: local repository only; no remote is configured for the demo
-- Vercel: MAM-owned team available; no project is linked for the demo
+- GitHub: company repository at `mobilityaccessmodifications/mam-team-management-system`
+- Vercel: company-owned project linked to the `main` branch; synthetic demo is deployed separately from the database
 - Supabase: MAM organization and development project available; deliberately not linked to the demo
 
 ## Stack
@@ -34,7 +34,7 @@ npm run dev -- -p 3001
 
 Open `http://localhost:3001`.
 
-Use the top-right profile selector to preview the workspace as HR, the Major Mod manager, the Minor Mod manager or several employees. The intentionally minimal sidebar contains Home, leave records, manager approvals when relevant, and the team calendar. Approval records show the applicant highlighted in a weekly calendar grid, relevant team leave and a clearly marked synthetic public-holiday example; private reasons never appear there. For part-day leave, an employee can optionally choose a start and end time between 6:00 am and 6:00 pm in fixed 15-minute intervals on one date; the demo calculates the duration. Submissions and decisions stay in memory for the current browser tab only.
+Use the top-right profile selector to preview the workspace as HR, the Major Mod manager, the Minor Mod manager or several employees. The intentionally minimal sidebar contains Home, one Leave workspace and the team calendar. For managers, Leave contains a clear in-page switch between team requests and the items waiting for their decision; employees only see their own leave. Approval records show the applicant highlighted in a weekly calendar grid, relevant team leave and a clearly marked synthetic public-holiday example; private reasons never appear there. For part-day leave, an employee can optionally choose a start and end time between 6:00 am and 6:00 pm in fixed 15-minute intervals on one date; the demo calculates the duration. Submissions and decisions stay in memory for the current browser tab only.
 
 ## Connected development
 
@@ -85,9 +85,9 @@ See `docs/environment-management.md` for the full model.
 
 ## Deployment order
 
-1. Authenticate the MAM GitHub owner and create a private repository.
+1. Confirm the MAM GitHub repository and its default branch are the intended deployment source.
 2. Select the MAM Supabase organization, review the quoted project cost, then create the project in Sydney (`ap-southeast-2`) unless MAM requires another region.
 3. Review and apply the database migration; run Supabase security and performance advisors.
-4. Create/link the MAM Vercel project to the GitHub repository.
+4. Confirm the MAM Vercel project remains linked to the GitHub repository.
 5. Add environment variables separately for Development, Preview and Production.
 6. Deploy a preview, test sign-in and RLS with synthetic users, then obtain management approval before production.
