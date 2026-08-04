@@ -1,10 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { isSupabaseConfigured, requireSupabaseConfig } from "@/lib/supabase/config";
+import { isSharedDemoConfigured, isSupabaseConfigured, requireSupabaseConfig } from "@/lib/supabase/config";
 
 export async function proxy(request: NextRequest) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() || isSharedDemoConfigured()) {
     return NextResponse.next({ request });
   }
 

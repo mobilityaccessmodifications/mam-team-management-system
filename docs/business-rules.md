@@ -27,6 +27,8 @@
 - A part-day request can optionally specify a start and end time between 6:00 am and 6:00 pm in fixed 15-minute intervals when both dates are the same; leaving both times blank means full working days.
 - The demo derives elapsed hours from the selected times. Break deductions, standard daily hours, payroll treatment and evidence requirements still need confirmation before live use.
 - Manager review shows a calendar from three weeks before the requested start through three weeks after the requested end, rounded to full Monday-to-Sunday weeks. The applicant is highlighted, relevant team leave and public holidays are visible, and another employee's private reason is never shown.
+- The request-list “Pending” count includes every pending request visible to the selected synthetic profile. “To approve” includes only pending requests assigned to that manager. A manager therefore sees their own pending request in the first count but cannot approve it themselves.
+- Shared demo mode stores only the fixed synthetic dataset. The profile selector simulates roles and is not evidence of user identity or authorization.
 
 ## Data minimisation
 

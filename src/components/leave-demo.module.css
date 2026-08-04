@@ -123,6 +123,18 @@
   letter-spacing: 0.025em;
 }
 
+.demoBadge[data-state="live"] {
+  border-color: rgba(118, 191, 159, 0.34);
+  background: rgba(69, 128, 102, 0.18);
+  color: #a9dfc5;
+}
+
+.demoBadge[data-state="error"] {
+  border-color: rgba(235, 137, 117, 0.38);
+  background: rgba(170, 66, 45, 0.18);
+  color: #ffc0b2;
+}
+
 .nav {
   display: grid;
   gap: 25px;

@@ -19,10 +19,12 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import styles from "@/components/leave-demo.module.css";
+import { createClient } from "@/lib/supabase/client";
+import { isSharedDemoConfigured } from "@/lib/supabase/config";
 
 type AppView = "home" | "leave" | "calendar";
 type LeaveSection = "requests" | "approvals";
@@ -63,6 +65,25 @@ type CalendarHoliday = {
   date: string;
   label: string;
   isDemo?: boolean;
+};
+
+type SharedDataState = "local" | "connecting" | "live" | "error";
+
+type DemoLeaveRequestRow = {
+  id: string;
+  employee_profile_id: string;
+  manager_profile_id: string;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  days: number | string;
+  hours: number | string | null;
+  status: RequestStatus;
+  submitted_at: string;
+  employee_note: string;
+  manager_note: string | null;
 };
 
 const demoCalendarHolidays: CalendarHoliday[] = [
@@ -194,6 +215,44 @@ const profiles: Profile[] = [
   { id: "sam", name: "Sam Rivera", initials: "SR", accessRole: "employee", roleLabel: "Modifications tradesperson", team: "Minor Modifications", manager: "Riley Brooks" },
   { id: "ava", name: "Ava Thompson", initials: "AT", accessRole: "employee", roleLabel: "Accounts officer", team: "Accounts", manager: "Priya Singh" },
 ];
+
+function formatSubmittedAt(value: string) {
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function mapDemoLeaveRequest(row: DemoLeaveRequestRow): LeaveRequest {
+  const employee = profiles.find((profile) => profile.id === row.employee_profile_id);
+  const manager = profiles.find((profile) => profile.id === row.manager_profile_id);
+
+  if (!employee || !manager) {
+    throw new Error(`Synthetic profile mapping is missing for ${row.id}.`);
+  }
+
+  return {
+    id: row.id,
+    employee: employee.name,
+    initials: employee.initials,
+    team: employee.team,
+    leaveType: row.leave_type,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    dateLabel: formatDateRange(row.start_date, row.end_date),
+    days: Number(row.days),
+    hours: row.hours === null ? undefined : Number(row.hours),
+    startTime: row.start_time?.slice(0, 5),
+    endTime: row.end_time?.slice(0, 5),
+    status: row.status,
+    submittedAt: formatSubmittedAt(row.submitted_at),
+    manager: manager.name,
+    employeeNote: row.employee_note,
+    managerNote: row.manager_note ?? undefined,
+  };
+}
 
 function businessDaysBetween(start: string, end: string) {
   const first = new Date(`${start}T12:00:00`);
@@ -331,6 +390,7 @@ function getCalendarRequests(requests: LeaveRequest[], profile: Profile) {
 }
 
 export function LeaveDemo() {
+  const supabase = isSharedDemoConfigured() ? createClient() : null;
   const [activeView, setActiveView] = useState<AppView>("home");
   const [activeProfileId, setActiveProfileId] = useState("taylor");
   const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests);
@@ -342,6 +402,62 @@ export function LeaveDemo() {
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
   const [showProfiles, setShowProfiles] = useState(false);
+  const [sharedDataState, setSharedDataState] = useState<SharedDataState>(supabase ? "connecting" : "local");
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    let mounted = true;
+    let refreshTimer: number | undefined;
+
+    async function loadSharedRequests() {
+      const { data, error } = await supabase
+        .from("demo_leave_requests")
+        .select("*")
+        .order("submitted_at", { ascending: false })
+        .order("id", { ascending: false });
+
+      if (!mounted) return;
+
+      if (error) {
+        setSharedDataState("error");
+        return;
+      }
+
+      try {
+        const nextRequests = (data as DemoLeaveRequestRow[]).map(mapDemoLeaveRequest);
+        setRequests(nextRequests);
+        setSelectedRequestId((current) => nextRequests.some((request) => request.id === current) ? current : nextRequests[0]?.id ?? current);
+        setSharedDataState("live");
+      } catch {
+        setSharedDataState("error");
+      }
+    }
+
+    void loadSharedRequests();
+
+    const channel = supabase
+      .channel("demo:leave_requests")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "demo_leave_requests" },
+        () => {
+          window.clearTimeout(refreshTimer);
+          refreshTimer = window.setTimeout(() => void loadSharedRequests(), 120);
+        },
+      )
+      .subscribe((status: string) => {
+        if (!mounted) return;
+        if (status === "SUBSCRIBED") setSharedDataState("live");
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setSharedDataState("error");
+      });
+
+    return () => {
+      mounted = false;
+      window.clearTimeout(refreshTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase]);
 
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId) ?? profiles[1];
   const viewTitles = getViewTitles(activeProfile, leaveSection);
@@ -381,8 +497,23 @@ export function LeaveDemo() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function resetDemo() {
-    setRequests(initialRequests);
+  async function resetDemo() {
+    if (supabase) {
+      setSharedDataState("connecting");
+      const { data, error } = await supabase.rpc("reset_demo_leave_requests", {
+        p_confirm_synthetic: true,
+      });
+      if (error) {
+        setSharedDataState("error");
+        announce("The shared demo could not be reset. Try again in a moment.");
+        return;
+      }
+      const nextRequests = (data as DemoLeaveRequestRow[]).map(mapDemoLeaveRequest);
+      setRequests(nextRequests);
+      setSharedDataState("live");
+    } else {
+      setRequests(initialRequests);
+    }
     setSelectedRequestId("MAM-2403");
     setActiveView("home");
     setLeaveSection("requests");
@@ -390,7 +521,7 @@ export function LeaveDemo() {
     setShowRequestForm(false);
     setManagerNote("");
     setShowProfiles(false);
-    announce("Demo reset to its starting point.");
+    announce(supabase ? "Shared fake data reset for every open demo." : "Demo reset to its starting point.");
   }
 
   function switchProfile(profile: Profile) {
@@ -404,7 +535,7 @@ export function LeaveDemo() {
     announce(`Now viewing the demo as ${profile.name} · ${profile.roleLabel}.`);
   }
 
-  function submitRequest(event: FormEvent<HTMLFormElement>) {
+  async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
@@ -465,25 +596,68 @@ export function LeaveDemo() {
       manager: activeProfile.manager,
       employeeNote: employeeNote || "No note added.",
     };
-    setRequests((current) => [next, ...current]);
-    setSelectedRequestId(next.id);
+
+    let savedRequest = next;
+    if (supabase) {
+      const { data: saved, error } = await supabase.rpc("submit_demo_leave_request", {
+        p_employee_profile_id: activeProfile.id,
+        p_leave_type: leaveType,
+        p_start_date: startDate,
+        p_end_date: endDate,
+        p_start_time: startTime || null,
+        p_end_time: endTime || null,
+        p_employee_note: employeeNote || null,
+      });
+
+      if (error || !saved) {
+        setFormError(error?.message ?? "The shared request could not be saved.");
+        setSharedDataState("error");
+        return;
+      }
+
+      savedRequest = mapDemoLeaveRequest(saved as DemoLeaveRequestRow);
+      setSharedDataState("live");
+    }
+
+    setRequests((current) => [savedRequest, ...current.filter((request) => request.id !== savedRequest.id)]);
+    setSelectedRequestId(savedRequest.id);
     setShowRequestForm(false);
     setFormError("");
     form.reset();
     navigate("leave");
-    announce(`${next.id} sent to ${activeProfile.manager} for review.`);
+    announce(`${savedRequest.id} sent to ${activeProfile.manager} for review${supabase ? " and synced live" : ""}.`);
   }
 
-  function decideRequest(status: "Approved" | "Declined") {
+  async function decideRequest(status: "Approved" | "Declined") {
     if (status === "Declined" && !managerNote.trim()) {
       announce("Add a manager comment before declining this request.");
       return;
     }
-    setRequests((current) => current.map((request) => request.id === selectedRequest.id ? {
-      ...request,
+    let decidedRequest: LeaveRequest = {
+      ...selectedRequest,
       status,
       managerNote: managerNote.trim() || "Coverage checked and confirmed.",
-    } : request));
+    };
+
+    if (supabase) {
+      const { data: decided, error } = await supabase.rpc("decide_demo_leave_request", {
+        p_request_id: selectedRequest.id,
+        p_actor_profile_id: activeProfile.id,
+        p_status: status,
+        p_manager_note: managerNote.trim() || null,
+      });
+
+      if (error || !decided) {
+        announce(error?.message ?? "The shared decision could not be saved.");
+        setSharedDataState("error");
+        return;
+      }
+
+      decidedRequest = mapDemoLeaveRequest(decided as DemoLeaveRequestRow);
+      setSharedDataState("live");
+    }
+
+    setRequests((current) => current.map((request) => request.id === selectedRequest.id ? decidedRequest : request));
     setManagerNote("");
     announce(`${selectedRequest.id} ${status.toLowerCase()}. The employee record and register are updated.`);
   }
@@ -501,7 +675,13 @@ export function LeaveDemo() {
       <a className={styles.skipLink} href="#main-content">Skip to workspace</a>
       <aside className={styles.sidebar} aria-label="MAM workspace navigation">
         <div className={styles.brandRow}><BrandMark /><button type="button" aria-label="Workspace options"><MoreHorizontal size={17} /></button></div>
-        <div className={styles.demoBadge}><Sparkles size={13} /> Safe demo · synthetic data</div>
+        <div className={styles.demoBadge} data-state={sharedDataState} role="status">
+          <Sparkles size={13} />
+          {sharedDataState === "live" ? "Live demo · shared fake data" : null}
+          {sharedDataState === "connecting" ? "Connecting shared fake data…" : null}
+          {sharedDataState === "error" ? "Shared data connection issue" : null}
+          {sharedDataState === "local" ? "Safe demo · browser-only data" : null}
+        </div>
         <nav className={styles.nav}>
           {navGroups.map((group) => (
             <div className={styles.navGroup} key={group.label}>

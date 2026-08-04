@@ -19,6 +19,7 @@ It is normal for one project environment to contain several API configurations:
 ```text
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+NEXT_PUBLIC_SHARED_DEMO
 AROFLO_API_BASE_URL
 AROFLO_API_KEY
 OUTLOOK_TENANT_ID
@@ -40,6 +41,7 @@ That is identity isolation, not session isolation.
 - `.env.local`: gitignored development values for this project only.
 - Vercel: encrypted values separated by Development, Preview and Production.
 - Supabase: publishable key may reach the browser; secret/service-role keys are server-only and are not needed by this foundation app.
+- `NEXT_PUBLIC_SHARED_DEMO=true`: permits only the shared synthetic demo path. It is not suitable for real staff data because the role selector is not authentication.
 - GitHub Actions: repository/environment secrets only when CI genuinely needs them.
 - Password manager or macOS Keychain: recovery copies and credentials used by local scripts.
 - Never create `.env.save`; use the password manager or deployment platform's controlled history instead.
