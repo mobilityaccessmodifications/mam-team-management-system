@@ -15,7 +15,7 @@ No external HR, payroll, AroFlo or Outlook write integration exists in the found
 
 - `demo_profiles` and `demo_leave_requests` contain fixed synthetic records only.
 - Browsers may read those records through RLS and subscribe to Postgres Changes.
-- Direct anonymous inserts, updates and deletes are revoked. Narrow `security definer` RPCs validate a fixed synthetic profile, manager assignment, request status and reset confirmation before changing demo rows.
+- Direct anonymous inserts, updates and deletes are revoked. Narrow `security definer` RPCs validate a fixed synthetic profile, working-window times, manager assignment, employee request status and reset confirmation before changing demo rows. Manager profiles create approved records with `approval_required = false`; employee profiles create pending records assigned to their manager.
 - The public RPCs are an intentional demo-only compromise so the workflow can be tested before authentication. They are not an authorization model and must never be used with real employee data.
 - If the shared demo variables are absent, the application falls back to browser-local synthetic data.
 

@@ -44,6 +44,7 @@ type LeaveRequest = {
   hours?: number;
   startTime?: string;
   endTime?: string;
+  approvalRequired: boolean;
   status: RequestStatus;
   submittedAt: string;
   manager: string;
@@ -80,6 +81,7 @@ type DemoLeaveRequestRow = {
   end_time: string | null;
   days: number | string;
   hours: number | string | null;
+  approval_required: boolean;
   status: RequestStatus;
   submitted_at: string;
   employee_note: string;
@@ -101,6 +103,7 @@ const initialRequests: LeaveRequest[] = [
     endDate: "2026-08-19",
     dateLabel: "17–19 Aug 2026",
     days: 3,
+    approvalRequired: true,
     status: "Pending",
     submittedAt: "Today, 8:42 am",
     manager: "Taylor Morgan",
@@ -119,6 +122,7 @@ const initialRequests: LeaveRequest[] = [
     hours: 4,
     startTime: "09:00",
     endTime: "13:00",
+    approvalRequired: true,
     status: "Pending",
     submittedAt: "Yesterday, 3:24 pm",
     manager: "Riley Brooks",
@@ -134,6 +138,7 @@ const initialRequests: LeaveRequest[] = [
     endDate: "2026-08-20",
     dateLabel: "18–20 Aug 2026",
     days: 3,
+    approvalRequired: true,
     status: "Approved",
     submittedAt: "29 Jul, 10:08 am",
     manager: "Taylor Morgan",
@@ -150,7 +155,8 @@ const initialRequests: LeaveRequest[] = [
     endDate: "2026-09-11",
     dateLabel: "7–11 Sep 2026",
     days: 5,
-    status: "Pending",
+    approvalRequired: false,
+    status: "Approved",
     submittedAt: "30 Jul, 2:16 pm",
     manager: "Priya Singh",
     employeeNote: "School holiday break.",
@@ -165,11 +171,11 @@ const initialRequests: LeaveRequest[] = [
     endDate: "2026-07-10",
     dateLabel: "6–10 Jul 2026",
     days: 5,
+    approvalRequired: false,
     status: "Approved",
     submittedAt: "22 Jun, 4:16 pm",
     manager: "Priya Singh",
     employeeNote: "Planned leave.",
-    managerNote: "Operations cover confirmed.",
   },
   {
     id: "MAM-2397",
@@ -181,7 +187,8 @@ const initialRequests: LeaveRequest[] = [
     endDate: "2026-09-18",
     dateLabel: "14–18 Sep 2026",
     days: 5,
-    status: "Pending",
+    approvalRequired: false,
+    status: "Approved",
     submittedAt: "30 Jul, 9:35 am",
     manager: "Priya Singh",
     employeeNote: "Planned annual leave.",
@@ -196,6 +203,7 @@ const initialRequests: LeaveRequest[] = [
     endDate: "2026-07-31",
     dateLabel: "31 Jul 2026",
     days: 1,
+    approvalRequired: true,
     status: "Declined",
     submittedAt: "28 Jul, 1:14 pm",
     manager: "Priya Singh",
@@ -246,6 +254,7 @@ function mapDemoLeaveRequest(row: DemoLeaveRequestRow): LeaveRequest {
     hours: row.hours === null ? undefined : Number(row.hours),
     startTime: row.start_time?.slice(0, 5),
     endTime: row.end_time?.slice(0, 5),
+    approvalRequired: row.approval_required,
     status: row.status,
     submittedAt: formatSubmittedAt(row.submitted_at),
     manager: manager.name,
@@ -264,6 +273,34 @@ function businessDaysBetween(start: string, end: string) {
   return days;
 }
 
+function isWeekday(date: string) {
+  const day = new Date(`${date}T12:00:00`).getDay();
+  return day !== 0 && day !== 6;
+}
+
+function minutesFromTime(time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return (hours * 60) + minutes;
+}
+
+function workingHoursBetween(startDate: string, endDate: string, startTime: string, endTime: string) {
+  const first = new Date(`${startDate}T12:00:00`);
+  const last = new Date(`${endDate}T12:00:00`);
+  const selectedStart = minutesFromTime(startTime);
+  const selectedEnd = minutesFromTime(endTime);
+  let minutes = 0;
+
+  for (const current = new Date(first); current <= last; current.setDate(current.getDate() + 1)) {
+    if (current.getDay() === 0 || current.getDay() === 6) continue;
+    const currentDate = toIsoDate(current);
+    const dayStart = currentDate === startDate ? selectedStart : 6 * 60;
+    const dayEnd = currentDate === endDate ? selectedEnd : 18 * 60;
+    minutes += Math.max(0, dayEnd - dayStart);
+  }
+
+  return Math.round((minutes / 60) * 100) / 100;
+}
+
 function formatDuration(request: LeaveRequest) {
   if (request.hours) return `${request.hours} ${request.hours === 1 ? "hour" : "hours"}`;
   return `${request.days} ${request.days === 1 ? "day" : "days"}`;
@@ -278,6 +315,9 @@ function formatClockTime(value: string) {
 
 function formatTimeRange(request: LeaveRequest) {
   if (!request.startTime || !request.endTime) return "";
+  if (request.startDate !== request.endDate) {
+    return `First day from ${formatClockTime(request.startTime)} · last day until ${formatClockTime(request.endTime)}`;
+  }
   return `${formatClockTime(request.startTime)}–${formatClockTime(request.endTime)}`;
 }
 
@@ -464,7 +504,7 @@ export function LeaveDemo() {
   const visibleRequests = getVisibleRequests(requests, activeProfile);
   const calendarRequests = getCalendarRequests(requests, activeProfile);
   const approvalQueue = activeProfile.accessRole === "manager"
-    ? requests.filter((request) => request.status === "Pending" && request.manager === activeProfile.name)
+    ? requests.filter((request) => request.approvalRequired && request.status === "Pending" && request.manager === activeProfile.name)
     : [];
   const myRequests = requests.filter((request) => request.employee === activeProfile.name);
   const selectedRequest = visibleRequests.find((request) => request.id === selectedRequestId) ?? approvalQueue[0] ?? visibleRequests[0] ?? requests[0];
@@ -557,20 +597,21 @@ export function LeaveDemo() {
       setFormError("Choose start and end times in 15-minute intervals.");
       return;
     }
-    if (startTime && startDate !== endDate) {
-      setFormError("A start and end time can only be used for a single-day request.");
-      return;
-    }
     let hours: number | undefined;
     if (startTime && endTime) {
-      const [startHour, startMinute] = startTime.split(":").map(Number);
-      const [endHour, endMinute] = endTime.split(":").map(Number);
-      const minutes = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
-      if (minutes <= 0) {
+      if (!isWeekday(startDate) || !isWeekday(endDate)) {
+        setFormError("Timed leave must start and end on weekdays.");
+        return;
+      }
+      if (startDate === endDate && minutesFromTime(endTime) <= minutesFromTime(startTime)) {
         setFormError("End time must be later than start time.");
         return;
       }
-      hours = Math.round((minutes / 60) * 100) / 100;
+      hours = workingHoursBetween(startDate, endDate, startTime, endTime);
+      if (hours <= 0) {
+        setFormError("Choose a time range that includes working hours.");
+        return;
+      }
     }
     const days = businessDaysBetween(startDate, endDate);
     if (days < 1) {
@@ -578,6 +619,7 @@ export function LeaveDemo() {
       return;
     }
     const nextNumber = Math.max(...requests.map((request) => Number(request.id.split("-")[1]))) + 1;
+    const approvalRequired = activeProfile.accessRole !== "manager";
     const next: LeaveRequest = {
       id: `MAM-${nextNumber}`,
       employee: activeProfile.name,
@@ -591,7 +633,8 @@ export function LeaveDemo() {
       hours,
       startTime: startTime || undefined,
       endTime: endTime || undefined,
-      status: "Pending",
+      approvalRequired,
+      status: approvalRequired ? "Pending" : "Approved",
       submittedAt: "Just now",
       manager: activeProfile.manager,
       employeeNote: employeeNote || "No note added.",
@@ -625,7 +668,9 @@ export function LeaveDemo() {
     setFormError("");
     form.reset();
     navigate("leave");
-    announce(`${savedRequest.id} sent to ${activeProfile.manager} for review${supabase ? " and synced live" : ""}.`);
+    announce(savedRequest.approvalRequired
+      ? `${savedRequest.id} sent to ${activeProfile.manager} for review${supabase ? " and synced live" : ""}.`
+      : `${savedRequest.id} added to the team calendar${supabase ? " and synced live" : ""}. No approval is needed.`);
   }
 
   async function decideRequest(status: "Approved" | "Declined") {
@@ -716,7 +761,7 @@ export function LeaveDemo() {
         <main className={styles.main} id="main-content">
           <section className={styles.pageHeader}>
             <div><p>{viewTitles[activeView].eyebrow}</p><h1>{viewTitles[activeView].title}</h1></div>
-            <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)}><Plus size={17} /> New leave request</button>
+            <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)}><Plus size={17} /> {activeProfile.accessRole === "manager" ? "Add leave" : "New leave request"}</button>
           </section>
 
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} onNavigate={navigate} onSelect={selectRequest} /> : null}
@@ -728,16 +773,16 @@ export function LeaveDemo() {
       {showRequestForm ? (
         <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowRequestForm(false)}>
           <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="new-request-title">
-            <header><div><span>New request</span><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={() => setShowRequestForm(false)} aria-label="Close request form"><X size={19} /></button></header>
-            <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{activeProfile.name}</strong><small>{activeProfile.team} · Approver: {activeProfile.manager}</small></span></div>
+            <header><div><span>{activeProfile.accessRole === "manager" ? "New calendar entry" : "New request"}</span><h2 id="new-request-title">{activeProfile.accessRole === "manager" ? "Add your leave" : "Request leave"}</h2></div><button type="button" onClick={() => setShowRequestForm(false)} aria-label="Close request form"><X size={19} /></button></header>
+            <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{activeProfile.name}</strong><small>{activeProfile.accessRole === "manager" ? `${activeProfile.team} · Added directly, no approval needed` : `${activeProfile.team} · Approver: ${activeProfile.manager}`}</small></span></div>
             <form className={styles.form} onSubmit={submitRequest}>
               <label><span>Leave type</span><select name="leaveType" defaultValue="Annual leave" required><option>Annual leave</option><option>Sick leave</option><option>Carer&apos;s leave</option><option>Unpaid leave</option></select></label>
               <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" defaultValue="2026-09-21" required /></label><label><span>End date</span><input name="endDate" type="date" defaultValue="2026-09-21" required /></label></div>
-              <fieldset className={styles.timeRange}><legend>Part-day times <small>Optional</small></legend><div className={styles.formRow}><label><span>From</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>To</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>6:00 am–6:00 pm in 15-minute intervals. Leave both blank for full-day leave.</p></fieldset>
-              <label><span>Note for your manager <small>Optional</small></span><textarea name="employeeNote" rows={3} placeholder="Add only what your manager needs to decide." /></label>
-              <div className={styles.privacyNote}><ShieldCheck size={17} /><span>Your note is private to you, your approver and HR. Coworkers only see that you are unavailable.</span></div>
+              <fieldset className={styles.timeRange}><legend>Start and end times <small>Optional</small></legend><div className={styles.formRow}><label><span>From · first day</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>To · last day</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>6:00 am–6:00 pm in 15-minute intervals. For multiple dates, these apply to the first and last day. Leave both blank for full working days.</p></fieldset>
+              <label><span>{activeProfile.accessRole === "manager" ? "Private note" : "Note for your manager"} <small>Optional</small></span><textarea name="employeeNote" rows={3} placeholder={activeProfile.accessRole === "manager" ? "Add optional details for your own record." : "Add only what your manager needs to decide."} /></label>
+              <div className={styles.privacyNote}><ShieldCheck size={17} /><span>{activeProfile.accessRole === "manager" ? "Your note is private to you and HR." : "Your note is private to you, your approver and HR."} Coworkers only see that you are unavailable.</span></div>
               {formError ? <p className={styles.formError} role="alert">{formError}</p> : null}
-              <footer><button className={styles.secondaryButton} type="button" onClick={() => setShowRequestForm(false)}>Cancel</button><button className={styles.primaryButton} type="submit">Send request <ArrowUpRight size={16} /></button></footer>
+              <footer><button className={styles.secondaryButton} type="button" onClick={() => setShowRequestForm(false)}>Cancel</button><button className={styles.primaryButton} type="submit">{activeProfile.accessRole === "manager" ? "Add leave" : "Send request"} <ArrowUpRight size={16} /></button></footer>
             </form>
           </section>
         </div>
@@ -857,7 +902,7 @@ function RequestsView({ requests, allRequests, selected, filter, onFilter, onSel
 }
 
 function RequestDetail({ request }: { request: LeaveRequest }) {
-  return <aside className={styles.detailPanel} aria-label={`${request.id} details`}><header><span className={styles.avatarOrange}>{request.initials}</span><span><small>{request.id}</small><h2>{request.employee}</h2><p>{request.team}</p></span><button type="button" aria-label="More record actions"><MoreHorizontal size={18} /></button></header><StatusPill status={request.status} /><dl><div><dt>Leave type</dt><dd>{request.leaveType}</dd></div><div><dt>When</dt><dd>{request.dateLabel}</dd></div><div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div><div><dt>Approver</dt><dd>{request.manager}</dd></div></dl>{request.employeeNote !== "No note added." ? <section><span>Employee note</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> Private to employee, approver and HR</small></section> : null}{request.managerNote ? <section><span>Manager decision note</span><p>{request.managerNote}</p></section> : null}</aside>;
+  return <aside className={styles.detailPanel} aria-label={`${request.id} details`}><header><span className={styles.avatarOrange}>{request.initials}</span><span><small>{request.id}</small><h2>{request.employee}</h2><p>{request.team}</p></span><button type="button" aria-label="More record actions"><MoreHorizontal size={18} /></button></header><StatusPill status={request.status} /><dl><div><dt>Leave type</dt><dd>{request.leaveType}</dd></div><div><dt>When</dt><dd>{request.dateLabel}</dd></div><div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div><div><dt>Approval</dt><dd>{request.approvalRequired ? request.manager : "Not required"}</dd></div></dl>{request.employeeNote !== "No note added." ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}{request.managerNote ? <section><span>Manager decision note</span><p>{request.managerNote}</p></section> : null}</aside>;
 }
 
 function ApprovalsView({ pending, selected, selectedId, note, requests, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected: LeaveRequest; selectedId: string; note: string; requests: LeaveRequest[]; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {

@@ -6,7 +6,7 @@
 - The initial release is for management review before any all-staff rollout.
 - Nixon owns the delivery priority; a team-supplied priority is input, not a command.
 - Employee and HR data is confidential.
-- A final human decision remains required; the system does not auto-approve leave in Phase 1.
+- Employee requests still require a final manager decision; the system does not automatically approve them in Phase 1.
 
 ## Decisions required before live use
 
@@ -24,10 +24,10 @@
 ## Demo behaviour — not final payroll policy
 
 - The synthetic demo offers Annual leave, Sick leave, Carer's leave and Unpaid leave.
-- A part-day request can optionally specify a start and end time between 6:00 am and 6:00 pm in fixed 15-minute intervals when both dates are the same; leaving both times blank means full working days.
-- The demo derives elapsed hours from the selected times. Break deductions, standard daily hours, payroll treatment and evidence requirements still need confirmation before live use.
+- A timed request can optionally specify a start time for the first date and an end time for the last date, both between 6:00 am and 6:00 pm in fixed 15-minute intervals. Leaving both times blank means full working days.
+- The demo totals weekday hours inside the 6:00 am–6:00 pm working window. Break deductions, standard daily hours, payroll treatment and evidence requirements still need confirmation before live use.
 - Manager review shows a calendar from three weeks before the requested start through three weeks after the requested end, rounded to full Monday-to-Sunday weeks. The applicant is highlighted, relevant team leave and public holidays are visible, and another employee's private reason is never shown.
-- The request-list “Pending” count includes every pending request visible to the selected synthetic profile. “To approve” includes only pending requests assigned to that manager. A manager therefore sees their own pending request in the first count but cannot approve it themselves.
+- Employee requests are pending until their assigned manager decides them. A manager's own leave is added directly as an approved calendar record with approval marked “Not required”; managers never approve themselves. “To approve” includes only pending employee requests assigned to the selected manager.
 - Shared demo mode stores only the fixed synthetic dataset. The profile selector simulates roles and is not evidence of user identity or authorization.
 
 ## Data minimisation
