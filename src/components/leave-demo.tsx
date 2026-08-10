@@ -9,8 +9,12 @@ import {
   ChevronRight,
   ClipboardList,
   Clock3,
+  Eye,
+  FileImage,
+  FileText,
   LayoutDashboard,
   MoreHorizontal,
+  Paperclip,
   Plus,
   RotateCcw,
   Search,
@@ -50,6 +54,15 @@ type LeaveRequest = {
   manager: string;
   employeeNote: string;
   managerNote?: string;
+  attachments?: LeaveAttachment[];
+};
+
+type LeaveAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  previewUrl: string;
 };
 
 type Profile = {
@@ -335,6 +348,27 @@ const TIME_OPTIONS = Array.from({ length: 49 }, (_, index) => {
 const START_TIME_OPTIONS = TIME_OPTIONS.slice(0, -1);
 const END_TIME_OPTIONS = TIME_OPTIONS.slice(1);
 const TIME_VALUES = new Set(TIME_OPTIONS.map((option) => option.value));
+const MAX_ATTACHMENT_COUNT = 3;
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_TYPES = new Set([
+  "application/pdf",
+  "image/heic",
+  "image/heif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function releaseAttachmentUrls(requests: LeaveRequest[]) {
+  requests.forEach((request) => {
+    request.attachments?.forEach((attachment) => URL.revokeObjectURL(attachment.previewUrl));
+  });
+}
 
 function formatDateRange(start: string, end: string) {
   const date = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" });
@@ -466,7 +500,10 @@ export function LeaveDemo() {
 
       try {
         const nextRequests = (data as DemoLeaveRequestRow[]).map(mapDemoLeaveRequest);
-        setRequests(nextRequests);
+        setRequests((current) => nextRequests.map((request) => {
+          const localAttachments = current.find((item) => item.id === request.id)?.attachments;
+          return localAttachments?.length ? { ...request, attachments: localAttachments } : request;
+        }));
         setSelectedRequestId((current) => nextRequests.some((request) => request.id === current) ? current : nextRequests[0]?.id ?? current);
         setSharedDataState("live");
       } catch {
@@ -549,10 +586,16 @@ export function LeaveDemo() {
         return;
       }
       const nextRequests = (data as DemoLeaveRequestRow[]).map(mapDemoLeaveRequest);
-      setRequests(nextRequests);
+      setRequests((current) => {
+        releaseAttachmentUrls(current);
+        return nextRequests;
+      });
       setSharedDataState("live");
     } else {
-      setRequests(initialRequests);
+      setRequests((current) => {
+        releaseAttachmentUrls(current);
+        return initialRequests;
+      });
     }
     setSelectedRequestId("MAM-2403");
     setActiveView("home");
@@ -585,6 +628,21 @@ export function LeaveDemo() {
     const startTime = String(data.get("startTime") ?? "").trim();
     const endTime = String(data.get("endTime") ?? "").trim();
     const employeeNote = String(data.get("employeeNote"));
+    const attachmentFiles = data.getAll("attachments").filter((entry): entry is File => entry instanceof File && entry.size > 0);
+    if (attachmentFiles.length > MAX_ATTACHMENT_COUNT) {
+      setFormError(`Choose no more than ${MAX_ATTACHMENT_COUNT} supporting files.`);
+      return;
+    }
+    const unsupportedAttachment = attachmentFiles.find((file) => !ALLOWED_ATTACHMENT_TYPES.has(file.type));
+    if (unsupportedAttachment) {
+      setFormError(`${unsupportedAttachment.name} is not a supported PDF or image file.`);
+      return;
+    }
+    const oversizedAttachment = attachmentFiles.find((file) => file.size > MAX_ATTACHMENT_BYTES);
+    if (oversizedAttachment) {
+      setFormError(`${oversizedAttachment.name} is larger than 5 MB.`);
+      return;
+    }
     if (endDate < startDate) {
       setFormError("End date must be on or after the start date.");
       return;
@@ -620,6 +678,13 @@ export function LeaveDemo() {
     }
     const nextNumber = Math.max(...requests.map((request) => Number(request.id.split("-")[1]))) + 1;
     const approvalRequired = activeProfile.accessRole !== "manager";
+    const attachments = attachmentFiles.map((file) => ({
+      id: crypto.randomUUID(),
+      name: file.name,
+      mimeType: file.type,
+      sizeBytes: file.size,
+      previewUrl: URL.createObjectURL(file),
+    }));
     const next: LeaveRequest = {
       id: `MAM-${nextNumber}`,
       employee: activeProfile.name,
@@ -638,6 +703,7 @@ export function LeaveDemo() {
       submittedAt: "Just now",
       manager: activeProfile.manager,
       employeeNote: employeeNote || "No note added.",
+      attachments,
     };
 
     let savedRequest = next;
@@ -653,12 +719,13 @@ export function LeaveDemo() {
       });
 
       if (error || !saved) {
+        attachments.forEach((attachment) => URL.revokeObjectURL(attachment.previewUrl));
         setFormError(error?.message ?? "The shared request could not be saved.");
         setSharedDataState("error");
         return;
       }
 
-      savedRequest = mapDemoLeaveRequest(saved as DemoLeaveRequestRow);
+      savedRequest = { ...mapDemoLeaveRequest(saved as DemoLeaveRequestRow), attachments };
       setSharedDataState("live");
     }
 
@@ -698,7 +765,7 @@ export function LeaveDemo() {
         return;
       }
 
-      decidedRequest = mapDemoLeaveRequest(decided as DemoLeaveRequestRow);
+      decidedRequest = { ...mapDemoLeaveRequest(decided as DemoLeaveRequestRow), attachments: selectedRequest.attachments };
       setSharedDataState("live");
     }
 
@@ -780,6 +847,7 @@ export function LeaveDemo() {
               <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" defaultValue="2026-09-21" required /></label><label><span>End date</span><input name="endDate" type="date" defaultValue="2026-09-21" required /></label></div>
               <fieldset className={styles.timeRange}><legend>Start and end times <small>Optional</small></legend><div className={styles.formRow}><label><span>From · first day</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>To · last day</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>6:00 am–6:00 pm in 15-minute intervals. For multiple dates, these apply to the first and last day. Leave both blank for full working days.</p></fieldset>
               <label><span>{activeProfile.accessRole === "manager" ? "Private note" : "Note for your manager"} <small>Optional</small></span><textarea name="employeeNote" rows={3} placeholder={activeProfile.accessRole === "manager" ? "Add optional details for your own record." : "Add only what your manager needs to decide."} /></label>
+              <label className={styles.attachmentField}><span>Supporting files <small>Optional</small></span><input className={styles.fileInput} name="attachments" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" multiple /><small>PDF or images · up to 3 files, 5 MB each. Demo files stay in this open session.</small></label>
               <div className={styles.privacyNote}><ShieldCheck size={17} /><span>{activeProfile.accessRole === "manager" ? "Your note is private to you and HR." : "Your note is private to you, your approver and HR."} Coworkers only see that you are unavailable.</span></div>
               {formError ? <p className={styles.formError} role="alert">{formError}</p> : null}
               <footer><button className={styles.secondaryButton} type="button" onClick={() => setShowRequestForm(false)}>Cancel</button><button className={styles.primaryButton} type="submit">{activeProfile.accessRole === "manager" ? "Add leave" : "Send request"} <ArrowUpRight size={16} /></button></footer>
@@ -876,13 +944,13 @@ function LeaveView({ profile, section, requests, allRequests, selected, filter, 
           </button>
         </div>
       ) : null}
-      {section === "requests" ? <RequestsView requests={requests} allRequests={allRequests} selected={selected} filter={filter} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} /> : null}
+      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} /> : null}
       {section === "approvals" && canApprove ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} requests={calendarRequests} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
     </section>
   );
 }
 
-function RequestsView({ requests, allRequests, selected, filter, onFilter, onSelect }: { requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected: LeaveRequest; filter: "All" | RequestStatus; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void }) {
+function RequestsView({ profile, requests, allRequests, selected, filter, onFilter, onSelect }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected: LeaveRequest; filter: "All" | RequestStatus; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void }) {
   const filters: ("All" | RequestStatus)[] = ["All", "Pending", "Approved", "Declined"];
   return (
     <section className={styles.recordsWorkspace}>
@@ -895,14 +963,20 @@ function RequestsView({ requests, allRequests, selected, filter, onFilter, onSel
           {requests.map((request) => <button className={`${styles.tableRow} ${selected.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} role="row" key={request.id}><span><i>{request.initials}</i><b>{request.employee}<small>{request.team} · {request.id}</small></b></span><span>{request.leaveType}</span><span>{request.dateLabel}</span><span>{formatDuration(request)}{formatTimeRange(request) ? <small>{formatTimeRange(request)}</small> : null}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} /></button>)}
           {!requests.length ? <div className={styles.emptyState}><Search size={23} /><strong>No requests here</strong><span>Choose another status.</span></div> : null}
         </div>
-        <RequestDetail request={selected} />
+        <RequestDetail profile={profile} request={selected} />
       </div>
     </section>
   );
 }
 
-function RequestDetail({ request }: { request: LeaveRequest }) {
-  return <aside className={styles.detailPanel} aria-label={`${request.id} details`}><header><span className={styles.avatarOrange}>{request.initials}</span><span><small>{request.id}</small><h2>{request.employee}</h2><p>{request.team}</p></span><button type="button" aria-label="More record actions"><MoreHorizontal size={18} /></button></header><StatusPill status={request.status} /><dl><div><dt>Leave type</dt><dd>{request.leaveType}</dd></div><div><dt>When</dt><dd>{request.dateLabel}</dd></div><div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div><div><dt>Approval</dt><dd>{request.approvalRequired ? request.manager : "Not required"}</dd></div></dl>{request.employeeNote !== "No note added." ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}{request.managerNote ? <section><span>Manager decision note</span><p>{request.managerNote}</p></section> : null}</aside>;
+function RequestDetail({ profile, request }: { profile: Profile; request: LeaveRequest }) {
+  const canViewAttachments = profile.accessRole === "manager" || profile.accessRole === "hr";
+  return <aside className={styles.detailPanel} aria-label={`${request.id} details`}><header><span className={styles.avatarOrange}>{request.initials}</span><span><small>{request.id}</small><h2>{request.employee}</h2><p>{request.team}</p></span><button type="button" aria-label="More record actions"><MoreHorizontal size={18} /></button></header><StatusPill status={request.status} /><dl><div><dt>Leave type</dt><dd>{request.leaveType}</dd></div><div><dt>When</dt><dd>{request.dateLabel}</dd></div><div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div><div><dt>Approval</dt><dd>{request.approvalRequired ? request.manager : "Not required"}</dd></div></dl>{request.employeeNote !== "No note added." ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}{canViewAttachments ? <AttachmentList attachments={request.attachments} /> : null}{request.managerNote ? <section><span>Manager decision note</span><p>{request.managerNote}</p></section> : null}</aside>;
+}
+
+function AttachmentList({ attachments }: { attachments?: LeaveAttachment[] }) {
+  if (!attachments?.length) return null;
+  return <section className={styles.attachmentList}><span><Paperclip size={14} /> Supporting files · private</span>{attachments.map((attachment) => { const Icon = attachment.mimeType === "application/pdf" ? FileText : FileImage; return <a href={attachment.previewUrl} target="_blank" rel="noreferrer" key={attachment.id}><Icon size={17} /><span><strong>{attachment.name}</strong><small>{formatFileSize(attachment.sizeBytes)}</small></span><Eye size={15} /></a>; })}<small><ShieldCheck size={13} /> Only managers and HR can open these files.</small></section>;
 }
 
 function ApprovalsView({ pending, selected, selectedId, note, requests, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected: LeaveRequest; selectedId: string; note: string; requests: LeaveRequest[]; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
@@ -912,6 +986,7 @@ function ApprovalsView({ pending, selected, selectedId, note, requests, onNote, 
       <header className={styles.approvalHeader}><span className={styles.avatarOrange}>{selected.initials}</span><span><small>{selected.id}</small><h2>{selected.employee}</h2><p>{selected.team}</p></span><StatusPill status={selected.status} /></header>
       <div className={styles.factGrid}><article><CalendarDays size={17} /><span><small>When</small><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><small>Duration</small><strong>{formatDurationWithTime(selected)}</strong></span></article><article><ClipboardList size={17} /><span><small>Leave type</small><strong>{selected.leaveType}</strong></span></article></div>
       <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div>
+      <AttachmentList attachments={selected.attachments} />
       <ApprovalCalendar selected={selected} requests={requests} />
       {selected.status === "Pending" ? <div className={styles.decisionBox}><label><span>Decision note <small>Required when declining</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} placeholder="Add context that will remain with this record." /></label><div><button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")}><XCircle size={16} /> Decline</button><button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")}><CheckCircle2 size={16} /> Approve leave</button></div></div> : <div className={styles.decisionRecorded}><CheckCircle2 size={19} /><span><strong>Decision recorded</strong><small>The employee view and leave register show {selected.status.toLowerCase()}.</small></span></div>}
     </section>

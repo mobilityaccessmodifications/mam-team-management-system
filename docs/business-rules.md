@@ -28,10 +28,12 @@
 - The demo totals weekday hours inside the 6:00 am–6:00 pm working window. Break deductions, standard daily hours, payroll treatment and evidence requirements still need confirmation before live use.
 - Manager review shows a calendar from three weeks before the requested start through three weeks after the requested end, rounded to full Monday-to-Sunday weeks. The applicant is highlighted, relevant team leave and public holidays are visible, and another employee's private reason is never shown.
 - Employee requests are pending until their assigned manager decides them. A manager's own leave is added directly as an approved calendar record with approval marked “Not required”; managers never approve themselves. “To approve” includes only pending employee requests assigned to the selected manager.
+- A request may include up to three supporting PDF or image files, limited to 5 MB each. In the current no-login demo, files remain only in the open browser session and appear only in manager or HR views. The authenticated release uses a private Supabase Storage bucket and RLS so employees and coworkers cannot download evidence after submission.
 - Shared demo mode stores only the fixed synthetic dataset. The profile selector simulates roles and is not evidence of user identity or authorization.
 
 ## Data minimisation
 
 - The team calendar should show only what is required for coverage.
 - Detailed reasons and attachments must not appear in the shared calendar.
+- Medical certificates and other evidence require an agreed retention/deletion period and malware-scanning decision before live staff use.
 - Use synthetic names and dates in development, CI, screenshots and demos.

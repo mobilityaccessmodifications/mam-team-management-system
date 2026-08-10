@@ -1454,6 +1454,85 @@
   font-size: 12px;
 }
 
+.attachmentList > span,
+.privateNote > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.attachmentList > a {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fafbf9;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.attachmentList > a:hover {
+  border-color: var(--orange);
+  background: #fffaf7;
+}
+
+.attachmentList > a:focus-visible {
+  outline: 3px solid rgba(232, 111, 46, 0.18);
+  outline-offset: 2px;
+}
+
+.attachmentList > a > svg:first-child {
+  color: var(--orange-deep);
+}
+
+.attachmentList > a > svg:last-child {
+  color: var(--muted);
+}
+
+.attachmentList > a strong,
+.attachmentList > a small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachmentList > a strong {
+  font-size: 12px;
+}
+
+.attachmentList > a small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.attachmentList > small {
+  margin-top: 9px;
+}
+
+.approvalRecord > .attachmentList {
+  margin-top: 11px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fafbf9;
+}
+
+.approvalRecord > .attachmentList > span {
+  color: var(--orange-deep);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
 .board {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -2662,6 +2741,40 @@
   height: 46px;
   padding: 0 10px;
   font-size: 13px;
+}
+
+.attachmentField > small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.form .fileInput {
+  height: auto;
+  min-height: 46px;
+  padding: 6px;
+  color: var(--muted);
+}
+
+.fileInput::file-selector-button {
+  min-height: 32px;
+  margin-right: 9px;
+  padding: 0 11px;
+  border: 1px solid var(--line-dark);
+  border-radius: 5px;
+  background: #f7f9f8;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.fileInput:hover::file-selector-button {
+  border-color: var(--orange);
+  background: var(--orange-soft);
+  color: var(--orange-deep);
 }
 
 .privacyNote {

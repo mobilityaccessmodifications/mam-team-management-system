@@ -18,6 +18,7 @@ No external HR, payroll, AroFlo or Outlook write integration exists in the found
 - Direct anonymous inserts, updates and deletes are revoked. Narrow `security definer` RPCs validate a fixed synthetic profile, working-window times, manager assignment, employee request status and reset confirmation before changing demo rows. Manager profiles create approved records with `approval_required = false`; employee profiles create pending records assigned to their manager.
 - The public RPCs are an intentional demo-only compromise so the workflow can be tested before authentication. They are not an authorization model and must never be used with real employee data.
 - If the shared demo variables are absent, the application falls back to browser-local synthetic data.
+- Supporting files are a browser-session interaction in this no-login demo and disappear on refresh or reset. They are deliberately not written to the anonymous shared dataset because the profile selector is not an identity or authorization boundary.
 
 ## Future authentication
 
@@ -33,8 +34,9 @@ No external HR, payroll, AroFlo or Outlook write integration exists in the found
 - `team_memberships`: employee-to-team relationship and team role.
 - `leave_requests`: employee-owned request with dates and lifecycle state.
 - `leave_request_events`: audit-friendly request history.
+- `leave_request_attachments`: private evidence metadata linked to a leave request; file bytes live in the non-public `leave-evidence` Storage bucket.
 
-The unapplied staff/auth migration intentionally exposes only a user's own profile, memberships, requests and request events. Manager access is deferred until the approval model is confirmed.
+The staff/auth attachment migration allows an employee to upload evidence for their own open request, while only HR, system administrators, and a manager/team lead who shares the employee's team may read the attachment metadata or file object. Access is checked from controlled profile and membership records, never user-editable metadata.
 
 ## Environments
 

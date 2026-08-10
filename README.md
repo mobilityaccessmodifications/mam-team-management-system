@@ -2,7 +2,7 @@
 
 An internal web portal for Mobility Access Modifications to manage team availability, leave requests and manager decisions.
 
-The repository currently contains a deployable foundation and an interactive, shared synthetic workflow demo. It demonstrates full-day and timed leave across one or more dates, sick leave, manager approval of employee requests with a coverage calendar spanning three weeks before and after each request, direct manager leave entries, and a privacy-preserving team calendar without authentication or real staff data.
+The repository currently contains a deployable foundation and an interactive, shared synthetic workflow demo. It demonstrates full-day and timed leave across one or more dates, sick leave, optional PDF/image evidence, manager approval of employee requests with a coverage calendar spanning three weeks before and after each request, direct manager leave entries, and a privacy-preserving team calendar without authentication or real staff data.
 
 ## Status
 
@@ -19,7 +19,7 @@ The repository currently contains a deployable foundation and an interactive, sh
 ## Stack
 
 - Next.js 16 App Router, React 19, TypeScript
-- Supabase Auth and Postgres
+- Supabase Auth, Postgres and private Storage
 - Vercel hosting and environment separation
 - npm with committed lockfile and pinned application dependencies
 
@@ -35,6 +35,8 @@ npm run dev -- -p 3001
 Open `http://localhost:3001`.
 
 Use the top-right profile selector to preview the workspace as HR, the Major Mod manager, the Minor Mod manager or several employees. The intentionally minimal sidebar contains Home, one Leave workspace and the team calendar. For managers, Leave contains a clear in-page switch between team requests and the items waiting for their decision; employees only see their own leave. “Pending” counts every pending employee request visible in the current request list, while “To approve” counts only employee requests assigned to the current manager. Managers add their own leave directly to the calendar as approved records and never approve themselves. Approval records show the applicant highlighted in a weekly calendar grid, relevant team leave and a clearly marked synthetic public-holiday example; private reasons never appear there. A person can optionally choose a start time for the first date and an end time for the last date between 6:00 am and 6:00 pm in fixed 15-minute intervals; the demo totals only weekday working-window hours between them.
+
+A request can include up to three PDF or image files of 5 MB each. Files stay only in the open browser session during the no-login demo, disappear on refresh or reset, and are shown only when the profile selector is set to a manager or HR. This is an honest workflow preview, not a security boundary. The versioned staff/auth migration creates a private Supabase Storage bucket and RLS-backed metadata for real manager/HR-only access once authenticated identities are enabled.
 
 When `NEXT_PUBLIC_SHARED_DEMO=true` and the public Supabase variables are configured, submissions, decisions and resets are shared in realtime across open browsers. “Reset demo” restores the fixed fake dataset for everyone. The profile selector remains a role simulation, not authentication, so this mode must never contain real staff or leave data.
 
