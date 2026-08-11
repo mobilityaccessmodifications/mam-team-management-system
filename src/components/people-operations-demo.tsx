@@ -200,6 +200,7 @@ function createOffboardingTasks(endDate: string): WorkflowTask[] {
     { id: crypto.randomUUID(), group: "Systems & licences", title: "AroFlo, Hubstaff, Deputy, 3CX, LMS and reporting cleanup", owner: "Analyst", due: addDays(endDate, -1), status: "Not Started" },
     { id: crypto.randomUUID(), group: "Assets & physical access", title: "Recover equipment, tools, PPE, SIM and site access", owner: "Warehouse", due: endDate, status: "Not Started" },
     { id: crypto.randomUUID(), group: "Handover & close-out", title: "Reassign files, inboxes and active jobs", owner: "Team Leader", due: endDate, status: "Not Started" },
+    { id: crypto.randomUUID(), group: "Handover & close-out", title: "Confirm equipment return and handover arrangements", owner: "Employee", due: endDate, status: "Not Started" },
     { id: crypto.randomUUID(), group: "Handover & close-out", title: "Final timesheet, optional exit interview and signed close-out", owner: "Accounts", due: addDays(endDate, 2), status: "Not Started" },
   ];
 }
@@ -266,7 +267,7 @@ const initialWorkflows: PeopleWorkflow[] = [
     kind: "offboarding",
     employee: "Alex King",
     initials: "AK",
-    role: "Mobility consultant",
+    role: "Accessibility carpenter",
     department: "Major Modifications",
     manager: "Taylor Morgan",
     date: "2026-08-18",
@@ -279,6 +280,7 @@ const initialWorkflows: PeopleWorkflow[] = [
       { id: "off-4", group: "Systems & licences", title: "AroFlo, Deputy, Hubstaff, 3CX, LMS and reporting cleanup", owner: "Analyst", due: "2026-08-17", status: "Not Started" },
       { id: "off-5", group: "Assets & physical access", title: "Confirm asset return plan and site access recovery", owner: "Warehouse", due: "2026-08-10", status: "Overdue" },
       { id: "off-6", group: "Handover & close-out", title: "Reassign jobs, files and inbox ownership", owner: "Team Leader", due: "2026-08-18", status: "In Progress" },
+      { id: "off-8", group: "Handover & close-out", title: "Confirm equipment return and handover arrangements", owner: "Employee", due: "2026-08-18", status: "Not Started" },
       { id: "off-7", group: "Handover & close-out", title: "Final timesheet and signed close-out", owner: "Accounts", due: "2026-08-20", status: "Not Started" },
     ],
     assets: [
@@ -391,20 +393,25 @@ export function PeopleOperationsDemo({
   const [toast, setToast] = useState("");
 
   const canManage = activeProfile.accessRole === "hr" || activeProfile.accessRole === "manager";
-  const canViewOffboarding = activeProfile.accessRole !== "employee";
+  const isEmployee = activeProfile.accessRole === "employee";
   const accessibleWorkflows = useMemo(() => workflows.filter((workflow) => {
-    if (workflow.kind === "offboarding" && !canViewOffboarding) return false;
     if (activeProfile.accessRole === "hr") return true;
     if (activeProfile.accessRole === "manager") return workflow.manager === activeProfile.name;
     return workflow.employee === activeProfile.name;
-  }), [activeProfile, canViewOffboarding, workflows]);
+  }), [activeProfile, workflows]);
   const visiblePeople = useMemo(() => people.filter((person) => {
     if (activeProfile.accessRole === "hr") return true;
     if (activeProfile.accessRole === "manager") return person.manager === activeProfile.name;
     return `${person.firstName} ${person.lastName}` === activeProfile.name;
   }), [activeProfile, people]);
   const visibleReminders = useMemo(() => reminders.filter((reminder) => visiblePeople.some((person) => person.id === reminder.personId)), [reminders, visiblePeople]);
-  const visibleSection: PeopleSection = !canViewOffboarding && section === "offboarding" ? "profile" : section;
+  const employeeWorkflow = isEmployee
+    ? accessibleWorkflows.find((workflow) => workflow.kind === "offboarding") ?? accessibleWorkflows.find((workflow) => workflow.kind === "onboarding")
+    : undefined;
+  const employeeLifecycleSection = employeeWorkflow?.kind;
+  const visibleSection: PeopleSection = isEmployee && (section === "onboarding" || section === "offboarding")
+    ? employeeLifecycleSection ?? "profile"
+    : section;
   const workflowSection: WorkflowKind = visibleSection === "offboarding" ? "offboarding" : "onboarding";
   const activeWorkflows = accessibleWorkflows.filter((workflow) => workflow.kind === workflowSection);
   const selectedWorkflow = activeWorkflows.find((workflow) => workflow.id === selectedWorkflowId) ?? activeWorkflows[0];
@@ -581,9 +588,9 @@ export function PeopleOperationsDemo({
 
     <nav className={styles.sectionSwitch} aria-label="People sections">
       <button type="button" aria-pressed={visibleSection === "profile"} className={visibleSection === "profile" ? styles.sectionActive : undefined} onClick={() => setSection("profile")}><span><strong>Profile</strong></span></button>
-      <button type="button" aria-pressed={visibleSection === "onboarding"} className={visibleSection === "onboarding" ? styles.sectionActive : undefined} onClick={() => setSection("onboarding")}><span><strong>Onboarding</strong></span></button>
+      {isEmployee ? employeeLifecycleSection ? <button type="button" aria-pressed={visibleSection === employeeLifecycleSection} className={visibleSection === employeeLifecycleSection ? styles.sectionActive : undefined} onClick={() => setSection(employeeLifecycleSection)}><span><strong>{employeeLifecycleSection === "onboarding" ? "Onboarding" : "Offboarding"}</strong></span></button> : null : <button type="button" aria-pressed={visibleSection === "onboarding"} className={visibleSection === "onboarding" ? styles.sectionActive : undefined} onClick={() => setSection("onboarding")}><span><strong>Onboarding</strong></span></button>}
       <button type="button" aria-pressed={visibleSection === "checkins"} className={visibleSection === "checkins" ? styles.sectionActive : undefined} onClick={() => setSection("checkins")}><span><strong>Check-ins</strong></span>{queuedReminders.length ? <i>{queuedReminders.length}</i> : null}</button>
-      {canViewOffboarding ? <button type="button" aria-pressed={visibleSection === "offboarding"} className={visibleSection === "offboarding" ? styles.sectionActive : undefined} onClick={() => setSection("offboarding")}><span><strong>Offboarding</strong></span></button> : null}
+      {!isEmployee ? <button type="button" aria-pressed={visibleSection === "offboarding"} className={visibleSection === "offboarding" ? styles.sectionActive : undefined} onClick={() => setSection("offboarding")}><span><strong>Offboarding</strong></span></button> : null}
     </nav>
 
     {visibleSection === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} team={activeProfile.team} manager={activeProfile.manager} startedDate={activeProfile.startedDate} /> : null}
@@ -664,7 +671,7 @@ function WorkflowsView({
 
     <article className={styles.workflowDetail}>
       <header className={styles.detailHeader}>
-        <div>{!isEmployee ? <span className={styles.caseAvatar}>{selected.initials}</span> : null}<span><small>{selected.id} · {selected.kind === "onboarding" ? "Onboarding" : "Offboarding"}</small><h2>{isEmployee ? "My onboarding" : selected.employee}</h2><p>{isEmployee ? `${selected.role} · ${selected.department}` : `${selected.role} · ${selected.department} · Manager: ${selected.manager}`}</p></span></div>
+        <div>{!isEmployee ? <span className={styles.caseAvatar}>{selected.initials}</span> : null}<span><small>{selected.id} · {selected.kind === "onboarding" ? "Onboarding" : "Offboarding"}</small><h2>{isEmployee ? selected.kind === "onboarding" ? "My onboarding" : "My offboarding" : selected.employee}</h2><p>{isEmployee ? `${selected.role} · ${selected.department}` : `${selected.role} · ${selected.department} · Manager: ${selected.manager}`}</p></span></div>
         <span className={`${styles.statusPill} ${statusClass(status)}`}>{status}</span>
       </header>
 
