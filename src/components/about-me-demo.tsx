@@ -2,10 +2,8 @@
 
 import {
   BadgeCheck,
-  BriefcaseBusiness,
   Cake,
   HeartHandshake,
-  Mail,
   ShieldCheck,
   Sparkles,
   UsersRound,
@@ -14,8 +12,6 @@ import {
 import styles from "@/components/about-me-demo.module.css";
 
 export type AboutMeDemoProps = {
-  name: string;
-  initials: string;
   roleLabel: string;
   team: string;
   manager: string;
@@ -92,8 +88,6 @@ function anniversaryFor(today: string, startedDate: string, years: number): Spec
 
 /** A compact, browser-local profile panel rendered within the People workspace. */
 export function AboutMeDemo({
-  name,
-  initials,
   roleLabel,
   team,
   manager,
@@ -141,29 +135,16 @@ export function AboutMeDemo({
         </section>
       ) : null}
 
-      <section className={styles.profileCard} aria-labelledby="profile-summary-heading">
-        <div className={styles.identity}>
-          <span className={styles.avatar} aria-hidden="true">{initials}</span>
-          <div>
-            <h2 id="profile-summary-heading">{name}</h2>
-            <p>{roleLabel} <span aria-hidden="true">·</span> {team}</p>
-          </div>
+      <section className={styles.profileCard} aria-label="MAM profile summary">
+        <div className={styles.profileSummary}>
+          <span>{roleLabel} <i aria-hidden="true">·</i> {team}</span>
+          <strong>{daysAtMam.toLocaleString()} <small>days at MAM</small></strong>
         </div>
-        <dl className={styles.tenure}>
-          <div>
-            <dt>At MAM</dt>
-            <dd>{daysAtMam.toLocaleString()} <small>days</small></dd>
-          </div>
-        </dl>
       </section>
 
       <section className={styles.contactsCard} aria-labelledby="contacts-heading">
         <header>
-          <div>
-            <span>Need help?</span>
-            <h2 id="contacts-heading">Contact the right team</h2>
-          </div>
-          <Mail aria-hidden="true" size={18} />
+          <h2 id="contacts-heading">Who to contact</h2>
         </header>
         <div className={styles.contactList}>
           {contacts.map((contact) => {
@@ -175,13 +156,11 @@ export function AboutMeDemo({
                   <strong>{contact.title}</strong>
                   <small>{contact.name}</small>
                 </span>
-                <span className={styles.contactEmail}>{contact.email}</span>
-                <Mail aria-hidden="true" size={14} />
+                <span className={styles.contactAction}>Email</span>
               </a>
             );
           })}
         </div>
-        <p className={styles.contactFootnote}><BriefcaseBusiness aria-hidden="true" size={14} /> Contact details are fictional in this synthetic demo.</p>
       </section>
     </section>
   );

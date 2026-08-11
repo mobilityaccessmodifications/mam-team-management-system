@@ -488,14 +488,14 @@ export function PeopleOperationsDemo({
           `Role: ${person.role} · ${person.department}`,
           `Check-in due: ${formatDate(reminder.checkInDate)}`,
           `Reminder schedule: ${reminder.sequence.toLowerCase()} reminder on ${formatDate(reminder.notifyDate)}`,
-          `Forms & templates: ${checkInFormsUrl}`,
+          "Forms & templates: available from the People workspace",
           "Action: Schedule the check-in and use the MAM check-in / probation template.",
         ],
       }];
     });
     setReminders((current) => current.map((reminder) => due.some((entry) => entry.id === reminder.id) ? { ...reminder, status: "Preview sent", sentAt: "Just now" } : reminder));
     onEmailPreview(previews);
-    announce(`${previews.length} synthetic reminder preview${previews.length === 1 ? "" : "s"} queued for review.`);
+    announce(`${previews.length} email preview${previews.length === 1 ? "" : "s"} created.`);
   }
 
   function completeCheckIn(reminderId: string) {
@@ -567,27 +567,26 @@ export function PeopleOperationsDemo({
     announce(`${id} created with assigned tasks, assets, access requests${kind === "onboarding" ? " and check-in milestones" : ""}.`);
   }
 
-  const totalOverdue = accessibleWorkflows.reduce((count, workflow) => count + workflowOverdueCount(workflow), 0);
+  const actionableOwner = activeProfile.accessRole === "manager" ? "Team Leader" : activeProfile.accessRole === "employee" ? "Employee" : undefined;
+  const totalOverdue = accessibleWorkflows.reduce((count, workflow) => count + workflow.tasks.filter((task) => task.status === "Overdue" && (!actionableOwner || task.owner === actionableOwner)).length, 0);
 
   return <section className={styles.workspace} aria-label="People operations workspace">
     <header className={styles.pageHeader}>
       <div>
-        <span>People · synthetic demo</span>
         <h1>People</h1>
-        <p>{canViewOffboarding ? "Your profile and people workflows." : "Your profile, onboarding and check-ins."}</p>
-        {totalOverdue ? <p className={styles.attentionSummary}><AlertTriangle size={14} /> {totalOverdue} action{totalOverdue === 1 ? "" : "s"} need attention</p> : null}
+        {totalOverdue ? <p className={styles.attentionSummary}><AlertTriangle size={14} /> {totalOverdue} action{totalOverdue === 1 ? " needs" : "s need"} attention</p> : null}
       </div>
       {canManage && visibleSection !== "profile" ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleSection === "checkins" ? "checkin" : visibleSection)}><Plus size={17} /> {visibleSection === "checkins" ? "Add employee" : `Start ${visibleSection}`}</button> : null}
     </header>
 
     <nav className={styles.sectionSwitch} aria-label="People sections">
-      <button type="button" aria-pressed={visibleSection === "profile"} className={visibleSection === "profile" ? styles.sectionActive : undefined} onClick={() => setSection("profile")}><span><strong>My profile</strong></span></button>
-      <button type="button" aria-pressed={visibleSection === "onboarding"} className={visibleSection === "onboarding" ? styles.sectionActive : undefined} onClick={() => setSection("onboarding")}><span><strong>{activeProfile.accessRole === "employee" ? "My onboarding" : "Onboarding"}</strong></span></button>
-      <button type="button" aria-pressed={visibleSection === "checkins"} className={visibleSection === "checkins" ? styles.sectionActive : undefined} onClick={() => setSection("checkins")}><span><strong>{activeProfile.accessRole === "employee" ? "My check-ins" : "Check-ins"}</strong></span>{queuedReminders.length ? <i>{queuedReminders.length}</i> : null}</button>
+      <button type="button" aria-pressed={visibleSection === "profile"} className={visibleSection === "profile" ? styles.sectionActive : undefined} onClick={() => setSection("profile")}><span><strong>Profile</strong></span></button>
+      <button type="button" aria-pressed={visibleSection === "onboarding"} className={visibleSection === "onboarding" ? styles.sectionActive : undefined} onClick={() => setSection("onboarding")}><span><strong>Onboarding</strong></span></button>
+      <button type="button" aria-pressed={visibleSection === "checkins"} className={visibleSection === "checkins" ? styles.sectionActive : undefined} onClick={() => setSection("checkins")}><span><strong>Check-ins</strong></span>{queuedReminders.length ? <i>{queuedReminders.length}</i> : null}</button>
       {canViewOffboarding ? <button type="button" aria-pressed={visibleSection === "offboarding"} className={visibleSection === "offboarding" ? styles.sectionActive : undefined} onClick={() => setSection("offboarding")}><span><strong>Offboarding</strong></span></button> : null}
     </nav>
 
-    {visibleSection === "profile" ? <AboutMeDemo name={activeProfile.name} initials={activeProfile.initials} roleLabel={activeProfile.roleLabel} team={activeProfile.team} manager={activeProfile.manager} startedDate={activeProfile.startedDate} /> : null}
+    {visibleSection === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} team={activeProfile.team} manager={activeProfile.manager} startedDate={activeProfile.startedDate} /> : null}
     {visibleSection === "checkins" ? <CheckInsView
       people={visiblePeople}
       reminders={visibleReminders}
@@ -641,49 +640,57 @@ function WorkflowsView({
   onAccessUpdate: (workflowId: string, requestId: string) => void;
 }) {
   if (!workflows.length || !selected) return <div className={styles.emptyState}><UsersRound size={26} /><strong>{activeProfile.accessRole === "employee" ? "No onboarding tasks are assigned to you." : "No matching workflows"}</strong><span>{activeProfile.accessRole === "employee" ? "Your assigned tasks will appear here." : "Start a synthetic workflow to see it here."}</span></div>;
-  const groups = Array.from(new Set(selected.tasks.map((task) => task.group)));
-  const progress = workflowProgress(selected);
-  const status = workflowStatus(selected);
+  const isEmployee = activeProfile.accessRole === "employee";
+  const visibleTasks = isEmployee ? selected.tasks.filter((task) => task.owner === "Employee") : selected.tasks;
+  const groups = Array.from(new Set(visibleTasks.map((task) => task.group)));
+  const visibleComplete = visibleTasks.filter((task) => task.status === "Complete").length;
+  const progress = isEmployee ? Math.round((visibleComplete / Math.max(visibleTasks.length, 1)) * 100) : workflowProgress(selected);
+  const visibleOverdue = isEmployee ? visibleTasks.filter((task) => task.status === "Overdue").length : workflowOverdueCount(selected);
+  const status = isEmployee ? progress === 100 ? "Complete" : visibleOverdue ? "Needs attention" : "In progress" : workflowStatus(selected);
+  const showWorkflowList = !isEmployee && workflows.length > 1;
   const canActionTask = (task: WorkflowTask) => activeProfile.accessRole === "hr" || (activeProfile.accessRole === "manager" && selected.manager === activeProfile.name && task.owner === "Team Leader") || (activeProfile.accessRole === "employee" && selected.employee === activeProfile.name && task.owner === "Employee");
   const canActionRecord = (owner: string) => activeProfile.accessRole === "hr" || (activeProfile.accessRole === "manager" && selected.manager === activeProfile.name && owner === "Team Leader");
+  const visibleAssets = activeProfile.accessRole === "hr" ? selected.assets : selected.assets.filter((asset) => asset.owner === "Team Leader");
+  const visibleAccess = activeProfile.accessRole === "hr" ? selected.access : selected.access.filter((request) => request.owner === "Team Leader");
+  const showSupporting = activeProfile.accessRole !== "employee" && (activeProfile.accessRole === "hr" || visibleAssets.length > 0 || visibleAccess.length > 0);
 
-  return <div className={styles.workflowDesk}>
-    <aside className={styles.workflowList} aria-label="People workflow records">
+  return <div className={`${styles.workflowDesk} ${!showWorkflowList ? styles.workflowDeskSingle : ""}`}>
+    {showWorkflowList ? <aside className={styles.workflowList} aria-label="People workflow records">
       <header><span>{workflows.length} open</span><h2>{selected.kind === "onboarding" ? "New starters" : "Departures"}</h2></header>
       {workflows.map((workflow) => <button type="button" key={workflow.id} className={workflow.id === selectedId ? styles.workflowSelected : undefined} onClick={() => onSelect(workflow.id)}>
         <span className={styles.caseAvatar}>{workflow.initials}</span><span><small>{workflow.id}</small><strong>{workflow.employee}</strong><em>{workflow.role} · {workflow.department}</em></span><span className={`${styles.statusPill} ${statusClass(workflowStatus(workflow))}`}>{workflowProgress(workflow)}%</span><ChevronRight size={15} />
       </button>)}
-    </aside>
+    </aside> : null}
 
     <article className={styles.workflowDetail}>
       <header className={styles.detailHeader}>
-        <div><span className={styles.caseAvatar}>{selected.initials}</span><span><small>{selected.id} · {selected.kind === "onboarding" ? "New starter" : "Departure"}</small><h2>{selected.employee}</h2><p>{selected.role} · {selected.department} · Manager: {selected.manager}</p></span></div>
+        <div>{!isEmployee ? <span className={styles.caseAvatar}>{selected.initials}</span> : null}<span><small>{selected.id} · {selected.kind === "onboarding" ? "Onboarding" : "Offboarding"}</small><h2>{isEmployee ? "My onboarding" : selected.employee}</h2><p>{isEmployee ? `${selected.role} · ${selected.department}` : `${selected.role} · ${selected.department} · Manager: ${selected.manager}`}</p></span></div>
         <span className={`${styles.statusPill} ${statusClass(status)}`}>{status}</span>
       </header>
 
-      <div className={styles.readiness}><div><span>{selected.kind === "onboarding" ? "Start date" : "Final working day"}</span><strong>{formatDate(selected.date)}</strong></div><div><span>Checklist progress</span><strong>{progress}%</strong><i><b style={{ width: `${progress}%` }} /></i></div><div><span>Overdue actions</span><strong>{workflowOverdueCount(selected)}</strong></div></div>
+      <div className={styles.readiness}><div><span>{selected.kind === "onboarding" ? "Start date" : "Final working day"}</span><strong>{formatDate(selected.date)}</strong></div><div><span>{isEmployee ? "My progress" : "Checklist progress"}</span><strong>{progress}%</strong><i><b style={{ width: `${progress}%` }} /></i></div><div><span>Overdue actions</span><strong>{visibleOverdue}</strong></div></div>
 
       <section className={styles.taskBoard} aria-label="Assigned checklist">
-        <header><div><span>Assigned checklist</span><h3>{selected.kind === "onboarding" ? "Day 1 readiness plan" : "Close-out plan"}</h3></div><small>Only assigned demo roles can confirm their own tasks.</small></header>
-        {groups.map((group) => <div className={styles.taskGroup} key={group}><h4>{group}</h4>{selected.tasks.filter((task) => task.group === group).map((task) => <div className={styles.taskRow} key={task.id}>
+        <header><h3>{selected.kind === "onboarding" ? "Onboarding tasks" : "Offboarding tasks"}</h3></header>
+        {groups.map((group) => <div className={styles.taskGroup} key={group}><h4>{group}</h4>{visibleTasks.filter((task) => task.group === group).map((task) => <div className={styles.taskRow} key={task.id}>
           <span className={`${styles.taskMark} ${task.status === "Complete" ? styles.taskComplete : ""}`}>{task.status === "Complete" ? <Check size={14} /> : <CircleDot size={13} />}</span>
-          <span><strong>{task.title}</strong><small>{task.owner} · Due {formatDate(task.due)}{task.evidence ? ` · ${task.evidence}` : ""}</small></span>
+          <span><strong>{task.title}</strong><small>{task.owner} · Due {formatDate(task.due)}{task.evidence ? " · Attachment added" : ""}</small></span>
           <span className={`${styles.statusPill} ${statusClass(task.status)}`}>{task.status}</span>
-          {canActionTask(task) ? <span className={styles.taskActions}><label title="Attach a synthetic confirmation"><Paperclip size={14} /><input type="file" accept="application/pdf,image/*" onChange={(event) => onAttach(event, selected.id, task.id)} /></label><button type="button" onClick={() => onTaskUpdate(selected.id, task.id, task.status === "Complete" ? "In Progress" : "Complete")}>{task.status === "Complete" ? "Reopen" : "Confirm"}</button></span> : null}
+          {canActionTask(task) ? <span className={styles.taskActions}><label title="Attach a synthetic confirmation"><Paperclip size={14} /> Attach<input type="file" accept="application/pdf,image/*" onChange={(event) => onAttach(event, selected.id, task.id)} /></label><button type="button" onClick={() => onTaskUpdate(selected.id, task.id, task.status === "Complete" ? "In Progress" : "Complete")}>{task.status === "Complete" ? "Reopen" : "Confirm"}</button></span> : null}
         </div>)}</div>)}
       </section>
 
-      <details className={styles.supportingDetails}>
-        <summary><span>Assets, access and activity</span><small>Open when needed</small></summary>
+      {showSupporting ? <details className={styles.supportingDetails}>
+        <summary><span>{activeProfile.accessRole === "hr" ? "Assets, access and activity" : "Assets and access"}</span><small>Open when needed</small></summary>
         <div className={styles.supportingContent}>
-          <div className={styles.detailGrid}>
-            <section><header><Laptop size={16} /><span><small>Equipment & access</small><h3>Asset register</h3></span></header>{selected.assets.map((asset) => <div className={styles.assetRow} key={asset.id}><span><strong>{asset.item}</strong><small>{asset.owner}</small></span><span className={`${styles.statusPill} ${statusClass(asset.status)}`}>{asset.status}</span>{canActionRecord(asset.owner) && asset.status !== (selected.kind === "onboarding" ? "Issued" : "Returned") ? <button type="button" onClick={() => onAssetUpdate(selected.id, asset.id)}>{selected.kind === "onboarding" ? "Mark issued" : "Mark returned"}</button> : null}</div>)}</section>
-            <section><header><ShieldCheck size={16} /><span><small>Role access</small><h3>Access & subscriptions</h3></span></header>{selected.access.map((request) => <div className={styles.accessRow} key={request.id}><span><strong>{request.service}</strong><small>{request.owner} · {request.businessNeed}</small><em>{request.renewal}</em></span><span className={`${styles.statusPill} ${statusClass(request.status)}`}>{request.status}</span>{canActionRecord(request.owner) && !["Active", "Revoked"].includes(request.status) ? <button type="button" onClick={() => onAccessUpdate(selected.id, request.id)}>{selected.kind === "offboarding" ? "Confirm revoked" : request.status === "Requested" ? "Approve" : "Advance"}</button> : null}</div>)}</section>
+          <div className={`${styles.detailGrid} ${visibleAssets.length && !visibleAccess.length ? styles.detailGridSingle : ""}`}>
+            {visibleAssets.length ? <section><header><Laptop size={16} /><span><small>Equipment & access</small><h3>Asset register</h3></span></header>{visibleAssets.map((asset) => <div className={styles.assetRow} key={asset.id}><span><strong>{asset.item}</strong><small>{asset.owner}</small></span><span className={`${styles.statusPill} ${statusClass(asset.status)}`}>{asset.status}</span>{canActionRecord(asset.owner) && asset.status !== (selected.kind === "onboarding" ? "Issued" : "Returned") ? <button type="button" onClick={() => onAssetUpdate(selected.id, asset.id)}>{selected.kind === "onboarding" ? "Mark issued" : "Mark returned"}</button> : null}</div>)}</section> : null}
+            {visibleAccess.length ? <section><header><ShieldCheck size={16} /><span><small>Role access</small><h3>Access & subscriptions</h3></span></header>{visibleAccess.map((request) => <div className={styles.accessRow} key={request.id}><span><strong>{request.service}</strong><small>{request.owner} · {request.businessNeed}</small><em>{request.renewal}</em></span><span className={`${styles.statusPill} ${statusClass(request.status)}`}>{request.status}</span>{canActionRecord(request.owner) && !["Active", "Revoked"].includes(request.status) ? <button type="button" onClick={() => onAccessUpdate(selected.id, request.id)}>{selected.kind === "offboarding" ? "Confirm revoked" : request.status === "Requested" ? "Approve" : "Advance"}</button> : null}</div>)}</section> : null}
           </div>
 
-          <section className={styles.audit}><header><FileCheck2 size={16} /><span><small>Audit trail</small><h3>Recorded activity</h3></span></header>{selected.audit.slice(0, 5).map((entry) => <div key={entry.id}><span /><p><strong>{entry.actor}</strong> {entry.action}<small>{entry.time}</small></p></div>)}</section>
+          {activeProfile.accessRole === "hr" ? <section className={styles.audit}><header><FileCheck2 size={16} /><span><small>Audit trail</small><h3>Recorded activity</h3></span></header>{selected.audit.slice(0, 5).map((entry) => <div key={entry.id}><span /><p><strong>{entry.actor}</strong> {entry.action}<small>{entry.time}</small></p></div>)}</section> : null}
         </div>
-      </details>
+      </details> : null}
     </article>
   </div>;
 }
@@ -717,19 +724,21 @@ function CheckInsView({
 }) {
   const personReminders = selectedPerson ? reminders.filter((reminder) => reminder.personId === selectedPerson.id).sort((first, second) => first.checkInDate.localeCompare(second.checkInDate) || first.notifyDate.localeCompare(second.notifyDate)) : [];
   const dueCount = reminders.filter((reminder) => reminder.status === "Scheduled" && reminder.notifyDate <= DEMO_TODAY).length;
+  const isEmployee = activeProfile.accessRole === "employee";
+  const showPersonList = !isEmployee && people.length > 1;
   if (!people.length || !selectedPerson) return <div className={styles.emptyState}><CalendarClock size={26} /><strong>{activeProfile.accessRole === "employee" ? "No check-ins are scheduled for you." : "No matching check-in records"}</strong><span>{activeProfile.accessRole === "employee" ? "Your manager will add the next milestone when it is needed." : "Add a fictional employee to the check-in register."}</span></div>;
 
   return <div className={styles.checkInDesk}>
-    <header className={styles.checkInLead}><div><span>Check-ins</span><h2>Scheduled milestones</h2><p>2-week, 1-month, 3-month and probation check-ins.</p></div>{canManage ? <button className={styles.previewButton} type="button" onClick={onRunDue}><Mail size={16} /> Run {dueCount || "due"} reminder preview{dueCount === 1 ? "" : "s"}</button> : null}</header>
-    <div className={styles.checkInLayout}>
-      <aside className={styles.personList} aria-label="Employee check-in register">
+    {canManage ? <header className={styles.checkInLead}><p>{dueCount ? `${dueCount} reminder${dueCount === 1 ? "" : "s"} due` : "No reminders due"}</p><button className={styles.previewButton} type="button" onClick={onRunDue} disabled={!dueCount}><Mail size={16} /> Create {dueCount || ""} email preview{dueCount === 1 ? "" : "s"}</button></header> : null}
+    <div className={`${styles.checkInLayout} ${!showPersonList ? styles.checkInLayoutSingle : ""}`}>
+      {showPersonList ? <aside className={styles.personList} aria-label="Employee check-in register">
         {people.map((person) => <button type="button" key={person.id} className={person.id === selectedPersonId ? styles.personSelected : undefined} onClick={() => onSelectPerson(person.id)}><span className={styles.caseAvatar}>{initialsFor(person.firstName, person.lastName)}</span><span><strong>{person.firstName} {person.lastName}</strong><small>{person.role} · Starts {formatDate(person.startDate)}</small></span><ChevronRight size={15} /></button>)}
-      </aside>
+      </aside> : null}
       <article className={styles.checkInDetail}>
-        <header><div><span className={styles.caseAvatar}>{initialsFor(selectedPerson.firstName, selectedPerson.lastName)}</span><span><small>Check-in record · synthetic only</small><h2>{selectedPerson.firstName} {selectedPerson.lastName}</h2><p>{selectedPerson.role} · {selectedPerson.department} · Manager: {selectedPerson.manager}</p></span></div>{activeProfile.accessRole === "hr" ? <button type="button" className={styles.detailToggle} onClick={onTogglePrivate}>{showPrivateFields ? "Hide HR fields" : "View HR fields"}</button> : null}</header>
+        <header><div>{!isEmployee ? <span className={styles.caseAvatar}>{initialsFor(selectedPerson.firstName, selectedPerson.lastName)}</span> : null}<span><small>Check-in record</small><h2>{isEmployee ? "My check-ins" : `${selectedPerson.firstName} ${selectedPerson.lastName}`}</h2><p>{isEmployee ? selectedPerson.role : `${selectedPerson.role} · ${selectedPerson.department} · Manager: ${selectedPerson.manager}`}</p></span></div>{activeProfile.accessRole === "hr" ? <button type="button" className={styles.detailToggle} onClick={onTogglePrivate}>{showPrivateFields ? "Hide HR fields" : "View HR fields"}</button> : null}</header>
         {showPrivateFields && activeProfile.accessRole === "hr" ? <div className={styles.privateFields}><ShieldCheck size={16} /><span><strong>HR-only synthetic register fields</strong><small>Address: {selectedPerson.address} · DOB: {formatDate(selectedPerson.dateOfBirth)} · Mobile: {selectedPerson.mobile} · Email: {selectedPerson.email}</small></span></div> : null}
-        <div className={styles.checkInMeta}><div><small>Start date</small><strong>{formatDate(selectedPerson.startDate)}</strong></div><div><small>Manager</small><strong>{selectedPerson.manager}</strong></div><a href={checkInFormsUrl} target="_blank" rel="noreferrer"><ArrowUpRight size={15} /> Check-in forms & templates</a></div>
-        <section className={styles.reminderTimeline}><header><span>Scheduled check-ins</span><small>Manager emails are previews in this demo — not automatic delivery.</small></header>{personReminders.map((reminder) => <article key={reminder.id}><span className={`${styles.timelineDot} ${statusClass(reminder.status)}`} /><div><strong>{reminder.milestone}{reminder.sequence === "Final" ? " · final reminder" : ""}</strong><p>Check-in due {formatDate(reminder.checkInDate)} · notify manager {formatDate(reminder.notifyDate)}</p>{reminder.snoozedUntil ? <small>Snoozed until {formatDate(reminder.snoozedUntil)}</small> : null}{reminder.sentAt ? <small>Preview queued {reminder.sentAt}</small> : null}</div><span className={`${styles.statusPill} ${statusClass(reminder.status)}`}>{reminder.status}</span>{canManage && !["Completed"].includes(reminder.status) ? <span className={styles.reminderActions}><button type="button" onClick={() => onComplete(reminder.id)}>Complete</button><button type="button" onClick={() => onSnooze(reminder.id)}><RotateCcw size={13} /> Snooze</button></span> : null}</article>)}</section>
+        <div className={styles.checkInMeta}><div><small>Start date</small><strong>{formatDate(selectedPerson.startDate)}</strong></div><div><small>Manager</small><strong>{selectedPerson.manager}</strong></div>{canManage ? <a href={checkInFormsUrl} target="_blank" rel="noreferrer"><ArrowUpRight size={15} /> Forms & templates</a> : null}</div>
+        <section className={styles.reminderTimeline}><header><span>Scheduled check-ins</span></header>{personReminders.map((reminder) => <article key={reminder.id}><span className={`${styles.timelineDot} ${statusClass(reminder.status)}`} /><div><strong>{reminder.milestone}{reminder.sequence === "Final" ? " · final reminder" : ""}</strong><p>Due {formatDate(reminder.checkInDate)} · reminder {formatDate(reminder.notifyDate)}</p>{reminder.snoozedUntil ? <small>Snoozed until {formatDate(reminder.snoozedUntil)}</small> : null}{reminder.sentAt ? <small>Email preview created {reminder.sentAt}</small> : null}</div><span className={`${styles.statusPill} ${statusClass(reminder.status)}`}>{reminder.status === "Preview sent" ? "Preview created" : reminder.status}</span>{canManage && !["Completed"].includes(reminder.status) ? <span className={styles.reminderActions}><button type="button" onClick={() => onComplete(reminder.id)}>Complete</button><button type="button" onClick={() => onSnooze(reminder.id)}><RotateCcw size={13} /> Snooze</button></span> : null}</article>)}</section>
       </article>
     </div>
   </div>;
@@ -755,12 +764,11 @@ function CreateCaseModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="people-case-title">
       <header><div><span>Synthetic People workflow</span><h2 id="people-case-title">Start {label}</h2></div><button type="button" onClick={onClose} aria-label="Close"><X size={19} /></button></header>
-      <p className={styles.modalNotice}><HardHat size={16} /> Use fictional details only. This creates a browser-only demo record and no real account, access or email.</p>
+      <p className={styles.modalNotice}><HardHat size={16} /> Demo only — use fictional details.</p>
       <form onSubmit={onSubmit}>
         <div className={styles.formRow}><label><span>First name</span><input name="firstName" defaultValue="Casey" required /></label><label><span>Last name</span><input name="lastName" defaultValue="Nguyen" required /></label></div>
         <div className={styles.formRow}><label><span>Role</span><input name="role" defaultValue="Team coordinator" required /></label><label><span>Department</span><input name="department" defaultValue={defaultTeam} required /></label></div>
         <div className={styles.formRow}><label><span>Manager</span><input name="manager" defaultValue={defaultManager} required /></label><label><span>{dateLabel}</span><input name="date" type="date" defaultValue={mode === "offboarding" ? "2026-09-04" : "2026-09-01"} required /></label></div>
-        <label><span>Work email</span><input name="email" type="email" defaultValue="casey.nguyen@example.test" required /></label>
         {allowPrivateFields ? <details><summary>HR register fields <small>Synthetic only</small></summary><div className={styles.formRow}><label><span>Address</span><input name="address" defaultValue="99 Example Avenue, Melbourne VIC" /></label><label><span>Date of birth</span><input name="dateOfBirth" type="date" defaultValue="1994-06-15" /></label></div><label><span>Mobile</span><input name="mobile" defaultValue="0400 000 199" /></label></details> : null}
         <footer><button type="button" className={styles.cancelButton} onClick={onClose}>Cancel</button><button type="submit" className={styles.primaryAction}>Create {label} <ArrowUpRight size={16} /></button></footer>
       </form>

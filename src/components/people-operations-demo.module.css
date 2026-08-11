@@ -1,14 +1,14 @@
-.workspace { display: grid; gap: 18px; max-width: 1180px; margin: 0 auto; color: #273136; }
-.pageHeader { display: flex; align-items: end; justify-content: space-between; gap: 24px; }
+.workspace { display: grid; gap: 14px; max-width: 1180px; margin: 0 auto; color: #273136; }
+.pageHeader { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 48px; }
 .pageHeader > div > span, .checkInLead > div > span, .modal header span { display: block; color: #69767a; font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
-.pageHeader h1 { margin: 5px 0 8px; font-family: var(--font-display, Impact, sans-serif); font-size: clamp(38px, 5vw, 52px); letter-spacing: -.035em; line-height: .95; }
+.pageHeader h1 { margin: 0; font-family: var(--font-display, Impact, sans-serif); font-size: clamp(30px, 4vw, 38px); font-weight: 600; letter-spacing: -.03em; line-height: 1; }
 .pageHeader p, .checkInLead p { margin: 0; color: #687479; font-size: 14px; }
-.primaryAction, .previewButton { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 7px; background: #f37022; color: #fff; cursor: pointer; font: inherit; font-size: 14px; padding: 11px 15px; box-shadow: 0 6px 14px rgb(170 72 14 / .16); }
+.primaryAction, .previewButton { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 7px; background: #f37022; color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; padding: 9px 14px; }
 .primaryAction:hover, .previewButton:hover { background: #df5f16; }
 .primaryAction:focus-visible, .previewButton:focus-visible { outline: 3px solid rgb(243 112 34 / .32); outline-offset: 3px; }
 .attentionSummary { display: inline-flex; align-items: center; gap: 6px; margin-top: 9px !important; color: #a24335 !important; font-size: 12px !important; font-weight: 700; }
 .sectionSwitch { display: flex; flex-wrap: wrap; border: 1px solid #dce2e1; border-radius: 9px; overflow: hidden; background: #fff; }
-.sectionSwitch button { display: flex; min-width: 132px; flex: 1 1 132px; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; border: 0; border-right: 1px solid #dce2e1; background: #fff; color: #273136; cursor: pointer; padding: 11px 14px; text-align: left; transition: background .18s ease, color .18s ease, box-shadow .18s ease; }
+.sectionSwitch button { display: flex; min-width: 120px; flex: 1 1 120px; align-items: center; justify-content: space-between; gap: 10px; min-height: 46px; border: 0; border-right: 1px solid #dce2e1; background: #fff; color: #526065; cursor: pointer; padding: 9px 13px; text-align: left; transition: background .16s ease, color .16s ease, box-shadow .16s ease; }
 .sectionSwitch strong { font-size: 14px; }
 .sectionSwitch i { display: grid; min-width: 24px; height: 24px; place-items: center; margin-left: auto; border-radius: 999px; background: #edf0ef; color: #556267; font-size: 11px; font-style: normal; }
 .sectionSwitch .sectionActive { box-shadow: inset 0 -3px #f37022; background: #fffaf7; }
@@ -16,6 +16,7 @@
 .sectionSwitch button:hover { background: #fffaf7; }
 .sectionSwitch button:focus-visible { position: relative; z-index: 1; outline: 3px solid rgb(243 112 34 / .32); outline-offset: -3px; }
 .workflowDesk { display: grid; grid-template-columns: minmax(250px, .42fr) minmax(0, 1.58fr); border: 1px solid #dce2e1; border-radius: 10px; background: #fff; overflow: hidden; }
+.workflowDeskSingle { grid-template-columns: 1fr; }
 .workflowList { border-right: 1px solid #dce2e1; min-height: 660px; }
 .workflowList > header { padding: 16px 17px; border-bottom: 1px solid #dce2e1; }
 .workflowList > header span { color: #748185; font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
@@ -48,7 +49,7 @@
 .readiness i { display: block; height: 5px; border-radius: 999px; background: #edf0ef; overflow: hidden; }
 .readiness i b { display: block; height: 100%; border-radius: inherit; background: #ef7027; }
 .taskBoard { border: 1px solid #dce2e1; border-radius: 8px; overflow: hidden; }
-.taskBoard > header, .audit > header, .detailGrid section > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 15px; border-bottom: 1px solid #dce2e1; }
+.taskBoard > header, .audit > header, .detailGrid section > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 15px; border-bottom: 1px solid #dce2e1; }
 .taskBoard header span, .audit header small, .detailGrid section header small { display: block; color: #748185; font-family: var(--font-mono, ui-monospace, monospace); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .taskBoard h3, .audit h3, .detailGrid h3 { margin: 3px 0 0; font-size: 14px; }
 .taskBoard > header > small { max-width: 190px; color: #78858a; font-size: 10px; text-align: right; }
@@ -65,8 +66,19 @@
 .taskActions label, .taskActions button, .assetRow button, .accessRow button, .reminderActions button, .detailToggle { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 27px; border: 1px solid #d6dfdc; border-radius: 5px; background: #fff; color: #526065; cursor: pointer; font: inherit; font-size: 10px; padding: 5px 7px; }
 .taskActions label:hover, .taskActions button:hover, .assetRow button:hover, .accessRow button:hover, .reminderActions button:hover, .detailToggle:hover { border-color: #e98a57; color: #bd531d; }
 .taskActions label:focus-within, .taskActions button:focus-visible, .assetRow button:focus-visible, .accessRow button:focus-visible, .reminderActions button:focus-visible, .detailToggle:focus-visible { outline: 2px solid rgb(243 112 34 / .32); outline-offset: 2px; }
-.taskActions input { display: none; }
+.taskActions input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 .detailGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.detailGridSingle { grid-template-columns: 1fr; }
 .detailGrid section, .audit { border: 1px solid #dce2e1; border-radius: 8px; overflow: hidden; }
 .detailGrid section > header, .audit > header { justify-content: flex-start; }
 .detailGrid section > header > svg, .audit > header > svg { color: #d65d1d; }
@@ -90,11 +102,13 @@
 .supportingDetails summary:focus-visible { outline: 3px solid rgb(243 112 34 / .32); outline-offset: -3px; }
 .supportingContent { display: grid; gap: 14px; padding: 14px; }
 .checkInDesk { display: grid; gap: 13px; }
-.checkInLead { display: flex; align-items: end; justify-content: space-between; gap: 18px; padding: 3px 2px 0; }
+.checkInLead { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 2px; }
 .checkInLead h2 { margin: 5px 0; font-size: 21px; }
 .previewButton { background: #3f7869; box-shadow: none; white-space: nowrap; }
 .previewButton:hover { background: #31685b; }
+.previewButton:disabled { background: #dfe5e2; color: #7b8783; cursor: not-allowed; }
 .checkInLayout { display: grid; grid-template-columns: minmax(240px, .38fr) minmax(0, 1.62fr); border: 1px solid #dce2e1; border-radius: 10px; background: #fff; overflow: hidden; }
+.checkInLayoutSingle { grid-template-columns: 1fr; }
 .personList { border-right: 1px solid #dce2e1; min-height: 560px; }
 .personList button { display: grid; grid-template-columns: 34px minmax(0, 1fr) 15px; align-items: center; gap: 10px; width: 100%; border: 0; border-bottom: 1px solid #edf0ef; background: #fff; color: inherit; cursor: pointer; padding: 14px 12px; text-align: left; }
 .personList button:hover, .personList .personSelected { background: #fffaf7; }
@@ -131,7 +145,7 @@
 .emptyState strong { color: #354044; font-size: 14px; }
 .emptyState span { font-size: 11px; }
 .modalBackdrop { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; background: rgb(25 37 39 / .54); padding: 20px; }
-.modal { width: min(620px, 100%); border-radius: 11px; background: #fff; box-shadow: 0 25px 70px rgb(0 0 0 / .24); overflow: hidden; }
+.modal { width: min(620px, 100%); max-height: calc(100dvh - 40px); border-radius: 11px; background: #fff; box-shadow: 0 25px 70px rgb(0 0 0 / .24); overflow-y: auto; }
 .modal > header { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid #dce2e1; padding: 18px 20px; }
 .modal h2 { margin: 4px 0 0; font-size: 22px; }
 .modal > header button { display: grid; width: 31px; height: 31px; place-items: center; border: 0; border-radius: 5px; background: #f4f6f5; color: #58656a; cursor: pointer; }
@@ -161,7 +175,8 @@
 @media (max-width: 680px) {
   .pageHeader, .checkInLead { align-items: stretch; flex-direction: column; }
   .primaryAction, .previewButton { width: 100%; }
-  .sectionSwitch button { min-height: 48px; border-bottom: 1px solid #dce2e1; }
+  .sectionSwitch button { position: relative; min-width: 100px; min-height: 48px; flex-basis: 100px; justify-content: center; padding: 9px 8px; border-bottom: 0; }
+  .sectionSwitch i { position: absolute; top: 4px; right: 4px; min-width: 18px; height: 18px; font-size: 9px; }
   .sectionSwitch button:nth-last-child(-n + 2) { border-bottom: 0; }
   .sectionSwitch .sectionActive { box-shadow: inset 0 -3px #f37022; }
   .workflowDetail, .checkInDetail { padding: 14px; }

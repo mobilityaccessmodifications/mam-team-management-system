@@ -4,7 +4,7 @@ type BrandMarkProps = {
 
 export function BrandMark({ compact = false }: BrandMarkProps) {
   return (
-    <a className={`brand-mark${compact ? " brand-mark-compact" : ""}`} href="#main-content" aria-label="MAM Team Management home">
+    <div className={`brand-mark${compact ? " brand-mark-compact" : ""}`} aria-label="MAM Team Management">
       <span className="brand-symbol" aria-hidden="true">
         <i />
         <i />
@@ -16,6 +16,6 @@ export function BrandMark({ compact = false }: BrandMarkProps) {
           <small>Team Management</small>
         </span>
       ) : null}
-    </a>
+    </div>
   );
 }

@@ -14,13 +14,11 @@ import {
   FileText,
   LayoutDashboard,
   Mail,
-  MoreHorizontal,
   Paperclip,
   Plus,
   RotateCcw,
   Search,
   ShieldCheck,
-  Sparkles,
   UsersRound,
   X,
   XCircle,
@@ -459,6 +457,13 @@ function buildDemoReviewUrl(requestId: string) {
   return url.toString();
 }
 
+function canViewDemoEmail(email: DemoEmail, profile: Profile) {
+  if (profile.accessRole === "hr") return true;
+  if (email.recipient === "Employee") return email.recipientName === profile.name;
+  if (email.recipient === "Team Leader") return email.recipientName === profile.name;
+  return profile.team === "Accounts" && email.recipient === "Accounts";
+}
+
 const TIME_OPTIONS = Array.from({ length: 49 }, (_, index) => {
   const totalMinutes = (6 * 60) + (index * 15);
   const value = `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
@@ -498,10 +503,6 @@ function formatDateRange(start: string, end: string) {
   if (start === end) return `${date.format(first)} ${year.format(last)}`;
   if (first.getMonth() === last.getMonth()) return `${first.getDate()}–${date.format(last)} ${year.format(last)}`;
   return `${date.format(first)}–${date.format(last)} ${year.format(last)}`;
-}
-
-function formatMonthCode(date: string) {
-  return ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"][Number(date.slice(5, 7)) - 1];
 }
 
 function toIsoDate(date: Date) {
@@ -560,15 +561,11 @@ function getCalendarDays() {
   });
 }
 
-function getViewTitles(profile: Profile, leaveSection: LeaveSection): Record<AppView, { title: string; eyebrow: string }> {
+function getViewTitles(profile: Profile): Record<Exclude<AppView, "people">, { title: string; helper?: string }> {
   return {
-    home: { title: `Good morning, ${profile.name.split(" ")[0]}`, eyebrow: "Tuesday · 4 August" },
-    leave: {
-      title: profile.accessRole === "employee" ? "My leave" : "Leave",
-      eyebrow: leaveSection === "approvals" ? `${profile.team} decision queue` : profile.roleLabel,
-    },
-    calendar: { title: "Team calendar", eyebrow: "August 2026" },
-    people: { title: "People operations", eyebrow: "Onboarding · offboarding · check-ins" },
+    home: { title: "Home" },
+    leave: { title: profile.accessRole === "employee" ? "My leave" : "Leave" },
+    calendar: { title: "Team calendar", helper: "August 2026" },
   };
 }
 
@@ -662,17 +659,20 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
   }, [supabase]);
 
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId) ?? profiles[1];
-  const viewTitles = getViewTitles(activeProfile, leaveSection);
+  const viewTitles = getViewTitles(activeProfile);
   const visibleRequests = getVisibleRequests(requests, activeProfile);
   const calendarRequests = getCalendarRequests(requests, activeProfile);
   const approvalQueue = activeProfile.accessRole === "manager"
     ? requests.filter((request) => request.approvalRequired && request.status === "Pending" && request.manager === activeProfile.name)
     : [];
   const myRequests = requests.filter((request) => request.employee === activeProfile.name);
-  const selectedRequest = visibleRequests.find((request) => request.id === selectedRequestId) ?? approvalQueue[0] ?? visibleRequests[0] ?? requests[0];
   const filteredRequests = visibleRequests.filter((request) => {
     return statusFilter === "All" || request.status === statusFilter;
   });
+  const visibleEmailLog = emailLog.filter((email) => canViewDemoEmail(email, activeProfile));
+  const selectedRegisterRequest = filteredRequests.find((request) => request.id === selectedRequestId) ?? filteredRequests[0];
+  const selectedApprovalRequest = approvalQueue.find((request) => request.id === selectedRequestId) ?? approvalQueue[0];
+  const selectedRequest = leaveSection === "approvals" ? selectedApprovalRequest : selectedRegisterRequest;
 
   function announce(message: string) {
     setToast(message);
@@ -681,7 +681,9 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
 
   function addEmailPreviews(previews: DemoEmail[]) {
     setEmailLog((current) => [...previews, ...current]);
-    setShowEmailActivity(true);
+    if (previews.some((preview) => canViewDemoEmail(preview, activeProfile))) {
+      setShowEmailActivity(true);
+    }
   }
 
   function addPeopleOperationsEmailPreviews(previews: PeopleOperationsEmailPreview[]) {
@@ -694,9 +696,16 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
     })));
   }
 
-  function chooseLeaveSection(section: LeaveSection) {
+  function chooseLeaveSection(section: LeaveSection, requestedId?: string) {
     if (section === "approvals" && activeProfile.accessRole !== "manager") return;
-    if (section === "approvals" && approvalQueue[0]) setSelectedRequestId(approvalQueue[0].id);
+    if (section === "approvals" && approvalQueue[0]) {
+      const nextId = requestedId && approvalQueue.some((request) => request.id === requestedId)
+        ? requestedId
+        : approvalQueue.some((request) => request.id === selectedRequestId)
+          ? selectedRequestId
+          : approvalQueue[0].id;
+      setSelectedRequestId(nextId);
+    }
     setLeaveSection(section);
   }
 
@@ -709,7 +718,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
   function selectRequest(id: string, section: LeaveSection = "requests") {
     setSelectedRequestId(id);
     setManagerNote("");
-    chooseLeaveSection(section);
+    chooseLeaveSection(section, id);
     setActiveView("leave");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -887,6 +896,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
   }
 
   async function decideRequest(status: "Approved" | "Declined") {
+    if (!selectedRequest) return;
     if (status === "Declined" && !managerNote.trim()) {
       announce("Add a manager comment before declining this request.");
       return;
@@ -916,70 +926,51 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
     }
 
     setRequests((current) => current.map((request) => request.id === selectedRequest.id ? decidedRequest : request));
+    const nextApproval = approvalQueue.find((request) => request.id !== selectedRequest.id);
+    if (nextApproval) setSelectedRequestId(nextApproval.id);
     addEmailPreviews(buildDemoEmails(decidedRequest, status === "Approved" ? "approved" : "declined"));
     setManagerNote("");
     announce(`${selectedRequest.id} ${status.toLowerCase()}. The employee record and register are updated.`);
   }
 
-  const navGroups = [
-    { label: "Leave", items: [
-      { id: "home" as AppView, label: "Home", icon: LayoutDashboard },
-      { id: "leave" as AppView, label: "Leave", icon: ClipboardList, badge: activeProfile.accessRole === "manager" ? approvalQueue.length : undefined },
-      { id: "calendar" as AppView, label: "Team calendar", icon: CalendarDays },
-    ] },
-    { label: "People", items: [
-      { id: "people" as AppView, label: "People", icon: UsersRound },
-    ] },
+  const navItems = [
+    { id: "home" as AppView, label: "Home", icon: LayoutDashboard },
+    { id: "leave" as AppView, label: "Leave", icon: ClipboardList, badge: activeProfile.accessRole === "manager" ? approvalQueue.length : undefined },
+    { id: "calendar" as AppView, label: "Calendar", icon: CalendarDays },
+    { id: "people" as AppView, label: "People", icon: UsersRound },
   ];
 
   return (
     <div className={styles.shell}>
       <a className={styles.skipLink} href="#main-content">Skip to workspace</a>
       <aside className={styles.sidebar} aria-label="MAM workspace navigation">
-        <div className={styles.brandRow}><BrandMark /><button type="button" aria-label="Workspace options"><MoreHorizontal size={17} /></button></div>
-        <div className={styles.demoBadge} data-state={activeView === "people" ? "local" : sharedDataState} role="status">
-          <Sparkles size={13} />
-          {activeView === "people" ? "People demo · browser-only synthetic data" : null}
-          {activeView !== "people" && sharedDataState === "live" ? "Live demo · shared fake data" : null}
-          {activeView !== "people" && sharedDataState === "connecting" ? "Connecting shared fake data…" : null}
-          {activeView !== "people" && sharedDataState === "error" ? "Shared data connection issue" : null}
-          {activeView !== "people" && sharedDataState === "local" ? "Safe demo · browser-only data" : null}
-        </div>
+        <div className={styles.brandRow}><BrandMark /></div>
         <nav className={styles.nav}>
-          {navGroups.map((group) => (
-            <div className={styles.navGroup} key={group.label}>
-              <span>{group.label}</span>
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button className={`${styles.navItem} ${activeView === item.id ? styles.navItemActive : ""}`} type="button" onClick={() => navigate(item.id)} key={item.id}>
-                    <Icon size={17} strokeWidth={1.8} /><b>{item.label}</b>{item.badge ? <i>{item.badge}</i> : null}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button className={`${styles.navItem} ${activeView === item.id ? styles.navItemActive : ""}`} type="button" onClick={() => navigate(item.id)} key={item.id}>
+                <Icon size={17} strokeWidth={1.8} /><b>{item.label}</b>{item.badge ? <i>{item.badge}</i> : null}
+              </button>
+            );
+          })}
         </nav>
-        <div className={styles.sidebarFooter}>
-          <span className={styles.avatarDark}>{activeProfile.initials}</span>
-          <span><strong>{activeProfile.name}</strong><small>{activeProfile.roleLabel}</small></span>
-          <MoreHorizontal size={16} />
-        </div>
       </aside>
 
       <div className={styles.workspace}>
         <header className={styles.topbar}>
           <div className={styles.mobileBrand}><BrandMark compact /></div>
           <div className={styles.topActions}>
-            <button className={styles.emailActivityButton} type="button" onClick={() => setShowEmailActivity(true)}><Mail size={14} /> Email activity{emailLog.length ? <i>{emailLog.length}</i> : null}</button>
-            <button className={styles.resetButton} type="button" onClick={resetDemo}><RotateCcw size={14} /> Reset demo</button>
+            <span className={styles.demoStatus} data-state={activeView === "people" ? "local" : sharedDataState} role="status"><i />{activeView === "people" || sharedDataState === "local" ? "Demo data" : sharedDataState === "live" ? "Shared demo" : sharedDataState === "connecting" ? "Connecting" : "Connection issue"}</span>
+            <button className={styles.emailActivityButton} type="button" onClick={() => setShowEmailActivity(true)} aria-label={visibleEmailLog.length ? `Email log, ${visibleEmailLog.length} previews` : "Email log"}><Mail size={15} /><span className={styles.actionLabel}>Email log</span>{visibleEmailLog.length ? <i>{visibleEmailLog.length}</i> : null}</button>
+            <button className={styles.resetButton} type="button" onClick={resetDemo}><RotateCcw size={15} /> Reset</button>
             <ProfileSwitcher activeProfile={activeProfile} open={showProfiles} onToggle={() => setShowProfiles((current) => !current)} onSelect={switchProfile} />
           </div>
         </header>
 
         <main className={styles.main} id="main-content">
           {activeView !== "people" ? <section className={styles.pageHeader}>
-            <div><p>{viewTitles[activeView].eyebrow}</p><h1>{viewTitles[activeView].title}</h1></div>
+            <div><h1>{viewTitles[activeView].title}</h1>{viewTitles[activeView].helper ? <p>{viewTitles[activeView].helper}</p> : null}</div>
             <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)}><Plus size={17} /> {activeProfile.accessRole === "manager" ? "Add leave" : "New leave request"}</button>
           </section> : null}
 
@@ -1009,7 +1000,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
         </div>
       ) : null}
 
-      {showEmailActivity ? <EmailActivityModal emails={emailLog} onClose={() => setShowEmailActivity(false)} /> : null}
+      {showEmailActivity ? <EmailActivityModal emails={visibleEmailLog} onClose={() => setShowEmailActivity(false)} /> : null}
 
       <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`} role="status" aria-live="polite"><CheckCircle2 size={17} />{toast}</div>
     </div>
@@ -1040,19 +1031,19 @@ function ProfileSwitcher({ activeProfile, open, onToggle, onSelect }: { activePr
 
   return (
     <div className={styles.profileSwitcher}>
-      <button className={styles.profileTrigger} type="button" onClick={onToggle} aria-expanded={open} aria-haspopup="menu">
+      <button className={styles.profileTrigger} type="button" onClick={onToggle} aria-expanded={open}>
         <span className={`${styles.profileAvatar} ${styles[`profile${activeProfile.accessRole}`]}`}>{activeProfile.initials}</span>
         <span><strong>{activeProfile.name}</strong><small>{activeProfile.roleLabel}</small></span>
         <ChevronDown className={open ? styles.profileChevronOpen : ""} size={15} />
       </button>
       {open ? (
-        <div className={styles.profileMenu} role="menu" aria-label="Select demo profile">
-          <header><span>View demo as</span><small>Permissions and records change with each role</small></header>
+        <div className={styles.profileMenu} aria-label="Select demo profile">
+          <header><span>View demo as</span><small>Choose a demo role</small></header>
           {groups.map((group) => (
             <section key={group.label}>
               <span>{group.label}</span>
               {profiles.filter((profile) => group.roles.includes(profile.accessRole)).map((profile) => (
-                <button type="button" role="menuitem" onClick={() => onSelect(profile)} key={profile.id}>
+                <button type="button" onClick={() => onSelect(profile)} key={profile.id}>
                   <span className={`${styles.profileAvatar} ${styles[`profile${profile.accessRole}`]}`}>{profile.initials}</span>
                   <span><strong>{profile.name}</strong><small>{profile.roleLabel} · {profile.team}</small></span>
                   {profile.id === activeProfile.id ? <Check size={15} /> : null}
@@ -1073,44 +1064,61 @@ function StatusPill({ status }: { status: RequestStatus }) {
 
 function HomeView({ profile, requests, myRequests, pending, onNavigate, onSelect }: { profile: Profile; requests: LeaveRequest[]; myRequests: LeaveRequest[]; pending: LeaveRequest[]; onNavigate: (view: AppView, section?: LeaveSection) => void; onSelect: (id: string, section?: LeaveSection) => void }) {
   const nextOwn = myRequests.find((request) => request.status === "Pending") ?? myRequests[0];
-  const attentionRequests = profile.accessRole === "manager" ? pending : profile.accessRole === "hr" ? requests.filter((request) => request.status === "Pending") : myRequests;
-  const attentionTitle = profile.accessRole === "manager" ? "Your approval queue" : profile.accessRole === "hr" ? "Pending leave" : "My recent requests";
+  const attentionRequests = profile.accessRole === "manager" ? pending : requests.filter((request) => request.status === "Pending" && request.employee !== profile.name);
+  const attentionTitle = profile.accessRole === "manager" ? "Needs my review" : "Pending leave";
   const recordSection: LeaveSection = profile.accessRole === "manager" ? "approvals" : "requests";
+
+  if (profile.accessRole === "employee") {
+    return (
+      <div className={styles.dashboard}>
+        <section className={`${styles.panel} ${styles.myLeavePanel} ${styles.personalLeavePanel}`}>
+          <PanelHeader title="My leave" action="View requests" onAction={() => onNavigate("leave")} />
+          {nextOwn ? (
+            <button className={styles.nextLeaveSimple} type="button" onClick={() => onSelect(nextOwn.id, "requests")}>
+              <span><StatusPill status={nextOwn.status} /><strong>{nextOwn.leaveType}</strong><small>{nextOwn.dateLabel} · {formatDurationWithTime(nextOwn)}</small></span>
+              <ChevronRight size={17} />
+            </button>
+          ) : <div className={styles.emptyState}><CalendarDays size={24} /><strong>No leave requests yet</strong><span>Use “New leave request” when you need time away.</span></div>}
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.dashboard}>
       <div className={styles.homeGrid}>
         <section className={`${styles.panel} ${styles.attentionPanel}`}>
-          <PanelHeader kicker={profile.accessRole === "employee" ? "Personal" : "Needs attention"} title={attentionTitle} action="View all" onAction={() => onNavigate("leave", recordSection)} />
+          <PanelHeader title={attentionTitle} action={profile.accessRole === "manager" ? "Open queue" : "View requests"} onAction={() => onNavigate("leave", recordSection)} />
           <div className={styles.recordList}>
             {attentionRequests.slice(0, 3).map((request) => <button type="button" onClick={() => onSelect(request.id, recordSection)} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><span className={styles.dayCount}>{request.hours ?? request.days}<small>{request.hours ? (request.hours === 1 ? "hour" : "hours") : request.days === 1 ? "day" : "days"}</small></span><ChevronRight size={16} /></button>)}
-            {!attentionRequests.length ? <div className={styles.emptyState}><CheckCircle2 size={24} /><strong>Nothing waiting</strong><span>This profile has no pending records.</span></div> : null}
+            {!attentionRequests.length ? <div className={styles.emptyState}><CheckCircle2 size={24} /><strong>Nothing needs action</strong></div> : null}
           </div>
         </section>
 
         <section className={`${styles.panel} ${styles.myLeavePanel}`}>
-          <PanelHeader kicker="Personal" title="My leave" action="All requests" onAction={() => onNavigate("leave")} />
-          {nextOwn ? <div className={styles.nextLeave}><span className={styles.dateBlock}><strong>{nextOwn.startDate.slice(8)}</strong><small>{formatMonthCode(nextOwn.startDate)}</small></span><span><StatusPill status={nextOwn.status} /><h3>{nextOwn.leaveType}</h3><p>{nextOwn.dateLabel} · {formatDurationWithTime(nextOwn)}</p></span></div> : <div className={styles.emptyState}><CalendarDays size={24} /><strong>No leave requests yet</strong><span>Use “New leave request” to try the employee flow.</span></div>}
+          <PanelHeader title="My leave" action="View requests" onAction={() => onNavigate("leave")} />
+          {nextOwn ? <button className={styles.nextLeaveSimple} type="button" onClick={() => onSelect(nextOwn.id, "requests")}><span><StatusPill status={nextOwn.status} /><strong>{nextOwn.leaveType}</strong><small>{nextOwn.dateLabel} · {formatDurationWithTime(nextOwn)}</small></span><ChevronRight size={17} /></button> : <div className={styles.emptyState}><CalendarDays size={24} /><strong>No leave requests yet</strong></div>}
         </section>
       </div>
     </div>
   );
 }
 
-function PanelHeader({ kicker, title, action, onAction }: { kicker: string; title: string; action?: string; onAction?: () => void }) {
-  return <header className={styles.panelHeader}><div><span>{kicker}</span><h2>{title}</h2></div>{action && onAction ? <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button> : null}</header>;
+function PanelHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+  return <header className={styles.panelHeader}><h2>{title}</h2>{action && onAction ? <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button> : null}</header>;
 }
 
-function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, selectedId, note, calendarRequests, onFilter, onSection, onNote, onSelect, onDecision }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; selectedId: string; note: string; calendarRequests: LeaveRequest[]; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void }) {
+function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, selectedId, note, calendarRequests, onFilter, onSection, onNote, onSelect, onDecision }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; selectedId: string; note: string; calendarRequests: LeaveRequest[]; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void }) {
   const canApprove = profile.accessRole === "manager";
   return (
     <section className={styles.leaveDesk}>
       {canApprove ? (
         <div className={styles.leaveSwitch} aria-label="Leave workspace">
           <button className={section === "requests" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "requests"} onClick={() => onSection("requests")}>
-            <span><strong>Requests</strong><small>Team leave records</small></span><i>{allRequests.length}</i>
+            <strong>Leave register</strong><i>{allRequests.length}</i>
           </button>
           <button className={section === "approvals" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "approvals"} onClick={() => onSection("approvals")}>
-            <span><strong>To approve</strong><small>Needs your decision</small></span><i>{pending.length}</i>
+            <strong>Needs my review</strong><i>{pending.length}</i>
           </button>
         </div>
       ) : null}
@@ -1120,20 +1128,21 @@ function LeaveView({ profile, section, requests, allRequests, selected, filter, 
   );
 }
 
-function RequestsView({ profile, requests, allRequests, selected, filter, onFilter, onSelect }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected: LeaveRequest; filter: "All" | RequestStatus; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void }) {
+function RequestsView({ profile, requests, allRequests, selected, filter, onFilter, onSelect }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void }) {
   const filters: ("All" | RequestStatus)[] = ["All", "Pending", "Approved", "Declined"];
+  const isEmployee = profile.accessRole === "employee";
   return (
     <section className={styles.recordsWorkspace}>
       <div className={styles.viewToolbar}>
         <div className={styles.filterTabs}>{filters.map((item) => <button className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => request.status === item).length}</span></button>)}</div>
       </div>
-      <div className={styles.recordsGrid}>
+      <div className={`${styles.recordsGrid} ${isEmployee ? styles.employeeRecordsGrid : ""} ${!selected ? styles.recordsGridNoDetail : ""}`}>
         <div className={styles.recordsTable} role="table" aria-label="Leave requests">
-          <div className={styles.tableHead} role="row"><span>Employee</span><span>Leave type</span><span>Dates</span><span>Duration</span><span>Status</span><span /></div>
-          {requests.map((request) => <button className={`${styles.tableRow} ${selected.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} role="row" key={request.id}><span><i>{request.initials}</i><b>{request.employee}<small>{request.team} · {request.id}</small></b></span><span>{request.leaveType}</span><span>{request.dateLabel}</span><span>{formatDuration(request)}{formatTimeRange(request) ? <small>{formatTimeRange(request)}</small> : null}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} /></button>)}
+          <div className={`${styles.tableHead} ${isEmployee ? styles.employeeTableRow : ""}`} role="row">{!isEmployee ? <span>Employee</span> : null}<span>Leave</span><span>Dates</span><span>Duration</span><span>Status</span><span /></div>
+          {requests.map((request) => <button className={`${styles.tableRow} ${isEmployee ? styles.employeeTableRow : ""} ${selected?.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} role="row" key={request.id}>{!isEmployee ? <span><i>{request.initials}</i><b>{request.employee === profile.name ? "You" : request.employee}<small>{request.team}</small></b></span> : null}<span><b>{request.leaveType}</b><small>{request.id}</small></span><span>{request.dateLabel}</span><span>{formatDuration(request)}{formatTimeRange(request) ? <small>{formatTimeRange(request)}</small> : null}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} /></button>)}
           {!requests.length ? <div className={styles.emptyState}><Search size={23} /><strong>No requests here</strong><span>Choose another status.</span></div> : null}
         </div>
-        <RequestDetail profile={profile} request={selected} />
+        {selected ? <RequestDetail profile={profile} request={selected} /> : null}
       </div>
     </section>
   );
@@ -1141,7 +1150,8 @@ function RequestsView({ profile, requests, allRequests, selected, filter, onFilt
 
 function RequestDetail({ profile, request }: { profile: Profile; request: LeaveRequest }) {
   const canViewAttachments = profile.accessRole === "manager" || profile.accessRole === "hr";
-  return <aside className={styles.detailPanel} aria-label={`${request.id} details`}><header><span className={styles.avatarOrange}>{request.initials}</span><span><small>{request.id}</small><h2>{request.employee}</h2><p>{request.team}</p></span><button type="button" aria-label="More record actions"><MoreHorizontal size={18} /></button></header><StatusPill status={request.status} /><dl><div><dt>Leave type</dt><dd>{request.leaveType}</dd></div><div><dt>When</dt><dd>{request.dateLabel}</dd></div><div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div><div><dt>Approval</dt><dd>{request.approvalRequired ? request.manager : "Not required"}</dd></div></dl>{request.employeeNote !== "No note added." ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}{canViewAttachments ? <AttachmentList attachments={request.attachments} /> : null}{request.managerNote ? <section><span>Manager decision note</span><p>{request.managerNote}</p></section> : null}</aside>;
+  const showEmployee = profile.accessRole !== "employee" && request.employee !== profile.name;
+  return <aside className={styles.detailPanel} aria-label={`${request.id} details`}><header className={!showEmployee ? styles.personalDetailHeader : undefined}>{showEmployee ? <span className={styles.avatarOrange}>{request.initials}</span> : null}<span><small>{request.id}</small>{showEmployee ? <><h2>{request.employee}</h2><p>{request.team}</p></> : <h2>{request.leaveType}</h2>}</span></header><StatusPill status={request.status} /><dl>{showEmployee ? <div><dt>Leave type</dt><dd>{request.leaveType}</dd></div> : null}<div><dt>When</dt><dd>{request.dateLabel}</dd></div><div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div><div><dt>Approval</dt><dd>{request.approvalRequired ? request.manager : "Not required"}</dd></div></dl>{request.employeeNote !== "No note added." ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}{canViewAttachments ? <AttachmentList attachments={request.attachments} /> : null}{request.managerNote ? <section><span>Manager decision note</span><p>{request.managerNote}</p></section> : null}</aside>;
 }
 
 function AttachmentList({ attachments }: { attachments?: LeaveAttachment[] }) {
@@ -1149,17 +1159,18 @@ function AttachmentList({ attachments }: { attachments?: LeaveAttachment[] }) {
   return <section className={styles.attachmentList}><span><Paperclip size={14} /> Supporting files · private</span>{attachments.map((attachment) => { const Icon = attachment.mimeType === "application/pdf" ? FileText : FileImage; return <a href={attachment.previewUrl} target="_blank" rel="noreferrer" key={attachment.id}><Icon size={17} /><span><strong>{attachment.name}</strong><small>{formatFileSize(attachment.sizeBytes)}</small></span><Eye size={15} /></a>; })}<small><ShieldCheck size={13} /> Only managers and HR can open these files.</small></section>;
 }
 
-function ApprovalsView({ pending, selected, selectedId, note, requests, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected: LeaveRequest; selectedId: string; note: string; requests: LeaveRequest[]; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
-  return <div className={styles.approvalGrid}>
-    <section className={`${styles.panel} ${styles.queue}`}><PanelHeader kicker={`${pending.length} waiting`} title="Decision queue" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small><i>Submitted {request.submittedAt.toLowerCase()}</i></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Queue cleared</strong><span>Every request has a decision.</span></div>}</section>
-    <section className={`${styles.panel} ${styles.approvalRecord}`}>
+function ApprovalsView({ pending, selected, selectedId, note, requests, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; requests: LeaveRequest[]; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
+  const showQueue = pending.length > 1 || !selected;
+  return <div className={`${styles.approvalGrid} ${!selected ? styles.approvalGridEmpty : ""} ${!showQueue ? styles.approvalGridSingle : ""}`}>
+    {showQueue ? <section className={`${styles.panel} ${styles.queue}`}><PanelHeader title="Requests" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Nothing needs review</strong></div>}</section> : null}
+    {selected ? <section className={`${styles.panel} ${styles.approvalRecord}`}>
       <header className={styles.approvalHeader}><span className={styles.avatarOrange}>{selected.initials}</span><span><small>{selected.id}</small><h2>{selected.employee}</h2><p>{selected.team}</p></span><StatusPill status={selected.status} /></header>
       <div className={styles.factGrid}><article><CalendarDays size={17} /><span><small>When</small><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><small>Duration</small><strong>{formatDurationWithTime(selected)}</strong></span></article><article><ClipboardList size={17} /><span><small>Leave type</small><strong>{selected.leaveType}</strong></span></article></div>
       <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div>
       <AttachmentList attachments={selected.attachments} />
       <ApprovalCalendar selected={selected} requests={requests} />
       {selected.status === "Pending" ? <div className={styles.decisionBox}><label><span>Decision note <small>Required when declining</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} placeholder="Add context that will remain with this record." /></label><div><button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")}><XCircle size={16} /> Decline</button><button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")}><CheckCircle2 size={16} /> Approve leave</button></div></div> : <div className={styles.decisionRecorded}><CheckCircle2 size={19} /><span><strong>Decision recorded</strong><small>The employee view and leave register show {selected.status.toLowerCase()}.</small></span></div>}
-    </section>
+    </section> : null}
   </div>;
 }
 
@@ -1214,5 +1225,5 @@ function ApprovalCalendar({ selected, requests }: { selected: LeaveRequest; requ
 function CalendarView({ requests }: { requests: LeaveRequest[] }) {
   const days = getCalendarDays();
   const visible = requests.filter((request) => request.status !== "Declined");
-  return <section className={`${styles.panel} ${styles.calendarPanel}`}><div className={styles.calendarToolbar}><div><button type="button" aria-label="Previous month">‹</button><button type="button">Today</button><button type="button" aria-label="Next month">›</button></div><div className={styles.legend}><span><i className={styles.legendApproved} />Approved</span><span><i className={styles.legendPending} />Pending</span></div></div><div className={styles.calendarWeek}>{["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => <span key={day}>{day}</span>)}</div><div className={styles.calendarGrid}>{days.map((day) => { const events = visible.filter((request) => day.iso >= request.startDate && day.iso <= request.endDate); return <div className={`${styles.calendarDay} ${day.inMonth ? "" : styles.calendarMuted}`} key={day.iso}><span>{day.day}</span>{events.slice(0, 3).map((request) => <article className={request.status === "Approved" ? styles.eventApproved : styles.eventPending} key={request.id}><i>{request.initials}</i><b>{request.employee}<small>Unavailable</small></b></article>)}</div>; })}</div><footer className={styles.calendarPrivacy}><ShieldCheck size={16} /><span><strong>Coverage without oversharing.</strong> Coworkers see availability dates, not personal leave notes.</span></footer></section>;
+  return <section className={`${styles.panel} ${styles.calendarPanel}`}><div className={styles.calendarToolbar}><strong>August 2026</strong><div className={styles.legend}><span><i className={styles.legendApproved} />Approved</span><span><i className={styles.legendPending} />Pending</span></div></div><div className={styles.calendarWeek}>{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}</div><div className={styles.calendarGrid}>{days.map((day) => { const events = visible.filter((request) => day.iso >= request.startDate && day.iso <= request.endDate); return <div className={`${styles.calendarDay} ${day.inMonth ? "" : styles.calendarMuted}`} key={day.iso}><span>{day.day}</span>{events.slice(0, 3).map((request) => <article className={request.status === "Approved" ? styles.eventApproved : styles.eventPending} key={request.id}><i>{request.initials}</i><b>{request.employee}<small>{request.status} leave</small></b></article>)}{events.length > 3 ? <small className={styles.calendarMore}>+{events.length - 3} more</small> : null}</div>; })}</div><footer className={styles.calendarPrivacy}><ShieldCheck size={15} /> Private notes are never shown here.</footer></section>;
 }
