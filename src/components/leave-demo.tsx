@@ -21,7 +21,6 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
-  UserRound,
   UsersRound,
   X,
   XCircle,
@@ -29,13 +28,12 @@ import {
 import { FormEvent, useEffect, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
-import { AboutMeDemo } from "@/components/about-me-demo";
 import styles from "@/components/leave-demo.module.css";
 import { PeopleOperationsDemo, type PeopleOperationsEmailPreview } from "@/components/people-operations-demo";
 import { createClient } from "@/lib/supabase/client";
 import { isSharedDemoConfigured } from "@/lib/supabase/config";
 
-type AppView = "home" | "leave" | "calendar" | "people" | "about";
+type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals";
 type RequestStatus = "Pending" | "Approved" | "Declined";
 type AccessRole = "hr" | "manager" | "employee";
@@ -571,7 +569,6 @@ function getViewTitles(profile: Profile, leaveSection: LeaveSection): Record<App
     },
     calendar: { title: "Team calendar", eyebrow: "August 2026" },
     people: { title: "People operations", eyebrow: "Onboarding · offboarding · check-ins" },
-    about: { title: "About me", eyebrow: "My MAM profile" },
   };
 }
 
@@ -933,9 +930,6 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
     { label: "People", items: [
       { id: "people" as AppView, label: "People", icon: UsersRound },
     ] },
-    { label: "My MAM", items: [
-      { id: "about" as AppView, label: "About me", icon: UserRound },
-    ] },
   ];
 
   return (
@@ -943,14 +937,13 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
       <a className={styles.skipLink} href="#main-content">Skip to workspace</a>
       <aside className={styles.sidebar} aria-label="MAM workspace navigation">
         <div className={styles.brandRow}><BrandMark /><button type="button" aria-label="Workspace options"><MoreHorizontal size={17} /></button></div>
-        <div className={styles.demoBadge} data-state={activeView === "people" || activeView === "about" ? "local" : sharedDataState} role="status">
+        <div className={styles.demoBadge} data-state={activeView === "people" ? "local" : sharedDataState} role="status">
           <Sparkles size={13} />
           {activeView === "people" ? "People demo · browser-only synthetic data" : null}
-          {activeView === "about" ? "Profile demo · browser-only synthetic data" : null}
-          {activeView !== "people" && activeView !== "about" && sharedDataState === "live" ? "Live demo · shared fake data" : null}
-          {activeView !== "people" && activeView !== "about" && sharedDataState === "connecting" ? "Connecting shared fake data…" : null}
-          {activeView !== "people" && activeView !== "about" && sharedDataState === "error" ? "Shared data connection issue" : null}
-          {activeView !== "people" && activeView !== "about" && sharedDataState === "local" ? "Safe demo · browser-only data" : null}
+          {activeView !== "people" && sharedDataState === "live" ? "Live demo · shared fake data" : null}
+          {activeView !== "people" && sharedDataState === "connecting" ? "Connecting shared fake data…" : null}
+          {activeView !== "people" && sharedDataState === "error" ? "Shared data connection issue" : null}
+          {activeView !== "people" && sharedDataState === "local" ? "Safe demo · browser-only data" : null}
         </div>
         <nav className={styles.nav}>
           {navGroups.map((group) => (
@@ -985,7 +978,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
         </header>
 
         <main className={styles.main} id="main-content">
-          {activeView !== "people" && activeView !== "about" ? <section className={styles.pageHeader}>
+          {activeView !== "people" ? <section className={styles.pageHeader}>
             <div><p>{viewTitles[activeView].eyebrow}</p><h1>{viewTitles[activeView].title}</h1></div>
             <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)}><Plus size={17} /> {activeProfile.accessRole === "manager" ? "Add leave" : "New leave request"}</button>
           </section> : null}
@@ -994,7 +987,6 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
           {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
           {activeView === "calendar" ? <CalendarView requests={calendarRequests} /> : null}
           {activeView === "people" ? <PeopleOperationsDemo key={peopleOpsResetKey} activeProfile={activeProfile} onEmailPreview={addPeopleOperationsEmailPreviews} /> : null}
-          {activeView === "about" ? <AboutMeDemo name={activeProfile.name} initials={activeProfile.initials} accessRole={activeProfile.accessRole} roleLabel={activeProfile.roleLabel} team={activeProfile.team} manager={activeProfile.manager} startedDate={activeProfile.startedDate} /> : null}
         </main>
       </div>
 

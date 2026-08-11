@@ -18,7 +18,7 @@ Give MAM employees, managers and accounts one reliable place to see leave, cover
 - The demo contains no real employee records.
 - Shared Leave demo mode can write only the fixed synthetic Leave dataset to Supabase and share it in realtime across browsers. It remains separate from the People workspace.
 - Onboarding, Offboarding and Check-ins are browser-local synthetic workflows: their cases, selected evidence/uploads, asset/access changes, audit entries and reminder/email previews reset on refresh or Reset demo and do not write to Supabase.
-- Employee profile previews show their own onboarding and check-ins, not offboarding. About me uses the selected synthetic profile to demonstrate tenure, milestone treatment and support contacts; it does not use real employee details.
+- Employee profile previews show their own onboarding and check-ins, not offboarding. The People workspace's My profile panel uses the selected synthetic profile to demonstrate tenure, anniversary treatment and essential support contacts; it does not use real employee details.
 - The top-right selector contains synthetic HR, Major Mod manager, Minor Mod manager and employee profiles for demonstrating role-based visibility; this is not authentication or a production identity system.
 - The CRM-style Home, calendar and activity views are presentation surfaces around the demo data, not separate production data stores; the People workflow boundary is described above.
 - Approval and decline actions demonstrate the intended state changes but are not production decisions.

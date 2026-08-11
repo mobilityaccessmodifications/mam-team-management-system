@@ -3,14 +3,11 @@
 import {
   AlertTriangle,
   ArrowUpRight,
-  BadgeCheck,
-  BriefcaseBusiness,
   CalendarClock,
   Check,
   CheckCircle2,
   ChevronRight,
   CircleDot,
-  ClipboardCheck,
   FileCheck2,
   HardHat,
   Laptop,
@@ -19,16 +16,16 @@ import {
   Plus,
   RotateCcw,
   ShieldCheck,
-  UserRoundPlus,
   UsersRound,
   X,
 } from "lucide-react";
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 
+import { AboutMeDemo } from "@/components/about-me-demo";
 import styles from "@/components/people-operations-demo.module.css";
 
 type AccessRole = "hr" | "manager" | "employee";
-type PeopleSection = "onboarding" | "offboarding" | "checkins";
+type PeopleSection = "profile" | "onboarding" | "offboarding" | "checkins";
 type WorkflowKind = "onboarding" | "offboarding";
 type TaskOwner = "HR" | "Team Leader" | "IT" | "Accounts" | "Analyst" | "Warehouse" | "Employee";
 type TaskStatus = "Not Started" | "In Progress" | "Complete" | "Overdue";
@@ -38,8 +35,12 @@ type ReminderStatus = "Scheduled" | "Preview sent" | "Completed";
 
 export type PeopleOperationsProfile = {
   name: string;
+  initials: string;
   accessRole: AccessRole;
+  roleLabel: string;
   team: string;
+  manager: string;
+  startedDate: string;
 };
 
 export type PeopleOperationsEmailPreview = {
@@ -378,7 +379,7 @@ export function PeopleOperationsDemo({
   activeProfile: PeopleOperationsProfile;
   onEmailPreview: (previews: PeopleOperationsEmailPreview[]) => void;
 }) {
-  const [section, setSection] = useState<PeopleSection>("onboarding");
+  const [section, setSection] = useState<PeopleSection>("profile");
   const [workflows, setWorkflows] = useState<PeopleWorkflow[]>(initialWorkflows);
   const [people, setPeople] = useState<CheckInPerson[]>(initialPeople);
   const [reminders, setReminders] = useState<CheckInReminder[]>(initialReminders);
@@ -403,7 +404,7 @@ export function PeopleOperationsDemo({
     return `${person.firstName} ${person.lastName}` === activeProfile.name;
   }), [activeProfile, people]);
   const visibleReminders = useMemo(() => reminders.filter((reminder) => visiblePeople.some((person) => person.id === reminder.personId)), [reminders, visiblePeople]);
-  const visibleSection: PeopleSection = !canViewOffboarding && section === "offboarding" ? "onboarding" : section;
+  const visibleSection: PeopleSection = !canViewOffboarding && section === "offboarding" ? "profile" : section;
   const workflowSection: WorkflowKind = visibleSection === "offboarding" ? "offboarding" : "onboarding";
   const activeWorkflows = accessibleWorkflows.filter((workflow) => workflow.kind === workflowSection);
   const selectedWorkflow = activeWorkflows.find((workflow) => workflow.id === selectedWorkflowId) ?? activeWorkflows[0];
@@ -567,33 +568,26 @@ export function PeopleOperationsDemo({
   }
 
   const totalOverdue = accessibleWorkflows.reduce((count, workflow) => count + workflowOverdueCount(workflow), 0);
-  const readyCount = accessibleWorkflows.filter((workflow) => ["Ready for Day 1", "Offboarding complete"].includes(workflowStatus(workflow))).length;
 
   return <section className={styles.workspace} aria-label="People operations workspace">
     <header className={styles.pageHeader}>
       <div>
-        <span>People & culture · synthetic workflow demo</span>
-        <h1>People operations</h1>
-        <p>{canViewOffboarding ? "Onboarding, offboarding and manager check-ins, based on MAM's current checklists." : "Your onboarding and manager check-ins, based on MAM's current checklists."}</p>
+        <span>People · synthetic demo</span>
+        <h1>People</h1>
+        <p>{canViewOffboarding ? "Your profile and people workflows." : "Your profile, onboarding and check-ins."}</p>
+        {totalOverdue ? <p className={styles.attentionSummary}><AlertTriangle size={14} /> {totalOverdue} action{totalOverdue === 1 ? "" : "s"} need attention</p> : null}
       </div>
-      {canManage ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleSection === "checkins" ? "checkin" : visibleSection)}><Plus size={17} /> {visibleSection === "checkins" ? "Add employee" : `Start ${visibleSection}`}</button> : null}
+      {canManage && visibleSection !== "profile" ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleSection === "checkins" ? "checkin" : visibleSection)}><Plus size={17} /> {visibleSection === "checkins" ? "Add employee" : `Start ${visibleSection}`}</button> : null}
     </header>
 
-    <div className={styles.syntheticNote}><ShieldCheck size={16} /><span><strong>Synthetic cases only.</strong> Do not enter staff personal information in this demo. Documents, assets and email activity are illustrative browser state.</span></div>
+    <nav className={styles.sectionSwitch} aria-label="People sections">
+      <button type="button" aria-pressed={visibleSection === "profile"} className={visibleSection === "profile" ? styles.sectionActive : undefined} onClick={() => setSection("profile")}><span><strong>My profile</strong></span></button>
+      <button type="button" aria-pressed={visibleSection === "onboarding"} className={visibleSection === "onboarding" ? styles.sectionActive : undefined} onClick={() => setSection("onboarding")}><span><strong>{activeProfile.accessRole === "employee" ? "My onboarding" : "Onboarding"}</strong></span></button>
+      <button type="button" aria-pressed={visibleSection === "checkins"} className={visibleSection === "checkins" ? styles.sectionActive : undefined} onClick={() => setSection("checkins")}><span><strong>{activeProfile.accessRole === "employee" ? "My check-ins" : "Check-ins"}</strong></span>{queuedReminders.length ? <i>{queuedReminders.length}</i> : null}</button>
+      {canViewOffboarding ? <button type="button" aria-pressed={visibleSection === "offboarding"} className={visibleSection === "offboarding" ? styles.sectionActive : undefined} onClick={() => setSection("offboarding")}><span><strong>Offboarding</strong></span></button> : null}
+    </nav>
 
-    <div className={styles.metrics}>
-      <article><span><ClipboardCheck size={17} /></span><div><small>Open workflows</small><strong>{accessibleWorkflows.length}</strong></div></article>
-      <article><span><BadgeCheck size={17} /></span><div><small>Ready / complete</small><strong>{readyCount}</strong></div></article>
-      <article className={totalOverdue ? styles.metricAttention : undefined}><span><AlertTriangle size={17} /></span><div><small>Overdue actions</small><strong>{totalOverdue}</strong></div></article>
-      <article><span><CalendarClock size={17} /></span><div><small>Reminders due</small><strong>{queuedReminders.length}</strong></div></article>
-    </div>
-
-    <div className={styles.sectionSwitch} role="tablist" aria-label="People operations areas">
-      <button type="button" role="tab" aria-selected={visibleSection === "onboarding"} className={visibleSection === "onboarding" ? styles.sectionActive : undefined} onClick={() => setSection("onboarding")}><UserRoundPlus size={16} /><span><strong>Onboarding</strong><small>Ready for Day 1</small></span><i>{accessibleWorkflows.filter((workflow) => workflow.kind === "onboarding").length}</i></button>
-      {canViewOffboarding ? <button type="button" role="tab" aria-selected={visibleSection === "offboarding"} className={visibleSection === "offboarding" ? styles.sectionActive : undefined} onClick={() => setSection("offboarding")}><BriefcaseBusiness size={16} /><span><strong>Offboarding</strong><small>Close access and assets</small></span><i>{accessibleWorkflows.filter((workflow) => workflow.kind === "offboarding").length}</i></button> : null}
-      <button type="button" role="tab" aria-selected={visibleSection === "checkins"} className={visibleSection === "checkins" ? styles.sectionActive : undefined} onClick={() => setSection("checkins")}><CalendarClock size={16} /><span><strong>Check-ins</strong><small>Manager milestones</small></span><i>{visibleReminders.filter((reminder) => reminder.status !== "Completed").length}</i></button>
-    </div>
-
+    {visibleSection === "profile" ? <AboutMeDemo name={activeProfile.name} initials={activeProfile.initials} roleLabel={activeProfile.roleLabel} team={activeProfile.team} manager={activeProfile.manager} startedDate={activeProfile.startedDate} /> : null}
     {visibleSection === "checkins" ? <CheckInsView
       people={visiblePeople}
       reminders={visibleReminders}
@@ -607,7 +601,8 @@ export function PeopleOperationsDemo({
       onComplete={completeCheckIn}
       onSnooze={snoozeCheckIn}
       onTogglePrivate={() => setShowPrivateFields((current) => !current)}
-    /> : <WorkflowsView
+    /> : null}
+    {visibleSection === "onboarding" || visibleSection === "offboarding" ? <WorkflowsView
       workflows={activeWorkflows}
       selected={selectedWorkflow}
       selectedId={selectedWorkflow?.id}
@@ -617,7 +612,7 @@ export function PeopleOperationsDemo({
       onAttach={attachEvidence}
       onAssetUpdate={updateAsset}
       onAccessUpdate={updateAccess}
-    />}
+    /> : null}
 
     {showCreate ? <CreateCaseModal mode={createMode} defaultManager={activeProfile.name} defaultTeam={activeProfile.team} allowPrivateFields={activeProfile.accessRole === "hr"} onClose={() => setShowCreate(false)} onSubmit={createCase} /> : null}
     <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`} role="status" aria-live="polite"><CheckCircle2 size={16} />{toast}</div>
@@ -645,7 +640,7 @@ function WorkflowsView({
   onAssetUpdate: (workflowId: string, assetId: string) => void;
   onAccessUpdate: (workflowId: string, requestId: string) => void;
 }) {
-  if (!workflows.length || !selected) return <div className={styles.emptyState}><UsersRound size={26} /><strong>No matching synthetic workflows</strong><span>Switch demo profiles or add a synthetic workflow to see it here.</span></div>;
+  if (!workflows.length || !selected) return <div className={styles.emptyState}><UsersRound size={26} /><strong>{activeProfile.accessRole === "employee" ? "No onboarding tasks are assigned to you." : "No matching workflows"}</strong><span>{activeProfile.accessRole === "employee" ? "Your assigned tasks will appear here." : "Start a synthetic workflow to see it here."}</span></div>;
   const groups = Array.from(new Set(selected.tasks.map((task) => task.group)));
   const progress = workflowProgress(selected);
   const status = workflowStatus(selected);
@@ -678,12 +673,17 @@ function WorkflowsView({
         </div>)}</div>)}
       </section>
 
-      <div className={styles.detailGrid}>
-        <section><header><Laptop size={16} /><span><small>Equipment & access</small><h3>Asset register</h3></span></header>{selected.assets.map((asset) => <div className={styles.assetRow} key={asset.id}><span><strong>{asset.item}</strong><small>{asset.owner}</small></span><span className={`${styles.statusPill} ${statusClass(asset.status)}`}>{asset.status}</span>{canActionRecord(asset.owner) && asset.status !== (selected.kind === "onboarding" ? "Issued" : "Returned") ? <button type="button" onClick={() => onAssetUpdate(selected.id, asset.id)}>{selected.kind === "onboarding" ? "Mark issued" : "Mark returned"}</button> : null}</div>)}</section>
-        <section><header><ShieldCheck size={16} /><span><small>Role access</small><h3>Access & subscriptions</h3></span></header>{selected.access.map((request) => <div className={styles.accessRow} key={request.id}><span><strong>{request.service}</strong><small>{request.owner} · {request.businessNeed}</small><em>{request.renewal}</em></span><span className={`${styles.statusPill} ${statusClass(request.status)}`}>{request.status}</span>{canActionRecord(request.owner) && !["Active", "Revoked"].includes(request.status) ? <button type="button" onClick={() => onAccessUpdate(selected.id, request.id)}>{selected.kind === "offboarding" ? "Confirm revoked" : request.status === "Requested" ? "Approve" : "Advance"}</button> : null}</div>)}</section>
-      </div>
+      <details className={styles.supportingDetails}>
+        <summary><span>Assets, access and activity</span><small>Open when needed</small></summary>
+        <div className={styles.supportingContent}>
+          <div className={styles.detailGrid}>
+            <section><header><Laptop size={16} /><span><small>Equipment & access</small><h3>Asset register</h3></span></header>{selected.assets.map((asset) => <div className={styles.assetRow} key={asset.id}><span><strong>{asset.item}</strong><small>{asset.owner}</small></span><span className={`${styles.statusPill} ${statusClass(asset.status)}`}>{asset.status}</span>{canActionRecord(asset.owner) && asset.status !== (selected.kind === "onboarding" ? "Issued" : "Returned") ? <button type="button" onClick={() => onAssetUpdate(selected.id, asset.id)}>{selected.kind === "onboarding" ? "Mark issued" : "Mark returned"}</button> : null}</div>)}</section>
+            <section><header><ShieldCheck size={16} /><span><small>Role access</small><h3>Access & subscriptions</h3></span></header>{selected.access.map((request) => <div className={styles.accessRow} key={request.id}><span><strong>{request.service}</strong><small>{request.owner} · {request.businessNeed}</small><em>{request.renewal}</em></span><span className={`${styles.statusPill} ${statusClass(request.status)}`}>{request.status}</span>{canActionRecord(request.owner) && !["Active", "Revoked"].includes(request.status) ? <button type="button" onClick={() => onAccessUpdate(selected.id, request.id)}>{selected.kind === "offboarding" ? "Confirm revoked" : request.status === "Requested" ? "Approve" : "Advance"}</button> : null}</div>)}</section>
+          </div>
 
-      <section className={styles.audit}><header><FileCheck2 size={16} /><span><small>Audit trail</small><h3>Recorded activity</h3></span></header>{selected.audit.slice(0, 5).map((entry) => <div key={entry.id}><span /><p><strong>{entry.actor}</strong> {entry.action}<small>{entry.time}</small></p></div>)}</section>
+          <section className={styles.audit}><header><FileCheck2 size={16} /><span><small>Audit trail</small><h3>Recorded activity</h3></span></header>{selected.audit.slice(0, 5).map((entry) => <div key={entry.id}><span /><p><strong>{entry.actor}</strong> {entry.action}<small>{entry.time}</small></p></div>)}</section>
+        </div>
+      </details>
     </article>
   </div>;
 }
@@ -717,10 +717,10 @@ function CheckInsView({
 }) {
   const personReminders = selectedPerson ? reminders.filter((reminder) => reminder.personId === selectedPerson.id).sort((first, second) => first.checkInDate.localeCompare(second.checkInDate) || first.notifyDate.localeCompare(second.notifyDate)) : [];
   const dueCount = reminders.filter((reminder) => reminder.status === "Scheduled" && reminder.notifyDate <= DEMO_TODAY).length;
-  if (!people.length || !selectedPerson) return <div className={styles.emptyState}><CalendarClock size={26} /><strong>No matching check-in records</strong><span>Switch demo profiles or add a fictional employee to the check-in register.</span></div>;
+  if (!people.length || !selectedPerson) return <div className={styles.emptyState}><CalendarClock size={26} /><strong>{activeProfile.accessRole === "employee" ? "No check-ins are scheduled for you." : "No matching check-in records"}</strong><span>{activeProfile.accessRole === "employee" ? "Your manager will add the next milestone when it is needed." : "Add a fictional employee to the check-in register."}</span></div>;
 
   return <div className={styles.checkInDesk}>
-    <header className={styles.checkInLead}><div><span>Employee check-in register</span><h2>Manager milestones from the start date</h2><p>2 weeks, 1 month, 3 months, then 5-month probation. The later schedule takes precedence over the older checklist.</p></div>{canManage ? <button className={styles.previewButton} type="button" onClick={onRunDue}><Mail size={16} /> Run {dueCount || "due"} reminder preview{dueCount === 1 ? "" : "s"}</button> : null}</header>
+    <header className={styles.checkInLead}><div><span>Check-ins</span><h2>Scheduled milestones</h2><p>2-week, 1-month, 3-month and probation check-ins.</p></div>{canManage ? <button className={styles.previewButton} type="button" onClick={onRunDue}><Mail size={16} /> Run {dueCount || "due"} reminder preview{dueCount === 1 ? "" : "s"}</button> : null}</header>
     <div className={styles.checkInLayout}>
       <aside className={styles.personList} aria-label="Employee check-in register">
         {people.map((person) => <button type="button" key={person.id} className={person.id === selectedPersonId ? styles.personSelected : undefined} onClick={() => onSelectPerson(person.id)}><span className={styles.caseAvatar}>{initialsFor(person.firstName, person.lastName)}</span><span><strong>{person.firstName} {person.lastName}</strong><small>{person.role} · Starts {formatDate(person.startDate)}</small></span><ChevronRight size={15} /></button>)}

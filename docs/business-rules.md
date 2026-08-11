@@ -46,7 +46,7 @@
 - The Check-ins tab keeps a synthetic register and creates check-ins at 2 weeks, 1 month, 3 months and 5-month probation from the start date. Manager prompts are scheduled 3 days before the 2-week check-in, 4 business days before the 1-month check-in, 2 weeks before the 3-month check-in, and 2 weeks plus a final 1 week before the 5-month check-in.
 - The dedicated automated-check-in requirement is used in the demo because it is newer and more specific than the older onboarding checklist. The final live cadence, forms/templates, recipients, business-day calendar and snooze/escalation rules still require confirmation.
 - “Run reminder preview” adds an in-app synthetic Team Leader email preview and can mark a reminder previewed, complete or snoozed. It does not schedule work, call an email provider, retain recipient addresses or send email.
-- About me derives a selected synthetic profile's tenure from a fixed demo start date and can show a subtle anniversary or team-recognition treatment. Its manager, People, IT and Accounts contact details use `example.test`; it does not contain real employee contact details or form a security boundary.
+- The People workspace's My profile panel derives a selected synthetic profile's tenure from a fixed demo start date and can show a subtle anniversary treatment. Its manager, People and IT contact details use `example.test`; it does not contain real employee contact details or form a security boundary.
 
 ## Data minimisation
 

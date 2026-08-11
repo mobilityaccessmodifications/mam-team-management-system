@@ -11,9 +11,13 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const view = firstValue(params.view);
   const section = firstValue(params.section);
   const requestId = firstValue(params.request);
+  // Preserve previously shared About-me demo links by opening the merged People profile view.
+  const resolvedView = view === "about"
+    ? "people"
+    : view === "leave" || view === "people" ? view : "home";
 
   return <LeaveDemo initialNavigation={{
-    view: view === "leave" || view === "people" || view === "about" ? view : "home",
+    view: resolvedView,
     section: section === "approvals" ? "approvals" : "requests",
     requestId,
   }} />;

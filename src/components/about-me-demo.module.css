@@ -1,21 +1,10 @@
 .workspace {
   display: grid;
-  gap: 18px;
-  max-width: 1160px;
-  margin: 0 auto;
+  gap: 16px;
+  max-width: 900px;
   color: #273136;
 }
 
-.pageHeader {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.pageHeader > div:first-child > span,
-.eyebrow,
-.detailsCard header span,
 .contactsCard header span {
   display: block;
   color: #6d7a7e;
@@ -26,55 +15,6 @@
   text-transform: uppercase;
 }
 
-.pageHeader h1 {
-  margin: 5px 0 8px;
-  font-family: var(--font-display, Impact, sans-serif);
-  font-size: clamp(38px, 5vw, 52px);
-  letter-spacing: -.035em;
-  line-height: .95;
-}
-
-.pageHeader p {
-  margin: 0;
-  color: #687479;
-  font-size: 14px;
-}
-
-.localBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid #d7e2de;
-  border-radius: 999px;
-  background: #f7fbf9;
-  color: #4d7164;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 7px 10px;
-  white-space: nowrap;
-}
-
-.syntheticNote,
-.privacyNote {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  border: 1px solid #f1cfbd;
-  border-radius: 8px;
-  background: #fff8f4;
-  color: #76513e;
-  font-size: 12px;
-  line-height: 1.45;
-  padding: 11px 13px;
-}
-
-.syntheticNote svg,
-.privacyNote > svg {
-  flex: 0 0 auto;
-  color: #c85b21;
-  margin-top: 1px;
-}
-
 .specialDay {
   position: relative;
   display: flex;
@@ -83,160 +23,30 @@
   overflow: hidden;
   border: 1px solid #ead4a2;
   border-radius: 9px;
-  background: linear-gradient(100deg, #fff9e8, #fffdf5 62%, #f9f4e8);
+  background: #fff9e8;
   color: #665225;
-  padding: 13px 15px;
-}
-
-.specialDay::after {
-  position: absolute;
-  top: -18px;
-  right: 46px;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgb(228 173 57 / .24) 0 2px, transparent 3px 100%);
-  background-size: 12px 12px;
-  content: "";
-  opacity: .72;
-  transform: rotate(-12deg);
+  padding: 12px 14px;
 }
 
 .specialDayIcon {
   display: grid;
   width: 31px;
   height: 31px;
+  flex: 0 0 auto;
   place-items: center;
   border-radius: 8px;
   background: #f7e6b0;
   color: #9a711b;
 }
 
-.specialDay div {
-  position: relative;
-  z-index: 1;
-}
-
+.specialDay div { min-width: 0; }
 .specialDay strong,
-.specialDay p {
-  display: block;
-}
+.specialDay p { display: block; }
+.specialDay strong { font-size: 13px; }
+.specialDay p { margin: 2px 0 0; color: #7e6d3f; font-size: 11px; }
+.specialDaySparkles { margin-left: auto; color: #c48b19; }
 
-.specialDay strong {
-  font-size: 13px;
-}
-
-.specialDay p {
-  margin: 2px 0 0;
-  color: #7e6d3f;
-  font-size: 11px;
-}
-
-.specialDaySparkles {
-  position: relative;
-  z-index: 1;
-  margin-left: auto;
-  color: #c48b19;
-}
-
-.profileCard {
-  display: grid;
-  grid-template-columns: minmax(240px, .88fr) minmax(500px, 1.12fr);
-  align-items: stretch;
-  overflow: hidden;
-  border: 1px solid #dce2e1;
-  border-radius: 10px;
-  background: #fff;
-}
-
-.identity {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  border-right: 1px solid #dce2e1;
-  padding: 21px;
-}
-
-.avatar {
-  display: grid;
-  width: 54px;
-  height: 54px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 13px;
-  background: #fff0e8;
-  color: #b74d19;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 16px;
-  font-weight: 800;
-}
-
-.identity h2 {
-  margin: 4px 0;
-  font-size: 23px;
-  letter-spacing: -.025em;
-}
-
-.identity p {
-  margin: 0;
-  color: #677579;
-  font-size: 12px;
-}
-
-.identity p span {
-  color: #b8c0bd;
-  padding: 0 2px;
-}
-
-.tenure {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 0;
-}
-
-.tenure > div {
-  display: grid;
-  align-content: center;
-  gap: 5px;
-  padding: 17px 18px;
-}
-
-.tenure > div + div {
-  border-left: 1px solid #e6ebea;
-}
-
-.tenure dt {
-  color: #788589;
-  font-size: 10px;
-}
-
-.tenure dd {
-  margin: 0;
-  color: #293438;
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.tenure > div:first-child dd {
-  color: #c2551e;
-  font-size: 24px;
-  letter-spacing: -.035em;
-}
-
-.tenure dd small {
-  color: #768287;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-
-.contentGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 15px;
-}
-
-.detailsCard,
+.profileCard,
 .contactsCard {
   overflow: hidden;
   border: 1px solid #dce2e1;
@@ -244,87 +54,77 @@
   background: #fff;
 }
 
-.detailsCard header,
+.profileCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(180px, .8fr);
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.avatar {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 12px;
+  background: #fff0e8;
+  color: #b74d19;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.identity h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: -.02em; }
+.identity p { margin: 0; color: #677579; font-size: 12px; }
+.identity p span { color: #b8c0bd; padding: 0 2px; }
+
+.tenure {
+  display: grid;
+  align-content: center;
+  margin: 0;
+  border-left: 1px solid #e6ebea;
+}
+
+.tenure > div { display: grid; gap: 4px; padding: 17px 20px; }
+.tenure dt { color: #788589; font-size: 10px; }
+.tenure dd { margin: 0; color: #c2551e; font-size: 25px; font-weight: 800; letter-spacing: -.035em; }
+.tenure dd small { color: #768287; font-size: 11px; font-weight: 600; letter-spacing: 0; }
+
 .contactsCard header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid #dce2e1;
-  padding: 15px 16px;
+  padding: 14px 16px;
 }
 
-.detailsCard header svg,
-.contactsCard header > svg {
-  color: #d65d1d;
-}
+.contactsCard header > svg { color: #d65d1d; }
+.contactsCard h2 { margin: 4px 0 0; font-size: 16px; letter-spacing: -.01em; }
 
-.detailsCard h2,
-.contactsCard h2 {
-  margin: 4px 0 0;
-  font-size: 16px;
-  letter-spacing: -.01em;
-}
+.contactList { display: grid; }
 
-.detailsList {
+.contactList a {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  margin: 0;
-}
-
-.detailsList > div {
-  min-height: 83px;
-  padding: 13px 15px;
-}
-
-.detailsList > div:nth-child(odd) {
-  border-right: 1px solid #edf0ef;
-}
-
-.detailsList > div:nth-child(n + 3) {
-  border-top: 1px solid #edf0ef;
-}
-
-.detailsList dt {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #748185;
-  font-size: 10px;
-}
-
-.detailsList dt svg {
-  color: #d05a1e;
-}
-
-.detailsList dd {
-  margin: 7px 0 0;
-  color: #354145;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.38;
-}
-
-.detailsList dd small {
-  display: block;
-  margin-top: 2px;
-  color: #899398;
-  font-size: 10px;
-  font-weight: 500;
-}
-
-.contactList article {
-  display: grid;
-  grid-template-columns: 31px minmax(0, 1fr) auto;
+  grid-template-columns: 31px minmax(150px, 1fr) minmax(160px, auto) 14px;
   align-items: center;
   gap: 10px;
   border-top: 1px solid #edf0ef;
-  padding: 11px 13px;
+  color: inherit;
+  padding: 11px 14px;
+  text-decoration: none;
+  transition: background .18s ease, color .18s ease;
 }
 
-.contactList article:first-child {
-  border-top: 0;
-}
+.contactList a:first-child { border-top: 0; }
+.contactList a:hover { background: #fffaf7; color: #9a4116; }
+.contactList a:focus-visible { outline: 2px solid #ec7a3d; outline-offset: -2px; }
 
 .contactIcon {
   display: grid;
@@ -337,77 +137,24 @@
 }
 
 .contactList strong,
-.contactList span,
-.contactList p {
-  display: block;
-}
+.contactList small { display: block; }
+.contactList strong { color: #324044; font-size: 11px; }
+.contactList small { margin-top: 2px; color: #66757a; font-size: 10px; }
+.contactEmail { color: #a94b1c; font-size: 11px; font-weight: 700; white-space: nowrap; }
 
-.contactList strong {
-  color: #324044;
-  font-size: 11px;
-}
-
-.contactList article > div > span {
-  margin-top: 2px;
-  color: #66757a;
-  font-size: 10px;
-}
-
-.contactList p {
-  margin: 3px 0 0;
-  color: #889398;
-  font-size: 10px;
-  line-height: 1.32;
-}
-
-.contactList a {
-  display: inline-flex;
+.contactFootnote {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  color: #a94b1c;
+  gap: 6px;
+  margin: 0;
+  border-top: 1px solid #edf0ef;
+  color: #788589;
   font-size: 10px;
-  font-weight: 700;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.contactList a:hover {
-  color: #783513;
-  text-decoration: underline;
-}
-
-.contactList a:focus-visible,
-.localBadge:focus-visible {
-  outline: 2px solid #ec7a3d;
-  outline-offset: 3px;
-}
-
-.privacyNote {
-  border-color: #d3e1dc;
-  background: #f6faf8;
-  color: #49665b;
-}
-
-.privacyNote > svg {
-  color: #397564;
-}
-
-.privacyNote strong {
-  display: block;
-  color: #365c50;
-  font-size: 12px;
-}
-
-.privacyNote p {
-  margin: 2px 0 0;
-  font-size: 11px;
-  line-height: 1.45;
+  padding: 10px 14px;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .specialDaySparkles {
-    animation: quiet-sparkle 3.6s ease-in-out infinite;
-  }
+  .specialDaySparkles { animation: quiet-sparkle 3.6s ease-in-out infinite; }
 }
 
 @keyframes quiet-sparkle {
@@ -415,54 +162,9 @@
   50% { opacity: 1; transform: scale(1.04); }
 }
 
-@media (max-width: 860px) {
-  .profileCard {
-    grid-template-columns: 1fr;
-  }
-
-  .identity {
-    border-right: 0;
-    border-bottom: 1px solid #dce2e1;
-  }
-}
-
 @media (max-width: 680px) {
-  .pageHeader {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .contentGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .tenure {
-    grid-template-columns: 1fr;
-  }
-
-  .tenure > div + div {
-    border-top: 1px solid #e6ebea;
-    border-left: 0;
-  }
-
-  .detailsList {
-    grid-template-columns: 1fr;
-  }
-
-  .detailsList > div:nth-child(odd) {
-    border-right: 0;
-  }
-
-  .detailsList > div:nth-child(n + 2) {
-    border-top: 1px solid #edf0ef;
-  }
-
-  .contactList article {
-    grid-template-columns: 31px minmax(0, 1fr);
-  }
-
-  .contactList a {
-    grid-column: 2;
-    justify-self: start;
-  }
+  .profileCard { grid-template-columns: 1fr; }
+  .tenure { border-top: 1px solid #e6ebea; border-left: 0; }
+  .contactList a { grid-template-columns: 31px minmax(0, 1fr) 14px; }
+  .contactEmail { grid-column: 2; }
 }
