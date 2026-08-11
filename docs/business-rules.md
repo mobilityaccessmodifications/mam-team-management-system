@@ -1,4 +1,4 @@
-# Leave management business rules
+# Leave and People operations business rules
 
 ## Confirmed
 
@@ -20,6 +20,9 @@
 8. What is the retention period for rejected/cancelled requests and event history?
 9. What counts as manager-ready versus all-staff-ready?
 10. Which exact email domain(s) may sign in?
+11. Who may start, view and complete onboarding/offboarding work, including delegated owners and HR-only exit information?
+12. Which systems, assets and subscription approvals are required for each role, who approves them, and what retention/audit period applies?
+13. Should the live check-in cadence follow the dedicated 2-week/1-month/3-month/5-month schedule or the older checklist's 2-week/3-month/6-month references?
 
 ## Demo behaviour — not final payroll policy
 
@@ -28,12 +31,25 @@
 - The demo totals weekday hours inside the 6:00 am–6:00 pm working window. Break deductions, standard daily hours, payroll treatment and evidence requirements still need confirmation before live use.
 - Manager review shows a calendar from three weeks before the requested start through three weeks after the requested end, rounded to full Monday-to-Sunday weeks. The applicant is highlighted, relevant team leave and public holidays are visible, and another employee's private reason is never shown.
 - Employee requests are pending until their assigned manager decides them. A manager's own leave is added directly as an approved calendar record with approval marked “Not required”; managers never approve themselves. “To approve” includes only pending employee requests assigned to the selected manager.
+- The synthetic demo previews an email to the assigned Team Leader after an employee request, an email to the employee after a decline, and emails to the employee, HR and Accounts after approval. The Team Leader preview contains a direct in-app review link. No email is sent and no recipient address is stored.
+- The employee, Team Leader and HR previews can show the request reason. Accounts receives only the employee, leave type, dates/times and approval status; the reason and supporting files remain private until a live recipient policy is approved.
 - A request may include up to three supporting PDF or image files, limited to 5 MB each. In the current no-login demo, files remain only in the open browser session and appear only in manager or HR views. The authenticated release uses a private Supabase Storage bucket and RLS so employees and coworkers cannot download evidence after submission.
 - Shared demo mode stores only the fixed synthetic dataset. The profile selector simulates roles and is not evidence of user identity or authorization.
+
+## People operations demo behaviour — not live HR automation
+
+- Recruitment is not part of this module or demo.
+- The People workspace demonstrates synthetic onboarding and offboarding cases with checklist groups, role-assigned tasks, `Not Started`, `In Progress`, `Complete` and `Overdue` statuses, an illustrative asset/access register and a short audit trail. A workflow reaches “Ready for Day 1” or “Offboarding complete” only when every displayed task is complete.
+- HR may manage any synthetic case. A simulated Team Leader may confirm that manager-owned task for their assigned employee, and a simulated employee may confirm their own employee-owned task. These visibility rules are a UI demonstration, not authentication or authorisation.
+- A selected PDF/image confirmation is represented only by its filename in browser state. Cases, evidence selections/uploads, asset/access changes and audit entries are cleared on refresh or Reset demo; nothing is written to Supabase and no account, licence, asset, or external system is actually provisioned or revoked.
+- The Check-ins tab keeps a synthetic register and creates check-ins at 2 weeks, 1 month, 3 months and 5-month probation from the start date. Manager prompts are scheduled 3 days before the 2-week check-in, 4 business days before the 1-month check-in, 2 weeks before the 3-month check-in, and 2 weeks plus a final 1 week before the 5-month check-in.
+- The dedicated automated-check-in requirement is used in the demo because it is newer and more specific than the older onboarding checklist. The final live cadence, forms/templates, recipients, business-day calendar and snooze/escalation rules still require confirmation.
+- “Run reminder preview” adds an in-app synthetic Team Leader email preview and can mark a reminder previewed, complete or snoozed. It does not schedule work, call an email provider, retain recipient addresses or send email.
 
 ## Data minimisation
 
 - The team calendar should show only what is required for coverage.
 - Detailed reasons and attachments must not appear in the shared calendar.
 - Medical certificates and other evidence require an agreed retention/deletion period and malware-scanning decision before live staff use.
+- Onboarding/offboarding documents, exit information, employee contact details, access records and audit history require role-specific access, retention and deletion rules before live staff use.
 - Use synthetic names and dates in development, CI, screenshots and demos.

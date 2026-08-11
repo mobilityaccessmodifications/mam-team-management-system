@@ -13,6 +13,7 @@ import {
   FileImage,
   FileText,
   LayoutDashboard,
+  Mail,
   MoreHorizontal,
   Paperclip,
   Plus,
@@ -20,6 +21,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  UsersRound,
   X,
   XCircle,
 } from "lucide-react";
@@ -27,10 +29,11 @@ import { FormEvent, useEffect, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import styles from "@/components/leave-demo.module.css";
+import { PeopleOperationsDemo, type PeopleOperationsEmailPreview } from "@/components/people-operations-demo";
 import { createClient } from "@/lib/supabase/client";
 import { isSharedDemoConfigured } from "@/lib/supabase/config";
 
-type AppView = "home" | "leave" | "calendar";
+type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals";
 type RequestStatus = "Pending" | "Approved" | "Declined";
 type AccessRole = "hr" | "manager" | "employee";
@@ -82,6 +85,25 @@ type CalendarHoliday = {
 };
 
 type SharedDataState = "local" | "connecting" | "live" | "error";
+type DemoEmailTrigger = "review-requested" | "approved" | "declined" | "checkin-reminder";
+
+type DemoEmail = {
+  id: string;
+  requestId: string;
+  trigger: DemoEmailTrigger;
+  recipient: string;
+  recipientName: string;
+  subject: string;
+  details: string[];
+  reviewUrl?: string;
+  createdAt: string;
+};
+
+type DemoNavigation = {
+  view: AppView;
+  section: LeaveSection;
+  requestId?: string;
+};
 
 type DemoLeaveRequestRow = {
   id: string;
@@ -339,6 +361,103 @@ function formatDurationWithTime(request: LeaveRequest) {
   return timeRange ? `${formatDuration(request)} · ${timeRange}` : formatDuration(request);
 }
 
+function formatDemoEmailTime() {
+  return new Intl.DateTimeFormat("en-AU", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date());
+}
+
+function getDemoEmailDetails(request: LeaveRequest, includeReason: boolean, decisionNote?: string) {
+  const details = [
+    `Employee: ${request.employee}`,
+    `Leave type: ${request.leaveType}`,
+    `Dates and times: ${request.dateLabel}${formatTimeRange(request) ? ` · ${formatTimeRange(request)}` : ""}`,
+    `Duration: ${formatDuration(request)}`,
+  ];
+
+  if (includeReason) details.push(`Reason: ${request.employeeNote}`);
+  if (decisionNote) details.push(`Manager note: ${decisionNote}`);
+
+  return details;
+}
+
+function buildDemoEmails(request: LeaveRequest, trigger: DemoEmailTrigger, reviewUrl?: string): DemoEmail[] {
+  const createdAt = formatDemoEmailTime();
+  const createEmail = (
+    recipient: DemoEmail["recipient"],
+    recipientName: string,
+    subject: string,
+    details: string[],
+    link?: string,
+  ): DemoEmail => ({
+    id: crypto.randomUUID(),
+    requestId: request.id,
+    trigger,
+    recipient,
+    recipientName,
+    subject,
+    details,
+    reviewUrl: link,
+    createdAt,
+  });
+
+  if (trigger === "review-requested") {
+    return [createEmail(
+      "Team Leader",
+      request.manager,
+      `Leave request awaiting review — ${request.employee}`,
+      getDemoEmailDetails(request, true),
+      reviewUrl,
+    )];
+  }
+
+  if (trigger === "declined") {
+    return [createEmail(
+      "Employee",
+      request.employee,
+      `Leave request declined — ${request.leaveType}`,
+      getDemoEmailDetails(request, true, request.managerNote),
+    )];
+  }
+
+  return [
+    createEmail(
+      "Employee",
+      request.employee,
+      `Leave request approved — ${request.leaveType}`,
+      getDemoEmailDetails(request, true, request.managerNote),
+    ),
+    createEmail(
+      "HR",
+      "Priya Singh",
+      `Leave approved — ${request.employee}`,
+      getDemoEmailDetails(request, true, request.managerNote),
+    ),
+    createEmail(
+      "Accounts",
+      "Accounts team",
+      `Leave approved — ${request.employee}`,
+      [
+        ...getDemoEmailDetails(request, false),
+        "Status: Approved",
+        "The reason and supporting files stay private to the employee, Team Leader and HR.",
+      ],
+    ),
+  ];
+}
+
+function buildDemoReviewUrl(requestId: string) {
+  const url = new URL(window.location.href);
+  url.search = new URLSearchParams({
+    view: "leave",
+    section: "approvals",
+    request: requestId,
+  }).toString();
+  url.hash = "";
+  return url.toString();
+}
+
 const TIME_OPTIONS = Array.from({ length: 49 }, (_, index) => {
   const totalMinutes = (6 * 60) + (index * 15);
   const value = `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
@@ -389,6 +508,7 @@ function toIsoDate(date: Date) {
 }
 
 function getApprovalCalendarDays(request: LeaveRequest) {
+  const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const first = new Date(`${request.startDate}T12:00:00`);
   const last = new Date(`${request.endDate}T12:00:00`);
   first.setDate(first.getDate() - 21);
@@ -406,7 +526,7 @@ function getApprovalCalendarDays(request: LeaveRequest) {
     return {
       iso: toIsoDate(current),
       day: current.getDate(),
-      month: current.toLocaleDateString("en-AU", { month: "short" }),
+      month: shortMonths[current.getMonth()],
       isWeekend: current.getDay() === 0 || current.getDay() === 6,
     };
   });
@@ -447,6 +567,7 @@ function getViewTitles(profile: Profile, leaveSection: LeaveSection): Record<App
       eyebrow: leaveSection === "approvals" ? `${profile.team} decision queue` : profile.roleLabel,
     },
     calendar: { title: "Team calendar", eyebrow: "August 2026" },
+    people: { title: "People operations", eyebrow: "Onboarding · offboarding · check-ins" },
   };
 }
 
@@ -463,19 +584,22 @@ function getCalendarRequests(requests: LeaveRequest[], profile: Profile) {
   return requests.filter((request) => request.team === profile.team);
 }
 
-export function LeaveDemo() {
+export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavigation }) {
   const supabase = isSharedDemoConfigured() ? createClient() : null;
-  const [activeView, setActiveView] = useState<AppView>("home");
+  const [activeView, setActiveView] = useState<AppView>(initialNavigation?.view ?? "home");
   const [activeProfileId, setActiveProfileId] = useState("taylor");
   const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests);
-  const [selectedRequestId, setSelectedRequestId] = useState("MAM-2403");
-  const [leaveSection, setLeaveSection] = useState<LeaveSection>("requests");
+  const [selectedRequestId, setSelectedRequestId] = useState(initialNavigation?.requestId ?? "MAM-2403");
+  const [leaveSection, setLeaveSection] = useState<LeaveSection>(initialNavigation?.section ?? "requests");
   const [statusFilter, setStatusFilter] = useState<"All" | RequestStatus>("All");
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [managerNote, setManagerNote] = useState("");
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
   const [showProfiles, setShowProfiles] = useState(false);
+  const [showEmailActivity, setShowEmailActivity] = useState(false);
+  const [emailLog, setEmailLog] = useState<DemoEmail[]>([]);
+  const [peopleOpsResetKey, setPeopleOpsResetKey] = useState(0);
   const [sharedDataState, setSharedDataState] = useState<SharedDataState>(supabase ? "connecting" : "local");
 
   useEffect(() => {
@@ -554,6 +678,21 @@ export function LeaveDemo() {
     window.setTimeout(() => setToast(""), 3200);
   }
 
+  function addEmailPreviews(previews: DemoEmail[]) {
+    setEmailLog((current) => [...previews, ...current]);
+    setShowEmailActivity(true);
+  }
+
+  function addPeopleOperationsEmailPreviews(previews: PeopleOperationsEmailPreview[]) {
+    addEmailPreviews(previews.map((preview) => ({
+      id: crypto.randomUUID(),
+      requestId: "OPS-CHECK-IN",
+      trigger: "checkin-reminder" as const,
+      ...preview,
+      createdAt: formatDemoEmailTime(),
+    })));
+  }
+
   function chooseLeaveSection(section: LeaveSection) {
     if (section === "approvals" && activeProfile.accessRole !== "manager") return;
     if (section === "approvals" && approvalQueue[0]) setSelectedRequestId(approvalQueue[0].id);
@@ -604,6 +743,9 @@ export function LeaveDemo() {
     setShowRequestForm(false);
     setManagerNote("");
     setShowProfiles(false);
+    setShowEmailActivity(false);
+    setEmailLog([]);
+    setPeopleOpsResetKey((current) => current + 1);
     announce(supabase ? "Shared fake data reset for every open demo." : "Demo reset to its starting point.");
   }
 
@@ -730,6 +872,9 @@ export function LeaveDemo() {
     }
 
     setRequests((current) => [savedRequest, ...current.filter((request) => request.id !== savedRequest.id)]);
+    if (savedRequest.approvalRequired) {
+      addEmailPreviews(buildDemoEmails(savedRequest, "review-requested", buildDemoReviewUrl(savedRequest.id)));
+    }
     setSelectedRequestId(savedRequest.id);
     setShowRequestForm(false);
     setFormError("");
@@ -770,6 +915,7 @@ export function LeaveDemo() {
     }
 
     setRequests((current) => current.map((request) => request.id === selectedRequest.id ? decidedRequest : request));
+    addEmailPreviews(buildDemoEmails(decidedRequest, status === "Approved" ? "approved" : "declined"));
     setManagerNote("");
     announce(`${selectedRequest.id} ${status.toLowerCase()}. The employee record and register are updated.`);
   }
@@ -780,6 +926,9 @@ export function LeaveDemo() {
       { id: "leave" as AppView, label: "Leave", icon: ClipboardList, badge: activeProfile.accessRole === "manager" ? approvalQueue.length : undefined },
       { id: "calendar" as AppView, label: "Team calendar", icon: CalendarDays },
     ] },
+    { label: "People", items: [
+      { id: "people" as AppView, label: "People", icon: UsersRound },
+    ] },
   ];
 
   return (
@@ -787,12 +936,13 @@ export function LeaveDemo() {
       <a className={styles.skipLink} href="#main-content">Skip to workspace</a>
       <aside className={styles.sidebar} aria-label="MAM workspace navigation">
         <div className={styles.brandRow}><BrandMark /><button type="button" aria-label="Workspace options"><MoreHorizontal size={17} /></button></div>
-        <div className={styles.demoBadge} data-state={sharedDataState} role="status">
+        <div className={styles.demoBadge} data-state={activeView === "people" ? "local" : sharedDataState} role="status">
           <Sparkles size={13} />
-          {sharedDataState === "live" ? "Live demo · shared fake data" : null}
-          {sharedDataState === "connecting" ? "Connecting shared fake data…" : null}
-          {sharedDataState === "error" ? "Shared data connection issue" : null}
-          {sharedDataState === "local" ? "Safe demo · browser-only data" : null}
+          {activeView === "people" ? "People demo · browser-only synthetic data" : null}
+          {activeView !== "people" && sharedDataState === "live" ? "Live demo · shared fake data" : null}
+          {activeView !== "people" && sharedDataState === "connecting" ? "Connecting shared fake data…" : null}
+          {activeView !== "people" && sharedDataState === "error" ? "Shared data connection issue" : null}
+          {activeView !== "people" && sharedDataState === "local" ? "Safe demo · browser-only data" : null}
         </div>
         <nav className={styles.nav}>
           {navGroups.map((group) => (
@@ -820,20 +970,22 @@ export function LeaveDemo() {
         <header className={styles.topbar}>
           <div className={styles.mobileBrand}><BrandMark compact /></div>
           <div className={styles.topActions}>
+            <button className={styles.emailActivityButton} type="button" onClick={() => setShowEmailActivity(true)}><Mail size={14} /> Email activity{emailLog.length ? <i>{emailLog.length}</i> : null}</button>
             <button className={styles.resetButton} type="button" onClick={resetDemo}><RotateCcw size={14} /> Reset demo</button>
             <ProfileSwitcher activeProfile={activeProfile} open={showProfiles} onToggle={() => setShowProfiles((current) => !current)} onSelect={switchProfile} />
           </div>
         </header>
 
         <main className={styles.main} id="main-content">
-          <section className={styles.pageHeader}>
+          {activeView !== "people" ? <section className={styles.pageHeader}>
             <div><p>{viewTitles[activeView].eyebrow}</p><h1>{viewTitles[activeView].title}</h1></div>
             <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)}><Plus size={17} /> {activeProfile.accessRole === "manager" ? "Add leave" : "New leave request"}</button>
-          </section>
+          </section> : null}
 
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} onNavigate={navigate} onSelect={selectRequest} /> : null}
           {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
           {activeView === "calendar" ? <CalendarView requests={calendarRequests} /> : null}
+          {activeView === "people" ? <PeopleOperationsDemo key={peopleOpsResetKey} activeProfile={activeProfile} onEmailPreview={addPeopleOperationsEmailPreviews} /> : null}
         </main>
       </div>
 
@@ -856,9 +1008,26 @@ export function LeaveDemo() {
         </div>
       ) : null}
 
+      {showEmailActivity ? <EmailActivityModal emails={emailLog} onClose={() => setShowEmailActivity(false)} /> : null}
+
       <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`} role="status" aria-live="polite"><CheckCircle2 size={17} />{toast}</div>
     </div>
   );
+}
+
+function EmailActivityModal({ emails, onClose }: { emails: DemoEmail[]; onClose: () => void }) {
+  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <section className={`${styles.modal} ${styles.emailModal}`} role="dialog" aria-modal="true" aria-labelledby="email-activity-title">
+      <header><div><span>Synthetic email preview</span><h2 id="email-activity-title">Email activity</h2></div><button type="button" onClick={onClose} aria-label="Close email activity"><X size={19} /></button></header>
+      <div className={styles.emailIntro}><Mail size={18} /><span><strong>No email is sent from this demo.</strong><small>These previews show the notifications the live workflow will send.</small></span></div>
+      {emails.length ? <div className={styles.emailLog}>{emails.map((email) => <article className={styles.emailCard} key={email.id}>
+        <header><span><small>To {email.recipient}</small><strong>{email.recipientName}</strong></span><time>{email.createdAt}</time></header>
+        <h3>{email.subject}</h3>
+        <ul>{email.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>
+        {email.reviewUrl ? <a className={styles.emailReviewLink} href={email.reviewUrl}><ArrowUpRight size={14} /> Open review request</a> : null}
+      </article>)}</div> : <div className={styles.emailEmpty}><Mail size={24} /><strong>No notifications yet</strong><span>Submit or decide a synthetic leave request to preview the email flow.</span></div>}
+    </section>
+  </div>;
 }
 
 function ProfileSwitcher({ activeProfile, open, onToggle, onSelect }: { activeProfile: Profile; open: boolean; onToggle: () => void; onSelect: (profile: Profile) => void }) {

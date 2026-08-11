@@ -2,7 +2,7 @@
 
 ## Outcome
 
-Give MAM employees, managers and accounts one reliable place to see leave, coverage and approval state before the working day starts.
+Give MAM employees, managers and accounts one reliable place to see leave, coverage and approval state before the working day starts, while giving HR and Team Leaders a synthetic preview of onboarding, offboarding and check-in workflows.
 
 ## Phase 1
 
@@ -11,14 +11,17 @@ Give MAM employees, managers and accounts one reliable place to see leave, cover
 - Add password access only after management approves the demonstrated workflow.
 - Model employees, teams and employee-owned leave requests with RLS.
 - Validate employee submission, manager decisions, dashboard language and coverage visibility with management using synthetic data.
+- Demonstrate People workflow checklists, asset/access visibility and manager check-in reminders using synthetic browser-local data. Recruitment is excluded.
 
 ## Current demo boundary
 
-- The demo runs entirely in the browser and resets on refresh.
-- It contains no real employee records and writes nothing to Supabase.
+- The demo contains no real employee records.
+- Shared Leave demo mode can write only the fixed synthetic Leave dataset to Supabase and share it in realtime across browsers. It remains separate from the People workspace.
+- Onboarding, Offboarding and Check-ins are browser-local synthetic workflows: their cases, selected evidence/uploads, asset/access changes, audit entries and reminder/email previews reset on refresh or Reset demo and do not write to Supabase.
 - The top-right selector contains synthetic HR, Major Mod manager, Minor Mod manager and employee profiles for demonstrating role-based visibility; this is not authentication or a production identity system.
-- CRM-style record, board, calendar, people and activity views are navigation prototypes, not separate production data stores.
+- The CRM-style Home, calendar and activity views are presentation surfaces around the demo data, not separate production data stores; the People workflow boundary is described above.
 - Approval and decline actions demonstrate the intended state changes but are not production decisions.
+- People task changes and reminder previews are illustrative only: they do not create accounts, provision/revoke external access, schedule jobs or send email.
 
 ## Not yet in scope
 
@@ -27,6 +30,7 @@ Give MAM employees, managers and accounts one reliable place to see leave, cover
 - Writing leave into AroFlo, Outlook calendars, payroll or another production system.
 - Exposing leave reasons to coworkers.
 - Production notifications before recipients and templates are approved.
+- Recruitment automation.
 
 ## Definition of done for the foundation
 

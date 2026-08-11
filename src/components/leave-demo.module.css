@@ -566,7 +566,8 @@
 }
 
 .resetButton,
-.secondaryButton {
+.secondaryButton,
+.emailActivityButton {
   min-height: 42px;
   display: inline-flex;
   align-items: center;
@@ -576,6 +577,19 @@
   border-radius: 7px;
   font-size: 14px;
   font-weight: 680;
+}
+
+.emailActivityButton i {
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--orange-soft);
+  color: var(--orange-deep);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .main {
@@ -2668,6 +2682,143 @@
   border-radius: 7px;
   background: white;
   color: var(--muted);
+}
+
+.emailModal {
+  width: min(100%, 650px);
+}
+
+.emailIntro {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 18px 20px 0;
+  padding: 12px;
+  border-radius: 7px;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.emailIntro strong,
+.emailIntro small {
+  display: block;
+}
+
+.emailIntro strong {
+  font-size: 13px;
+}
+
+.emailIntro small {
+  margin-top: 3px;
+  color: #596d7a;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.emailLog {
+  display: grid;
+  gap: 10px;
+  padding: 18px 20px 20px;
+}
+
+.emailCard {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafbf9;
+}
+
+.emailCard header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.emailCard header small,
+.emailCard header strong,
+.emailCard time {
+  display: block;
+}
+
+.emailCard header small {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.emailCard header strong {
+  margin-top: 3px;
+  font-size: 13px;
+}
+
+.emailCard time {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.emailCard h3 {
+  margin: 13px 0 9px;
+  font-size: 14px;
+}
+
+.emailCard ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.emailCard li {
+  color: #596466;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.emailReviewLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 12px;
+  color: var(--orange-deep);
+  font-size: 12px;
+  font-weight: 720;
+  text-decoration: none;
+}
+
+.emailReviewLink:hover {
+  text-decoration: underline;
+}
+
+.emailEmpty {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  padding: 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.emailEmpty > svg {
+  color: var(--orange);
+}
+
+.emailEmpty strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.emailEmpty span {
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .formPerson {
