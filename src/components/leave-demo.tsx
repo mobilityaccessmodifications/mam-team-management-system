@@ -21,6 +21,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  UserRound,
   UsersRound,
   X,
   XCircle,
@@ -28,12 +29,13 @@ import {
 import { FormEvent, useEffect, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
+import { AboutMeDemo } from "@/components/about-me-demo";
 import styles from "@/components/leave-demo.module.css";
 import { PeopleOperationsDemo, type PeopleOperationsEmailPreview } from "@/components/people-operations-demo";
 import { createClient } from "@/lib/supabase/client";
 import { isSharedDemoConfigured } from "@/lib/supabase/config";
 
-type AppView = "home" | "leave" | "calendar" | "people";
+type AppView = "home" | "leave" | "calendar" | "people" | "about";
 type LeaveSection = "requests" | "approvals";
 type RequestStatus = "Pending" | "Approved" | "Declined";
 type AccessRole = "hr" | "manager" | "employee";
@@ -76,6 +78,7 @@ type Profile = {
   roleLabel: string;
   team: string;
   manager: string;
+  startedDate: string;
 };
 
 type CalendarHoliday = {
@@ -248,15 +251,15 @@ const initialRequests: LeaveRequest[] = [
 ];
 
 const profiles: Profile[] = [
-  { id: "priya", name: "Priya Singh", initials: "PS", accessRole: "hr", roleLabel: "HR & People", team: "People & Culture", manager: "Executive Team" },
-  { id: "taylor", name: "Taylor Morgan", initials: "TM", accessRole: "manager", roleLabel: "Major Mod manager", team: "Major Modifications", manager: "Priya Singh" },
-  { id: "riley", name: "Riley Brooks", initials: "RB", accessRole: "manager", roleLabel: "Minor Mod manager", team: "Minor Modifications", manager: "Priya Singh" },
-  { id: "jordan", name: "Jordan Patel", initials: "JP", accessRole: "employee", roleLabel: "Accessibility technician", team: "Major Modifications", manager: "Taylor Morgan" },
-  { id: "noah", name: "Noah Williams", initials: "NW", accessRole: "employee", roleLabel: "Project coordinator", team: "Major Modifications", manager: "Taylor Morgan" },
-  { id: "alex", name: "Alex King", initials: "AK", accessRole: "employee", roleLabel: "Accessibility carpenter", team: "Major Modifications", manager: "Taylor Morgan" },
-  { id: "mia", name: "Mia Chen", initials: "MC", accessRole: "employee", roleLabel: "Modifications coordinator", team: "Minor Modifications", manager: "Riley Brooks" },
-  { id: "sam", name: "Sam Rivera", initials: "SR", accessRole: "employee", roleLabel: "Modifications tradesperson", team: "Minor Modifications", manager: "Riley Brooks" },
-  { id: "ava", name: "Ava Thompson", initials: "AT", accessRole: "employee", roleLabel: "Accounts officer", team: "Accounts", manager: "Priya Singh" },
+  { id: "priya", name: "Priya Singh", initials: "PS", accessRole: "hr", roleLabel: "HR & People", team: "People & Culture", manager: "Executive Team", startedDate: "2022-05-16" },
+  { id: "taylor", name: "Taylor Morgan", initials: "TM", accessRole: "manager", roleLabel: "Major Mod manager", team: "Major Modifications", manager: "Priya Singh", startedDate: "2023-08-11" },
+  { id: "riley", name: "Riley Brooks", initials: "RB", accessRole: "manager", roleLabel: "Minor Mod manager", team: "Minor Modifications", manager: "Priya Singh", startedDate: "2023-10-03" },
+  { id: "jordan", name: "Jordan Patel", initials: "JP", accessRole: "employee", roleLabel: "Accessibility technician", team: "Major Modifications", manager: "Taylor Morgan", startedDate: "2025-09-15" },
+  { id: "noah", name: "Noah Williams", initials: "NW", accessRole: "employee", roleLabel: "Project coordinator", team: "Major Modifications", manager: "Taylor Morgan", startedDate: "2026-07-30" },
+  { id: "alex", name: "Alex King", initials: "AK", accessRole: "employee", roleLabel: "Accessibility carpenter", team: "Major Modifications", manager: "Taylor Morgan", startedDate: "2024-02-12" },
+  { id: "mia", name: "Mia Chen", initials: "MC", accessRole: "employee", roleLabel: "Modifications coordinator", team: "Minor Modifications", manager: "Riley Brooks", startedDate: "2024-04-01" },
+  { id: "sam", name: "Sam Rivera", initials: "SR", accessRole: "employee", roleLabel: "Modifications tradesperson", team: "Minor Modifications", manager: "Riley Brooks", startedDate: "2025-01-19" },
+  { id: "ava", name: "Ava Thompson", initials: "AT", accessRole: "employee", roleLabel: "Accounts officer", team: "Accounts", manager: "Priya Singh", startedDate: "2023-06-05" },
 ];
 
 function formatSubmittedAt(value: string) {
@@ -568,6 +571,7 @@ function getViewTitles(profile: Profile, leaveSection: LeaveSection): Record<App
     },
     calendar: { title: "Team calendar", eyebrow: "August 2026" },
     people: { title: "People operations", eyebrow: "Onboarding · offboarding · check-ins" },
+    about: { title: "About me", eyebrow: "My MAM profile" },
   };
 }
 
@@ -929,6 +933,9 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
     { label: "People", items: [
       { id: "people" as AppView, label: "People", icon: UsersRound },
     ] },
+    { label: "My MAM", items: [
+      { id: "about" as AppView, label: "About me", icon: UserRound },
+    ] },
   ];
 
   return (
@@ -936,13 +943,14 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
       <a className={styles.skipLink} href="#main-content">Skip to workspace</a>
       <aside className={styles.sidebar} aria-label="MAM workspace navigation">
         <div className={styles.brandRow}><BrandMark /><button type="button" aria-label="Workspace options"><MoreHorizontal size={17} /></button></div>
-        <div className={styles.demoBadge} data-state={activeView === "people" ? "local" : sharedDataState} role="status">
+        <div className={styles.demoBadge} data-state={activeView === "people" || activeView === "about" ? "local" : sharedDataState} role="status">
           <Sparkles size={13} />
           {activeView === "people" ? "People demo · browser-only synthetic data" : null}
-          {activeView !== "people" && sharedDataState === "live" ? "Live demo · shared fake data" : null}
-          {activeView !== "people" && sharedDataState === "connecting" ? "Connecting shared fake data…" : null}
-          {activeView !== "people" && sharedDataState === "error" ? "Shared data connection issue" : null}
-          {activeView !== "people" && sharedDataState === "local" ? "Safe demo · browser-only data" : null}
+          {activeView === "about" ? "Profile demo · browser-only synthetic data" : null}
+          {activeView !== "people" && activeView !== "about" && sharedDataState === "live" ? "Live demo · shared fake data" : null}
+          {activeView !== "people" && activeView !== "about" && sharedDataState === "connecting" ? "Connecting shared fake data…" : null}
+          {activeView !== "people" && activeView !== "about" && sharedDataState === "error" ? "Shared data connection issue" : null}
+          {activeView !== "people" && activeView !== "about" && sharedDataState === "local" ? "Safe demo · browser-only data" : null}
         </div>
         <nav className={styles.nav}>
           {navGroups.map((group) => (
@@ -977,7 +985,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
         </header>
 
         <main className={styles.main} id="main-content">
-          {activeView !== "people" ? <section className={styles.pageHeader}>
+          {activeView !== "people" && activeView !== "about" ? <section className={styles.pageHeader}>
             <div><p>{viewTitles[activeView].eyebrow}</p><h1>{viewTitles[activeView].title}</h1></div>
             <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)}><Plus size={17} /> {activeProfile.accessRole === "manager" ? "Add leave" : "New leave request"}</button>
           </section> : null}
@@ -986,6 +994,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
           {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
           {activeView === "calendar" ? <CalendarView requests={calendarRequests} /> : null}
           {activeView === "people" ? <PeopleOperationsDemo key={peopleOpsResetKey} activeProfile={activeProfile} onEmailPreview={addPeopleOperationsEmailPreviews} /> : null}
+          {activeView === "about" ? <AboutMeDemo name={activeProfile.name} initials={activeProfile.initials} accessRole={activeProfile.accessRole} roleLabel={activeProfile.roleLabel} team={activeProfile.team} manager={activeProfile.manager} startedDate={activeProfile.startedDate} /> : null}
         </main>
       </div>
 

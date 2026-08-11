@@ -13,7 +13,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const requestId = firstValue(params.request);
 
   return <LeaveDemo initialNavigation={{
-    view: view === "leave" || view === "people" ? view : "home",
+    view: view === "leave" || view === "people" || view === "about" ? view : "home",
     section: section === "approvals" ? "approvals" : "requests",
     requestId,
   }} />;

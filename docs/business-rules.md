@@ -41,10 +41,12 @@
 - Recruitment is not part of this module or demo.
 - The People workspace demonstrates synthetic onboarding and offboarding cases with checklist groups, role-assigned tasks, `Not Started`, `In Progress`, `Complete` and `Overdue` statuses, an illustrative asset/access register and a short audit trail. A workflow reaches “Ready for Day 1” or “Offboarding complete” only when every displayed task is complete.
 - HR may manage any synthetic case. A simulated Team Leader may confirm that manager-owned task for their assigned employee, and a simulated employee may confirm their own employee-owned task. These visibility rules are a UI demonstration, not authentication or authorisation.
+- Employees may view their own onboarding and check-ins only. Offboarding cases are not shown in an employee profile; simulated HR and the relevant manager can view them. This is a privacy-oriented demo convention, not a live authorisation policy.
 - A selected PDF/image confirmation is represented only by its filename in browser state. Cases, evidence selections/uploads, asset/access changes and audit entries are cleared on refresh or Reset demo; nothing is written to Supabase and no account, licence, asset, or external system is actually provisioned or revoked.
 - The Check-ins tab keeps a synthetic register and creates check-ins at 2 weeks, 1 month, 3 months and 5-month probation from the start date. Manager prompts are scheduled 3 days before the 2-week check-in, 4 business days before the 1-month check-in, 2 weeks before the 3-month check-in, and 2 weeks plus a final 1 week before the 5-month check-in.
 - The dedicated automated-check-in requirement is used in the demo because it is newer and more specific than the older onboarding checklist. The final live cadence, forms/templates, recipients, business-day calendar and snooze/escalation rules still require confirmation.
 - “Run reminder preview” adds an in-app synthetic Team Leader email preview and can mark a reminder previewed, complete or snoozed. It does not schedule work, call an email provider, retain recipient addresses or send email.
+- About me derives a selected synthetic profile's tenure from a fixed demo start date and can show a subtle anniversary or team-recognition treatment. Its manager, People, IT and Accounts contact details use `example.test`; it does not contain real employee contact details or form a security boundary.
 
 ## Data minimisation
 

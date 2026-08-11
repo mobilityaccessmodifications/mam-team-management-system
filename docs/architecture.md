@@ -21,6 +21,7 @@ No external HR, payroll, AroFlo or Outlook write integration exists in the found
 - Supporting files are a browser-session interaction in this no-login demo and disappear on refresh or reset. They are deliberately not written to the anonymous shared dataset because the profile selector is not an identity or authorization boundary.
 - Email previews are also browser-only, non-durable synthetic state. They are cleared by Reset demo and do not contain recipient addresses, provider credentials or attachment links.
 - The separate People workspace (Onboarding, Offboarding and Check-ins; no Recruitment) is entirely browser-local synthetic state. Its cases, task progress, selected evidence filenames/uploads, asset/access register, audit entries and reminder previews are not part of `demo_profiles` or `demo_leave_requests`, do not use Supabase Realtime and disappear on refresh or Reset demo.
+- The About me view is also browser-local synthetic state. It receives only the selected demo profile's fixed role, team, manager and start-date fixture, derives tenure in the client, and lists `example.test` support contacts; it is not an employee directory or a security boundary.
 - Check-in reminders are calculated in the client from synthetic start dates. They create only in-app preview activity; there is no server route, mail credential, scheduler/cron, external provisioning or deprovisioning integration, and no new Supabase migration for People operations.
 
 ## Future authentication

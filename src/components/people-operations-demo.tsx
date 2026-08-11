@@ -390,18 +390,21 @@ export function PeopleOperationsDemo({
   const [toast, setToast] = useState("");
 
   const canManage = activeProfile.accessRole === "hr" || activeProfile.accessRole === "manager";
+  const canViewOffboarding = activeProfile.accessRole !== "employee";
   const accessibleWorkflows = useMemo(() => workflows.filter((workflow) => {
+    if (workflow.kind === "offboarding" && !canViewOffboarding) return false;
     if (activeProfile.accessRole === "hr") return true;
     if (activeProfile.accessRole === "manager") return workflow.manager === activeProfile.name;
     return workflow.employee === activeProfile.name;
-  }), [activeProfile, workflows]);
+  }), [activeProfile, canViewOffboarding, workflows]);
   const visiblePeople = useMemo(() => people.filter((person) => {
     if (activeProfile.accessRole === "hr") return true;
     if (activeProfile.accessRole === "manager") return person.manager === activeProfile.name;
     return `${person.firstName} ${person.lastName}` === activeProfile.name;
   }), [activeProfile, people]);
   const visibleReminders = useMemo(() => reminders.filter((reminder) => visiblePeople.some((person) => person.id === reminder.personId)), [reminders, visiblePeople]);
-  const workflowSection: WorkflowKind = section === "offboarding" ? "offboarding" : "onboarding";
+  const visibleSection: PeopleSection = !canViewOffboarding && section === "offboarding" ? "onboarding" : section;
+  const workflowSection: WorkflowKind = visibleSection === "offboarding" ? "offboarding" : "onboarding";
   const activeWorkflows = accessibleWorkflows.filter((workflow) => workflow.kind === workflowSection);
   const selectedWorkflow = activeWorkflows.find((workflow) => workflow.id === selectedWorkflowId) ?? activeWorkflows[0];
   const selectedPerson = visiblePeople.find((person) => person.id === selectedPersonId) ?? visiblePeople[0];
@@ -571,9 +574,9 @@ export function PeopleOperationsDemo({
       <div>
         <span>People & culture · synthetic workflow demo</span>
         <h1>People operations</h1>
-        <p>Onboarding, offboarding and manager check-ins, based on MAM&apos;s current checklists.</p>
+        <p>{canViewOffboarding ? "Onboarding, offboarding and manager check-ins, based on MAM's current checklists." : "Your onboarding and manager check-ins, based on MAM's current checklists."}</p>
       </div>
-      {canManage ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(section === "checkins" ? "checkin" : section)}><Plus size={17} /> {section === "checkins" ? "Add employee" : `Start ${section}`}</button> : null}
+      {canManage ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleSection === "checkins" ? "checkin" : visibleSection)}><Plus size={17} /> {visibleSection === "checkins" ? "Add employee" : `Start ${visibleSection}`}</button> : null}
     </header>
 
     <div className={styles.syntheticNote}><ShieldCheck size={16} /><span><strong>Synthetic cases only.</strong> Do not enter staff personal information in this demo. Documents, assets and email activity are illustrative browser state.</span></div>
@@ -586,12 +589,12 @@ export function PeopleOperationsDemo({
     </div>
 
     <div className={styles.sectionSwitch} role="tablist" aria-label="People operations areas">
-      <button type="button" role="tab" aria-selected={section === "onboarding"} className={section === "onboarding" ? styles.sectionActive : undefined} onClick={() => setSection("onboarding")}><UserRoundPlus size={16} /><span><strong>Onboarding</strong><small>Ready for Day 1</small></span><i>{accessibleWorkflows.filter((workflow) => workflow.kind === "onboarding").length}</i></button>
-      <button type="button" role="tab" aria-selected={section === "offboarding"} className={section === "offboarding" ? styles.sectionActive : undefined} onClick={() => setSection("offboarding")}><BriefcaseBusiness size={16} /><span><strong>Offboarding</strong><small>Close access and assets</small></span><i>{accessibleWorkflows.filter((workflow) => workflow.kind === "offboarding").length}</i></button>
-      <button type="button" role="tab" aria-selected={section === "checkins"} className={section === "checkins" ? styles.sectionActive : undefined} onClick={() => setSection("checkins")}><CalendarClock size={16} /><span><strong>Check-ins</strong><small>Manager milestones</small></span><i>{visibleReminders.filter((reminder) => reminder.status !== "Completed").length}</i></button>
+      <button type="button" role="tab" aria-selected={visibleSection === "onboarding"} className={visibleSection === "onboarding" ? styles.sectionActive : undefined} onClick={() => setSection("onboarding")}><UserRoundPlus size={16} /><span><strong>Onboarding</strong><small>Ready for Day 1</small></span><i>{accessibleWorkflows.filter((workflow) => workflow.kind === "onboarding").length}</i></button>
+      {canViewOffboarding ? <button type="button" role="tab" aria-selected={visibleSection === "offboarding"} className={visibleSection === "offboarding" ? styles.sectionActive : undefined} onClick={() => setSection("offboarding")}><BriefcaseBusiness size={16} /><span><strong>Offboarding</strong><small>Close access and assets</small></span><i>{accessibleWorkflows.filter((workflow) => workflow.kind === "offboarding").length}</i></button> : null}
+      <button type="button" role="tab" aria-selected={visibleSection === "checkins"} className={visibleSection === "checkins" ? styles.sectionActive : undefined} onClick={() => setSection("checkins")}><CalendarClock size={16} /><span><strong>Check-ins</strong><small>Manager milestones</small></span><i>{visibleReminders.filter((reminder) => reminder.status !== "Completed").length}</i></button>
     </div>
 
-    {section === "checkins" ? <CheckInsView
+    {visibleSection === "checkins" ? <CheckInsView
       people={visiblePeople}
       reminders={visibleReminders}
       selectedPerson={selectedPerson}
