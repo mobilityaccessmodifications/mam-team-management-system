@@ -86,25 +86,25 @@ as $$
         in ('employee', 'manager', 'hr', 'system_admin')
       or exists (
         select 1
-        from private.internal_org_member_allowlist authorization
+        from private.internal_org_member_allowlist membership_rule
         join auth.users member on member.id = (select auth.uid())
-        where authorization.revoked_at is null
+        where membership_rule.revoked_at is null
           and member.email_confirmed_at is not null
           and (
-            authorization.auth_user_id = member.id
+            membership_rule.auth_user_id = member.id
             or (
-              authorization.auth_user_id is null
-              and authorization.email = lower(coalesce(member.email, ''))
+              membership_rule.auth_user_id is null
+              and membership_rule.email = lower(coalesce(member.email, ''))
             )
           )
       )
       or exists (
         select 1
-        from private.internal_org_domain_allowlist authorization
+        from private.internal_org_domain_allowlist domain_rule
         join auth.users member on member.id = (select auth.uid())
-        where authorization.revoked_at is null
+        where domain_rule.revoked_at is null
           and member.email_confirmed_at is not null
-          and authorization.domain = lower(split_part(coalesce(member.email, ''), '@', 2))
+          and domain_rule.domain = lower(split_part(coalesce(member.email, ''), '@', 2))
       )
     );
 $$;
@@ -126,11 +126,11 @@ as $$
         in ('hr', 'system_admin')
       or exists (
         select 1
-        from private.internal_org_hr_allowlist authorization
+        from private.internal_org_hr_allowlist hr_rule
         join auth.users member on member.id = (select auth.uid())
-        where authorization.revoked_at is null
+        where hr_rule.revoked_at is null
           and member.email_confirmed_at is not null
-          and authorization.auth_user_id = member.id
+          and hr_rule.auth_user_id = member.id
       )
     );
 $$;
