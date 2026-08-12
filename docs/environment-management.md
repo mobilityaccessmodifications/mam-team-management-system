@@ -22,7 +22,9 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 NEXT_PUBLIC_SHARED_DEMO
 AROFLO_API_BASE_URL
 AROFLO_API_KEY
-OUTLOOK_TENANT_ID
+MAM_DEMO_EMAIL_ENABLED
+MAM_N8N_LEAVE_WEBHOOK_URL
+MAM_N8N_LEAVE_WEBHOOK_SECRET
 ```
 
 Group variables by provider name and use the same variable names in development, preview and production. The values change; the names and code do not.
@@ -42,9 +44,24 @@ That is identity isolation, not session isolation.
 - Vercel: encrypted values separated by Development, Preview and Production.
 - Supabase: publishable key may reach the browser; secret/service-role keys are server-only and are not needed by this foundation app.
 - `NEXT_PUBLIC_SHARED_DEMO=true`: permits only the shared synthetic demo path. It is not suitable for real staff data because the role selector is not authentication.
+- `MAM_DEMO_EMAIL_ENABLED`, `MAM_N8N_LEAVE_WEBHOOK_URL` and `MAM_N8N_LEAVE_WEBHOOK_SECRET` are server-only. They must never use a `NEXT_PUBLIC_*` name or enter client code, screenshots or logs.
 - GitHub Actions: repository/environment secrets only when CI genuinely needs them.
 - Password manager or macOS Keychain: recovery copies and credentials used by local scripts.
 - Never create `.env.save`; use the password manager or deployment platform's controlled history instead.
+
+## Approved synthetic email-review environment
+
+The email path is deliberately narrower than the general three-environment model:
+
+| Environment | Email-review setting |
+|---|---|
+| Development | `MAM_DEMO_EMAIL_ENABLED=false`; webhook values blank unless a separate, explicitly approved isolated test is introduced |
+| Preview | `MAM_DEMO_EMAIL_ENABLED=false`; no provider delivery |
+| Production | May be `true` only for the approved synthetic review test, with the MAM n8n webhook and shared secret configured as server-only Vercel variables |
+
+The Next.js route derives the message from canonical synthetic Supabase records and calls n8n with the shared secret. n8n owns the Outlook credential named `Microsoft Outlook - ai@mobilityaccess.com.au`; the Outlook credential does not belong in Vercel. Both the server route and n8n workflow must hard-lock the physical recipient to `ai@mobilityaccess.com.au` regardless of the intended Team Leader, employee, HR or Accounts template. The Team Leader link uses the fixed production origin `https://mam-team-management-system-ten.vercel.app`.
+
+These variables do not authorise real employee addresses, authentication, a database migration, attachment delivery or live HR data. Rotate the webhook secret in both Vercel Production and n8n if it is exposed. A provider failure is operational telemetry only and must not undo a successfully stored leave request or decision.
 
 ## Session workflow
 

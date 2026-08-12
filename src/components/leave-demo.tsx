@@ -27,7 +27,11 @@ import { FormEvent, useEffect, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import styles from "@/components/leave-demo.module.css";
-import { PeopleOperationsDemo, type PeopleOperationsEmailPreview } from "@/components/people-operations-demo";
+import {
+  PeopleOperationsDemo,
+  type PeopleOperationsEmailPreview,
+  type PeopleOperationsEmailResult,
+} from "@/components/people-operations-demo";
 import { createClient } from "@/lib/supabase/client";
 import { isSharedDemoConfigured } from "@/lib/supabase/config";
 
@@ -85,6 +89,7 @@ type CalendarHoliday = {
 
 type SharedDataState = "local" | "connecting" | "live" | "error";
 type DemoEmailTrigger = "review-requested" | "approved" | "declined" | "checkin-reminder";
+type DemoEmailDeliveryStatus = "sending" | "sent" | "failed" | "preview";
 
 type DemoEmail = {
   id: string;
@@ -96,6 +101,16 @@ type DemoEmail = {
   details: string[];
   reviewUrl?: string;
   createdAt: string;
+  deliveryStatus: DemoEmailDeliveryStatus;
+  deliveryMessage?: string;
+};
+
+type DemoEmailApiResponse = {
+  ok?: boolean;
+  status?: "sent" | "already-sent";
+  messageCount?: number;
+  actualRecipient?: string;
+  error?: string;
 };
 
 type DemoNavigation = {
@@ -399,6 +414,7 @@ function buildDemoEmails(request: LeaveRequest, trigger: DemoEmailTrigger, revie
     details,
     reviewUrl: link,
     createdAt,
+    deliveryStatus: "sending",
   });
 
   if (trigger === "review-requested") {
@@ -440,14 +456,14 @@ function buildDemoEmails(request: LeaveRequest, trigger: DemoEmailTrigger, revie
       [
         ...getDemoEmailDetails(request, false),
         "Status: Approved",
-        "The reason and supporting files stay private to the employee, Team Leader and HR.",
+        "The reason, manager note and supporting files stay private to the employee, Team Leader and HR.",
       ],
     ),
   ];
 }
 
 function buildDemoReviewUrl(requestId: string) {
-  const url = new URL(window.location.href);
+  const url = new URL("https://mam-team-management-system-ten.vercel.app");
   url.search = new URLSearchParams({
     view: "leave",
     section: "approvals",
@@ -597,6 +613,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
   const [showProfiles, setShowProfiles] = useState(false);
   const [showEmailActivity, setShowEmailActivity] = useState(false);
   const [emailLog, setEmailLog] = useState<DemoEmail[]>([]);
+  const [isMutating, setIsMutating] = useState(false);
   const [peopleOpsResetKey, setPeopleOpsResetKey] = useState(0);
   const [sharedDataState, setSharedDataState] = useState<SharedDataState>(supabase ? "connecting" : "local");
 
@@ -686,14 +703,67 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
     }
   }
 
-  function addPeopleOperationsEmailPreviews(previews: PeopleOperationsEmailPreview[]) {
-    addEmailPreviews(previews.map((preview) => ({
-      id: crypto.randomUUID(),
-      requestId: "OPS-CHECK-IN",
-      trigger: "checkin-reminder" as const,
-      ...preview,
-      createdAt: formatDemoEmailTime(),
+  function updateEmailDelivery(ids: string[], status: DemoEmailDeliveryStatus, message: string) {
+    const idSet = new Set(ids);
+    setEmailLog((current) => current.map((email) => idSet.has(email.id)
+      ? { ...email, deliveryStatus: status, deliveryMessage: message }
+      : email));
+  }
+
+  async function requestEmailDelivery(
+    payload: { event: DemoEmailTrigger; requestId?: string; notificationKey?: string },
+    previewIds: string[],
+  ) {
+    try {
+      const response = await fetch("/api/demo-notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json() as DemoEmailApiResponse;
+      if (!response.ok || !result.ok || result.actualRecipient !== "ai@mobilityaccess.com.au") {
+        updateEmailDelivery(previewIds, "failed", result.error || "Email delivery failed.");
+        return { ok: false as const, alreadySent: false };
+      }
+      const alreadySent = result.status === "already-sent";
+      updateEmailDelivery(
+        previewIds,
+        "sent",
+        alreadySent ? "Already delivered to the review inbox." : "Delivered to ai@mobilityaccess.com.au.",
+      );
+      return { ok: true as const, alreadySent };
+    } catch {
+      updateEmailDelivery(previewIds, "failed", "Email delivery failed.");
+      return { ok: false as const, alreadySent: false };
+    }
+  }
+
+  async function addPeopleOperationsEmailPreviews(
+    previews: PeopleOperationsEmailPreview[],
+  ): Promise<PeopleOperationsEmailResult> {
+    const mapped = previews.map(({ notificationKey, ...preview }) => ({
+      notificationKey,
+      email: {
+        id: crypto.randomUUID(),
+        requestId: "OPS-CHECK-IN",
+        trigger: "checkin-reminder" as const,
+        ...preview,
+        createdAt: formatDemoEmailTime(),
+        deliveryStatus: "sending" as const,
+      },
+    }));
+    addEmailPreviews(mapped.map((entry) => entry.email));
+    const results = await Promise.all(mapped.map(async (entry) => ({
+      notificationKey: entry.notificationKey,
+      delivery: await requestEmailDelivery(
+        { event: "checkin-reminder", notificationKey: entry.notificationKey },
+        [entry.email.id],
+      ),
     })));
+    return {
+      deliveredKeys: results.filter((entry) => entry.delivery.ok).map((entry) => entry.notificationKey),
+      failedKeys: results.filter((entry) => !entry.delivery.ok).map((entry) => entry.notificationKey),
+    };
   }
 
   function chooseLeaveSection(section: LeaveSection, requestedId?: string) {
@@ -772,6 +842,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isMutating) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     const leaveType = String(data.get("leaveType"));
@@ -858,6 +929,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
       attachments,
     };
 
+    setIsMutating(true);
     let savedRequest = next;
     if (supabase) {
       const { data: saved, error } = await supabase.rpc("submit_demo_leave_request", {
@@ -874,6 +946,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
         attachments.forEach((attachment) => URL.revokeObjectURL(attachment.previewUrl));
         setFormError(error?.message ?? "The shared request could not be saved.");
         setSharedDataState("error");
+        setIsMutating(false);
         return;
       }
 
@@ -882,25 +955,35 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
     }
 
     setRequests((current) => [savedRequest, ...current.filter((request) => request.id !== savedRequest.id)]);
+    let emailDelivery: { ok: boolean; alreadySent: boolean } | undefined;
     if (savedRequest.approvalRequired) {
-      addEmailPreviews(buildDemoEmails(savedRequest, "review-requested", buildDemoReviewUrl(savedRequest.id)));
+      const previews = buildDemoEmails(savedRequest, "review-requested", buildDemoReviewUrl(savedRequest.id));
+      addEmailPreviews(previews);
+      emailDelivery = await requestEmailDelivery(
+        { event: "review-requested", requestId: savedRequest.id },
+        previews.map((preview) => preview.id),
+      );
     }
     setSelectedRequestId(savedRequest.id);
     setShowRequestForm(false);
     setFormError("");
     form.reset();
     navigate("leave");
+    setIsMutating(false);
     announce(savedRequest.approvalRequired
-      ? `${savedRequest.id} sent to ${activeProfile.manager} for review${supabase ? " and synced live" : ""}.`
+      ? emailDelivery?.ok
+        ? `${savedRequest.id} saved. The review email was sent to ai@mobilityaccess.com.au.`
+        : `${savedRequest.id} saved, but the review email could not be delivered.`
       : `${savedRequest.id} added to the team calendar${supabase ? " and synced live" : ""}. No approval is needed.`);
   }
 
   async function decideRequest(status: "Approved" | "Declined") {
-    if (!selectedRequest) return;
+    if (!selectedRequest || isMutating) return;
     if (status === "Declined" && !managerNote.trim()) {
       announce("Add a manager comment before declining this request.");
       return;
     }
+    setIsMutating(true);
     let decidedRequest: LeaveRequest = {
       ...selectedRequest,
       status,
@@ -918,6 +1001,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
       if (error || !decided) {
         announce(error?.message ?? "The shared decision could not be saved.");
         setSharedDataState("error");
+        setIsMutating(false);
         return;
       }
 
@@ -928,9 +1012,18 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
     setRequests((current) => current.map((request) => request.id === selectedRequest.id ? decidedRequest : request));
     const nextApproval = approvalQueue.find((request) => request.id !== selectedRequest.id);
     if (nextApproval) setSelectedRequestId(nextApproval.id);
-    addEmailPreviews(buildDemoEmails(decidedRequest, status === "Approved" ? "approved" : "declined"));
+    const trigger = status === "Approved" ? "approved" : "declined";
+    const previews = buildDemoEmails(decidedRequest, trigger);
+    addEmailPreviews(previews);
+    const emailDelivery = await requestEmailDelivery(
+      { event: trigger, requestId: decidedRequest.id },
+      previews.map((preview) => preview.id),
+    );
     setManagerNote("");
-    announce(`${selectedRequest.id} ${status.toLowerCase()}. The employee record and register are updated.`);
+    setIsMutating(false);
+    announce(emailDelivery.ok
+      ? `${selectedRequest.id} ${status.toLowerCase()}. ${previews.length} review email${previews.length === 1 ? "" : "s"} sent to ai@mobilityaccess.com.au.`
+      : `${selectedRequest.id} ${status.toLowerCase()} and saved, but email delivery failed.`);
   }
 
   const navItems = [
@@ -962,7 +1055,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
           <div className={styles.mobileBrand}><BrandMark compact /></div>
           <div className={styles.topActions}>
             <span className={styles.demoStatus} data-state={activeView === "people" ? "local" : sharedDataState} role="status"><i />{activeView === "people" || sharedDataState === "local" ? "Demo data" : sharedDataState === "live" ? "Shared demo" : sharedDataState === "connecting" ? "Connecting" : "Connection issue"}</span>
-            <button className={styles.emailActivityButton} type="button" onClick={() => setShowEmailActivity(true)} aria-label={visibleEmailLog.length ? `Email log, ${visibleEmailLog.length} previews` : "Email log"}><Mail size={15} /><span className={styles.actionLabel}>Email log</span>{visibleEmailLog.length ? <i>{visibleEmailLog.length}</i> : null}</button>
+            <button className={styles.emailActivityButton} type="button" onClick={() => setShowEmailActivity(true)} aria-label={visibleEmailLog.length ? `Email log, ${visibleEmailLog.length} notifications` : "Email log"}><Mail size={15} /><span className={styles.actionLabel}>Email log</span>{visibleEmailLog.length ? <i>{visibleEmailLog.length}</i> : null}</button>
             <button className={styles.resetButton} type="button" onClick={resetDemo}><RotateCcw size={15} /> Reset</button>
             <ProfileSwitcher activeProfile={activeProfile} open={showProfiles} onToggle={() => setShowProfiles((current) => !current)} onSelect={switchProfile} />
           </div>
@@ -971,11 +1064,11 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
         <main className={styles.main} id="main-content">
           {activeView !== "people" ? <section className={styles.pageHeader}>
             <div><h1>{viewTitles[activeView].title}</h1>{viewTitles[activeView].helper ? <p>{viewTitles[activeView].helper}</p> : null}</div>
-            <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)}><Plus size={17} /> {activeProfile.accessRole === "manager" ? "Add leave" : "New leave request"}</button>
+            <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)} disabled={isMutating}><Plus size={17} /> {activeProfile.accessRole === "manager" ? "Add leave" : "New leave request"}</button>
           </section> : null}
 
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} onNavigate={navigate} onSelect={selectRequest} /> : null}
-          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
+          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} busy={isMutating} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
           {activeView === "calendar" ? <CalendarView requests={calendarRequests} /> : null}
           {activeView === "people" ? <PeopleOperationsDemo key={peopleOpsResetKey} activeProfile={activeProfile} onEmailPreview={addPeopleOperationsEmailPreviews} /> : null}
         </main>
@@ -994,7 +1087,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
               <label className={styles.attachmentField}><span>Supporting files <small>Optional</small></span><input className={styles.fileInput} name="attachments" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" multiple /><small>PDF or images · up to 3 files, 5 MB each. Demo files stay in this open session.</small></label>
               <div className={styles.privacyNote}><ShieldCheck size={17} /><span>{activeProfile.accessRole === "manager" ? "Your note is private to you and HR." : "Your note is private to you, your approver and HR."} Coworkers only see that you are unavailable.</span></div>
               {formError ? <p className={styles.formError} role="alert">{formError}</p> : null}
-              <footer><button className={styles.secondaryButton} type="button" onClick={() => setShowRequestForm(false)}>Cancel</button><button className={styles.primaryButton} type="submit">{activeProfile.accessRole === "manager" ? "Add leave" : "Send request"} <ArrowUpRight size={16} /></button></footer>
+              <footer><button className={styles.secondaryButton} type="button" onClick={() => setShowRequestForm(false)} disabled={isMutating}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : activeProfile.accessRole === "manager" ? "Add leave" : "Send request"} <ArrowUpRight size={16} /></button></footer>
             </form>
           </section>
         </div>
@@ -1008,16 +1101,23 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
 }
 
 function EmailActivityModal({ emails, onClose }: { emails: DemoEmail[]; onClose: () => void }) {
+  const deliveryLabel: Record<DemoEmailDeliveryStatus, string> = {
+    sending: "Sending",
+    sent: "Delivered",
+    failed: "Failed",
+    preview: "Preview only",
+  };
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className={`${styles.modal} ${styles.emailModal}`} role="dialog" aria-modal="true" aria-labelledby="email-activity-title">
-      <header><div><span>Synthetic email preview</span><h2 id="email-activity-title">Email activity</h2></div><button type="button" onClick={onClose} aria-label="Close email activity"><X size={19} /></button></header>
-      <div className={styles.emailIntro}><Mail size={18} /><span><strong>No email is sent from this demo.</strong><small>These previews show the notifications the live workflow will send.</small></span></div>
+      <header><div><span>Synthetic notification log</span><h2 id="email-activity-title">Email activity</h2></div><button type="button" onClick={onClose} aria-label="Close email activity"><X size={19} /></button></header>
+      <div className={styles.emailIntro}><Mail size={18} /><span><strong>All demo emails go only to ai@mobilityaccess.com.au.</strong><small>The intended role is shown below so each template can be reviewed safely.</small></span></div>
       {emails.length ? <div className={styles.emailLog}>{emails.map((email) => <article className={styles.emailCard} key={email.id}>
-        <header><span><small>To {email.recipient}</small><strong>{email.recipientName}</strong></span><time>{email.createdAt}</time></header>
+        <header><span><small>Intended for {email.recipient}</small><strong>{email.recipientName}</strong></span><span className={`${styles.emailDelivery} ${styles[`emailDelivery${email.deliveryStatus}`]}`}>{deliveryLabel[email.deliveryStatus]}</span><time>{email.createdAt}</time></header>
         <h3>{email.subject}</h3>
         <ul>{email.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>
+        {email.deliveryMessage ? <p className={styles.emailDeliveryMessage}>{email.deliveryMessage}</p> : null}
         {email.reviewUrl ? <a className={styles.emailReviewLink} href={email.reviewUrl}><ArrowUpRight size={14} /> Open review request</a> : null}
-      </article>)}</div> : <div className={styles.emailEmpty}><Mail size={24} /><strong>No notifications yet</strong><span>Submit or decide a synthetic leave request to preview the email flow.</span></div>}
+      </article>)}</div> : <div className={styles.emailEmpty}><Mail size={24} /><strong>No notifications yet</strong><span>Submit or decide a synthetic leave request to test the email flow.</span></div>}
     </section>
   </div>;
 }
@@ -1108,7 +1208,7 @@ function PanelHeader({ title, action, onAction }: { title: string; action?: stri
   return <header className={styles.panelHeader}><h2>{title}</h2>{action && onAction ? <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button> : null}</header>;
 }
 
-function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, selectedId, note, calendarRequests, onFilter, onSection, onNote, onSelect, onDecision }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; selectedId: string; note: string; calendarRequests: LeaveRequest[]; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void }) {
+function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, selectedId, note, calendarRequests, busy, onFilter, onSection, onNote, onSelect, onDecision }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; selectedId: string; note: string; calendarRequests: LeaveRequest[]; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void }) {
   const canApprove = profile.accessRole === "manager";
   return (
     <section className={styles.leaveDesk}>
@@ -1123,7 +1223,7 @@ function LeaveView({ profile, section, requests, allRequests, selected, filter, 
         </div>
       ) : null}
       {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} /> : null}
-      {section === "approvals" && canApprove ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} requests={calendarRequests} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
+      {section === "approvals" && canApprove ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} requests={calendarRequests} busy={busy} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
     </section>
   );
 }
@@ -1159,17 +1259,17 @@ function AttachmentList({ attachments }: { attachments?: LeaveAttachment[] }) {
   return <section className={styles.attachmentList}><span><Paperclip size={14} /> Supporting files · private</span>{attachments.map((attachment) => { const Icon = attachment.mimeType === "application/pdf" ? FileText : FileImage; return <a href={attachment.previewUrl} target="_blank" rel="noreferrer" key={attachment.id}><Icon size={17} /><span><strong>{attachment.name}</strong><small>{formatFileSize(attachment.sizeBytes)}</small></span><Eye size={15} /></a>; })}<small><ShieldCheck size={13} /> Only managers and HR can open these files.</small></section>;
 }
 
-function ApprovalsView({ pending, selected, selectedId, note, requests, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; requests: LeaveRequest[]; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
+function ApprovalsView({ pending, selected, selectedId, note, requests, busy, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; requests: LeaveRequest[]; busy: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
   const showQueue = pending.length > 1 || !selected;
   return <div className={`${styles.approvalGrid} ${!selected ? styles.approvalGridEmpty : ""} ${!showQueue ? styles.approvalGridSingle : ""}`}>
-    {showQueue ? <section className={`${styles.panel} ${styles.queue}`}><PanelHeader title="Requests" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Nothing needs review</strong></div>}</section> : null}
+    {showQueue ? <section className={`${styles.panel} ${styles.queue}`}><PanelHeader title="Requests" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} disabled={busy} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Nothing needs review</strong></div>}</section> : null}
     {selected ? <section className={`${styles.panel} ${styles.approvalRecord}`}>
       <header className={styles.approvalHeader}><span className={styles.avatarOrange}>{selected.initials}</span><span><small>{selected.id}</small><h2>{selected.employee}</h2><p>{selected.team}</p></span><StatusPill status={selected.status} /></header>
       <div className={styles.factGrid}><article><CalendarDays size={17} /><span><small>When</small><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><small>Duration</small><strong>{formatDurationWithTime(selected)}</strong></span></article><article><ClipboardList size={17} /><span><small>Leave type</small><strong>{selected.leaveType}</strong></span></article></div>
       <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div>
       <AttachmentList attachments={selected.attachments} />
       <ApprovalCalendar selected={selected} requests={requests} />
-      {selected.status === "Pending" ? <div className={styles.decisionBox}><label><span>Decision note <small>Required when declining</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} placeholder="Add context that will remain with this record." /></label><div><button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")}><XCircle size={16} /> Decline</button><button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")}><CheckCircle2 size={16} /> Approve leave</button></div></div> : <div className={styles.decisionRecorded}><CheckCircle2 size={19} /><span><strong>Decision recorded</strong><small>The employee view and leave register show {selected.status.toLowerCase()}.</small></span></div>}
+      {selected.status === "Pending" ? <div className={styles.decisionBox}><label><span>Decision note <small>Required when declining</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} placeholder="Add context that will remain with this record." disabled={busy} /></label><div><button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")} disabled={busy}><XCircle size={16} /> {busy ? "Sending…" : "Decline"}</button><button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")} disabled={busy}><CheckCircle2 size={16} /> {busy ? "Sending…" : "Approve leave"}</button></div></div> : <div className={styles.decisionRecorded}><CheckCircle2 size={19} /><span><strong>Decision recorded</strong><small>The employee view and leave register show {selected.status.toLowerCase()}.</small></span></div>}
     </section> : null}
   </div>;
 }

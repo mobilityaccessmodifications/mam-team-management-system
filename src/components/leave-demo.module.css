@@ -2731,7 +2731,7 @@
 .emailCard header {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -2757,8 +2757,33 @@
 
 .emailCard time {
   flex: 0 0 auto;
+  margin-left: auto;
   color: var(--muted);
   font-size: 12px;
+}
+
+.emailDelivery {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.emailDeliverysending,
+.emailDeliverypreview {
+  background: var(--orange-soft);
+  color: var(--orange-deep);
+}
+
+.emailDeliverysent {
+  background: #e9f2ed;
+  color: #356653;
+}
+
+.emailDeliveryfailed {
+  background: #fbeceb;
+  color: #a5433d;
 }
 
 .emailCard h3 {
@@ -2778,6 +2803,12 @@
   color: #596466;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.emailDeliveryMessage {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .emailReviewLink {

@@ -31,7 +31,7 @@ type TaskOwner = "HR" | "Team Leader" | "IT" | "Accounts" | "Analyst" | "Warehou
 type TaskStatus = "Not Started" | "In Progress" | "Complete" | "Overdue";
 type AssetStatus = "Required" | "Issued" | "Returned" | "Pending return";
 type AccessStatus = "Requested" | "Approved" | "Provisioning" | "Active" | "Revocation due" | "Revoked";
-type ReminderStatus = "Scheduled" | "Preview sent" | "Completed";
+type ReminderStatus = "Scheduled" | "Email sent" | "Delivery failed" | "Completed";
 
 export type PeopleOperationsProfile = {
   name: string;
@@ -44,10 +44,16 @@ export type PeopleOperationsProfile = {
 };
 
 export type PeopleOperationsEmailPreview = {
+  notificationKey: string;
   recipient: string;
   recipientName: string;
   subject: string;
   details: string[];
+};
+
+export type PeopleOperationsEmailResult = {
+  deliveredKeys: string[];
+  failedKeys: string[];
 };
 
 type WorkflowTask = {
@@ -359,14 +365,14 @@ function createCheckInReminders(personId: string, startDate: string): CheckInRem
 
 const initialReminders: CheckInReminder[] = [
   ...createCheckInReminders("person-noah", "2026-07-30"),
-  ...createCheckInReminders("person-jordan", "2026-03-20").map<CheckInReminder>((reminder) => reminder.milestone === "5-month probation" && reminder.sequence === "Initial" ? { ...reminder, status: "Preview sent", sentAt: "6 Jul 2026" } : { ...reminder, status: "Completed" }),
+  ...createCheckInReminders("person-jordan", "2026-03-20").map<CheckInReminder>((reminder) => ({ ...reminder, status: "Completed" })),
   ...createCheckInReminders("person-mia", "2026-04-01").map<CheckInReminder>((reminder) => ({ ...reminder, status: "Completed" })),
 ];
 
 function statusClass(status: string) {
-  if (status === "Complete" || status === "Ready for Day 1" || status === "Offboarding complete" || status === "Active" || status === "Revoked" || status === "Completed") return styles.success;
-  if (status === "Overdue" || status === "Needs attention" || status === "Revocation due") return styles.danger;
-  if (status === "In Progress" || status === "Preview sent" || status === "Provisioning") return styles.progress;
+  if (status === "Complete" || status === "Ready for Day 1" || status === "Offboarding complete" || status === "Active" || status === "Revoked" || status === "Completed" || status === "Email sent") return styles.success;
+  if (status === "Overdue" || status === "Needs attention" || status === "Revocation due" || status === "Delivery failed") return styles.danger;
+  if (status === "In Progress" || status === "Provisioning") return styles.progress;
   return styles.neutral;
 }
 
@@ -379,7 +385,7 @@ export function PeopleOperationsDemo({
   onEmailPreview,
 }: {
   activeProfile: PeopleOperationsProfile;
-  onEmailPreview: (previews: PeopleOperationsEmailPreview[]) => void;
+  onEmailPreview: (previews: PeopleOperationsEmailPreview[]) => Promise<PeopleOperationsEmailResult>;
 }) {
   const [section, setSection] = useState<PeopleSection>("profile");
   const [workflows, setWorkflows] = useState<PeopleWorkflow[]>(initialWorkflows);
@@ -390,6 +396,7 @@ export function PeopleOperationsDemo({
   const [showCreate, setShowCreate] = useState(false);
   const [createMode, setCreateMode] = useState<WorkflowKind | "checkin">("onboarding");
   const [showPrivateFields, setShowPrivateFields] = useState(false);
+  const [isSendingReminders, setIsSendingReminders] = useState(false);
   const [toast, setToast] = useState("");
 
   const canManage = activeProfile.accessRole === "hr" || activeProfile.accessRole === "manager";
@@ -477,7 +484,8 @@ export function PeopleOperationsDemo({
     announce("Access register updated.");
   }
 
-  function runDueReminders() {
+  async function runDueReminders() {
+    if (isSendingReminders) return;
     const due = queuedReminders;
     if (!due.length) {
       announce("No scheduled check-in reminders are due in this synthetic timeline.");
@@ -487,6 +495,7 @@ export function PeopleOperationsDemo({
       const person = people.find((entry) => entry.id === reminder.personId);
       if (!person) return [];
       return [{
+        notificationKey: `checkin:${person.id}:${reminder.milestone}:${reminder.sequence}:${reminder.checkInDate}:${reminder.notifyDate}`,
         recipient: "Team Leader",
         recipientName: person.manager,
         subject: `Check-in reminder — ${person.firstName} ${person.lastName} · ${reminder.milestone}`,
@@ -495,14 +504,29 @@ export function PeopleOperationsDemo({
           `Role: ${person.role} · ${person.department}`,
           `Check-in due: ${formatDate(reminder.checkInDate)}`,
           `Reminder schedule: ${reminder.sequence.toLowerCase()} reminder on ${formatDate(reminder.notifyDate)}`,
-          "Forms & templates: available from the People workspace",
           "Action: Schedule the check-in and use the MAM check-in / probation template.",
         ],
       }];
     });
-    setReminders((current) => current.map((reminder) => due.some((entry) => entry.id === reminder.id) ? { ...reminder, status: "Preview sent", sentAt: "Just now" } : reminder));
-    onEmailPreview(previews);
-    announce(`${previews.length} email preview${previews.length === 1 ? "" : "s"} created.`);
+    setIsSendingReminders(true);
+    try {
+      const result = await onEmailPreview(previews);
+      setReminders((current) => current.map((reminder) => {
+        const person = people.find((entry) => entry.id === reminder.personId);
+        if (!person || !due.some((entry) => entry.id === reminder.id)) return reminder;
+        const key = `checkin:${person.id}:${reminder.milestone}:${reminder.sequence}:${reminder.checkInDate}:${reminder.notifyDate}`;
+        if (result.deliveredKeys.includes(key)) return { ...reminder, status: "Email sent", sentAt: "Just now" };
+        if (result.failedKeys.includes(key)) return { ...reminder, status: "Delivery failed", sentAt: undefined };
+        return reminder;
+      }));
+      announce(result.failedKeys.length
+        ? `${result.failedKeys.length} notification${result.failedKeys.length === 1 ? "" : "s"} could not be delivered.`
+        : `${result.deliveredKeys.length} email notification${result.deliveredKeys.length === 1 ? "" : "s"} sent to the review inbox.`);
+    } catch {
+      announce("The notification could not be delivered.");
+    } finally {
+      setIsSendingReminders(false);
+    }
   }
 
   function completeCheckIn(reminderId: string) {
@@ -604,6 +628,7 @@ export function PeopleOperationsDemo({
       canManage={canManage}
       onSelectPerson={(id) => { setSelectedPersonId(id); setShowPrivateFields(false); }}
       onRunDue={runDueReminders}
+      sending={isSendingReminders}
       onComplete={completeCheckIn}
       onSnooze={snoozeCheckIn}
       onTogglePrivate={() => setShowPrivateFields((current) => !current)}
@@ -712,6 +737,7 @@ function CheckInsView({
   canManage,
   onSelectPerson,
   onRunDue,
+  sending,
   onComplete,
   onSnooze,
   onTogglePrivate,
@@ -725,6 +751,7 @@ function CheckInsView({
   canManage: boolean;
   onSelectPerson: (id: string) => void;
   onRunDue: () => void;
+  sending: boolean;
   onComplete: (id: string) => void;
   onSnooze: (id: string) => void;
   onTogglePrivate: () => void;
@@ -736,7 +763,7 @@ function CheckInsView({
   if (!people.length || !selectedPerson) return <div className={styles.emptyState}><CalendarClock size={26} /><strong>{activeProfile.accessRole === "employee" ? "No check-ins are scheduled for you." : "No matching check-in records"}</strong><span>{activeProfile.accessRole === "employee" ? "Your manager will add the next milestone when it is needed." : "Add a fictional employee to the check-in register."}</span></div>;
 
   return <div className={styles.checkInDesk}>
-    {canManage ? <header className={styles.checkInLead}><p>{dueCount ? `${dueCount} reminder${dueCount === 1 ? "" : "s"} due` : "No reminders due"}</p><button className={styles.previewButton} type="button" onClick={onRunDue} disabled={!dueCount}><Mail size={16} /> Create {dueCount || ""} email preview{dueCount === 1 ? "" : "s"}</button></header> : null}
+    {canManage ? <header className={styles.checkInLead}><p>{dueCount ? `${dueCount} reminder${dueCount === 1 ? "" : "s"} due` : "No reminders due"}</p><button className={styles.previewButton} type="button" onClick={onRunDue} disabled={!dueCount || sending}><Mail size={16} /> {sending ? "Sending…" : `Send ${dueCount || ""} email notification${dueCount === 1 ? "" : "s"}`}</button></header> : null}
     <div className={`${styles.checkInLayout} ${!showPersonList ? styles.checkInLayoutSingle : ""}`}>
       {showPersonList ? <aside className={styles.personList} aria-label="Employee check-in register">
         {people.map((person) => <button type="button" key={person.id} className={person.id === selectedPersonId ? styles.personSelected : undefined} onClick={() => onSelectPerson(person.id)}><span className={styles.caseAvatar}>{initialsFor(person.firstName, person.lastName)}</span><span><strong>{person.firstName} {person.lastName}</strong><small>{person.role} · Starts {formatDate(person.startDate)}</small></span><ChevronRight size={15} /></button>)}
@@ -745,7 +772,7 @@ function CheckInsView({
         <header><div>{!isEmployee ? <span className={styles.caseAvatar}>{initialsFor(selectedPerson.firstName, selectedPerson.lastName)}</span> : null}<span><small>Check-in record</small><h2>{isEmployee ? "My check-ins" : `${selectedPerson.firstName} ${selectedPerson.lastName}`}</h2><p>{isEmployee ? selectedPerson.role : `${selectedPerson.role} · ${selectedPerson.department} · Manager: ${selectedPerson.manager}`}</p></span></div>{activeProfile.accessRole === "hr" ? <button type="button" className={styles.detailToggle} onClick={onTogglePrivate}>{showPrivateFields ? "Hide HR fields" : "View HR fields"}</button> : null}</header>
         {showPrivateFields && activeProfile.accessRole === "hr" ? <div className={styles.privateFields}><ShieldCheck size={16} /><span><strong>HR-only synthetic register fields</strong><small>Address: {selectedPerson.address} · DOB: {formatDate(selectedPerson.dateOfBirth)} · Mobile: {selectedPerson.mobile} · Email: {selectedPerson.email}</small></span></div> : null}
         <div className={styles.checkInMeta}><div><small>Start date</small><strong>{formatDate(selectedPerson.startDate)}</strong></div><div><small>Manager</small><strong>{selectedPerson.manager}</strong></div>{canManage ? <a href={checkInFormsUrl} target="_blank" rel="noreferrer"><ArrowUpRight size={15} /> Forms & templates</a> : null}</div>
-        <section className={styles.reminderTimeline}><header><span>Scheduled check-ins</span></header>{personReminders.map((reminder) => <article key={reminder.id}><span className={`${styles.timelineDot} ${statusClass(reminder.status)}`} /><div><strong>{reminder.milestone}{reminder.sequence === "Final" ? " · final reminder" : ""}</strong><p>Due {formatDate(reminder.checkInDate)} · reminder {formatDate(reminder.notifyDate)}</p>{reminder.snoozedUntil ? <small>Snoozed until {formatDate(reminder.snoozedUntil)}</small> : null}{reminder.sentAt ? <small>Email preview created {reminder.sentAt}</small> : null}</div><span className={`${styles.statusPill} ${statusClass(reminder.status)}`}>{reminder.status === "Preview sent" ? "Preview created" : reminder.status}</span>{canManage && !["Completed"].includes(reminder.status) ? <span className={styles.reminderActions}><button type="button" onClick={() => onComplete(reminder.id)}>Complete</button><button type="button" onClick={() => onSnooze(reminder.id)}><RotateCcw size={13} /> Snooze</button></span> : null}</article>)}</section>
+        <section className={styles.reminderTimeline}><header><span>Scheduled check-ins</span></header>{personReminders.map((reminder) => <article key={reminder.id}><span className={`${styles.timelineDot} ${statusClass(reminder.status)}`} /><div><strong>{reminder.milestone}{reminder.sequence === "Final" ? " · final reminder" : ""}</strong><p>Due {formatDate(reminder.checkInDate)} · reminder {formatDate(reminder.notifyDate)}</p>{reminder.snoozedUntil ? <small>Snoozed until {formatDate(reminder.snoozedUntil)}</small> : null}{reminder.sentAt ? <small>Email sent {reminder.sentAt}</small> : null}</div><span className={`${styles.statusPill} ${statusClass(reminder.status)}`}>{reminder.status}</span>{canManage && !["Completed"].includes(reminder.status) ? <span className={styles.reminderActions}><button type="button" onClick={() => onComplete(reminder.id)}>Complete</button><button type="button" onClick={() => onSnooze(reminder.id)}><RotateCcw size={13} /> Snooze</button></span> : null}</article>)}</section>
       </article>
     </div>
   </div>;
