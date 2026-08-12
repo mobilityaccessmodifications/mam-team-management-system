@@ -1,7 +1,10 @@
 .shell {
-  --orange: #e86f2e;
-  --orange-deep: #a84416;
-  --orange-soft: #fff0e7;
+  --accent: #e86f2e;
+  --accent-deep: #a84416;
+  --accent-soft: #fff0e7;
+  --orange: var(--accent);
+  --orange-deep: var(--accent-deep);
+  --orange-soft: var(--accent-soft);
   --ink: #252d2f;
   --muted: #697477;
   --canvas: #f3f5f4;
@@ -17,6 +20,12 @@
   min-height: 100vh;
   background: var(--canvas);
   color: var(--ink);
+}
+
+.shell[data-company="equipsy"] {
+  --accent: #2677b8;
+  --accent-deep: #175e95;
+  --accent-soft: #edf6fd;
 }
 
 .shell button,
@@ -429,19 +438,36 @@
   font-weight: 850;
 }
 
-.profilehr {
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.profilemanager {
+.profileAvatar[data-company="mam"] {
   background: var(--orange-soft);
   color: var(--orange-deep);
 }
 
-.profileemployee {
+.profileAvatar[data-company="equipsy"] {
   background: var(--blue-soft);
   color: var(--blue);
+}
+
+.profileSearch {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  padding: 0 9px;
+}
+
+.profileSearch input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
 }
 
 .profileMenu {
@@ -536,6 +562,7 @@
 
 .iconButton,
 .resetButton,
+.signOutButton,
 .secondaryButton,
 .viewActions > button,
 .calendarToolbar button,
@@ -566,6 +593,7 @@
 }
 
 .resetButton,
+.signOutButton,
 .secondaryButton,
 .emailActivityButton {
   min-height: 42px;
@@ -3216,6 +3244,7 @@
 .profileTrigger:focus-visible,
 .profileMenu button:focus-visible,
 .emailActivityButton:focus-visible,
+.signOutButton:focus-visible,
 .resetButton:focus-visible,
 .primaryButton:focus-visible,
 .panelHeader > button:focus-visible,
@@ -3226,7 +3255,7 @@
 .tableRow:focus-visible {
   position: relative;
   z-index: 2;
-  outline: 3px solid rgb(232 111 46 / .3);
+  outline: 3px solid color-mix(in srgb, var(--accent) 30%, transparent);
   outline-offset: -3px;
 }
 
@@ -3405,6 +3434,15 @@
   .emailActivityButton {
     width: 42px;
     padding: 0;
+  }
+
+  .signOutButton {
+    width: 42px;
+    padding: 0;
+  }
+
+  .signOutButton .actionLabel {
+    display: none;
   }
 
   .emailActivityButton .actionLabel {

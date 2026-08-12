@@ -20,6 +20,7 @@ It is normal for one project environment to contain several API configurations:
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 NEXT_PUBLIC_SHARED_DEMO
+MAM_ALLOWED_EMAIL_DOMAINS
 AROFLO_API_BASE_URL
 AROFLO_API_KEY
 MAM_DEMO_EMAIL_ENABLED
@@ -44,6 +45,8 @@ That is identity isolation, not session isolation.
 - Vercel: encrypted values separated by Development, Preview and Production.
 - Supabase: publishable key may reach the browser; secret/service-role keys are server-only and are not needed by this foundation app.
 - `NEXT_PUBLIC_SHARED_DEMO=true`: permits only the shared synthetic demo path. It is not suitable for real staff data because the role selector is not authentication.
+- Real organisation rows belong only in the authenticated, RLS-protected Supabase table. Import them directly into the verified project; do not place them in `.env*`, migrations, source fixtures, Vercel variables, screenshots or the shared-demo tables.
+- `MAM_ALLOWED_EMAIL_DOMAINS` is a required, comma-separated server-only allowlist for the exact MAM and Equipsy work-email domains. Login fails closed when it is absent or empty.
 - `MAM_DEMO_EMAIL_ENABLED`, `MAM_N8N_LEAVE_WEBHOOK_URL` and `MAM_N8N_LEAVE_WEBHOOK_SECRET` are server-only. They must never use a `NEXT_PUBLIC_*` name or enter client code, screenshots or logs.
 - GitHub Actions: repository/environment secrets only when CI genuinely needs them.
 - Password manager or macOS Keychain: recovery copies and credentials used by local scripts.

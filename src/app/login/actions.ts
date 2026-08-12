@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { redirect } from "next/navigation";
 
 export type LoginState = {
   status: "idle" | "success" | "error";
@@ -15,7 +16,7 @@ export async function requestSignInLink(
   if (!isSupabaseConfigured()) {
     return {
       status: "error",
-      message: "Authentication is not connected yet. Add the MAM Supabase environment first.",
+      message: "Authentication is not connected yet. Ask the system owner to finish setup.",
     };
   }
 
@@ -24,9 +25,20 @@ export async function requestSignInLink(
     return { status: "error", message: "Enter a valid work email address." };
   }
 
-  const allowedDomain = process.env.MAM_ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase();
-  if (allowedDomain && !email.endsWith(`@${allowedDomain}`)) {
-    return { status: "error", message: "Use your approved MAM work email address." };
+  const allowedDomains = process.env.MAM_ALLOWED_EMAIL_DOMAINS
+    ?.split(",")
+    .map((domain) => domain.trim().toLowerCase().replace(/^@/, ""))
+    .filter(Boolean);
+  if (!allowedDomains?.length) {
+    return {
+      status: "error",
+      message: "Work-email access is not configured. Ask the system owner to finish setup.",
+    };
+  }
+
+  const emailDomain = email.split("@").at(-1);
+  if (!emailDomain || !allowedDomains.includes(emailDomain)) {
+    return { status: "error", message: "Use your approved work email address." };
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
@@ -51,4 +63,14 @@ export async function requestSignInLink(
     status: "success",
     message: "Check your inbox for a secure sign-in link.",
   };
+}
+
+export async function signOut() {
+  if (!isSupabaseConfigured()) redirect("/login");
+
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getUser();
+  if (data.user) await supabase.auth.signOut();
+
+  redirect("/login");
 }

@@ -1,3 +1,15 @@
 # Local agent configuration is not part of the deployed application.
 AGENTS.md
 .mcp.json
+
+# Local credentials, linked-project metadata, build output, and test artifacts
+# must never be uploaded with a manual Vercel deployment.
+.env*
+.mam-secrets/
+.vercel/
+.next/
+node_modules/
+output/
+.playwright-cli/
+supabase/.temp/
+*.tsbuildinfo

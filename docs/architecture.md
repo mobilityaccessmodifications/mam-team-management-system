@@ -6,14 +6,24 @@
 Browser
   -> Vercel / Next.js
        -> Shared synthetic demo: Supabase Postgres + Realtime (publishable key)
+       -> Authenticated organisation directory
+            -> Supabase Auth + RLS-protected Postgres + Realtime
        -> Production-only synthetic email route
             -> n8n authenticated webhook
                  -> Microsoft Outlook - ai@mobilityaccess.com.au
                       -> ai@mobilityaccess.com.au only
-       -> Future live system: Supabase Auth + Postgres RLS
+       -> Future live leave/People system: Supabase Auth + Postgres RLS
 ```
 
 No external HR, payroll or AroFlo write integration exists in the foundation phase. The only approved external write is the narrowly scoped synthetic email-review transport described below; it is not a live staff notification integration.
+
+## Authenticated organisation directory
+
+- The Safer People System covers staff from MAM and Equipsy. The organisation directory is separate from the anonymous shared Leave demo and the browser-local People workflow demo.
+- A directory row contains only the minimum tree fields: name, position, company, reporting parent and ordering metadata. MAM is presented with an orange accent and Equipsy with a blue accent; company is also stated in text so colour is never the only indicator.
+- Passwordless Supabase Auth is required before the private tree can be read. RLS grants ordinary signed-in staff read-only access and grants mutations only to database-controlled HR editors. The synthetic profile selector cannot grant organisation write access.
+- HR can add a person, change a title or change a reporting parent. Server-side/database checks must reject self-reporting relationships and cycles. Supabase Realtime propagates saved changes to other authorised viewers.
+- Real names and positions are imported directly into the verified Supabase project. They are not committed in migrations, fixtures, tests or screenshots. Development and preview continue to use synthetic data.
 
 ## Synthetic email-review transport
 
@@ -35,13 +45,13 @@ No external HR, payroll or AroFlo write integration exists in the foundation pha
 - If the shared demo variables are absent, the application falls back to browser-local synthetic data.
 - Supporting files are a browser-session interaction in this no-login demo and disappear on refresh or reset. They are deliberately not written to the anonymous shared dataset because the profile selector is not an identity or authorization boundary.
 - Email activity entries are browser-only, non-durable synthetic display state and are cleared by Reset demo. When production review delivery is enabled, the server independently rebuilds approved message content from the canonical synthetic Supabase record; provider credentials and attachment links never enter browser state.
-- The separate People workspace (Onboarding, Offboarding and Check-ins; no Recruitment) is entirely browser-local synthetic state. Its cases, task progress, selected evidence filenames/uploads, asset/access register, audit entries and reminder previews are not part of `demo_profiles` or `demo_leave_requests`, do not use Supabase Realtime and disappear on refresh or Reset demo.
+- The separate People workflow workspace (Onboarding, Offboarding and Check-ins; no Recruitment) is entirely browser-local synthetic state. Its cases, task progress, selected evidence filenames/uploads, asset/access register, audit entries and reminder previews are not part of `demo_profiles`, `demo_leave_requests` or the authenticated organisation directory, do not use Supabase Realtime and disappear on refresh or Reset demo.
 - The People workspace's My profile panel is also browser-local synthetic state. It receives only the selected demo profile's fixed role, team, manager and start-date fixture, derives tenure in the client, and lists essential `example.test` support contacts; it is not an employee directory or a security boundary.
 - Check-in reminders are calculated in the client from synthetic start dates and always create in-app preview activity. The production email route may deliver only an exact, fixed server-allowlisted synthetic reminder fixture to the review mailbox; there is no scheduler/cron, external provisioning or deprovisioning integration, and no new Supabase migration for People operations.
 
-## Future authentication
+## Authentication boundary
 
-- Passwordless email sign-in through Supabase Auth.
+- Passwordless email sign-in through Supabase Auth protects the internal organisation directory. The shared workflow selector remains synthetic and is not an identity mechanism.
 - Next.js `src/proxy.ts` refreshes auth cookies and performs only an optimistic redirect.
 - Server Actions and RLS remain responsible for authorization.
 - The server validates claims with `getClaims()`; it does not trust an unvalidated session cookie.
@@ -54,8 +64,9 @@ No external HR, payroll or AroFlo write integration exists in the foundation pha
 - `leave_requests`: employee-owned request with dates and lifecycle state.
 - `leave_request_events`: audit-friendly request history.
 - `leave_request_attachments`: private evidence metadata linked to a leave request; file bytes live in the non-public `leave-evidence` Storage bucket.
+- Authenticated organisation nodes: minimal name, position, company and reporting-parent data for the live MAM/Equipsy tree, protected by RLS and a controlled HR editor allowlist.
 
-People operations tables are intentionally not yet modelled. A future authenticated design will need separately authorised workflow, task, evidence, asset, access/subscription, audit, employee check-in and reminder records, plus server-side scheduling and provider secrets if actual notifications are approved.
+People workflow tables are intentionally not yet modelled. The private organisation directory is not a persistence layer for onboarding, offboarding, check-in, leave, contact or payroll information. A future authenticated design will need separately authorised workflow, task, evidence, asset, access/subscription, audit, employee check-in and reminder records, plus server-side scheduling and provider secrets if actual notifications are approved.
 
 The staff/auth attachment migration allows an employee to upload evidence for their own open request, while only HR, system administrators, and a manager/team lead who shares the employee's team may read the attachment metadata or file object. Access is checked from controlled profile and membership records, never user-editable metadata.
 

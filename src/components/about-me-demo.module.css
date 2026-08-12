@@ -64,7 +64,7 @@
 }
 
 .profileSummary > strong {
-  color: #b84f1d;
+  color: var(--accent-deep, #b84f1d);
   font-size: 27px;
   letter-spacing: -.04em;
   white-space: nowrap;
@@ -104,8 +104,8 @@
 }
 
 .contactList a:first-child { border-top: 0; }
-.contactList a:hover { background: #fffaf7; }
-.contactList a:focus-visible { outline: 3px solid rgb(243 112 34 / .3); outline-offset: -3px; }
+.contactList a:hover { background: var(--accent-soft, #fffaf7); }
+.contactList a:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent, #f37022) 30%, transparent); outline-offset: -3px; }
 
 .contactIcon {
   display: grid;
@@ -121,7 +121,7 @@
 .contactList small { display: block; }
 .contactList strong { color: #324044; font-size: 12px; }
 .contactList small { margin-top: 2px; color: #66757a; font-size: 11px; }
-.contactAction { color: #a94b1c; font-size: 12px; font-weight: 700; }
+.contactAction { color: var(--accent-deep, #a94b1c); font-size: 12px; font-weight: 700; }
 
 @media (prefers-reduced-motion: no-preference) {
   .specialDaySparkles { animation: quiet-sparkle 3.6s ease-in-out infinite; }

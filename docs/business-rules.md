@@ -7,6 +7,10 @@
 - Nixon owns the delivery priority; a team-supplied priority is input, not a command.
 - Employee and HR data is confidential.
 - Employee requests still require a final manager decision; the system does not automatically approve them in Phase 1.
+- Safer People System covers MAM and Equipsy. The organisation directory shows only the name, position, company and reporting relationship needed for the tree.
+- MAM uses the orange profile accent and Equipsy uses blue; the company name remains visible so colour is not the only distinction.
+- Signed-in staff may read the organisation tree. Only a database-authorised HR user may add people, edit titles or change reporting relationships; selecting a demo profile never grants that permission.
+- Real roster names and positions are imported privately into the verified Supabase project and must not be committed to Git, copied into demo fixtures or used in screenshots.
 
 ## Decisions required before live use
 
@@ -23,6 +27,7 @@
 11. Who may start, view and complete onboarding/offboarding work, including delegated owners and HR-only exit information?
 12. Which systems, assets and subscription approvals are required for each role, who approves them, and what retention/audit period applies?
 13. Should the live check-in cadence follow the dedicated 2-week/1-month/3-month/5-month schedule or the older checklist's 2-week/3-month/6-month references?
+14. Should any cross-company reporting-line edit require an additional confirmation? Passwordless sign-in currently permits confirmed addresses at `mobilityaccess.com.au` and `equipsy.com.au`.
 
 ## Demo behaviour — not final payroll policy
 
@@ -54,6 +59,7 @@
 ## Data minimisation
 
 - The team calendar should show only what is required for coverage.
+- Organisation cards show name and position only. Contact, payroll, leave-reason, medical and home/work-location data does not belong in the organisation tree.
 - Detailed reasons and attachments must not appear in the shared calendar.
 - Medical certificates and other evidence require an agreed retention/deletion period and malware-scanning decision before live staff use.
 - Onboarding/offboarding documents, exit information, employee contact details, access records and audit history require role-specific access, retention and deletion rules before live staff use.

@@ -18,6 +18,7 @@ export type AboutMeDemoProps = {
   /** Fixed fictional date used only to demonstrate tenure and an anniversary state. */
   startedDate?: string;
   syntheticToday?: string;
+  company?: "mam" | "equipsy";
 };
 
 type HelpContact = {
@@ -61,7 +62,7 @@ function sameMonthDay(first: string, second: string) {
   return firstParts.month === secondParts.month && firstParts.day === secondParts.day;
 }
 
-function yearsAtMam(startedDate: string, today: string) {
+function yearsAtCompany(startedDate: string, today: string) {
   const start = dateParts(startedDate);
   const current = dateParts(today);
   const anniversaryThisYear = dateWithYear(startedDate, current.year);
@@ -76,11 +77,11 @@ function makeSyntheticEmail(value: string) {
   return `${localPart || "team"}@example.test`;
 }
 
-function anniversaryFor(today: string, startedDate: string, years: number): SpecialDay | null {
+function anniversaryFor(today: string, startedDate: string, years: number, companyName: string): SpecialDay | null {
   if (!sameMonthDay(today, startedDate)) return null;
 
   return {
-    title: years === 1 ? "One year at MAM" : `${years} years at MAM`,
+    title: years === 1 ? `One year at ${companyName}` : `${years} years at ${companyName}`,
     description: "Thank you for the work and care you bring to the team.",
     icon: years > 0 ? BadgeCheck : Cake,
   };
@@ -93,11 +94,13 @@ export function AboutMeDemo({
   manager,
   startedDate: startedDateProp,
   syntheticToday = DEMO_TODAY,
+  company = "mam",
 }: AboutMeDemoProps) {
+  const companyName = company === "equipsy" ? "Equipsy" : "MAM";
   const startedDate = startedDateProp ?? "2024-08-11";
-  const daysAtMam = daysBetween(startedDate, syntheticToday);
-  const years = yearsAtMam(startedDate, syntheticToday);
-  const specialDay = anniversaryFor(syntheticToday, startedDate, years);
+  const daysAtCompany = daysBetween(startedDate, syntheticToday);
+  const years = yearsAtCompany(startedDate, syntheticToday);
+  const specialDay = anniversaryFor(syntheticToday, startedDate, years, companyName);
   const SpecialDayIcon = specialDay?.icon;
   const contacts: HelpContact[] = [
     {
@@ -108,13 +111,13 @@ export function AboutMeDemo({
     },
     {
       title: "People & Culture",
-      name: "MAM People team",
+      name: "People team",
       email: "people@example.test",
       icon: HeartHandshake,
     },
     {
       title: "IT support",
-      name: "MAM IT service desk",
+      name: "IT service desk",
       email: "it-support@example.test",
       icon: ShieldCheck,
     },
@@ -135,10 +138,10 @@ export function AboutMeDemo({
         </section>
       ) : null}
 
-      <section className={styles.profileCard} aria-label="MAM profile summary">
+      <section className={styles.profileCard} aria-label={`${companyName} profile summary`}>
         <div className={styles.profileSummary}>
           <span>{roleLabel} <i aria-hidden="true">·</i> {team}</span>
-          <strong>{daysAtMam.toLocaleString()} <small>days at MAM</small></strong>
+          <strong>{daysAtCompany.toLocaleString()} <small>days at {companyName}</small></strong>
         </div>
       </section>
 

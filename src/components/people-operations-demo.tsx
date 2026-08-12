@@ -22,10 +22,16 @@ import {
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 
 import { AboutMeDemo } from "@/components/about-me-demo";
+import {
+  OrganisationTree,
+  type OrganisationPerson,
+  type OrganisationPersonDraft,
+} from "@/components/organisation-tree";
 import styles from "@/components/people-operations-demo.module.css";
 
 type AccessRole = "hr" | "manager" | "employee";
-type PeopleSection = "profile" | "onboarding" | "offboarding" | "checkins";
+type PeopleSection = "profile" | "organisation" | "tasks";
+type PeopleTaskSection = "onboarding" | "offboarding" | "checkins";
 type WorkflowKind = "onboarding" | "offboarding";
 type TaskOwner = "HR" | "Team Leader" | "IT" | "Accounts" | "Analyst" | "Warehouse" | "Employee";
 type TaskStatus = "Not Started" | "In Progress" | "Complete" | "Overdue";
@@ -41,6 +47,8 @@ export type PeopleOperationsProfile = {
   team: string;
   manager: string;
   startedDate: string;
+  company: "mam" | "equipsy";
+  source: "demo" | "directory";
 };
 
 export type PeopleOperationsEmailPreview = {
@@ -382,12 +390,21 @@ function initialsFor(firstName: string, lastName: string) {
 
 export function PeopleOperationsDemo({
   activeProfile,
+  organisationProfiles,
+  canEditOrganisation,
+  onCreateOrganisationPerson,
+  onUpdateOrganisationPerson,
   onEmailPreview,
 }: {
   activeProfile: PeopleOperationsProfile;
+  organisationProfiles: OrganisationPerson[];
+  canEditOrganisation: boolean;
+  onCreateOrganisationPerson: (person: OrganisationPersonDraft) => Promise<void>;
+  onUpdateOrganisationPerson: (id: string, person: OrganisationPersonDraft) => Promise<void>;
   onEmailPreview: (previews: PeopleOperationsEmailPreview[]) => Promise<PeopleOperationsEmailResult>;
 }) {
   const [section, setSection] = useState<PeopleSection>("profile");
+  const [taskSection, setTaskSection] = useState<PeopleTaskSection>("checkins");
   const [workflows, setWorkflows] = useState<PeopleWorkflow[]>(initialWorkflows);
   const [people, setPeople] = useState<CheckInPerson[]>(initialPeople);
   const [reminders, setReminders] = useState<CheckInReminder[]>(initialReminders);
@@ -416,10 +433,10 @@ export function PeopleOperationsDemo({
     ? accessibleWorkflows.find((workflow) => workflow.kind === "offboarding") ?? accessibleWorkflows.find((workflow) => workflow.kind === "onboarding")
     : undefined;
   const employeeLifecycleSection = employeeWorkflow?.kind;
-  const visibleSection: PeopleSection = isEmployee && (section === "onboarding" || section === "offboarding")
-    ? employeeLifecycleSection ?? "profile"
-    : section;
-  const workflowSection: WorkflowKind = visibleSection === "offboarding" ? "offboarding" : "onboarding";
+  const visibleTaskSection: PeopleTaskSection = isEmployee && (taskSection === "onboarding" || taskSection === "offboarding")
+    ? employeeLifecycleSection ?? "checkins"
+    : taskSection;
+  const workflowSection: WorkflowKind = visibleTaskSection === "offboarding" ? "offboarding" : "onboarding";
   const activeWorkflows = accessibleWorkflows.filter((workflow) => workflow.kind === workflowSection);
   const selectedWorkflow = activeWorkflows.find((workflow) => workflow.id === selectedWorkflowId) ?? activeWorkflows[0];
   const selectedPerson = visiblePeople.find((person) => person.id === selectedPersonId) ?? visiblePeople[0];
@@ -567,7 +584,8 @@ export function PeopleOperationsDemo({
     if (createMode !== "offboarding") setSelectedPersonId(checkInPerson.id);
     if (createMode === "checkin") {
       if (!existingPerson) setReminders((current) => [...createCheckInReminders(checkInPerson.id, date), ...current]);
-      setSection("checkins");
+      setSection("tasks");
+      setTaskSection("checkins");
       setShowCreate(false);
       announce(existingPerson ? `The existing synthetic check-in record for ${firstName} is selected.` : `Check-in register and the five reminder points were created for ${firstName}.`);
       return;
@@ -592,7 +610,8 @@ export function PeopleOperationsDemo({
     };
     setWorkflows((current) => [workflow, ...current]);
     if (kind === "onboarding" && !existingPerson) setReminders((current) => [...createCheckInReminders(checkInPerson.id, date), ...current]);
-    setSection(kind);
+    setSection("tasks");
+    setTaskSection(kind);
     setSelectedWorkflowId(id);
     setShowCreate(false);
     announce(`${id} created with assigned tasks, assets, access requests${kind === "onboarding" ? " and check-in milestones" : ""}.`);
@@ -607,18 +626,28 @@ export function PeopleOperationsDemo({
         <h1>People</h1>
         {totalOverdue ? <p className={styles.attentionSummary}><AlertTriangle size={14} /> {totalOverdue} action{totalOverdue === 1 ? " needs" : "s need"} attention</p> : null}
       </div>
-      {canManage && visibleSection !== "profile" ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleSection === "checkins" ? "checkin" : visibleSection)}><Plus size={17} /> {visibleSection === "checkins" ? "Add employee" : `Start ${visibleSection}`}</button> : null}
+      {canManage && section === "tasks" ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleTaskSection === "checkins" ? "checkin" : visibleTaskSection)}><Plus size={17} /> {visibleTaskSection === "checkins" ? "Add employee" : `Start ${visibleTaskSection}`}</button> : null}
     </header>
 
     <nav className={styles.sectionSwitch} aria-label="People sections">
-      <button type="button" aria-pressed={visibleSection === "profile"} className={visibleSection === "profile" ? styles.sectionActive : undefined} onClick={() => setSection("profile")}><span><strong>Profile</strong></span></button>
-      {isEmployee ? employeeLifecycleSection ? <button type="button" aria-pressed={visibleSection === employeeLifecycleSection} className={visibleSection === employeeLifecycleSection ? styles.sectionActive : undefined} onClick={() => setSection(employeeLifecycleSection)}><span><strong>{employeeLifecycleSection === "onboarding" ? "Onboarding" : "Offboarding"}</strong></span></button> : null : <button type="button" aria-pressed={visibleSection === "onboarding"} className={visibleSection === "onboarding" ? styles.sectionActive : undefined} onClick={() => setSection("onboarding")}><span><strong>Onboarding</strong></span></button>}
-      <button type="button" aria-pressed={visibleSection === "checkins"} className={visibleSection === "checkins" ? styles.sectionActive : undefined} onClick={() => setSection("checkins")}><span><strong>Check-ins</strong></span>{queuedReminders.length ? <i>{queuedReminders.length}</i> : null}</button>
-      {!isEmployee ? <button type="button" aria-pressed={visibleSection === "offboarding"} className={visibleSection === "offboarding" ? styles.sectionActive : undefined} onClick={() => setSection("offboarding")}><span><strong>Offboarding</strong></span></button> : null}
+      <button type="button" aria-pressed={section === "profile"} className={section === "profile" ? styles.sectionActive : undefined} onClick={() => setSection("profile")}><span><strong>My profile</strong></span></button>
+      <button type="button" aria-pressed={section === "organisation"} className={section === "organisation" ? styles.sectionActive : undefined} onClick={() => setSection("organisation")}><span><strong>Organisation</strong></span></button>
+      <button type="button" aria-pressed={section === "tasks"} className={section === "tasks" ? styles.sectionActive : undefined} onClick={() => setSection("tasks")}><span><strong>Tasks</strong></span>{queuedReminders.length ? <i>{queuedReminders.length}</i> : null}</button>
     </nav>
 
-    {visibleSection === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} team={activeProfile.team} manager={activeProfile.manager} startedDate={activeProfile.startedDate} /> : null}
-    {visibleSection === "checkins" ? <CheckInsView
+    {section === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} team={activeProfile.team} manager={activeProfile.manager} startedDate={activeProfile.startedDate} company={activeProfile.company} /> : null}
+    {section === "organisation" ? <OrganisationTree
+      profiles={organisationProfiles}
+      canEdit={canEditOrganisation}
+      onCreate={onCreateOrganisationPerson}
+      onUpdate={onUpdateOrganisationPerson}
+    /> : null}
+    {section === "tasks" ? <nav className={styles.taskSwitch} aria-label="Task type">
+      {!isEmployee || employeeLifecycleSection === "onboarding" ? <button type="button" aria-pressed={visibleTaskSection === "onboarding"} onClick={() => setTaskSection("onboarding")}>Onboarding</button> : null}
+      <button type="button" aria-pressed={visibleTaskSection === "checkins"} onClick={() => setTaskSection("checkins")}>Check-ins</button>
+      {!isEmployee || employeeLifecycleSection === "offboarding" ? <button type="button" aria-pressed={visibleTaskSection === "offboarding"} onClick={() => setTaskSection("offboarding")}>Offboarding</button> : null}
+    </nav> : null}
+    {section === "tasks" && visibleTaskSection === "checkins" ? <CheckInsView
       people={visiblePeople}
       reminders={visibleReminders}
       selectedPerson={selectedPerson}
@@ -633,7 +662,7 @@ export function PeopleOperationsDemo({
       onSnooze={snoozeCheckIn}
       onTogglePrivate={() => setShowPrivateFields((current) => !current)}
     /> : null}
-    {visibleSection === "onboarding" || visibleSection === "offboarding" ? <WorkflowsView
+    {section === "tasks" && (visibleTaskSection === "onboarding" || visibleTaskSection === "offboarding") ? <WorkflowsView
       workflows={activeWorkflows}
       selected={selectedWorkflow}
       selectedId={selectedWorkflow?.id}

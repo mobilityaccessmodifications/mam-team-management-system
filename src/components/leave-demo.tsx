@@ -19,26 +19,34 @@ import {
   RotateCcw,
   Search,
   ShieldCheck,
+  LogOut,
   UsersRound,
   X,
   XCircle,
 } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
+import { signOut } from "@/app/login/actions";
 import styles from "@/components/leave-demo.module.css";
 import {
   PeopleOperationsDemo,
   type PeopleOperationsEmailPreview,
   type PeopleOperationsEmailResult,
 } from "@/components/people-operations-demo";
+import type {
+  OrganisationCompany,
+  OrganisationPerson,
+  OrganisationPersonDraft,
+} from "@/components/organisation-tree";
 import { createClient } from "@/lib/supabase/client";
-import { isSharedDemoConfigured } from "@/lib/supabase/config";
+import { isSharedDemoConfigured, isSupabaseConfigured } from "@/lib/supabase/config";
 
 type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals";
 type RequestStatus = "Pending" | "Approved" | "Declined";
 type AccessRole = "hr" | "manager" | "employee";
+type ProfileSource = "demo" | "directory";
 
 type LeaveRequest = {
   id: string;
@@ -79,6 +87,20 @@ type Profile = {
   team: string;
   manager: string;
   startedDate: string;
+  company: OrganisationCompany;
+  source: ProfileSource;
+};
+
+type InternalOrgRow = {
+  id: string;
+  node_kind: "person" | "org_unit" | "vacancy";
+  company_key: OrganisationCompany;
+  full_name: string | null;
+  position_title: string;
+  parent_id: string | null;
+  sort_order: number;
+  updated_at: string;
+  version: number;
 };
 
 type CalendarHoliday = {
@@ -261,16 +283,16 @@ const initialRequests: LeaveRequest[] = [
   },
 ];
 
-const profiles: Profile[] = [
-  { id: "priya", name: "Priya Singh", initials: "PS", accessRole: "hr", roleLabel: "HR & People", team: "People & Culture", manager: "Executive Team", startedDate: "2022-05-16" },
-  { id: "taylor", name: "Taylor Morgan", initials: "TM", accessRole: "manager", roleLabel: "Major Mod manager", team: "Major Modifications", manager: "Priya Singh", startedDate: "2023-08-11" },
-  { id: "riley", name: "Riley Brooks", initials: "RB", accessRole: "manager", roleLabel: "Minor Mod manager", team: "Minor Modifications", manager: "Priya Singh", startedDate: "2023-10-03" },
-  { id: "jordan", name: "Jordan Patel", initials: "JP", accessRole: "employee", roleLabel: "Accessibility technician", team: "Major Modifications", manager: "Taylor Morgan", startedDate: "2025-09-15" },
-  { id: "noah", name: "Noah Williams", initials: "NW", accessRole: "employee", roleLabel: "Project coordinator", team: "Major Modifications", manager: "Taylor Morgan", startedDate: "2026-07-30" },
-  { id: "alex", name: "Alex King", initials: "AK", accessRole: "employee", roleLabel: "Accessibility carpenter", team: "Major Modifications", manager: "Taylor Morgan", startedDate: "2024-02-12" },
-  { id: "mia", name: "Mia Chen", initials: "MC", accessRole: "employee", roleLabel: "Modifications coordinator", team: "Minor Modifications", manager: "Riley Brooks", startedDate: "2024-04-01" },
-  { id: "sam", name: "Sam Rivera", initials: "SR", accessRole: "employee", roleLabel: "Modifications tradesperson", team: "Minor Modifications", manager: "Riley Brooks", startedDate: "2025-01-19" },
-  { id: "ava", name: "Ava Thompson", initials: "AT", accessRole: "employee", roleLabel: "Accounts officer", team: "Accounts", manager: "Priya Singh", startedDate: "2023-06-05" },
+const demoProfiles: Profile[] = [
+  { id: "priya", name: "Priya Singh", initials: "PS", accessRole: "hr", roleLabel: "HR & People", team: "People & Culture", manager: "Executive Team", startedDate: "2022-05-16", company: "mam", source: "demo" },
+  { id: "taylor", name: "Taylor Morgan", initials: "TM", accessRole: "manager", roleLabel: "Major Mod manager", team: "Major Modifications", manager: "Priya Singh", startedDate: "2023-08-11", company: "mam", source: "demo" },
+  { id: "riley", name: "Riley Brooks", initials: "RB", accessRole: "manager", roleLabel: "Minor Mod manager", team: "Minor Modifications", manager: "Priya Singh", startedDate: "2023-10-03", company: "mam", source: "demo" },
+  { id: "jordan", name: "Jordan Patel", initials: "JP", accessRole: "employee", roleLabel: "Accessibility technician", team: "Major Modifications", manager: "Taylor Morgan", startedDate: "2025-09-15", company: "mam", source: "demo" },
+  { id: "noah", name: "Noah Williams", initials: "NW", accessRole: "employee", roleLabel: "Project coordinator", team: "Major Modifications", manager: "Taylor Morgan", startedDate: "2026-07-30", company: "mam", source: "demo" },
+  { id: "alex", name: "Alex King", initials: "AK", accessRole: "employee", roleLabel: "Accessibility carpenter", team: "Major Modifications", manager: "Taylor Morgan", startedDate: "2024-02-12", company: "mam", source: "demo" },
+  { id: "mia", name: "Mia Chen", initials: "MC", accessRole: "employee", roleLabel: "Modifications coordinator", team: "Minor Modifications", manager: "Riley Brooks", startedDate: "2024-04-01", company: "mam", source: "demo" },
+  { id: "sam", name: "Sam Rivera", initials: "SR", accessRole: "employee", roleLabel: "Modifications tradesperson", team: "Minor Modifications", manager: "Riley Brooks", startedDate: "2025-01-19", company: "mam", source: "demo" },
+  { id: "ava", name: "Ava Thompson", initials: "AT", accessRole: "employee", roleLabel: "Accounts officer", team: "Accounts", manager: "Priya Singh", startedDate: "2023-06-05", company: "mam", source: "demo" },
 ];
 
 function formatSubmittedAt(value: string) {
@@ -283,8 +305,8 @@ function formatSubmittedAt(value: string) {
 }
 
 function mapDemoLeaveRequest(row: DemoLeaveRequestRow): LeaveRequest {
-  const employee = profiles.find((profile) => profile.id === row.employee_profile_id);
-  const manager = profiles.find((profile) => profile.id === row.manager_profile_id);
+  const employee = demoProfiles.find((profile) => profile.id === row.employee_profile_id);
+  const manager = demoProfiles.find((profile) => profile.id === row.manager_profile_id);
 
   if (!employee || !manager) {
     throw new Error(`Synthetic profile mapping is missing for ${row.id}.`);
@@ -598,8 +620,32 @@ function getCalendarRequests(requests: LeaveRequest[], profile: Profile) {
   return requests.filter((request) => request.team === profile.team);
 }
 
+function initialsForName(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+function accessRoleForOrgPerson(row: InternalOrgRow, managerIds: Set<string>): AccessRole {
+  if (/\bHR\b|PEOPLE\s*&\s*CULTURE/i.test(row.position_title)) return "hr";
+  return managerIds.has(row.id) ? "manager" : "employee";
+}
+
+function syntheticStartedDate(id: string) {
+  const score = Array.from(id).reduce((total, character) => total + character.charCodeAt(0), 0);
+  const year = 2021 + (score % 5);
+  const month = 1 + (score % 12);
+  const day = 1 + (score % 25);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavigation }) {
   const supabase = isSharedDemoConfigured() ? createClient() : null;
+  const directorySupabase = isSupabaseConfigured() ? createClient() : null;
   const [activeView, setActiveView] = useState<AppView>(initialNavigation?.view ?? "home");
   const [activeProfileId, setActiveProfileId] = useState("taylor");
   const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests);
@@ -616,6 +662,59 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
   const [isMutating, setIsMutating] = useState(false);
   const [peopleOpsResetKey, setPeopleOpsResetKey] = useState(0);
   const [sharedDataState, setSharedDataState] = useState<SharedDataState>(supabase ? "connecting" : "local");
+  const [organisationRows, setOrganisationRows] = useState<InternalOrgRow[]>([]);
+  const [canEditOrganisation, setCanEditOrganisation] = useState(false);
+  const [organisationState, setOrganisationState] = useState<SharedDataState>(directorySupabase ? "connecting" : "local");
+
+  const loadOrganisation = useCallback(async () => {
+    if (!directorySupabase) return;
+    const [{ data: rows, error }, { data: canEdit }] = await Promise.all([
+      directorySupabase
+        .from("internal_org_people")
+        .select("id,node_kind,company_key,full_name,position_title,parent_id,sort_order,updated_at,version")
+        .order("sort_order", { ascending: true })
+        .order("position_title", { ascending: true }),
+      directorySupabase.rpc("can_edit_internal_org"),
+    ]);
+
+    if (error) {
+      setOrganisationState("error");
+      return;
+    }
+    setOrganisationRows((rows ?? []) as InternalOrgRow[]);
+    setCanEditOrganisation(canEdit === true);
+    setOrganisationState("live");
+  }, [directorySupabase]);
+
+  useEffect(() => {
+    if (!directorySupabase) return;
+    let mounted = true;
+    let refreshTimer: number | undefined;
+    refreshTimer = window.setTimeout(() => void loadOrganisation(), 0);
+    const channel = directorySupabase
+      .channel("internal:organisation")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "internal_org_people",
+          select: ["id", "version"],
+        },
+        () => {
+          if (!mounted) return;
+          window.clearTimeout(refreshTimer);
+          refreshTimer = window.setTimeout(() => void loadOrganisation(), 120);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      window.clearTimeout(refreshTimer);
+      void directorySupabase.removeChannel(channel);
+    };
+  }, [directorySupabase, loadOrganisation]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -675,7 +774,39 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
     };
   }, [supabase]);
 
-  const activeProfile = profiles.find((profile) => profile.id === activeProfileId) ?? profiles[1];
+  const organisationPeople = useMemo<OrganisationPerson[]>(() => organisationRows
+    .filter((row) => row.node_kind !== "vacancy")
+    .map((row) => ({
+      id: row.id,
+      name: row.node_kind === "org_unit" ? row.position_title : row.full_name ?? "Unnamed person",
+      position: row.node_kind === "org_unit" ? "" : row.position_title,
+      company: row.company_key,
+      reportsTo: row.parent_id,
+      kind: row.node_kind === "org_unit" ? "org_unit" : "person",
+    })), [organisationRows]);
+  const directoryProfiles = useMemo<Profile[]>(() => {
+    const rowsById = new Map(organisationRows.map((row) => [row.id, row]));
+    const managerIds = new Set(organisationRows.map((row) => row.parent_id).filter((id): id is string => Boolean(id)));
+    return organisationRows
+      .filter((row) => row.node_kind === "person" && row.full_name)
+      .map((row) => {
+        const manager = row.parent_id ? rowsById.get(row.parent_id) : undefined;
+        return {
+          id: `org:${row.id}`,
+          name: row.full_name ?? "Unnamed person",
+          initials: initialsForName(row.full_name ?? ""),
+          accessRole: accessRoleForOrgPerson(row, managerIds),
+          roleLabel: row.position_title,
+          team: row.company_key === "mam" ? "MAM" : "Equipsy",
+          manager: manager?.full_name ?? manager?.position_title ?? "Executive team",
+          startedDate: syntheticStartedDate(row.id),
+          company: row.company_key,
+          source: "directory",
+        };
+      });
+  }, [organisationRows]);
+  const availableProfiles = useMemo(() => [...demoProfiles, ...directoryProfiles], [directoryProfiles]);
+  const activeProfile = availableProfiles.find((profile) => profile.id === activeProfileId) ?? demoProfiles[1];
   const viewTitles = getViewTitles(activeProfile);
   const visibleRequests = getVisibleRequests(requests, activeProfile);
   const calendarRequests = getCalendarRequests(requests, activeProfile);
@@ -690,6 +821,45 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
   const selectedRegisterRequest = filteredRequests.find((request) => request.id === selectedRequestId) ?? filteredRequests[0];
   const selectedApprovalRequest = approvalQueue.find((request) => request.id === selectedRequestId) ?? approvalQueue[0];
   const selectedRequest = leaveSection === "approvals" ? selectedApprovalRequest : selectedRegisterRequest;
+
+  async function createOrganisationPerson(person: OrganisationPersonDraft) {
+    if (!directorySupabase) throw new Error("The directory is not connected.");
+    const { error } = await directorySupabase.rpc("create_internal_org_node", {
+      p_company_key: person.company,
+      p_node_kind: "person",
+      p_position_title: person.position,
+      p_full_name: person.name,
+      p_parent_id: person.reportsTo,
+      p_started_date: null,
+      p_sort_order: organisationRows.length + 1,
+      p_auth_user_id: null,
+    });
+    if (error) throw new Error(error.message);
+    await loadOrganisation();
+    announce(`${person.name} added to the organisation.`);
+  }
+
+  async function updateOrganisationPerson(id: string, person: OrganisationPersonDraft) {
+    if (!directorySupabase) throw new Error("The directory is not connected.");
+    const current = organisationRows.find((row) => row.id === id);
+    if (!current) throw new Error("This person is no longer in the directory.");
+    const { error } = await directorySupabase.rpc("update_internal_org_node", {
+      p_node_id: id,
+      p_company_key: person.company,
+      p_node_kind: "person",
+      p_position_title: person.position,
+      p_full_name: person.name,
+      p_parent_id: person.reportsTo,
+      p_started_date: null,
+      p_sort_order: current.sort_order,
+      p_auth_user_id: null,
+      p_is_active: true,
+      p_expected_version: current.version,
+    });
+    if (error) throw new Error(error.message);
+    await loadOrganisation();
+    announce(`${person.name}'s profile was updated.`);
+  }
 
   function announce(message: string) {
     setToast(message);
@@ -831,7 +1001,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
 
   function switchProfile(profile: Profile) {
     setActiveProfileId(profile.id);
-    setActiveView("home");
+    setActiveView(profile.source === "directory" ? "people" : "home");
     setLeaveSection("requests");
     setSelectedRequestId(initialRequests.find((request) => request.employee === profile.name)?.id ?? initialRequests[0].id);
     setStatusFilter("All");
@@ -843,6 +1013,10 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isMutating) return;
+    if (activeProfile.source === "directory") {
+      setFormError("Live leave requests are not connected to directory profiles yet.");
+      return;
+    }
     const form = event.currentTarget;
     const data = new FormData(form);
     const leaveType = String(data.get("leaveType"));
@@ -1034,9 +1208,9 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
   ];
 
   return (
-    <div className={styles.shell}>
+    <div className={styles.shell} data-company={activeProfile.company}>
       <a className={styles.skipLink} href="#main-content">Skip to workspace</a>
-      <aside className={styles.sidebar} aria-label="MAM workspace navigation">
+      <aside className={styles.sidebar} aria-label="Safer People System navigation">
         <div className={styles.brandRow}><BrandMark /></div>
         <nav className={styles.nav}>
           {navItems.map((item) => {
@@ -1054,23 +1228,32 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
         <header className={styles.topbar}>
           <div className={styles.mobileBrand}><BrandMark compact /></div>
           <div className={styles.topActions}>
-            <span className={styles.demoStatus} data-state={activeView === "people" ? "local" : sharedDataState} role="status"><i />{activeView === "people" || sharedDataState === "local" ? "Demo data" : sharedDataState === "live" ? "Shared demo" : sharedDataState === "connecting" ? "Connecting" : "Connection issue"}</span>
+            <span className={styles.demoStatus} data-state={activeView === "people" ? organisationState : sharedDataState} role="status"><i />{activeView === "people" ? organisationState === "live" ? "Live directory" : organisationState === "connecting" ? "Connecting" : organisationState === "error" ? "Directory issue" : "Demo data" : sharedDataState === "local" ? "Demo data" : sharedDataState === "live" ? "Shared demo" : sharedDataState === "connecting" ? "Connecting" : "Connection issue"}</span>
             <button className={styles.emailActivityButton} type="button" onClick={() => setShowEmailActivity(true)} aria-label={visibleEmailLog.length ? `Email log, ${visibleEmailLog.length} notifications` : "Email log"}><Mail size={15} /><span className={styles.actionLabel}>Email log</span>{visibleEmailLog.length ? <i>{visibleEmailLog.length}</i> : null}</button>
             <button className={styles.resetButton} type="button" onClick={resetDemo}><RotateCcw size={15} /> Reset</button>
-            <ProfileSwitcher activeProfile={activeProfile} open={showProfiles} onToggle={() => setShowProfiles((current) => !current)} onSelect={switchProfile} />
+            {directorySupabase ? <form action={signOut}><button className={styles.signOutButton} type="submit" aria-label="Sign out"><LogOut size={15} /><span className={styles.actionLabel}>Sign out</span></button></form> : null}
+            <ProfileSwitcher activeProfile={activeProfile} profiles={availableProfiles} open={showProfiles} onToggle={() => setShowProfiles((current) => !current)} onSelect={switchProfile} />
           </div>
         </header>
 
         <main className={styles.main} id="main-content">
           {activeView !== "people" ? <section className={styles.pageHeader}>
             <div><h1>{viewTitles[activeView].title}</h1>{viewTitles[activeView].helper ? <p>{viewTitles[activeView].helper}</p> : null}</div>
-            <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)} disabled={isMutating}><Plus size={17} /> {activeProfile.accessRole === "manager" ? "Add leave" : "New leave request"}</button>
+            <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)} disabled={isMutating || activeProfile.source === "directory"}><Plus size={17} /> {activeProfile.accessRole === "manager" ? "Add leave" : "New leave request"}</button>
           </section> : null}
 
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} onNavigate={navigate} onSelect={selectRequest} /> : null}
           {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} busy={isMutating} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
           {activeView === "calendar" ? <CalendarView requests={calendarRequests} /> : null}
-          {activeView === "people" ? <PeopleOperationsDemo key={peopleOpsResetKey} activeProfile={activeProfile} onEmailPreview={addPeopleOperationsEmailPreviews} /> : null}
+          {activeView === "people" ? <PeopleOperationsDemo
+            key={peopleOpsResetKey}
+            activeProfile={activeProfile}
+            organisationProfiles={organisationPeople}
+            canEditOrganisation={canEditOrganisation}
+            onCreateOrganisationPerson={createOrganisationPerson}
+            onUpdateOrganisationPerson={updateOrganisationPerson}
+            onEmailPreview={addPeopleOperationsEmailPreviews}
+          /> : null}
         </main>
       </div>
 
@@ -1122,36 +1305,40 @@ function EmailActivityModal({ emails, onClose }: { emails: DemoEmail[]; onClose:
   </div>;
 }
 
-function ProfileSwitcher({ activeProfile, open, onToggle, onSelect }: { activeProfile: Profile; open: boolean; onToggle: () => void; onSelect: (profile: Profile) => void }) {
-  const groups: { label: string; roles: AccessRole[] }[] = [
-    { label: "People & Culture", roles: ["hr"] },
-    { label: "Management", roles: ["manager"] },
-    { label: "Employees", roles: ["employee"] },
-  ];
+function ProfileSwitcher({ activeProfile, profiles, open, onToggle, onSelect }: { activeProfile: Profile; profiles: Profile[]; open: boolean; onToggle: () => void; onSelect: (profile: Profile) => void }) {
+  const [query, setQuery] = useState("");
+  const groups = [
+    { label: "Demo roles", profiles: profiles.filter((profile) => profile.source === "demo") },
+    { label: "MAM", profiles: profiles.filter((profile) => profile.source === "directory" && profile.company === "mam") },
+    { label: "Equipsy", profiles: profiles.filter((profile) => profile.source === "directory" && profile.company === "equipsy") },
+  ].map((group) => ({
+    ...group,
+    profiles: group.profiles.filter((profile) => `${profile.name} ${profile.roleLabel}`.toLowerCase().includes(query.trim().toLowerCase())),
+  })).filter((group) => group.profiles.length);
 
   return (
     <div className={styles.profileSwitcher}>
       <button className={styles.profileTrigger} type="button" onClick={onToggle} aria-expanded={open}>
-        <span className={`${styles.profileAvatar} ${styles[`profile${activeProfile.accessRole}`]}`}>{activeProfile.initials}</span>
+        <span className={styles.profileAvatar} data-company={activeProfile.company}>{activeProfile.initials}</span>
         <span><strong>{activeProfile.name}</strong><small>{activeProfile.roleLabel}</small></span>
         <ChevronDown className={open ? styles.profileChevronOpen : ""} size={15} />
       </button>
       {open ? (
         <div className={styles.profileMenu} aria-label="Select demo profile">
-          <header><span>View demo as</span><small>Choose a demo role</small></header>
+          <header><span>Switch profile</span><small>View a team member&apos;s workspace</small><label className={styles.profileSearch}><Search size={14} /><span className={styles.srOnly}>Search profiles</span><input type="search" placeholder="Search name or position" value={query} onChange={(event) => setQuery(event.target.value)} /></label></header>
           {groups.map((group) => (
             <section key={group.label}>
               <span>{group.label}</span>
-              {profiles.filter((profile) => group.roles.includes(profile.accessRole)).map((profile) => (
+              {group.profiles.map((profile) => (
                 <button type="button" onClick={() => onSelect(profile)} key={profile.id}>
-                  <span className={`${styles.profileAvatar} ${styles[`profile${profile.accessRole}`]}`}>{profile.initials}</span>
-                  <span><strong>{profile.name}</strong><small>{profile.roleLabel} · {profile.team}</small></span>
+                  <span className={styles.profileAvatar} data-company={profile.company}>{profile.initials}</span>
+                  <span><strong>{profile.name}</strong><small>{profile.roleLabel}</small></span>
                   {profile.id === activeProfile.id ? <Check size={15} /> : null}
                 </button>
               ))}
             </section>
           ))}
-          <footer><ShieldCheck size={14} /> Synthetic demo profiles only</footer>
+          <footer><ShieldCheck size={14} /> Profile switching does not grant HR permissions</footer>
         </div>
       ) : null}
     </div>
