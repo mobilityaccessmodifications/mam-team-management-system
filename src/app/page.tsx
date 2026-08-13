@@ -1,4 +1,7 @@
 import { LeaveDemo } from "@/components/leave-demo";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -7,6 +10,21 @@ function firstValue(value: string | string[] | undefined) {
 }
 
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
+  let isAdmin = false;
+  if (isSupabaseConfigured()) {
+    const supabase = await createClient();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) redirect("/login");
+
+    const { data: canEditOrganisation, error: permissionError } = await supabase
+      .rpc("can_edit_internal_org");
+    isAdmin = !permissionError && canEditOrganisation === true;
+    if (!isAdmin) {
+      await supabase.auth.signOut({ scope: "local" });
+      redirect("/login");
+    }
+  }
+
   const params = await searchParams;
   const view = firstValue(params.view);
   const section = firstValue(params.section);
@@ -16,7 +34,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     ? "people"
     : view === "leave" || view === "people" ? view : "home";
 
-  return <LeaveDemo initialNavigation={{
+  return <LeaveDemo isAdmin={isAdmin} initialNavigation={{
     view: resolvedView,
     section: section === "approvals" ? "approvals" : "requests",
     requestId,

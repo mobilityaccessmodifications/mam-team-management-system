@@ -14,7 +14,7 @@ export default function LoginPage() {
       <section className="auth-form-wrap" aria-labelledby="sign-in-title">
         <div className="auth-card">
           <h2 id="sign-in-title">Sign in</h2>
-          <p>No password to remember. We will send a 6-digit code to your approved work email.</p>
+          <p>Enter your admin username and password.</p>
           <LoginForm />
         </div>
       </section>

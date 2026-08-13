@@ -9,8 +9,9 @@
 - Employee requests still require a final manager decision; the system does not automatically approve them in Phase 1.
 - Safer People System covers MAM and Equipsy. The organisation directory shows only the name, position, company and reporting relationship needed for the tree.
 - MAM uses the orange profile accent and Equipsy uses blue; the company name remains visible so colour is not the only distinction.
-- Signed-in staff may read the organisation tree. Only a database-authorised HR user may add people, edit titles or change reporting relationships; selecting a demo profile never grants that permission.
+- The current database-authorised HR administrator may read and edit the organisation tree. Any later staff-account rollout requires separately approved read rules; selecting a demo profile never grants permission.
 - Real roster names and positions are imported privately into the verified Supabase project and must not be committed to Git, copied into demo fixtures or used in screenshots.
+- The foundation review uses one Supabase Auth username/password administrator account. The server verifies its HR authorisation before opening the master view; its View-as selector changes only synthetic demo context. The password is stored only by Supabase Auth, never in source or environment variables.
 
 ## Decisions required before live use
 
@@ -23,11 +24,11 @@
 7. Which systems receive the approved result: Outlook, payroll, AroFlo, Teams, or none initially?
 8. What is the retention period for rejected/cancelled requests and event history?
 9. What counts as manager-ready versus all-staff-ready?
-10. Which exact email domain(s) may sign in?
+10. Which accounts and work-email domains may sign in when access expands beyond the single administrator review account?
 11. Who may start, view and complete onboarding/offboarding work, including delegated owners and HR-only exit information?
 12. Which systems, assets and subscription approvals are required for each role, who approves them, and what retention/audit period applies?
 13. Should the live check-in cadence follow the dedicated 2-week/1-month/3-month/5-month schedule or the older checklist's 2-week/3-month/6-month references?
-14. Should any cross-company reporting-line edit require an additional confirmation? Passwordless sign-in currently permits confirmed addresses at `mobilityaccess.com.au` and `equipsy.com.au`.
+14. Should any cross-company reporting-line edit require an additional confirmation?
 
 ## Demo behaviour — not final payroll policy
 
@@ -40,8 +41,9 @@
 - Every physical delivery is hard-locked to `ai@mobilityaccess.com.au`, even though the preview and template identify the intended recipient role. No real employee, Team Leader, HR or Accounts address is loaded or used.
 - The employee, Team Leader and HR templates may show the synthetic request reason. Accounts receives only the employee, leave type, dates/times and approval status; it never receives the reason, manager note, supporting files or attachment links. No template includes an attachment.
 - The production-only server route derives message content from the canonical synthetic Supabase row. Its delivery result does not control the leave transaction: a failed n8n or Outlook call never rolls back a saved submission, approval or decline.
+- This synthetic email-review transport and administrator password sign-in are separate boundaries.
 - Email activity shown in the browser remains a non-durable preview/log and clears on refresh or Reset demo; it is not proof of provider delivery.
-- A request may include up to three supporting PDF or image files, limited to 5 MB each. In the current no-login demo, files remain only in the open browser session and appear only in manager or HR views. The authenticated release uses a private Supabase Storage bucket and RLS so employees and coworkers cannot download evidence after submission.
+- A request may include up to three supporting PDF or image files, limited to 5 MB each. In the current synthetic demo, files remain only in the open browser session and appear only in manager or HR View-as modes. A future live workflow uses a private Supabase Storage bucket and RLS so employees and coworkers cannot download evidence after submission.
 - Shared demo mode stores only the fixed synthetic dataset. The profile selector simulates roles and is not evidence of user identity or authorization.
 
 ## People operations demo behaviour — not live HR automation

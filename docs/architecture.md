@@ -7,11 +7,8 @@ Browser
   -> Vercel / Next.js
        -> Shared synthetic demo: Supabase Postgres + Realtime (publishable key)
        -> Authenticated organisation directory
-            -> Supabase Auth + RLS-protected Postgres + Realtime
-            -> Signed Send Email Hook
-                 -> Next.js raw-body verification
-                      -> MAM n8n authenticated webhook
-                           -> Microsoft Outlook - ai@mobilityaccess.com.au
+            -> Supabase Auth username/password administrator
+            -> Server-verified HR access + RLS-protected Postgres + Realtime
        -> Production-only synthetic email route
             -> n8n authenticated webhook
                  -> Microsoft Outlook - ai@mobilityaccess.com.au
@@ -25,7 +22,8 @@ No external HR, payroll or AroFlo write integration exists in the foundation pha
 
 - The Safer People System covers staff from MAM and Equipsy. The organisation directory is separate from the anonymous shared Leave demo and the browser-local People workflow demo.
 - A directory row contains only the minimum tree fields: name, position, company, reporting parent and ordering metadata. MAM is presented with an orange accent and Equipsy with a blue accent; company is also stated in text so colour is never the only indicator.
-- Passwordless Supabase Auth is required before the private tree can be read. RLS grants ordinary signed-in staff read-only access and grants mutations only to database-controlled HR editors. The synthetic profile selector cannot grant organisation write access.
+- The approved review setup uses one pre-provisioned Supabase Auth username/password administrator account. The password is managed only by Supabase Auth and never appears in source, Vercel variables or browser code.
+- Next.js verifies the session and asks the database whether the authenticated account is an authorised HR editor before rendering the HR master view. Organisation mutations remain protected by database-controlled HR checks and RLS. The View-as selector changes only the synthetic demo context and cannot grant organisation write access.
 - HR can add a person, change a title or change a reporting parent. Server-side/database checks must reject self-reporting relationships and cycles. Supabase Realtime propagates saved changes to other authorised viewers.
 - Real names and positions are imported directly into the verified Supabase project. They are not committed in migrations, fixtures, tests or screenshots. Development and preview continue to use synthetic data.
 
@@ -47,7 +45,7 @@ No external HR, payroll or AroFlo write integration exists in the foundation pha
 - Direct anonymous inserts, updates and deletes are revoked. Narrow `security definer` RPCs validate a fixed synthetic profile, working-window times, manager assignment, employee request status and reset confirmation before changing demo rows. Manager profiles create approved records with `approval_required = false`; employee profiles create pending records assigned to their manager.
 - The public RPCs are an intentional demo-only compromise so the workflow can be tested before authentication. They are not an authorization model and must never be used with real employee data.
 - If the shared demo variables are absent, the application falls back to browser-local synthetic data.
-- Supporting files are a browser-session interaction in this no-login demo and disappear on refresh or reset. They are deliberately not written to the anonymous shared dataset because the profile selector is not an identity or authorization boundary.
+- Supporting files are a browser-session interaction in the synthetic demo and disappear on refresh or reset. They are deliberately not written to the anonymous shared dataset because the View-as selector is not an identity or authorization boundary.
 - Email activity entries are browser-only, non-durable synthetic display state and are cleared by Reset demo. When production review delivery is enabled, the server independently rebuilds approved message content from the canonical synthetic Supabase record; provider credentials and attachment links never enter browser state.
 - The separate People workflow workspace (Onboarding, Offboarding and Check-ins; no Recruitment) is entirely browser-local synthetic state. Its cases, task progress, selected evidence filenames/uploads, asset/access register, audit entries and reminder previews are not part of `demo_profiles`, `demo_leave_requests` or the authenticated organisation directory, do not use Supabase Realtime and disappear on refresh or Reset demo.
 - The People workspace's My profile panel is also browser-local synthetic state. It receives only the selected demo profile's fixed role, team, manager and start-date fixture, derives tenure in the client, and lists essential `example.test` support contacts; it is not an employee directory or a security boundary.
@@ -55,12 +53,11 @@ No external HR, payroll or AroFlo write integration exists in the foundation pha
 
 ## Authentication boundary
 
-- Passwordless email sign-in through Supabase Auth protects the internal organisation directory. The shared workflow selector remains synthetic and is not an identity mechanism.
-- Supabase's Send Email Hook signs the exact raw request using Standard Webhooks. A public Node.js route verifies that signature, rejects an explicitly unconfirmed or anonymous account, and accepts only an exact MAM email domain, the `magiclink` action and a six-digit code. It forwards only the lower-cased recipient, code, action and an opaque deterministic retry key to the dedicated MAM n8n Outlook workflow; user IDs and token hashes are never forwarded or logged. The route returns success only after n8n has accepted the item into its workflow, within a short timeout; Outlook delivery completes asynchronously and is verified separately.
-- The hook route is exempt from browser-session redirects but is not anonymous in practice: the signature and short timestamp window authenticate every request. Invalid requests fail closed, and downstream failures return a retryable response to Supabase.
-- Next.js `src/proxy.ts` refreshes auth cookies and performs only an optimistic redirect.
-- Server Actions and RLS remain responsible for authorization.
-- The server validates claims with `getClaims()`; it does not trust an unvalidated session cookie.
+- The administrator signs in with the approved username and a password held by Supabase Auth. The application stores neither the password nor a password-equivalent secret in source code, Vercel environment variables or client storage.
+- Next.js `src/proxy.ts` refreshes auth cookies and performs only an optimistic redirect. The server verifies the authenticated user before resolving whether the account may open the HR master view.
+- Database membership, the HR allowlist and RLS remain the authorisation boundary. Client state and the selected View-as profile are never accepted as permission claims.
+- The View-as selector is available to the authorised administrator for demonstrating synthetic HR, manager and employee workspaces. It does not replace the Supabase session, impersonate a database user or change the administrator's real permissions.
+- Password sign-in depends only on Supabase Auth. The separate synthetic email-review transport above is unchanged and is not part of authentication.
 
 ## Data model
 

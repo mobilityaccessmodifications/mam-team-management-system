@@ -643,11 +643,17 @@ function syntheticStartedDate(id: string) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavigation }) {
+export function LeaveDemo({
+  initialNavigation,
+  isAdmin = false,
+}: {
+  initialNavigation?: DemoNavigation;
+  isAdmin?: boolean;
+}) {
   const supabase = isSharedDemoConfigured() ? createClient() : null;
   const directorySupabase = isSupabaseConfigured() ? createClient() : null;
   const [activeView, setActiveView] = useState<AppView>(initialNavigation?.view ?? "home");
-  const [activeProfileId, setActiveProfileId] = useState("taylor");
+  const [activeProfileId, setActiveProfileId] = useState(isAdmin ? "priya" : "noah");
   const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests);
   const [selectedRequestId, setSelectedRequestId] = useState(initialNavigation?.requestId ?? "MAM-2403");
   const [leaveSection, setLeaveSection] = useState<LeaveSection>(initialNavigation?.section ?? "requests");
@@ -806,7 +812,11 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
       });
   }, [organisationRows]);
   const availableProfiles = useMemo(() => [...demoProfiles, ...directoryProfiles], [directoryProfiles]);
-  const activeProfile = availableProfiles.find((profile) => profile.id === activeProfileId) ?? demoProfiles[1];
+  const neutralEmployeeProfile = demoProfiles.find((profile) => profile.id === "noah") ?? demoProfiles[4];
+  const adminProfile = demoProfiles.find((profile) => profile.id === "priya") ?? demoProfiles[0];
+  const activeProfile = isAdmin
+    ? availableProfiles.find((profile) => profile.id === activeProfileId) ?? adminProfile
+    : neutralEmployeeProfile;
   const viewTitles = getViewTitles(activeProfile);
   const visibleRequests = getVisibleRequests(requests, activeProfile);
   const calendarRequests = getCalendarRequests(requests, activeProfile);
@@ -1000,6 +1010,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
   }
 
   function switchProfile(profile: Profile) {
+    if (!isAdmin) return;
     setActiveProfileId(profile.id);
     setActiveView(profile.source === "directory" ? "people" : "home");
     setLeaveSection("requests");
@@ -1232,7 +1243,7 @@ export function LeaveDemo({ initialNavigation }: { initialNavigation?: DemoNavig
             <button className={styles.emailActivityButton} type="button" onClick={() => setShowEmailActivity(true)} aria-label={visibleEmailLog.length ? `Email log, ${visibleEmailLog.length} notifications` : "Email log"}><Mail size={15} /><span className={styles.actionLabel}>Email log</span>{visibleEmailLog.length ? <i>{visibleEmailLog.length}</i> : null}</button>
             <button className={styles.resetButton} type="button" onClick={resetDemo}><RotateCcw size={15} /> Reset</button>
             {directorySupabase ? <form action={signOut}><button className={styles.signOutButton} type="submit" aria-label="Sign out"><LogOut size={15} /><span className={styles.actionLabel}>Sign out</span></button></form> : null}
-            <ProfileSwitcher activeProfile={activeProfile} profiles={availableProfiles} open={showProfiles} onToggle={() => setShowProfiles((current) => !current)} onSelect={switchProfile} />
+            {isAdmin ? <ProfileSwitcher activeProfile={activeProfile} profiles={availableProfiles} open={showProfiles} onToggle={() => setShowProfiles((current) => !current)} onSelect={switchProfile} /> : null}
           </div>
         </header>
 
@@ -1318,14 +1329,20 @@ function ProfileSwitcher({ activeProfile, profiles, open, onToggle, onSelect }: 
 
   return (
     <div className={styles.profileSwitcher}>
-      <button className={styles.profileTrigger} type="button" onClick={onToggle} aria-expanded={open}>
+      <button
+        className={styles.profileTrigger}
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-label={`Admin preview: view as ${activeProfile.name}, ${activeProfile.roleLabel}`}
+      >
         <span className={styles.profileAvatar} data-company={activeProfile.company}>{activeProfile.initials}</span>
-        <span><strong>{activeProfile.name}</strong><small>{activeProfile.roleLabel}</small></span>
+        <span><strong>{activeProfile.name}</strong><small>View as · {activeProfile.roleLabel}</small></span>
         <ChevronDown className={open ? styles.profileChevronOpen : ""} size={15} />
       </button>
       {open ? (
-        <div className={styles.profileMenu} aria-label="Select demo profile">
-          <header><span>Switch profile</span><small>View a team member&apos;s workspace</small><label className={styles.profileSearch}><Search size={14} /><span className={styles.srOnly}>Search profiles</span><input type="search" placeholder="Search name or position" value={query} onChange={(event) => setQuery(event.target.value)} /></label></header>
+        <div className={styles.profileMenu} aria-label="Admin preview: view as another profile">
+          <header><span>Admin preview</span><small>View the synthetic workspace as another team member</small><label className={styles.profileSearch}><Search size={14} /><span className={styles.srOnly}>Search profiles</span><input type="search" placeholder="Search name or position" value={query} onChange={(event) => setQuery(event.target.value)} /></label></header>
           {groups.map((group) => (
             <section key={group.label}>
               <span>{group.label}</span>
@@ -1338,7 +1355,7 @@ function ProfileSwitcher({ activeProfile, profiles, open, onToggle, onSelect }: 
               ))}
             </section>
           ))}
-          <footer><ShieldCheck size={14} /> Profile switching does not grant HR permissions</footer>
+          <footer><ShieldCheck size={14} /> View as changes the preview only; database permissions stay with your signed-in account</footer>
         </div>
       ) : null}
     </div>
