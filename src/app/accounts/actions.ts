@@ -39,6 +39,10 @@ type AccountRpcRow = {
   account_version: number;
 };
 
+type PasswordResetClaimRpcRow = AccountRpcRow & {
+  reset_token: string;
+};
+
 const LOGIN_PATTERN = /^[a-z0-9][a-z0-9._-]{2,63}$/;
 const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,128}$/;
 const GENERIC_ERROR = "The account change could not be saved. Refresh and try again.";
@@ -119,6 +123,13 @@ function mapRpcAccount(data: unknown) {
   const rows = Array.isArray(data) ? data : [];
   const row = rows[0] as AccountRpcRow | undefined;
   if (!row) throw new Error(GENERIC_ERROR);
+  return row;
+}
+
+function mapPasswordResetClaim(data: unknown) {
+  const rows = Array.isArray(data) ? data : [];
+  const row = rows[0] as PasswordResetClaimRpcRow | undefined;
+  if (!row || !/^[0-9a-f-]{36}$/i.test(row.reset_token)) throw new Error(GENERIC_ERROR);
   return row;
 }
 
@@ -262,16 +273,42 @@ export async function resetPortalPassword(input: ResetPasswordInput): Promise<Ac
   validateIds(input.personId, input.userId);
   validatePassword(input.newPassword);
   await requireLinkedAccount(input.personId, input.userId, input.accountVersion);
-  const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.updateUserById(input.userId, { password: input.newPassword });
-  if (error || !data.user) throw new Error("The password could not be reset.");
 
-  const { data: saved, error: saveError } = await supabase.rpc("record_portal_password_reset", {
+  const { data: claimed, error: claimError } = await supabase.rpc("begin_portal_password_reset", {
     p_person_id: input.personId,
     p_auth_user_id: input.userId,
+    p_expected_account_version: input.accountVersion,
   });
-  if (saveError) throw new Error("The password changed, but its account record needs refreshing.");
-  mapRpcAccount(saved);
+  if (claimError) throw new Error(GENERIC_ERROR);
+  const claim = mapPasswordResetClaim(claimed);
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.updateUserById(input.userId, { password: input.newPassword });
+  if (error || !data.user) {
+    await supabase.rpc("cancel_portal_password_reset", {
+      p_auth_user_id: input.userId,
+      p_reset_token: claim.reset_token,
+    });
+    throw new Error("The password could not be reset.");
+  }
+
+  let finalised = await supabase.rpc("finalise_portal_password_reset", {
+    p_person_id: input.personId,
+    p_auth_user_id: input.userId,
+    p_reset_token: claim.reset_token,
+  });
+  if (finalised.error) {
+    // A provider timeout can leave the database call's outcome unknown. The
+    // claim token makes this retry idempotent and prevents a second password
+    // from being shown for the same reset.
+    finalised = await supabase.rpc("finalise_portal_password_reset", {
+      p_person_id: input.personId,
+      p_auth_user_id: input.userId,
+      p_reset_token: claim.reset_token,
+    });
+  }
+  if (finalised.error) throw new Error("The password changed, but its account record needs refreshing.");
+  mapRpcAccount(finalised.data);
   revalidatePath("/");
   return { account: await loadAccountByPerson(input.personId), oneTimePassword: input.newPassword };
 }
