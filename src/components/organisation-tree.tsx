@@ -3,13 +3,17 @@
 import {
   ChevronDown,
   ChevronRight,
+  Focus,
   LocateFixed,
+  Maximize2,
+  Minimize2,
   Minus,
   Network,
   Pencil,
   Plus,
   Search,
   UnfoldVertical,
+  UserPlus,
   X,
 } from "lucide-react";
 import {
@@ -34,6 +38,7 @@ export type OrganisationPerson = {
   company: OrganisationCompany;
   reportsTo: string | null;
   kind?: "person" | "org_unit";
+  sortOrder?: number;
 };
 
 export type OrganisationPersonDraft = {
@@ -61,11 +66,55 @@ type EditorState =
   | { mode: "create" }
   | { mode: "update"; id: string }
   | null;
+type LayoutMode = "leaf" | "standard" | "stack";
+type MeasuredNode = {
+  node: TreeNode;
+  children: MeasuredNode[];
+  width: number;
+  height: number;
+  mode: LayoutMode;
+  depth: number;
+};
+type PositionedNode = {
+  node: TreeNode;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  depth: number;
+  hasChildren: boolean;
+  descendantCount: number;
+};
+type Connector = {
+  id: string;
+  fromId: string;
+  toId: string;
+  company: OrganisationCompany;
+  path: string;
+};
+type ChartLayout = {
+  nodes: PositionedNode[];
+  connectors: Connector[];
+  width: number;
+  height: number;
+};
 
 const companyLabels: Record<OrganisationCompany, string> = {
   mam: "MAM",
   equipsy: "Equipsy",
 };
+
+const CARD_WIDTH = 168;
+const CARD_HEIGHT = 54;
+const HORIZONTAL_GAP = 30;
+const VERTICAL_GAP = 62;
+const STACK_GAP = 13;
+const STACK_BUS = 24;
+const ROOT_GAP = 88;
+const CANVAS_MARGIN = 54;
+const DEFAULT_ZOOM = 0.78;
+const MIN_ZOOM = 0.35;
+const MAX_ZOOM = 1.35;
 
 const emptyDraft: OrganisationPersonDraft = {
   name: "",
@@ -81,6 +130,18 @@ function isPerson(profile: OrganisationPerson) {
 
 function normalise(value: string) {
   return value.trim().toLocaleLowerCase();
+}
+
+function sortPeople<T extends OrganisationPerson>(profiles: T[]) {
+  return [...profiles].sort((left, right) => {
+    const order =
+      (left.sortOrder ?? Number.MAX_SAFE_INTEGER) -
+      (right.sortOrder ?? Number.MAX_SAFE_INTEGER);
+    if (order) return order;
+    const position = left.position.localeCompare(right.position);
+    if (position) return position;
+    return left.name.localeCompare(right.name);
+  });
 }
 
 function getDescendantIds(
@@ -105,6 +166,23 @@ function getDescendantIds(
   }
 
   return descendants;
+}
+
+function addAncestorIds(
+  ids: Set<string>,
+  profileById: Map<string, OrganisationPerson>,
+) {
+  const result = new Set(ids);
+  for (const id of ids) {
+    let managerId = profileById.get(id)?.reportsTo;
+    const seen = new Set<string>();
+    while (managerId && !seen.has(managerId)) {
+      seen.add(managerId);
+      result.add(managerId);
+      managerId = profileById.get(managerId)?.reportsTo;
+    }
+  }
+  return result;
 }
 
 function buildForest(
@@ -136,25 +214,27 @@ function buildForest(
 
     visited.add(profile.id);
     const nextAncestors = new Set(ancestors).add(profile.id);
-    const children = (childrenByParent.get(profile.id) ?? [])
+    const children = sortPeople(childrenByParent.get(profile.id) ?? [])
       .map((child) => visit(child, nextAncestors))
       .filter((child): child is TreeNode => child !== null);
 
     return { ...profile, children };
   };
 
-  const roots = visible.filter(
-    (profile) =>
-      !profile.reportsTo ||
-      profile.reportsTo === profile.id ||
-      !visibleById.has(profile.reportsTo),
+  const roots = sortPeople(
+    visible.filter(
+      (profile) =>
+        !profile.reportsTo ||
+        profile.reportsTo === profile.id ||
+        !visibleById.has(profile.reportsTo),
+    ),
   );
   const forest = roots
     .map((root) => visit(root, new Set()))
     .filter((root): root is TreeNode => root !== null);
 
-  // Corrupt or circular reporting data should remain visible, not break the tree.
-  for (const profile of visible) {
+  // Keep malformed data visible as a separate root instead of losing people.
+  for (const profile of sortPeople(visible)) {
     if (!visited.has(profile.id)) {
       const root = visit(profile, new Set());
       if (root) forest.push(root);
@@ -164,102 +244,223 @@ function buildForest(
   return forest;
 }
 
-function TreeBranch({
+function countTreeDescendants(node: TreeNode): number {
+  return node.children.reduce(
+    (count, child) => count + 1 + countTreeDescendants(child),
+    0,
+  );
+}
+
+function measureNode(
+  node: TreeNode,
+  collapsedIds: Set<string>,
+  depth: number,
+): MeasuredNode {
+  const children = collapsedIds.has(node.id)
+    ? []
+    : node.children.map((child) => measureNode(child, collapsedIds, depth + 1));
+
+  if (!children.length) {
+    return {
+      node,
+      children,
+      width: CARD_WIDTH,
+      height: CARD_HEIGHT,
+      mode: "leaf",
+      depth,
+    };
+  }
+
+  const allLeaves = children.every((child) => child.children.length === 0);
+  const stack = allLeaves && (children.length >= 3 || (depth >= 2 && children.length >= 2));
+  if (stack) {
+    return {
+      node,
+      children,
+      width: CARD_WIDTH + STACK_BUS,
+      height:
+        CARD_HEIGHT +
+        VERTICAL_GAP +
+        children.length * CARD_HEIGHT +
+        (children.length - 1) * STACK_GAP,
+      mode: "stack",
+      depth,
+    };
+  }
+
+  const childrenWidth =
+    children.reduce((width, child) => width + child.width, 0) +
+    HORIZONTAL_GAP * (children.length - 1);
+
+  return {
+    node,
+    children,
+    width: Math.max(CARD_WIDTH, childrenWidth),
+    height:
+      CARD_HEIGHT +
+      VERTICAL_GAP +
+      Math.max(...children.map((child) => child.height)),
+    mode: "standard",
+    depth,
+  };
+}
+
+function layoutForest(
+  forest: TreeNode[],
+  collapsedIds: Set<string>,
+): ChartLayout {
+  const boxes = forest.map((root) => measureNode(root, collapsedIds, 0));
+  const contentWidth =
+    boxes.reduce((width, box) => width + box.width, 0) +
+    Math.max(0, boxes.length - 1) * ROOT_GAP;
+  const contentHeight = Math.max(CARD_HEIGHT, ...boxes.map((box) => box.height));
+  const positioned: PositionedNode[] = [];
+  const connectors: Connector[] = [];
+
+  const place = (
+    box: MeasuredNode,
+    left: number,
+    top: number,
+  ) => {
+    const x = left + (box.width - CARD_WIDTH) / 2;
+    const y = top;
+    positioned.push({
+      node: box.node,
+      x,
+      y,
+      width: CARD_WIDTH,
+      height: CARD_HEIGHT,
+      depth: box.depth,
+      hasChildren: box.node.children.length > 0,
+      descendantCount: countTreeDescendants(box.node),
+    });
+
+    if (!box.children.length) return;
+
+    const parentCenter = x + CARD_WIDTH / 2;
+    const parentBottom = y + CARD_HEIGHT;
+
+    if (box.mode === "stack") {
+      const childX = x;
+      const busX = childX - STACK_BUS;
+      const firstTop = top + CARD_HEIGHT + VERTICAL_GAP;
+      const busTop = parentBottom + VERTICAL_GAP / 2;
+
+      box.children.forEach((child, index) => {
+        const childTop = firstTop + index * (CARD_HEIGHT + STACK_GAP);
+        const childMiddle = childTop + CARD_HEIGHT / 2;
+        place(child, childX - (child.width - CARD_WIDTH) / 2, childTop);
+        connectors.push({
+          id: `${box.node.id}-${child.node.id}`,
+          fromId: box.node.id,
+          toId: child.node.id,
+          company: child.node.company,
+          path: `M ${parentCenter} ${parentBottom} V ${busTop} H ${busX} V ${childMiddle} H ${childX}`,
+        });
+      });
+      return;
+    }
+
+    const childrenWidth =
+      box.children.reduce((width, child) => width + child.width, 0) +
+      HORIZONTAL_GAP * (box.children.length - 1);
+    let cursor = left + (box.width - childrenWidth) / 2;
+    const childTop = top + CARD_HEIGHT + VERTICAL_GAP;
+    const middleY = parentBottom + VERTICAL_GAP / 2;
+
+    box.children.forEach((child) => {
+      const childX = cursor + (child.width - CARD_WIDTH) / 2;
+      const childCenter = childX + CARD_WIDTH / 2;
+      place(child, cursor, childTop);
+      connectors.push({
+        id: `${box.node.id}-${child.node.id}`,
+        fromId: box.node.id,
+        toId: child.node.id,
+        company: child.node.company,
+        path:
+          box.children.length === 1
+            ? `M ${parentCenter} ${parentBottom} V ${childTop}`
+            : `M ${parentCenter} ${parentBottom} V ${middleY} H ${childCenter} V ${childTop}`,
+      });
+      cursor += child.width + HORIZONTAL_GAP;
+    });
+  };
+
+  let cursor = CANVAS_MARGIN;
+  for (const box of boxes) {
+    place(box, cursor, CANVAS_MARGIN);
+    cursor += box.width + ROOT_GAP;
+  }
+
+  return {
+    nodes: positioned,
+    connectors,
+    width: Math.max(480, contentWidth + CANVAS_MARGIN * 2),
+    height: Math.max(360, contentHeight + CANVAS_MARGIN * 2),
+  };
+}
+
+function MobileTreeBranch({
   node,
-  depth,
-  parentCompany,
   collapsedIds,
-  matchingIds,
-  editMode,
-  canUpdate,
-  onEdit,
+  highlightedIds,
+  selectedId,
+  onSelect,
   onToggle,
 }: {
   node: TreeNode;
-  depth: number;
-  parentCompany?: OrganisationCompany;
   collapsedIds: Set<string>;
-  matchingIds: Set<string>;
-  editMode: boolean;
-  canUpdate: boolean;
-  onEdit: (profile: OrganisationPerson) => void;
+  highlightedIds: Set<string>;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
   onToggle: (id: string) => void;
 }) {
-  const unit = node.kind === "org_unit";
   const collapsed = collapsedIds.has(node.id);
   const hasChildren = node.children.length > 0;
-  const compact = node.children.length >= 5 || (depth >= 2 && node.children.length >= 3);
-  const showCompany = depth === 0 || parentCompany !== node.company || unit;
 
   return (
-    <li className={styles.branch}>
-      <article
-        className={`${styles.card} ${unit ? styles.unitCard : ""} ${
-          matchingIds.has(node.id) ? styles.matchingCard : ""
-        }`}
-        data-company={node.company}
-        data-node-id={node.id}
-      >
-        <div className={styles.cardCopy}>
-          <div className={styles.nameRow}>
-            <strong>{node.name}</strong>
-            {showCompany ? (
-              <span className={styles.companyBadge} data-company={node.company}>
-                {companyLabels[node.company]}
-              </span>
-            ) : null}
-            {unit ? <span className={styles.unitBadge}>Group</span> : null}
-          </div>
-          {node.position ? <p>{node.position}</p> : null}
-        </div>
-
-        {editMode && !unit ? (
-          <button
-            aria-label={`Edit ${node.name}`}
-            className={styles.nodeEdit}
-            disabled={!canUpdate}
-            onClick={() => onEdit(node)}
-            type="button"
-          >
-            <Pencil aria-hidden="true" size={14} />
-            <span>Edit</span>
-          </button>
-        ) : null}
-
+    <li className={styles.mobileBranch}>
+      <div className={styles.mobileNode}>
+        <button
+          aria-current={selectedId === node.id ? "true" : undefined}
+          className={styles.mobileCard}
+          data-company={node.company}
+          data-highlighted={highlightedIds.has(node.id)}
+          onClick={() => onSelect(node.id)}
+          type="button"
+        >
+          <span className={styles.positionBand}>
+            {node.position || companyLabels[node.company]}
+          </span>
+          <span className={styles.nameBand}>{node.name}</span>
+        </button>
         {hasChildren ? (
           <button
             aria-expanded={!collapsed}
-            aria-label={`${collapsed ? "Show" : "Hide"} ${node.children.length} direct ${
-              node.children.length === 1 ? "report" : "reports"
-            } under ${node.name}`}
-            className={styles.branchToggle}
+            aria-label={`${collapsed ? "Show" : "Hide"} ${countTreeDescendants(node)} people under ${node.name}`}
+            className={styles.mobileToggle}
             onClick={() => onToggle(node.id)}
             type="button"
           >
             {collapsed ? (
-              <ChevronRight aria-hidden="true" size={13} />
+              <ChevronRight aria-hidden="true" size={16} />
             ) : (
-              <ChevronDown aria-hidden="true" size={13} />
+              <ChevronDown aria-hidden="true" size={16} />
             )}
-            <span>{node.children.length}</span>
           </button>
         ) : null}
-      </article>
-
+      </div>
       {hasChildren && !collapsed ? (
-        <ul className={styles.branches} data-compact={compact}>
+        <ul className={styles.mobileChildren}>
           {node.children.map((child) => (
-            <TreeBranch
-              canUpdate={canUpdate}
+            <MobileTreeBranch
               collapsedIds={collapsedIds}
-              depth={depth + 1}
-              editMode={editMode}
+              highlightedIds={highlightedIds}
               key={child.id}
-              matchingIds={matchingIds}
               node={child}
-              onEdit={onEdit}
+              onSelect={onSelect}
               onToggle={onToggle}
-              parentCompany={node.company}
+              selectedId={selectedId}
             />
           ))}
         </ul>
@@ -276,20 +477,21 @@ export function OrganisationTree({
   className,
 }: OrganisationTreeProps) {
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [companyFilter, setCompanyFilter] = useState<CompanyFilter>("all");
+  const [focusedRootId, setFocusedRootId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
-  const [searchCollapsedIds, setSearchCollapsedIds] = useState<Set<string>>(
-    new Set(),
-  );
-  const [zoom, setZoom] = useState(0.85);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [panning, setPanning] = useState(false);
-  const [editMode, setEditMode] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [editor, setEditor] = useState<EditorState>(null);
   const [draft, setDraft] = useState<OrganisationPersonDraft>(emptyDraft);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const titleId = useId();
   const descriptionId = useId();
+  const markerPrefix = useId().replaceAll(":", "");
   const viewportRef = useRef<HTMLDivElement>(null);
   const panRef = useRef<{
     pointerId: number;
@@ -300,20 +502,117 @@ export function OrganisationTree({
   } | null>(null);
 
   useEffect(() => {
-    if (!editor) return;
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !saving) setEditor(null);
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (editor && !saving) setEditor(null);
+      else if (selectedId) setSelectedId(null);
+    };
+    const handleFullscreen = () => {
+      setFullscreen(document.fullscreenElement === viewportRef.current);
     };
 
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [editor, saving]);
+    window.addEventListener("keydown", handleKeydown);
+    document.addEventListener("fullscreenchange", handleFullscreen);
+    return () => {
+      window.removeEventListener("keydown", handleKeydown);
+      document.removeEventListener("fullscreenchange", handleFullscreen);
+    };
+  }, [editor, saving, selectedId]);
 
+  const orderedProfiles = useMemo(() => sortPeople(profiles), [profiles]);
   const profileById = useMemo(
-    () => new Map(profiles.map((profile) => [profile.id, profile])),
-    [profiles],
+    () => new Map(orderedProfiles.map((profile) => [profile.id, profile])),
+    [orderedProfiles],
   );
+
+  const companyScopeIds = useMemo(() => {
+    const ids = new Set(
+      orderedProfiles
+        .filter(
+          (profile) =>
+            companyFilter === "all" || profile.company === companyFilter,
+        )
+        .map((profile) => profile.id),
+    );
+    // Preserve cross-company reporting context, such as Steven → Equipsy.
+    return addAncestorIds(ids, profileById);
+  }, [companyFilter, orderedProfiles, profileById]);
+
+  const focusScopeIds = useMemo(() => {
+    if (!focusedRootId || !profileById.has(focusedRootId)) return companyScopeIds;
+    return addAncestorIds(
+      getDescendantIds(focusedRootId, orderedProfiles).add(focusedRootId),
+      profileById,
+    );
+  }, [companyScopeIds, focusedRootId, orderedProfiles, profileById]);
+
+  const searchMatches = useMemo(() => {
+    const cleaned = normalise(query);
+    if (!cleaned) return [];
+    return orderedProfiles.filter(
+      (profile) =>
+        focusScopeIds.has(profile.id) &&
+        normalise(
+          `${profile.name} ${profile.position} ${companyLabels[profile.company]}`,
+        ).includes(cleaned),
+    );
+  }, [focusScopeIds, orderedProfiles, query]);
+
+  const matchingIds = useMemo(
+    () => new Set(searchMatches.map((profile) => profile.id)),
+    [searchMatches],
+  );
+
+  const visibleIds = useMemo(() => {
+    if (!normalise(query)) return focusScopeIds;
+    return addAncestorIds(matchingIds, profileById);
+  }, [focusScopeIds, matchingIds, profileById, query]);
+
+  const forest = useMemo(
+    () => buildForest(orderedProfiles, visibleIds),
+    [orderedProfiles, visibleIds],
+  );
+
+  const searchAncestorIds = useMemo(() => {
+    if (!normalise(query)) return new Set<string>();
+    const ancestors = addAncestorIds(matchingIds, profileById);
+    for (const id of matchingIds) ancestors.delete(id);
+    return ancestors;
+  }, [matchingIds, profileById, query]);
+
+  const effectiveCollapsedIds = useMemo(() => {
+    if (!searchAncestorIds.size) return collapsedIds;
+    return new Set(
+      [...collapsedIds].filter((id) => !searchAncestorIds.has(id)),
+    );
+  }, [collapsedIds, searchAncestorIds]);
+
+  const layout = useMemo(
+    () => layoutForest(forest, effectiveCollapsedIds),
+    [effectiveCollapsedIds, forest],
+  );
+
+  const selectedProfile = selectedId ? profileById.get(selectedId) : undefined;
+  const selectedManager = selectedProfile?.reportsTo
+    ? profileById.get(selectedProfile.reportsTo)
+    : undefined;
+  const selectedReports = useMemo(
+    () =>
+      selectedProfile
+        ? orderedProfiles.filter(
+            (profile) => profile.reportsTo === selectedProfile.id,
+          )
+        : [],
+    [orderedProfiles, selectedProfile],
+  );
+  const selectedTeamSize = selectedProfile
+    ? getDescendantIds(selectedProfile.id, orderedProfiles).size
+    : 0;
+  const highlightedIds = useMemo(() => {
+    if (!selectedId) return new Set<string>();
+    return addAncestorIds(new Set([selectedId]), profileById);
+  }, [profileById, selectedId]);
+
   const activeEditor =
     canEdit &&
     (editor?.mode === "create" ||
@@ -323,73 +622,6 @@ export function OrganisationTree({
         )))
       ? editor
       : null;
-
-  const companyProfiles = useMemo(
-    () =>
-      profiles.filter(
-        (profile) =>
-          companyFilter === "all" || profile.company === companyFilter,
-      ),
-    [companyFilter, profiles],
-  );
-  const matchingIds = useMemo(() => {
-    const cleanedQuery = normalise(query);
-    if (!cleanedQuery) return new Set<string>();
-    return new Set(
-      companyProfiles
-        .filter((profile) =>
-          normalise(
-            `${profile.name} ${profile.position} ${companyLabels[profile.company]}`,
-          ).includes(cleanedQuery),
-        )
-        .map((profile) => profile.id),
-    );
-  }, [companyProfiles, query]);
-  const companyPersonCount = useMemo(
-    () => companyProfiles.filter(isPerson).length,
-    [companyProfiles],
-  );
-  const visibleIds = useMemo(() => {
-    const cleanedQuery = normalise(query);
-    if (!cleanedQuery) {
-      return new Set(companyProfiles.map((profile) => profile.id));
-    }
-
-    const ids = new Set(matchingIds);
-
-    // A search keeps matching reporting lines visible for context. Company
-    // filters remain strict, so they never leak people from the other company.
-    for (const matchId of matchingIds) {
-      const match = profileById.get(matchId);
-      if (!match) continue;
-      const seen = new Set<string>();
-      let managerId = match.reportsTo;
-      while (managerId && !seen.has(managerId)) {
-        seen.add(managerId);
-        const manager = profileById.get(managerId);
-        if (!manager) break;
-        if (companyFilter === "all" || manager.company === companyFilter) {
-          ids.add(manager.id);
-        }
-        managerId = manager.reportsTo;
-      }
-    }
-
-    return ids;
-  }, [companyFilter, companyProfiles, matchingIds, profileById, query]);
-  const visiblePersonCount = useMemo(
-    () =>
-      companyProfiles.filter(
-        (profile) => isPerson(profile) && visibleIds.has(profile.id),
-      ).length,
-    [companyProfiles, visibleIds],
-  );
-
-  const forest = useMemo(
-    () => buildForest(profiles, visibleIds),
-    [profiles, visibleIds],
-  );
-
   const editorProfile =
     activeEditor?.mode === "update"
       ? profileById.get(activeEditor.id)
@@ -398,22 +630,9 @@ export function OrganisationTree({
     if (!editorProfile) return new Set<string>();
     return getDescendantIds(editorProfile.id, profiles).add(editorProfile.id);
   }, [editorProfile, profiles]);
-  const managerOptions = profiles.filter(
-    (profile) => !excludedManagerIds.has(profile.id),
+  const managerOptions = sortPeople(
+    profiles.filter((profile) => !excludedManagerIds.has(profile.id)),
   );
-
-  const branchIds = useMemo(
-    () =>
-      new Set(
-        companyProfiles
-          .filter((profile) =>
-            companyProfiles.some((candidate) => candidate.reportsTo === profile.id),
-          )
-          .map((profile) => profile.id),
-      ),
-    [companyProfiles],
-  );
-
   const duplicateManagerLabels = useMemo(() => {
     const counts = new Map<string, number>();
     for (const profile of managerOptions) {
@@ -423,36 +642,35 @@ export function OrganisationTree({
     return counts;
   }, [managerOptions]);
 
-  const searchAncestorIds = useMemo(() => {
-    const ancestors = new Set<string>();
-    if (!normalise(query)) return ancestors;
+  const branchIds = useMemo(
+    () =>
+      new Set(
+        orderedProfiles
+          .filter((profile) =>
+            orderedProfiles.some(
+              (candidate) =>
+                visibleIds.has(candidate.id) &&
+                candidate.reportsTo === profile.id,
+            ),
+          )
+          .map((profile) => profile.id),
+      ),
+    [orderedProfiles, visibleIds],
+  );
 
-    for (const matchId of matchingIds) {
-      let managerId = profileById.get(matchId)?.reportsTo;
-      const seen = new Set<string>();
-      while (managerId && !seen.has(managerId)) {
-        seen.add(managerId);
-        ancestors.add(managerId);
-        managerId = profileById.get(managerId)?.reportsTo;
-      }
-    }
-    return ancestors;
-  }, [matchingIds, profileById, query]);
-  const visibleCollapsedIds = useMemo(() => {
-    if (!searchAncestorIds.size) return collapsedIds;
-    return new Set([
-      ...[...collapsedIds].filter((id) => !searchAncestorIds.has(id)),
-      ...searchCollapsedIds,
-    ]);
-  }, [collapsedIds, searchAncestorIds, searchCollapsedIds]);
+  const visiblePersonCount = orderedProfiles.filter(
+    (profile) => isPerson(profile) && visibleIds.has(profile.id),
+  ).length;
+  const activeFocus = focusedRootId
+    ? profileById.get(focusedRootId)
+    : undefined;
 
-  useEffect(() => {
-    const cleanedQuery = normalise(query);
-    if (!cleanedQuery || !matchingIds.size) return;
-
-    const timer = window.setTimeout(() => {
+  const centerNode = (id: string, delay = 40) => {
+    window.setTimeout(() => {
       const viewport = viewportRef.current;
-      const node = viewport?.querySelector<HTMLElement>(`.${styles.matchingCard}`);
+      const node = Array.from(
+        viewport?.querySelectorAll<HTMLElement>("[data-node-id]") ?? [],
+      ).find((element) => element.dataset.nodeId === id);
       if (!viewport || !node) return;
       const viewportRect = viewport.getBoundingClientRect();
       const nodeRect = node.getBoundingClientRect();
@@ -467,24 +685,65 @@ export function OrganisationTree({
           viewport.scrollTop +
           nodeRect.top -
           viewportRect.top -
-          Math.min(120, (viewport.clientHeight - nodeRect.height) / 2),
+          (viewport.clientHeight - nodeRect.height) / 2,
       });
-    }, 80);
+    }, delay);
+  };
 
-    return () => window.clearTimeout(timer);
-  }, [matchingIds, query]);
+  const expandAncestorBranches = (id: string) => {
+    setCollapsedIds((current) => {
+      const next = new Set(current);
+      let managerId = profileById.get(id)?.reportsTo;
+      const seen = new Set<string>();
+      while (managerId && !seen.has(managerId)) {
+        seen.add(managerId);
+        next.delete(managerId);
+        managerId = profileById.get(managerId)?.reportsTo;
+      }
+      return next;
+    });
+  };
+
+  const selectProfile = (id: string) => {
+    if (!visibleIds.has(id)) {
+      setCompanyFilter("all");
+      setFocusedRootId(null);
+      setQuery("");
+    }
+    expandAncestorBranches(id);
+    setSelectedId(id);
+    setSearchOpen(false);
+    centerNode(id, visibleIds.has(id) ? 30 : 100);
+  };
+
+  const selectSearchResult = (id: string) => {
+    expandAncestorBranches(id);
+    setQuery("");
+    setSearchOpen(false);
+    setSelectedId(id);
+    centerNode(id, 100);
+  };
+
+  const focusTeam = (id: string) => {
+    setFocusedRootId(id);
+    setCompanyFilter("all");
+    setQuery("");
+    setCollapsedIds((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+    centerNode(id, 100);
+  };
+
+  const showFullOrganisation = () => {
+    setFocusedRootId(null);
+    setCompanyFilter("all");
+    setQuery("");
+    if (selectedId) centerNode(selectedId, 100);
+  };
 
   const toggleBranch = (id: string) => {
-    if (normalise(query) && searchAncestorIds.has(id)) {
-      setSearchCollapsedIds((current) => {
-        const next = new Set(current);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        return next;
-      });
-      return;
-    }
-
     setCollapsedIds((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
@@ -496,35 +755,66 @@ export function OrganisationTree({
   const toggleAllBranches = () => {
     const allCollapsed =
       branchIds.size > 0 &&
-      [...branchIds].every((id) => visibleCollapsedIds.has(id));
-    const next = allCollapsed ? new Set<string>() : new Set(branchIds);
-    setCollapsedIds(next);
-    setSearchCollapsedIds(
-      normalise(query)
-        ? new Set([...next].filter((id) => searchAncestorIds.has(id)))
-        : new Set(),
-    );
+      [...branchIds].every((id) => effectiveCollapsedIds.has(id));
+    setCollapsedIds(allCollapsed ? new Set() : new Set(branchIds));
   };
 
-  const resetView = () => {
-    setZoom(0.85);
-    setCollapsedIds(new Set());
-    setSearchCollapsedIds(new Set());
+  const fitChart = () => {
     const viewport = viewportRef.current;
     if (!viewport) return;
+    const nextZoom = Math.max(
+      MIN_ZOOM,
+      Math.min(
+        1,
+        (viewport.clientWidth - 48) / layout.width,
+        (viewport.clientHeight - 86) / layout.height,
+      ),
+    );
+    setZoom(nextZoom);
     window.requestAnimationFrame(() => {
       viewport.scrollTo({
         behavior: "smooth",
-        left: Math.max(0, (viewport.scrollWidth - viewport.clientWidth) / 2),
+        left: Math.max(0, (layout.width * nextZoom - viewport.clientWidth) / 2),
         top: 0,
       });
     });
   };
 
+  const resetView = () => {
+    setFocusedRootId(null);
+    setCompanyFilter("all");
+    setQuery("");
+    setSelectedId(null);
+    setCollapsedIds(new Set());
+    setZoom(DEFAULT_ZOOM);
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    window.requestAnimationFrame(() => {
+      viewport.scrollTo({
+        behavior: "smooth",
+        left: Math.max(
+          0,
+          (layout.width * DEFAULT_ZOOM - viewport.clientWidth) / 2,
+        ),
+        top: 0,
+      });
+    });
+  };
+
+  const toggleFullscreen = async () => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    if (document.fullscreenElement === viewport) {
+      await document.exitFullscreen();
+    } else {
+      await viewport.requestFullscreen();
+    }
+  };
+
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
-    if (target.closest("button, input, select, label")) return;
+    if (target.closest("button, input, select, label, aside")) return;
     const viewport = viewportRef.current;
     if (!viewport) return;
     panRef.current = {
@@ -552,9 +842,12 @@ export function OrganisationTree({
     setPanning(false);
   };
 
-  const openCreate = () => {
-    const company = companyFilter === "all" ? "mam" : companyFilter;
-    setDraft({ ...emptyDraft, company });
+  const openCreate = (
+    reportsTo: string | null = null,
+    company: OrganisationCompany =
+      companyFilter === "all" ? "mam" : companyFilter,
+  ) => {
+    setDraft({ ...emptyDraft, company, reportsTo });
     setError("");
     setEditor({ mode: "create" });
   };
@@ -615,6 +908,15 @@ export function OrganisationTree({
   const rootClassName = [styles.organisation, className]
     .filter(Boolean)
     .join(" ");
+  const worldStyle = {
+    width: layout.width,
+    height: layout.height,
+    transform: `scale(${zoom})`,
+  } as CSSProperties;
+  const frameStyle = {
+    width: layout.width * zoom,
+    height: layout.height * zoom,
+  } as CSSProperties;
 
   return (
     <section aria-labelledby={titleId} className={rootClassName}>
@@ -622,47 +924,68 @@ export function OrganisationTree({
         <div>
           <span className={styles.eyebrow}>People</span>
           <h2 id={titleId}>Organisation</h2>
-          <p>Reporting lines across MAM and Equipsy.</p>
+          <p>Select a person to explore their reporting line.</p>
         </div>
 
         {canEdit ? (
-          <div className={styles.actions}>
-            <button
-              aria-pressed={editMode}
-              className={styles.secondaryAction}
-              onClick={() => setEditMode((current) => !current)}
-              type="button"
-            >
-              <Pencil aria-hidden="true" size={15} />
-              {editMode ? "Done editing" : "Edit tree"}
-            </button>
-            <button
-              className={styles.primaryAction}
-              disabled={!onCreate}
-              onClick={openCreate}
-              type="button"
-            >
-              <Plus aria-hidden="true" size={16} />
-              Add person
-            </button>
-          </div>
+          <button
+            className={styles.primaryAction}
+            disabled={!onCreate}
+            onClick={() => openCreate()}
+            type="button"
+          >
+            <Plus aria-hidden="true" size={16} />
+            Add person
+          </button>
         ) : null}
       </header>
 
       <div className={styles.toolbar}>
-        <label className={styles.search}>
-          <Search aria-hidden="true" size={16} />
-          <span className={styles.srOnly}>Search the organisation</span>
-          <input
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setSearchCollapsedIds(new Set());
-            }}
-            placeholder="Search people or positions"
-            type="search"
-            value={query}
-          />
-        </label>
+        <div className={styles.searchWrap}>
+          <label className={styles.search}>
+            <Search aria-hidden="true" size={16} />
+            <span className={styles.srOnly}>Search the organisation</span>
+            <input
+              onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setSearchOpen(true);
+              }}
+              onFocus={() => setSearchOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && searchMatches[0]) {
+                  event.preventDefault();
+                  selectSearchResult(searchMatches[0].id);
+                }
+              }}
+              placeholder="Search name or position"
+              type="search"
+              value={query}
+            />
+          </label>
+          {searchOpen && normalise(query) ? (
+            <div className={styles.searchResults}>
+              {searchMatches.length ? (
+                searchMatches.slice(0, 8).map((profile) => (
+                  <button
+                    data-company={profile.company}
+                    key={profile.id}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectSearchResult(profile.id)}
+                    type="button"
+                  >
+                    <span>{profile.name}</span>
+                    <small>
+                      {profile.position || companyLabels[profile.company]} · {companyLabels[profile.company]}
+                    </small>
+                  </button>
+                ))
+              ) : (
+                <span className={styles.noResults}>No matching people</span>
+              )}
+            </div>
+          ) : null}
+        </div>
 
         <div aria-label="Filter by company" className={styles.filters}>
           {(["all", "mam", "equipsy"] as const).map((filter) => (
@@ -673,7 +996,9 @@ export function OrganisationTree({
               key={filter}
               onClick={() => {
                 setCompanyFilter(filter);
-                setSearchCollapsedIds(new Set());
+                setFocusedRootId(null);
+                setQuery("");
+                setSelectedId(null);
               }}
               type="button"
             >
@@ -682,6 +1007,17 @@ export function OrganisationTree({
           ))}
         </div>
       </div>
+
+      {activeFocus ? (
+        <div className={styles.focusBar}>
+          <span>
+            Viewing <strong>{activeFocus.name}&apos;s team</strong>
+          </span>
+          <button onClick={showFullOrganisation} type="button">
+            Show full organisation
+          </button>
+        </div>
+      ) : null}
 
       <span aria-live="polite" className={styles.srOnly}>
         {normalise(query)
@@ -700,15 +1036,19 @@ export function OrganisationTree({
           ref={viewportRef}
         >
           <div className={styles.chartMeta}>
-            <span>{companyPersonCount} people</span>
-            <span>Drag to move</span>
+            <span>{visiblePersonCount} people</span>
+            <span>Drag canvas to move</span>
           </div>
 
           <div aria-label="Chart view controls" className={styles.chartControls}>
             <button
               aria-label="Zoom out"
-              disabled={zoom <= 0.6}
-              onClick={() => setZoom((current) => Math.max(0.6, current - 0.1))}
+              disabled={zoom <= MIN_ZOOM}
+              onClick={() =>
+                setZoom((current) =>
+                  Math.max(MIN_ZOOM, Math.round((current - 0.1) * 100) / 100),
+                )
+              }
               type="button"
             >
               <Minus aria-hidden="true" size={15} />
@@ -718,11 +1058,18 @@ export function OrganisationTree({
             </span>
             <button
               aria-label="Zoom in"
-              disabled={zoom >= 1.2}
-              onClick={() => setZoom((current) => Math.min(1.2, current + 0.1))}
+              disabled={zoom >= MAX_ZOOM}
+              onClick={() =>
+                setZoom((current) =>
+                  Math.min(MAX_ZOOM, Math.round((current + 0.1) * 100) / 100),
+                )
+              }
               type="button"
             >
               <Plus aria-hidden="true" size={15} />
+            </button>
+            <button aria-label="Fit chart to screen" onClick={fitChart} type="button">
+              <LocateFixed aria-hidden="true" size={15} />
             </button>
             <button
               aria-label="Expand or collapse all reporting lines"
@@ -732,30 +1079,147 @@ export function OrganisationTree({
               <UnfoldVertical aria-hidden="true" size={15} />
             </button>
             <button aria-label="Reset chart view" onClick={resetView} type="button">
-              <LocateFixed aria-hidden="true" size={15} />
+              <Focus aria-hidden="true" size={15} />
+            </button>
+            <button
+              aria-label={fullscreen ? "Exit full screen" : "Open full screen"}
+              aria-pressed={fullscreen}
+              onClick={toggleFullscreen}
+              type="button"
+            >
+              {fullscreen ? (
+                <Minimize2 aria-hidden="true" size={15} />
+              ) : (
+                <Maximize2 aria-hidden="true" size={15} />
+              )}
             </button>
           </div>
 
-          <div
-            className={styles.chartCanvas}
-            style={{ "--chart-zoom": zoom } as CSSProperties}
-          >
-            <ul aria-label="Organisation reporting tree" className={styles.tree}>
-              {forest.map((root) => (
-                <TreeBranch
-                  canUpdate={Boolean(onUpdate)}
-                  collapsedIds={visibleCollapsedIds}
-                  depth={0}
-                  editMode={canEdit && editMode}
-                  key={root.id}
-                  matchingIds={matchingIds}
-                  node={root}
-                  onEdit={openUpdate}
-                  onToggle={toggleBranch}
-                />
-              ))}
-            </ul>
+          <div className={styles.desktopChart} style={frameStyle}>
+            <div className={styles.chartWorld} style={worldStyle}>
+              <svg
+                aria-hidden="true"
+                className={styles.connectors}
+                height={layout.height}
+                viewBox={`0 0 ${layout.width} ${layout.height}`}
+                width={layout.width}
+              >
+                <defs>
+                  <marker
+                    id={`${markerPrefix}-mam`}
+                    markerHeight="6"
+                    markerWidth="6"
+                    orient="auto"
+                    refX="5"
+                    refY="3"
+                    viewBox="0 0 6 6"
+                  >
+                    <path d="M 0 0 L 6 3 L 0 6 Z" fill="#ff751f" />
+                  </marker>
+                  <marker
+                    id={`${markerPrefix}-equipsy`}
+                    markerHeight="6"
+                    markerWidth="6"
+                    orient="auto"
+                    refX="5"
+                    refY="3"
+                    viewBox="0 0 6 6"
+                  >
+                    <path d="M 0 0 L 6 3 L 0 6 Z" fill="#38b6ff" />
+                  </marker>
+                </defs>
+                {layout.connectors.map((connector) => {
+                  const active =
+                    !selectedId ||
+                    (highlightedIds.has(connector.fromId) &&
+                      highlightedIds.has(connector.toId));
+                  return (
+                    <path
+                      className={styles.connector}
+                      d={connector.path}
+                      data-active={active}
+                      data-company={connector.company}
+                      key={connector.id}
+                      markerEnd={`url(#${markerPrefix}-${connector.company})`}
+                    />
+                  );
+                })}
+              </svg>
+
+              {layout.nodes.map((item) => {
+                const collapsed = effectiveCollapsedIds.has(item.node.id);
+                const highlighted = highlightedIds.has(item.node.id);
+                const muted = Boolean(selectedId) && !highlighted;
+                return (
+                  <div
+                    className={styles.nodeWrap}
+                    data-muted={muted}
+                    data-node-id={item.node.id}
+                    data-selected={selectedId === item.node.id}
+                    key={item.node.id}
+                    style={{
+                      left: item.x,
+                      top: item.y,
+                      width: item.width,
+                      height: item.height,
+                    }}
+                  >
+                    <button
+                      aria-current={selectedId === item.node.id ? "true" : undefined}
+                      aria-label={`${item.node.name}, ${item.node.position || companyLabels[item.node.company]}, ${companyLabels[item.node.company]}`}
+                      className={styles.personCard}
+                      data-company={item.node.company}
+                      data-highlighted={highlighted}
+                      data-matching={matchingIds.has(item.node.id)}
+                      onClick={() => selectProfile(item.node.id)}
+                      type="button"
+                    >
+                      <span className={styles.positionBand}>
+                        {item.node.position || companyLabels[item.node.company]}
+                      </span>
+                      <span className={styles.nameBand}>{item.node.name}</span>
+                      <span className={styles.srOnly}>
+                        {companyLabels[item.node.company]}
+                      </span>
+                    </button>
+
+                    {item.hasChildren ? (
+                      <button
+                        aria-expanded={!collapsed}
+                        aria-label={`${collapsed ? "Show" : "Hide"} ${item.descendantCount} people under ${item.node.name}`}
+                        className={styles.branchToggle}
+                        data-company={item.node.company}
+                        onClick={() => toggleBranch(item.node.id)}
+                        title={`${collapsed ? "Show" : "Hide"} ${item.descendantCount} people`}
+                        type="button"
+                      >
+                        {collapsed ? (
+                          <ChevronRight aria-hidden="true" size={13} />
+                        ) : (
+                          <ChevronDown aria-hidden="true" size={13} />
+                        )}
+                        <span>{item.descendantCount}</span>
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
           </div>
+
+          <ul aria-label="Organisation reporting tree" className={styles.mobileTree}>
+            {forest.map((root) => (
+              <MobileTreeBranch
+                collapsedIds={effectiveCollapsedIds}
+                highlightedIds={highlightedIds}
+                key={root.id}
+                node={root}
+                onSelect={selectProfile}
+                onToggle={toggleBranch}
+                selectedId={selectedId}
+              />
+            ))}
+          </ul>
         </div>
       ) : (
         <div className={styles.emptyState}>
@@ -772,6 +1236,104 @@ export function OrganisationTree({
           </span>
         </div>
       )}
+
+      {selectedProfile ? (
+        <div className={styles.inspectorLayer}>
+          <aside aria-label={`${selectedProfile.name} details`} className={styles.inspector}>
+            <header className={styles.inspectorHeader} data-company={selectedProfile.company}>
+              <div>
+                <span>{selectedProfile.position || companyLabels[selectedProfile.company]}</span>
+                <strong>{selectedProfile.name}</strong>
+              </div>
+              <button
+                aria-label="Close person details"
+                onClick={() => setSelectedId(null)}
+                type="button"
+              >
+                <X aria-hidden="true" size={18} />
+              </button>
+            </header>
+
+            <div className={styles.inspectorBody}>
+              <dl className={styles.personFacts}>
+                <div>
+                  <dt>Company</dt>
+                  <dd>{companyLabels[selectedProfile.company]}</dd>
+                </div>
+                <div>
+                  <dt>Team below</dt>
+                  <dd>{selectedTeamSize}</dd>
+                </div>
+              </dl>
+
+              <section className={styles.relationships}>
+                <span>Reports to</span>
+                {selectedManager ? (
+                  <button onClick={() => selectProfile(selectedManager.id)} type="button">
+                    <strong>{selectedManager.name}</strong>
+                    <small>{selectedManager.position || companyLabels[selectedManager.company]}</small>
+                  </button>
+                ) : (
+                  <p>Top level</p>
+                )}
+              </section>
+
+              <section className={styles.relationships}>
+                <span>Direct reports · {selectedReports.length}</span>
+                {selectedReports.length ? (
+                  <div className={styles.reportList}>
+                    {selectedReports.map((report) => (
+                      <button key={report.id} onClick={() => selectProfile(report.id)} type="button">
+                        <strong>{report.name}</strong>
+                        <small>{report.position || companyLabels[report.company]}</small>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p>No direct reports</p>
+                )}
+              </section>
+            </div>
+
+            <footer className={styles.inspectorActions}>
+              <button
+                className={styles.secondaryAction}
+                onClick={() =>
+                  focusedRootId === selectedProfile.id
+                    ? showFullOrganisation()
+                    : focusTeam(selectedProfile.id)
+                }
+                type="button"
+              >
+                <Focus aria-hidden="true" size={15} />
+                {focusedRootId === selectedProfile.id ? "Show all" : "View this team"}
+              </button>
+              {canEdit && isPerson(selectedProfile) ? (
+                <>
+                  <button
+                    className={styles.secondaryAction}
+                    disabled={!onUpdate}
+                    onClick={() => openUpdate(selectedProfile)}
+                    type="button"
+                  >
+                    <Pencil aria-hidden="true" size={15} />
+                    Edit
+                  </button>
+                  <button
+                    className={styles.primaryAction}
+                    disabled={!onCreate}
+                    onClick={() => openCreate(selectedProfile.id, selectedProfile.company)}
+                    type="button"
+                  >
+                    <UserPlus aria-hidden="true" size={15} />
+                    Add report
+                  </button>
+                </>
+              ) : null}
+            </footer>
+          </aside>
+        </div>
+      ) : null}
 
       {activeEditor ? (
         <div className={styles.drawerLayer}>
@@ -796,7 +1358,7 @@ export function OrganisationTree({
                 <h3 id={`${titleId}-editor`}>
                   {activeEditor.mode === "create" ? "Add person" : "Edit person"}
                 </h3>
-                <p id={descriptionId}>Keep the reporting line current.</p>
+                <p id={descriptionId}>Name, position and reporting line.</p>
               </div>
               <button
                 aria-label="Close"

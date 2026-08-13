@@ -789,6 +789,7 @@ export function LeaveDemo({
       company: row.company_key,
       reportsTo: row.parent_id,
       kind: row.node_kind === "org_unit" ? "org_unit" : "person",
+      sortOrder: row.sort_order,
     })), [organisationRows]);
   const directoryProfiles = useMemo<Profile[]>(() => {
     const rowsById = new Map(organisationRows.map((row) => [row.id, row]));
