@@ -81,7 +81,7 @@ function parseAuthEmail(payload: unknown): AuthEmail | null {
     typeof userId !== "string"
     || !UUID.test(userId)
     || user.aud !== "authenticated"
-    || user.role !== "authenticated"
+    || (user.role !== "authenticated" && user.role !== "anon")
     || user.is_anonymous !== false
     || !hasConfirmedEmail(user)
     || typeof email !== "string"
@@ -90,7 +90,7 @@ function parseAuthEmail(payload: unknown): AuthEmail | null {
     || typeof token !== "string"
     || !/^\d{6}$/.test(token)
     || typeof tokenHash !== "string"
-    || !/^[0-9a-f]{16,128}$/i.test(tokenHash)
+    || !/^[A-Za-z0-9_-]{16,128}$/.test(tokenHash)
     || action !== "magiclink"
   ) {
     return null;
