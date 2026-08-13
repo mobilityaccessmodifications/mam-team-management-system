@@ -13,10 +13,8 @@ import {
   FileImage,
   FileText,
   LayoutDashboard,
-  Mail,
   Paperclip,
   Plus,
-  RotateCcw,
   Search,
   ShieldCheck,
   LogOut,
@@ -27,26 +25,32 @@ import {
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
-import { signOut } from "@/app/login/actions";
-import styles from "@/components/leave-demo.module.css";
 import {
-  PeopleOperationsDemo,
-  type PeopleOperationsEmailPreview,
-  type PeopleOperationsEmailResult,
-} from "@/components/people-operations-demo";
+  createPortalAccount,
+  listPortalAccounts,
+  resetPortalPassword,
+  togglePortalAccount,
+  updatePortalLogin,
+} from "@/app/accounts/actions";
+import { signOut } from "@/app/login/actions";
+import {
+  AccountManagement,
+  type AccountDto,
+} from "@/components/account-management";
+import styles from "@/components/leave-demo.module.css";
+import { PeopleOperationsDemo } from "@/components/people-operations-demo";
 import type {
   OrganisationCompany,
   OrganisationPerson,
   OrganisationPersonDraft,
 } from "@/components/organisation-tree";
 import { createClient } from "@/lib/supabase/client";
-import { isSharedDemoConfigured, isSupabaseConfigured } from "@/lib/supabase/config";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals";
 type RequestStatus = "Pending" | "Approved" | "Declined";
 type AccessRole = "hr" | "manager" | "employee";
-type ProfileSource = "demo" | "directory";
 
 type LeaveRequest = {
   id: string;
@@ -86,9 +90,7 @@ type Profile = {
   roleLabel: string;
   team: string;
   manager: string;
-  startedDate: string;
   company: OrganisationCompany;
-  source: ProfileSource;
 };
 
 type InternalOrgRow = {
@@ -99,240 +101,21 @@ type InternalOrgRow = {
   position_title: string;
   parent_id: string | null;
   sort_order: number;
+  is_active: boolean;
   updated_at: string;
   version: number;
 };
 
-type CalendarHoliday = {
-  date: string;
-  label: string;
-  isDemo?: boolean;
-};
+type DirectoryState = "connecting" | "live" | "error";
 
-type SharedDataState = "local" | "connecting" | "live" | "error";
-type DemoEmailTrigger = "review-requested" | "approved" | "declined" | "checkin-reminder";
-type DemoEmailDeliveryStatus = "sending" | "sent" | "failed" | "preview";
-
-type DemoEmail = {
-  id: string;
-  requestId: string;
-  trigger: DemoEmailTrigger;
-  recipient: string;
-  recipientName: string;
-  subject: string;
-  details: string[];
-  reviewUrl?: string;
-  createdAt: string;
-  deliveryStatus: DemoEmailDeliveryStatus;
-  deliveryMessage?: string;
-};
-
-type DemoEmailApiResponse = {
-  ok?: boolean;
-  status?: "sent" | "already-sent";
-  messageCount?: number;
-  actualRecipient?: string;
-  error?: string;
-};
-
-type DemoNavigation = {
+type InitialNavigation = {
   view: AppView;
   section: LeaveSection;
   requestId?: string;
 };
 
-type DemoLeaveRequestRow = {
-  id: string;
-  employee_profile_id: string;
-  manager_profile_id: string;
-  leave_type: string;
-  start_date: string;
-  end_date: string;
-  start_time: string | null;
-  end_time: string | null;
-  days: number | string;
-  hours: number | string | null;
-  approval_required: boolean;
-  status: RequestStatus;
-  submitted_at: string;
-  employee_note: string;
-  manager_note: string | null;
-};
-
-const demoCalendarHolidays: CalendarHoliday[] = [
-  { date: "2026-08-31", label: "Public holiday", isDemo: true },
-];
-
-const initialRequests: LeaveRequest[] = [
-  {
-    id: "MAM-2403",
-    employee: "Jordan Patel",
-    initials: "JP",
-    team: "Major Modifications",
-    leaveType: "Annual leave",
-    startDate: "2026-08-17",
-    endDate: "2026-08-19",
-    dateLabel: "17–19 Aug 2026",
-    days: 3,
-    approvalRequired: true,
-    status: "Pending",
-    submittedAt: "Today, 8:42 am",
-    manager: "Taylor Morgan",
-    employeeNote: "Family trip booked interstate.",
-  },
-  {
-    id: "MAM-2402",
-    employee: "Mia Chen",
-    initials: "MC",
-    team: "Minor Modifications",
-    leaveType: "Sick leave",
-    startDate: "2026-08-18",
-    endDate: "2026-08-18",
-    dateLabel: "18 Aug 2026",
-    days: 1,
-    hours: 4,
-    startTime: "09:00",
-    endTime: "13:00",
-    approvalRequired: true,
-    status: "Pending",
-    submittedAt: "Yesterday, 3:24 pm",
-    manager: "Riley Brooks",
-    employeeNote: "Personal appointment.",
-  },
-  {
-    id: "MAM-2401",
-    employee: "Noah Williams",
-    initials: "NW",
-    team: "Major Modifications",
-    leaveType: "Annual leave",
-    startDate: "2026-08-18",
-    endDate: "2026-08-20",
-    dateLabel: "18–20 Aug 2026",
-    days: 3,
-    approvalRequired: true,
-    status: "Approved",
-    submittedAt: "29 Jul, 10:08 am",
-    manager: "Taylor Morgan",
-    employeeNote: "Planned annual leave.",
-    managerNote: "Project handover is complete.",
-  },
-  {
-    id: "MAM-2398",
-    employee: "Taylor Morgan",
-    initials: "TM",
-    team: "Major Modifications",
-    leaveType: "Annual leave",
-    startDate: "2026-09-07",
-    endDate: "2026-09-11",
-    dateLabel: "7–11 Sep 2026",
-    days: 5,
-    approvalRequired: false,
-    status: "Approved",
-    submittedAt: "30 Jul, 2:16 pm",
-    manager: "Priya Singh",
-    employeeNote: "School holiday break.",
-  },
-  {
-    id: "MAM-2396",
-    employee: "Taylor Morgan",
-    initials: "TM",
-    team: "Major Modifications",
-    leaveType: "Annual leave",
-    startDate: "2026-07-06",
-    endDate: "2026-07-10",
-    dateLabel: "6–10 Jul 2026",
-    days: 5,
-    approvalRequired: false,
-    status: "Approved",
-    submittedAt: "22 Jun, 4:16 pm",
-    manager: "Priya Singh",
-    employeeNote: "Planned leave.",
-  },
-  {
-    id: "MAM-2397",
-    employee: "Riley Brooks",
-    initials: "RB",
-    team: "Minor Modifications",
-    leaveType: "Annual leave",
-    startDate: "2026-09-14",
-    endDate: "2026-09-18",
-    dateLabel: "14–18 Sep 2026",
-    days: 5,
-    approvalRequired: false,
-    status: "Approved",
-    submittedAt: "30 Jul, 9:35 am",
-    manager: "Priya Singh",
-    employeeNote: "Planned annual leave.",
-  },
-  {
-    id: "MAM-2395",
-    employee: "Ava Thompson",
-    initials: "AT",
-    team: "Accounts",
-    leaveType: "Unpaid leave",
-    startDate: "2026-07-31",
-    endDate: "2026-07-31",
-    dateLabel: "31 Jul 2026",
-    days: 1,
-    approvalRequired: true,
-    status: "Declined",
-    submittedAt: "28 Jul, 1:14 pm",
-    manager: "Priya Singh",
-    employeeNote: "Personal commitment.",
-    managerNote: "Please choose another date due to payroll close.",
-  },
-];
-
-const demoProfiles: Profile[] = [
-  { id: "priya", name: "Priya Singh", initials: "PS", accessRole: "hr", roleLabel: "HR & People", team: "People & Culture", manager: "Executive Team", startedDate: "2022-05-16", company: "mam", source: "demo" },
-  { id: "taylor", name: "Taylor Morgan", initials: "TM", accessRole: "manager", roleLabel: "Major Mod manager", team: "Major Modifications", manager: "Priya Singh", startedDate: "2023-08-11", company: "mam", source: "demo" },
-  { id: "riley", name: "Riley Brooks", initials: "RB", accessRole: "manager", roleLabel: "Minor Mod manager", team: "Minor Modifications", manager: "Priya Singh", startedDate: "2023-10-03", company: "mam", source: "demo" },
-  { id: "jordan", name: "Jordan Patel", initials: "JP", accessRole: "employee", roleLabel: "Accessibility technician", team: "Major Modifications", manager: "Taylor Morgan", startedDate: "2025-09-15", company: "mam", source: "demo" },
-  { id: "noah", name: "Noah Williams", initials: "NW", accessRole: "employee", roleLabel: "Project coordinator", team: "Major Modifications", manager: "Taylor Morgan", startedDate: "2026-07-30", company: "mam", source: "demo" },
-  { id: "alex", name: "Alex King", initials: "AK", accessRole: "employee", roleLabel: "Accessibility carpenter", team: "Major Modifications", manager: "Taylor Morgan", startedDate: "2024-02-12", company: "mam", source: "demo" },
-  { id: "mia", name: "Mia Chen", initials: "MC", accessRole: "employee", roleLabel: "Modifications coordinator", team: "Minor Modifications", manager: "Riley Brooks", startedDate: "2024-04-01", company: "mam", source: "demo" },
-  { id: "sam", name: "Sam Rivera", initials: "SR", accessRole: "employee", roleLabel: "Modifications tradesperson", team: "Minor Modifications", manager: "Riley Brooks", startedDate: "2025-01-19", company: "mam", source: "demo" },
-  { id: "ava", name: "Ava Thompson", initials: "AT", accessRole: "employee", roleLabel: "Accounts officer", team: "Accounts", manager: "Priya Singh", startedDate: "2023-06-05", company: "mam", source: "demo" },
-];
-
-function formatSubmittedAt(value: string) {
-  return new Intl.DateTimeFormat("en-AU", {
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function mapDemoLeaveRequest(row: DemoLeaveRequestRow): LeaveRequest {
-  const employee = demoProfiles.find((profile) => profile.id === row.employee_profile_id);
-  const manager = demoProfiles.find((profile) => profile.id === row.manager_profile_id);
-
-  if (!employee || !manager) {
-    throw new Error(`Synthetic profile mapping is missing for ${row.id}.`);
-  }
-
-  return {
-    id: row.id,
-    employee: employee.name,
-    initials: employee.initials,
-    team: employee.team,
-    leaveType: row.leave_type,
-    startDate: row.start_date,
-    endDate: row.end_date,
-    dateLabel: formatDateRange(row.start_date, row.end_date),
-    days: Number(row.days),
-    hours: row.hours === null ? undefined : Number(row.hours),
-    startTime: row.start_time?.slice(0, 5),
-    endTime: row.end_time?.slice(0, 5),
-    approvalRequired: row.approval_required,
-    status: row.status,
-    submittedAt: formatSubmittedAt(row.submitted_at),
-    manager: manager.name,
-    employeeNote: row.employee_note,
-    managerNote: row.manager_note ?? undefined,
-  };
-}
+/* Leave requests stay in this browser session until the production workflow is confirmed. */
+const initialRequests: LeaveRequest[] = [];
 
 function businessDaysBetween(start: string, end: string) {
   const first = new Date(`${start}T12:00:00`);
@@ -397,111 +180,6 @@ function formatDurationWithTime(request: LeaveRequest) {
   return timeRange ? `${formatDuration(request)} · ${timeRange}` : formatDuration(request);
 }
 
-function formatDemoEmailTime() {
-  return new Intl.DateTimeFormat("en-AU", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date());
-}
-
-function getDemoEmailDetails(request: LeaveRequest, includeReason: boolean, decisionNote?: string) {
-  const details = [
-    `Employee: ${request.employee}`,
-    `Leave type: ${request.leaveType}`,
-    `Dates and times: ${request.dateLabel}${formatTimeRange(request) ? ` · ${formatTimeRange(request)}` : ""}`,
-    `Duration: ${formatDuration(request)}`,
-  ];
-
-  if (includeReason) details.push(`Reason: ${request.employeeNote}`);
-  if (decisionNote) details.push(`Manager note: ${decisionNote}`);
-
-  return details;
-}
-
-function buildDemoEmails(request: LeaveRequest, trigger: DemoEmailTrigger, reviewUrl?: string): DemoEmail[] {
-  const createdAt = formatDemoEmailTime();
-  const createEmail = (
-    recipient: DemoEmail["recipient"],
-    recipientName: string,
-    subject: string,
-    details: string[],
-    link?: string,
-  ): DemoEmail => ({
-    id: crypto.randomUUID(),
-    requestId: request.id,
-    trigger,
-    recipient,
-    recipientName,
-    subject,
-    details,
-    reviewUrl: link,
-    createdAt,
-    deliveryStatus: "sending",
-  });
-
-  if (trigger === "review-requested") {
-    return [createEmail(
-      "Team Leader",
-      request.manager,
-      `Leave request awaiting review — ${request.employee}`,
-      getDemoEmailDetails(request, true),
-      reviewUrl,
-    )];
-  }
-
-  if (trigger === "declined") {
-    return [createEmail(
-      "Employee",
-      request.employee,
-      `Leave request declined — ${request.leaveType}`,
-      getDemoEmailDetails(request, true, request.managerNote),
-    )];
-  }
-
-  return [
-    createEmail(
-      "Employee",
-      request.employee,
-      `Leave request approved — ${request.leaveType}`,
-      getDemoEmailDetails(request, true, request.managerNote),
-    ),
-    createEmail(
-      "HR",
-      "Priya Singh",
-      `Leave approved — ${request.employee}`,
-      getDemoEmailDetails(request, true, request.managerNote),
-    ),
-    createEmail(
-      "Accounts",
-      "Accounts team",
-      `Leave approved — ${request.employee}`,
-      [
-        ...getDemoEmailDetails(request, false),
-        "Status: Approved",
-        "The reason, manager note and supporting files stay private to the employee, Team Leader and HR.",
-      ],
-    ),
-  ];
-}
-
-function buildDemoReviewUrl(requestId: string) {
-  const url = new URL("https://mam-team-management-system-ten.vercel.app");
-  url.search = new URLSearchParams({
-    view: "leave",
-    section: "approvals",
-    request: requestId,
-  }).toString();
-  url.hash = "";
-  return url.toString();
-}
-
-function canViewDemoEmail(email: DemoEmail, profile: Profile) {
-  if (profile.accessRole === "hr") return true;
-  if (email.recipient === "Employee") return email.recipientName === profile.name;
-  if (email.recipient === "Team Leader") return email.recipientName === profile.name;
-  return profile.team === "Accounts" && email.recipient === "Accounts";
-}
-
 const TIME_OPTIONS = Array.from({ length: 49 }, (_, index) => {
   const totalMinutes = (6 * 60) + (index * 15);
   const value = `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
@@ -525,12 +203,6 @@ const ALLOWED_ATTACHMENT_TYPES = new Set([
 function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function releaseAttachmentUrls(requests: LeaveRequest[]) {
-  requests.forEach((request) => {
-    request.attachments?.forEach((attachment) => URL.revokeObjectURL(attachment.previewUrl));
-  });
 }
 
 function formatDateRange(start: string, end: string) {
@@ -610,7 +282,7 @@ function getViewTitles(profile: Profile): Record<Exclude<AppView, "people">, { t
 function getVisibleRequests(requests: LeaveRequest[], profile: Profile) {
   if (profile.accessRole === "hr") return requests;
   if (profile.accessRole === "manager") {
-    return requests.filter((request) => request.team === profile.team || request.employee === profile.name);
+    return requests.filter((request) => request.manager === profile.name || request.employee === profile.name);
   }
   return requests.filter((request) => request.employee === profile.name);
 }
@@ -635,27 +307,20 @@ function accessRoleForOrgPerson(row: InternalOrgRow, managerIds: Set<string>): A
   return managerIds.has(row.id) ? "manager" : "employee";
 }
 
-function syntheticStartedDate(id: string) {
-  const score = Array.from(id).reduce((total, character) => total + character.charCodeAt(0), 0);
-  const year = 2021 + (score % 5);
-  const month = 1 + (score % 12);
-  const day = 1 + (score % 25);
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
 export function LeaveDemo({
   initialNavigation,
   isAdmin = false,
+  currentPersonId,
 }: {
-  initialNavigation?: DemoNavigation;
+  initialNavigation?: InitialNavigation;
   isAdmin?: boolean;
+  currentPersonId?: string;
 }) {
-  const supabase = isSharedDemoConfigured() ? createClient() : null;
   const directorySupabase = isSupabaseConfigured() ? createClient() : null;
   const [activeView, setActiveView] = useState<AppView>(initialNavigation?.view ?? "home");
-  const [activeProfileId, setActiveProfileId] = useState(isAdmin ? "priya" : "noah");
+  const [activeProfileId, setActiveProfileId] = useState(currentPersonId ?? "");
   const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests);
-  const [selectedRequestId, setSelectedRequestId] = useState(initialNavigation?.requestId ?? "MAM-2403");
+  const [selectedRequestId, setSelectedRequestId] = useState(initialNavigation?.requestId ?? "");
   const [leaveSection, setLeaveSection] = useState<LeaveSection>(initialNavigation?.section ?? "requests");
   const [statusFilter, setStatusFilter] = useState<"All" | RequestStatus>("All");
   const [showRequestForm, setShowRequestForm] = useState(false);
@@ -663,21 +328,33 @@ export function LeaveDemo({
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
   const [showProfiles, setShowProfiles] = useState(false);
-  const [showEmailActivity, setShowEmailActivity] = useState(false);
-  const [emailLog, setEmailLog] = useState<DemoEmail[]>([]);
   const [isMutating, setIsMutating] = useState(false);
-  const [peopleOpsResetKey, setPeopleOpsResetKey] = useState(0);
-  const [sharedDataState, setSharedDataState] = useState<SharedDataState>(supabase ? "connecting" : "local");
   const [organisationRows, setOrganisationRows] = useState<InternalOrgRow[]>([]);
   const [canEditOrganisation, setCanEditOrganisation] = useState(false);
-  const [organisationState, setOrganisationState] = useState<SharedDataState>(directorySupabase ? "connecting" : "local");
+  const [organisationState, setOrganisationState] = useState<DirectoryState>("connecting");
+  const [accounts, setAccounts] = useState<AccountDto[]>([]);
+  const [accountsError, setAccountsError] = useState("");
+  const [accountsLoading, setAccountsLoading] = useState(isAdmin);
+
+  const loadAccounts = useCallback(async () => {
+    if (!isAdmin) return;
+    setAccountsLoading(true);
+    try {
+      setAccounts(await listPortalAccounts());
+      setAccountsError("");
+    } catch (error) {
+      setAccountsError(error instanceof Error ? error.message : "Accounts could not be loaded.");
+    } finally {
+      setAccountsLoading(false);
+    }
+  }, [isAdmin]);
 
   const loadOrganisation = useCallback(async () => {
     if (!directorySupabase) return;
     const [{ data: rows, error }, { data: canEdit }] = await Promise.all([
       directorySupabase
         .from("internal_org_people")
-        .select("id,node_kind,company_key,full_name,position_title,parent_id,sort_order,updated_at,version")
+        .select("id,node_kind,company_key,full_name,position_title,parent_id,sort_order,is_active,updated_at,version")
         .order("sort_order", { ascending: true })
         .order("position_title", { ascending: true }),
       directorySupabase.rpc("can_edit_internal_org"),
@@ -723,62 +400,10 @@ export function LeaveDemo({
   }, [directorySupabase, loadOrganisation]);
 
   useEffect(() => {
-    if (!supabase) return;
-
-    let mounted = true;
-    let refreshTimer: number | undefined;
-
-    async function loadSharedRequests() {
-      const { data, error } = await supabase
-        .from("demo_leave_requests")
-        .select("*")
-        .order("submitted_at", { ascending: false })
-        .order("id", { ascending: false });
-
-      if (!mounted) return;
-
-      if (error) {
-        setSharedDataState("error");
-        return;
-      }
-
-      try {
-        const nextRequests = (data as DemoLeaveRequestRow[]).map(mapDemoLeaveRequest);
-        setRequests((current) => nextRequests.map((request) => {
-          const localAttachments = current.find((item) => item.id === request.id)?.attachments;
-          return localAttachments?.length ? { ...request, attachments: localAttachments } : request;
-        }));
-        setSelectedRequestId((current) => nextRequests.some((request) => request.id === current) ? current : nextRequests[0]?.id ?? current);
-        setSharedDataState("live");
-      } catch {
-        setSharedDataState("error");
-      }
-    }
-
-    void loadSharedRequests();
-
-    const channel = supabase
-      .channel("demo:leave_requests")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "demo_leave_requests" },
-        () => {
-          window.clearTimeout(refreshTimer);
-          refreshTimer = window.setTimeout(() => void loadSharedRequests(), 120);
-        },
-      )
-      .subscribe((status: string) => {
-        if (!mounted) return;
-        if (status === "SUBSCRIBED") setSharedDataState("live");
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setSharedDataState("error");
-      });
-
-    return () => {
-      mounted = false;
-      window.clearTimeout(refreshTimer);
-      void supabase.removeChannel(channel);
-    };
-  }, [supabase]);
+    if (!isAdmin) return;
+    const timer = window.setTimeout(() => void loadAccounts(), 0);
+    return () => window.clearTimeout(timer);
+  }, [isAdmin, loadAccounts]);
 
   const organisationPeople = useMemo<OrganisationPerson[]>(() => organisationRows
     .filter((row) => row.node_kind !== "vacancy")
@@ -790,34 +415,53 @@ export function LeaveDemo({
       reportsTo: row.parent_id,
       kind: row.node_kind === "org_unit" ? "org_unit" : "person",
       sortOrder: row.sort_order,
+      isActive: row.is_active,
     })), [organisationRows]);
   const directoryProfiles = useMemo<Profile[]>(() => {
     const rowsById = new Map(organisationRows.map((row) => [row.id, row]));
-    const managerIds = new Set(organisationRows.map((row) => row.parent_id).filter((id): id is string => Boolean(id)));
+    const managerIds = new Set(organisationRows
+      .filter((row) => row.is_active)
+      .map((row) => row.parent_id)
+      .filter((id): id is string => Boolean(id)));
+    const managerFor = (row: InternalOrgRow) => {
+      const visited = new Set<string>();
+      let parentId = row.parent_id;
+      while (parentId && !visited.has(parentId)) {
+        visited.add(parentId);
+        const parent = rowsById.get(parentId);
+        if (!parent) return "";
+        if (parent.node_kind === "person" && parent.is_active) return parent.full_name ?? "";
+        parentId = parent.parent_id;
+      }
+      return "";
+    };
     return organisationRows
-      .filter((row) => row.node_kind === "person" && row.full_name)
+      .filter((row) => row.node_kind === "person" && row.is_active && row.full_name)
       .map((row) => {
-        const manager = row.parent_id ? rowsById.get(row.parent_id) : undefined;
         return {
-          id: `org:${row.id}`,
+          id: row.id,
           name: row.full_name ?? "Unnamed person",
           initials: initialsForName(row.full_name ?? ""),
           accessRole: accessRoleForOrgPerson(row, managerIds),
           roleLabel: row.position_title,
           team: row.company_key === "mam" ? "MAM" : "Equipsy",
-          manager: manager?.full_name ?? manager?.position_title ?? "Executive team",
-          startedDate: syntheticStartedDate(row.id),
+          manager: managerFor(row),
           company: row.company_key,
-          source: "directory",
         };
       });
   }, [organisationRows]);
-  const availableProfiles = useMemo(() => [...demoProfiles, ...directoryProfiles], [directoryProfiles]);
-  const neutralEmployeeProfile = demoProfiles.find((profile) => profile.id === "noah") ?? demoProfiles[4];
-  const adminProfile = demoProfiles.find((profile) => profile.id === "priya") ?? demoProfiles[0];
-  const activeProfile = isAdmin
-    ? availableProfiles.find((profile) => profile.id === activeProfileId) ?? adminProfile
-    : neutralEmployeeProfile;
+  const selectedProfile = isAdmin
+    ? directoryProfiles.find((profile) => profile.id === activeProfileId)
+      ?? directoryProfiles.find((profile) => profile.id === currentPersonId)
+      ?? directoryProfiles[0]
+    : directoryProfiles.find((profile) => profile.id === currentPersonId);
+  if (!selectedProfile) {
+    return <DirectoryLoading state={organisationState} />;
+  }
+  const activeProfile: Profile = isAdmin && selectedProfile.id === currentPersonId
+    ? { ...selectedProfile, accessRole: "hr" }
+    : selectedProfile;
+
   const viewTitles = getViewTitles(activeProfile);
   const visibleRequests = getVisibleRequests(requests, activeProfile);
   const calendarRequests = getCalendarRequests(requests, activeProfile);
@@ -828,7 +472,6 @@ export function LeaveDemo({
   const filteredRequests = visibleRequests.filter((request) => {
     return statusFilter === "All" || request.status === statusFilter;
   });
-  const visibleEmailLog = emailLog.filter((email) => canViewDemoEmail(email, activeProfile));
   const selectedRegisterRequest = filteredRequests.find((request) => request.id === selectedRequestId) ?? filteredRequests[0];
   const selectedApprovalRequest = approvalQueue.find((request) => request.id === selectedRequestId) ?? approvalQueue[0];
   const selectedRequest = leaveSection === "approvals" ? selectedApprovalRequest : selectedRegisterRequest;
@@ -843,10 +486,9 @@ export function LeaveDemo({
       p_parent_id: person.reportsTo,
       p_started_date: null,
       p_sort_order: organisationRows.length + 1,
-      p_auth_user_id: null,
     });
     if (error) throw new Error(error.message);
-    await loadOrganisation();
+    await Promise.all([loadOrganisation(), loadAccounts()]);
     announce(`${person.name} added to the organisation.`);
   }
 
@@ -863,88 +505,25 @@ export function LeaveDemo({
       p_parent_id: person.reportsTo,
       p_started_date: null,
       p_sort_order: current.sort_order,
-      p_auth_user_id: null,
       p_is_active: true,
       p_expected_version: current.version,
     });
     if (error) throw new Error(error.message);
-    await loadOrganisation();
+    await Promise.all([loadOrganisation(), loadAccounts()]);
     announce(`${person.name}'s profile was updated.`);
+  }
+
+  function updateAccountRecord(account: AccountDto) {
+    setAccounts((current) => {
+      const existingIndex = current.findIndex((candidate) => candidate.personId === account.personId);
+      if (existingIndex < 0) return [...current, account];
+      return current.map((candidate) => candidate.personId === account.personId ? account : candidate);
+    });
   }
 
   function announce(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 3200);
-  }
-
-  function addEmailPreviews(previews: DemoEmail[]) {
-    setEmailLog((current) => [...previews, ...current]);
-    if (previews.some((preview) => canViewDemoEmail(preview, activeProfile))) {
-      setShowEmailActivity(true);
-    }
-  }
-
-  function updateEmailDelivery(ids: string[], status: DemoEmailDeliveryStatus, message: string) {
-    const idSet = new Set(ids);
-    setEmailLog((current) => current.map((email) => idSet.has(email.id)
-      ? { ...email, deliveryStatus: status, deliveryMessage: message }
-      : email));
-  }
-
-  async function requestEmailDelivery(
-    payload: { event: DemoEmailTrigger; requestId?: string; notificationKey?: string },
-    previewIds: string[],
-  ) {
-    try {
-      const response = await fetch("/api/demo-notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json() as DemoEmailApiResponse;
-      if (!response.ok || !result.ok || result.actualRecipient !== "ai@mobilityaccess.com.au") {
-        updateEmailDelivery(previewIds, "failed", result.error || "Email delivery failed.");
-        return { ok: false as const, alreadySent: false };
-      }
-      const alreadySent = result.status === "already-sent";
-      updateEmailDelivery(
-        previewIds,
-        "sent",
-        alreadySent ? "Already delivered to the review inbox." : "Delivered to ai@mobilityaccess.com.au.",
-      );
-      return { ok: true as const, alreadySent };
-    } catch {
-      updateEmailDelivery(previewIds, "failed", "Email delivery failed.");
-      return { ok: false as const, alreadySent: false };
-    }
-  }
-
-  async function addPeopleOperationsEmailPreviews(
-    previews: PeopleOperationsEmailPreview[],
-  ): Promise<PeopleOperationsEmailResult> {
-    const mapped = previews.map(({ notificationKey, ...preview }) => ({
-      notificationKey,
-      email: {
-        id: crypto.randomUUID(),
-        requestId: "OPS-CHECK-IN",
-        trigger: "checkin-reminder" as const,
-        ...preview,
-        createdAt: formatDemoEmailTime(),
-        deliveryStatus: "sending" as const,
-      },
-    }));
-    addEmailPreviews(mapped.map((entry) => entry.email));
-    const results = await Promise.all(mapped.map(async (entry) => ({
-      notificationKey: entry.notificationKey,
-      delivery: await requestEmailDelivery(
-        { event: "checkin-reminder", notificationKey: entry.notificationKey },
-        [entry.email.id],
-      ),
-    })));
-    return {
-      deliveredKeys: results.filter((entry) => entry.delivery.ok).map((entry) => entry.notificationKey),
-      failedKeys: results.filter((entry) => !entry.delivery.ok).map((entry) => entry.notificationKey),
-    };
   }
 
   function chooseLeaveSection(section: LeaveSection, requestedId?: string) {
@@ -974,61 +553,21 @@ export function LeaveDemo({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function resetDemo() {
-    if (supabase) {
-      setSharedDataState("connecting");
-      const { data, error } = await supabase.rpc("reset_demo_leave_requests", {
-        p_confirm_synthetic: true,
-      });
-      if (error) {
-        setSharedDataState("error");
-        announce("The shared demo could not be reset. Try again in a moment.");
-        return;
-      }
-      const nextRequests = (data as DemoLeaveRequestRow[]).map(mapDemoLeaveRequest);
-      setRequests((current) => {
-        releaseAttachmentUrls(current);
-        return nextRequests;
-      });
-      setSharedDataState("live");
-    } else {
-      setRequests((current) => {
-        releaseAttachmentUrls(current);
-        return initialRequests;
-      });
-    }
-    setSelectedRequestId("MAM-2403");
-    setActiveView("home");
-    setLeaveSection("requests");
-    setStatusFilter("All");
-    setShowRequestForm(false);
-    setManagerNote("");
-    setShowProfiles(false);
-    setShowEmailActivity(false);
-    setEmailLog([]);
-    setPeopleOpsResetKey((current) => current + 1);
-    announce(supabase ? "Shared fake data reset for every open demo." : "Demo reset to its starting point.");
-  }
-
   function switchProfile(profile: Profile) {
     if (!isAdmin) return;
     setActiveProfileId(profile.id);
-    setActiveView(profile.source === "directory" ? "people" : "home");
+    setActiveView("home");
     setLeaveSection("requests");
-    setSelectedRequestId(initialRequests.find((request) => request.employee === profile.name)?.id ?? initialRequests[0].id);
+    setSelectedRequestId(requests.find((request) => request.employee === profile.name)?.id ?? "");
     setStatusFilter("All");
     setManagerNote("");
     setShowProfiles(false);
-    announce(`Now viewing the demo as ${profile.name} · ${profile.roleLabel}.`);
+    announce(`Now viewing as ${profile.name} · ${profile.roleLabel}.`);
   }
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isMutating) return;
-    if (activeProfile.source === "directory") {
-      setFormError("Live leave requests are not connected to directory profiles yet.");
-      return;
-    }
     const form = event.currentTarget;
     const data = new FormData(form);
     const leaveType = String(data.get("leaveType"));
@@ -1082,11 +621,14 @@ export function LeaveDemo({
     }
     const days = businessDaysBetween(startDate, endDate);
     if (days < 1) {
-      setFormError("Choose at least one weekday for this demo request.");
+      setFormError("Choose at least one weekday for this request.");
       return;
     }
-    const nextNumber = Math.max(...requests.map((request) => Number(request.id.split("-")[1]))) + 1;
-    const approvalRequired = activeProfile.accessRole !== "manager";
+    const nextNumber = requests.reduce((highest, request) => {
+      const number = Number(request.id.split("-")[1]);
+      return Number.isFinite(number) ? Math.max(highest, number) : highest;
+    }, 0) + 1;
+    const approvalRequired = activeProfile.accessRole === "employee" && Boolean(activeProfile.manager);
     const attachments = attachmentFiles.map((file) => ({
       id: crypto.randomUUID(),
       name: file.name,
@@ -1095,7 +637,7 @@ export function LeaveDemo({
       previewUrl: URL.createObjectURL(file),
     }));
     const next: LeaveRequest = {
-      id: `MAM-${nextNumber}`,
+      id: `SPS-${String(nextNumber).padStart(4, "0")}`,
       employee: activeProfile.name,
       initials: activeProfile.initials,
       team: activeProfile.team,
@@ -1116,51 +658,16 @@ export function LeaveDemo({
     };
 
     setIsMutating(true);
-    let savedRequest = next;
-    if (supabase) {
-      const { data: saved, error } = await supabase.rpc("submit_demo_leave_request", {
-        p_employee_profile_id: activeProfile.id,
-        p_leave_type: leaveType,
-        p_start_date: startDate,
-        p_end_date: endDate,
-        p_start_time: startTime || null,
-        p_end_time: endTime || null,
-        p_employee_note: employeeNote || null,
-      });
-
-      if (error || !saved) {
-        attachments.forEach((attachment) => URL.revokeObjectURL(attachment.previewUrl));
-        setFormError(error?.message ?? "The shared request could not be saved.");
-        setSharedDataState("error");
-        setIsMutating(false);
-        return;
-      }
-
-      savedRequest = { ...mapDemoLeaveRequest(saved as DemoLeaveRequestRow), attachments };
-      setSharedDataState("live");
-    }
-
-    setRequests((current) => [savedRequest, ...current.filter((request) => request.id !== savedRequest.id)]);
-    let emailDelivery: { ok: boolean; alreadySent: boolean } | undefined;
-    if (savedRequest.approvalRequired) {
-      const previews = buildDemoEmails(savedRequest, "review-requested", buildDemoReviewUrl(savedRequest.id));
-      addEmailPreviews(previews);
-      emailDelivery = await requestEmailDelivery(
-        { event: "review-requested", requestId: savedRequest.id },
-        previews.map((preview) => preview.id),
-      );
-    }
-    setSelectedRequestId(savedRequest.id);
+    setRequests((current) => [next, ...current]);
+    setSelectedRequestId(next.id);
     setShowRequestForm(false);
     setFormError("");
     form.reset();
     navigate("leave");
     setIsMutating(false);
-    announce(savedRequest.approvalRequired
-      ? emailDelivery?.ok
-        ? `${savedRequest.id} saved. The review email was sent to ai@mobilityaccess.com.au.`
-        : `${savedRequest.id} saved, but the review email could not be delivered.`
-      : `${savedRequest.id} added to the team calendar${supabase ? " and synced live" : ""}. No approval is needed.`);
+    announce(next.approvalRequired
+      ? `${next.id} is ready for ${next.manager}'s review in this session.`
+      : `${next.id} was added to the calendar. No approval is needed.`);
   }
 
   async function decideRequest(status: "Approved" | "Declined") {
@@ -1170,46 +677,18 @@ export function LeaveDemo({
       return;
     }
     setIsMutating(true);
-    let decidedRequest: LeaveRequest = {
+    const decidedRequest: LeaveRequest = {
       ...selectedRequest,
       status,
       managerNote: managerNote.trim() || "Coverage checked and confirmed.",
     };
 
-    if (supabase) {
-      const { data: decided, error } = await supabase.rpc("decide_demo_leave_request", {
-        p_request_id: selectedRequest.id,
-        p_actor_profile_id: activeProfile.id,
-        p_status: status,
-        p_manager_note: managerNote.trim() || null,
-      });
-
-      if (error || !decided) {
-        announce(error?.message ?? "The shared decision could not be saved.");
-        setSharedDataState("error");
-        setIsMutating(false);
-        return;
-      }
-
-      decidedRequest = { ...mapDemoLeaveRequest(decided as DemoLeaveRequestRow), attachments: selectedRequest.attachments };
-      setSharedDataState("live");
-    }
-
     setRequests((current) => current.map((request) => request.id === selectedRequest.id ? decidedRequest : request));
     const nextApproval = approvalQueue.find((request) => request.id !== selectedRequest.id);
     if (nextApproval) setSelectedRequestId(nextApproval.id);
-    const trigger = status === "Approved" ? "approved" : "declined";
-    const previews = buildDemoEmails(decidedRequest, trigger);
-    addEmailPreviews(previews);
-    const emailDelivery = await requestEmailDelivery(
-      { event: trigger, requestId: decidedRequest.id },
-      previews.map((preview) => preview.id),
-    );
     setManagerNote("");
     setIsMutating(false);
-    announce(emailDelivery.ok
-      ? `${selectedRequest.id} ${status.toLowerCase()}. ${previews.length} review email${previews.length === 1 ? "" : "s"} sent to ai@mobilityaccess.com.au.`
-      : `${selectedRequest.id} ${status.toLowerCase()} and saved, but email delivery failed.`);
+    announce(`${selectedRequest.id} was ${status.toLowerCase()} in this session.`);
   }
 
   const navItems = [
@@ -1240,89 +719,93 @@ export function LeaveDemo({
         <header className={styles.topbar}>
           <div className={styles.mobileBrand}><BrandMark compact /></div>
           <div className={styles.topActions}>
-            <span className={styles.demoStatus} data-state={activeView === "people" ? organisationState : sharedDataState} role="status"><i />{activeView === "people" ? organisationState === "live" ? "Live directory" : organisationState === "connecting" ? "Connecting" : organisationState === "error" ? "Directory issue" : "Demo data" : sharedDataState === "local" ? "Demo data" : sharedDataState === "live" ? "Shared demo" : sharedDataState === "connecting" ? "Connecting" : "Connection issue"}</span>
-            <button className={styles.emailActivityButton} type="button" onClick={() => setShowEmailActivity(true)} aria-label={visibleEmailLog.length ? `Email log, ${visibleEmailLog.length} notifications` : "Email log"}><Mail size={15} /><span className={styles.actionLabel}>Email log</span>{visibleEmailLog.length ? <i>{visibleEmailLog.length}</i> : null}</button>
-            <button className={styles.resetButton} type="button" onClick={resetDemo}><RotateCcw size={15} /> Reset</button>
+            <span className={styles.demoStatus} data-state={organisationState} role="status"><i />{organisationState === "live" ? "Live directory" : organisationState === "connecting" ? "Connecting" : "Directory issue"}</span>
             {directorySupabase ? <form action={signOut}><button className={styles.signOutButton} type="submit" aria-label="Sign out"><LogOut size={15} /><span className={styles.actionLabel}>Sign out</span></button></form> : null}
-            {isAdmin ? <ProfileSwitcher activeProfile={activeProfile} profiles={availableProfiles} open={showProfiles} onToggle={() => setShowProfiles((current) => !current)} onSelect={switchProfile} /> : null}
+            {isAdmin ? <ProfileSwitcher activeProfile={activeProfile} profiles={directoryProfiles} open={showProfiles} onToggle={() => setShowProfiles((current) => !current)} onSelect={switchProfile} /> : null}
           </div>
         </header>
 
         <main className={styles.main} id="main-content">
           {activeView !== "people" ? <section className={styles.pageHeader}>
             <div><h1>{viewTitles[activeView].title}</h1>{viewTitles[activeView].helper ? <p>{viewTitles[activeView].helper}</p> : null}</div>
-            <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)} disabled={isMutating || activeProfile.source === "directory"}><Plus size={17} /> {activeProfile.accessRole === "manager" ? "Add leave" : "New leave request"}</button>
+            <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)} disabled={isMutating}><Plus size={17} /> {activeProfile.accessRole === "employee" ? "New leave request" : "Add leave"}</button>
           </section> : null}
 
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} onNavigate={navigate} onSelect={selectRequest} /> : null}
           {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} busy={isMutating} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
           {activeView === "calendar" ? <CalendarView requests={calendarRequests} /> : null}
-          {activeView === "people" ? <PeopleOperationsDemo
-            key={peopleOpsResetKey}
-            activeProfile={activeProfile}
-            organisationProfiles={organisationPeople}
-            canEditOrganisation={canEditOrganisation}
-            onCreateOrganisationPerson={createOrganisationPerson}
-            onUpdateOrganisationPerson={updateOrganisationPerson}
-            onEmailPreview={addPeopleOperationsEmailPreviews}
-          /> : null}
+          <div hidden={activeView !== "people"}>
+            <PeopleOperationsDemo
+              activeProfile={activeProfile}
+              organisationProfiles={organisationPeople}
+              canEditOrganisation={canEditOrganisation}
+              onCreateOrganisationPerson={createOrganisationPerson}
+              onUpdateOrganisationPerson={updateOrganisationPerson}
+              renderAccounts={isAdmin ? accountsLoading
+                ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
+                : accountsError
+                ? <div className={styles.emptyState}><ShieldCheck size={24} /><strong>Accounts could not be loaded</strong><span>{accountsError}</span></div>
+                : <AccountManagement
+                    accounts={accounts}
+                    onAccountChanged={updateAccountRecord}
+                    onCreateAccount={createPortalAccount}
+                    onUpdateLogin={updatePortalLogin}
+                    onResetPassword={resetPortalPassword}
+                    onToggleEnabled={togglePortalAccount}
+                  />
+                : undefined}
+            />
+          </div>
         </main>
       </div>
 
       {showRequestForm ? (
         <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowRequestForm(false)}>
           <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="new-request-title">
-            <header><div><span>{activeProfile.accessRole === "manager" ? "New calendar entry" : "New request"}</span><h2 id="new-request-title">{activeProfile.accessRole === "manager" ? "Add your leave" : "Request leave"}</h2></div><button type="button" onClick={() => setShowRequestForm(false)} aria-label="Close request form"><X size={19} /></button></header>
-            <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{activeProfile.name}</strong><small>{activeProfile.accessRole === "manager" ? `${activeProfile.team} · Added directly, no approval needed` : `${activeProfile.team} · Approver: ${activeProfile.manager}`}</small></span></div>
+            <header><div><span>{activeProfile.accessRole === "employee" ? "New request" : "New calendar entry"}</span><h2 id="new-request-title">{activeProfile.accessRole === "employee" ? "Request leave" : "Add your leave"}</h2></div><button type="button" onClick={() => setShowRequestForm(false)} aria-label="Close request form"><X size={19} /></button></header>
+            <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{activeProfile.name}</strong><small>{activeProfile.accessRole === "employee" && activeProfile.manager ? `${activeProfile.team} · Approver: ${activeProfile.manager}` : `${activeProfile.team} · Added directly, no approval needed`}</small></span></div>
             <form className={styles.form} onSubmit={submitRequest}>
               <label><span>Leave type</span><select name="leaveType" defaultValue="Annual leave" required><option>Annual leave</option><option>Sick leave</option><option>Carer&apos;s leave</option><option>Unpaid leave</option></select></label>
               <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" defaultValue="2026-09-21" required /></label><label><span>End date</span><input name="endDate" type="date" defaultValue="2026-09-21" required /></label></div>
               <fieldset className={styles.timeRange}><legend>Start and end times <small>Optional</small></legend><div className={styles.formRow}><label><span>From · first day</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>To · last day</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>6:00 am–6:00 pm in 15-minute intervals. For multiple dates, these apply to the first and last day. Leave both blank for full working days.</p></fieldset>
-              <label><span>{activeProfile.accessRole === "manager" ? "Private note" : "Note for your manager"} <small>Optional</small></span><textarea name="employeeNote" rows={3} placeholder={activeProfile.accessRole === "manager" ? "Add optional details for your own record." : "Add only what your manager needs to decide."} /></label>
-              <label className={styles.attachmentField}><span>Supporting files <small>Optional</small></span><input className={styles.fileInput} name="attachments" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" multiple /><small>PDF or images · up to 3 files, 5 MB each. Demo files stay in this open session.</small></label>
-              <div className={styles.privacyNote}><ShieldCheck size={17} /><span>{activeProfile.accessRole === "manager" ? "Your note is private to you and HR." : "Your note is private to you, your approver and HR."} Coworkers only see that you are unavailable.</span></div>
+              <label><span>{activeProfile.accessRole === "employee" && activeProfile.manager ? "Note for your manager" : "Private note"} <small>Optional</small></span><textarea name="employeeNote" rows={3} placeholder={activeProfile.accessRole === "employee" && activeProfile.manager ? "Add only what your manager needs to decide." : "Add optional details for your own record."} /></label>
+              <label className={styles.attachmentField}><span>Supporting files <small>Optional</small></span><input className={styles.fileInput} name="attachments" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" multiple /><small>PDF or images · up to 3 files, 5 MB each. Files stay in this open session.</small></label>
+              <div className={styles.privacyNote}><ShieldCheck size={17} /><span>{activeProfile.accessRole === "employee" && activeProfile.manager ? "Your note is private to you, your approver and HR." : "Your note is private to you and HR."} Coworkers only see that you are unavailable.</span></div>
               {formError ? <p className={styles.formError} role="alert">{formError}</p> : null}
-              <footer><button className={styles.secondaryButton} type="button" onClick={() => setShowRequestForm(false)} disabled={isMutating}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : activeProfile.accessRole === "manager" ? "Add leave" : "Send request"} <ArrowUpRight size={16} /></button></footer>
+              <footer><button className={styles.secondaryButton} type="button" onClick={() => setShowRequestForm(false)} disabled={isMutating}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : activeProfile.accessRole === "employee" && activeProfile.manager ? "Send request" : "Add leave"} <ArrowUpRight size={16} /></button></footer>
             </form>
           </section>
         </div>
       ) : null}
-
-      {showEmailActivity ? <EmailActivityModal emails={visibleEmailLog} onClose={() => setShowEmailActivity(false)} /> : null}
 
       <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`} role="status" aria-live="polite"><CheckCircle2 size={17} />{toast}</div>
     </div>
   );
 }
 
-function EmailActivityModal({ emails, onClose }: { emails: DemoEmail[]; onClose: () => void }) {
-  const deliveryLabel: Record<DemoEmailDeliveryStatus, string> = {
-    sending: "Sending",
-    sent: "Delivered",
-    failed: "Failed",
-    preview: "Preview only",
-  };
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-    <section className={`${styles.modal} ${styles.emailModal}`} role="dialog" aria-modal="true" aria-labelledby="email-activity-title">
-      <header><div><span>Synthetic notification log</span><h2 id="email-activity-title">Email activity</h2></div><button type="button" onClick={onClose} aria-label="Close email activity"><X size={19} /></button></header>
-      <div className={styles.emailIntro}><Mail size={18} /><span><strong>All demo emails go only to ai@mobilityaccess.com.au.</strong><small>The intended role is shown below so each template can be reviewed safely.</small></span></div>
-      {emails.length ? <div className={styles.emailLog}>{emails.map((email) => <article className={styles.emailCard} key={email.id}>
-        <header><span><small>Intended for {email.recipient}</small><strong>{email.recipientName}</strong></span><span className={`${styles.emailDelivery} ${styles[`emailDelivery${email.deliveryStatus}`]}`}>{deliveryLabel[email.deliveryStatus]}</span><time>{email.createdAt}</time></header>
-        <h3>{email.subject}</h3>
-        <ul>{email.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>
-        {email.deliveryMessage ? <p className={styles.emailDeliveryMessage}>{email.deliveryMessage}</p> : null}
-        {email.reviewUrl ? <a className={styles.emailReviewLink} href={email.reviewUrl}><ArrowUpRight size={14} /> Open review request</a> : null}
-      </article>)}</div> : <div className={styles.emailEmpty}><Mail size={24} /><strong>No notifications yet</strong><span>Submit or decide a synthetic leave request to test the email flow.</span></div>}
-    </section>
+function DirectoryLoading({ state }: { state: DirectoryState }) {
+  return <div className={styles.shell} data-company="mam">
+    <aside className={styles.sidebar} aria-label="Safer People System navigation">
+      <div className={styles.brandRow}><BrandMark /></div>
+    </aside>
+    <div className={styles.workspace}>
+      <header className={styles.topbar} />
+      <main className={styles.main} id="main-content">
+        <div className={styles.emptyState}>
+          <UsersRound size={25} />
+          <strong>{state === "error" ? "The directory could not be loaded" : "Loading your profile"}</strong>
+          <span>{state === "error" ? "Refresh the page or ask the system administrator to check your account link." : "Connecting to the live organisation directory…"}</span>
+        </div>
+      </main>
+    </div>
   </div>;
 }
 
 function ProfileSwitcher({ activeProfile, profiles, open, onToggle, onSelect }: { activeProfile: Profile; profiles: Profile[]; open: boolean; onToggle: () => void; onSelect: (profile: Profile) => void }) {
   const [query, setQuery] = useState("");
   const groups = [
-    { label: "Demo roles", profiles: profiles.filter((profile) => profile.source === "demo") },
-    { label: "MAM", profiles: profiles.filter((profile) => profile.source === "directory" && profile.company === "mam") },
-    { label: "Equipsy", profiles: profiles.filter((profile) => profile.source === "directory" && profile.company === "equipsy") },
+    { label: "MAM", profiles: profiles.filter((profile) => profile.company === "mam") },
+    { label: "Equipsy", profiles: profiles.filter((profile) => profile.company === "equipsy") },
   ].map((group) => ({
     ...group,
     profiles: group.profiles.filter((profile) => `${profile.name} ${profile.roleLabel}`.toLowerCase().includes(query.trim().toLowerCase())),
@@ -1343,7 +826,7 @@ function ProfileSwitcher({ activeProfile, profiles, open, onToggle, onSelect }: 
       </button>
       {open ? (
         <div className={styles.profileMenu} aria-label="Admin preview: view as another profile">
-          <header><span>Admin preview</span><small>View the synthetic workspace as another team member</small><label className={styles.profileSearch}><Search size={14} /><span className={styles.srOnly}>Search profiles</span><input type="search" placeholder="Search name or position" value={query} onChange={(event) => setQuery(event.target.value)} /></label></header>
+          <header><span>Admin preview</span><small>View the workspace as another team member</small><label className={styles.profileSearch}><Search size={14} /><span className={styles.srOnly}>Search profiles</span><input type="search" placeholder="Search name or position" value={query} onChange={(event) => setQuery(event.target.value)} /></label></header>
           {groups.map((group) => (
             <section key={group.label}>
               <span>{group.label}</span>
@@ -1445,7 +928,7 @@ function RequestsView({ profile, requests, allRequests, selected, filter, onFilt
         <div className={styles.recordsTable} role="table" aria-label="Leave requests">
           <div className={`${styles.tableHead} ${isEmployee ? styles.employeeTableRow : ""}`} role="row">{!isEmployee ? <span>Employee</span> : null}<span>Leave</span><span>Dates</span><span>Duration</span><span>Status</span><span /></div>
           {requests.map((request) => <button className={`${styles.tableRow} ${isEmployee ? styles.employeeTableRow : ""} ${selected?.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} role="row" key={request.id}>{!isEmployee ? <span><i>{request.initials}</i><b>{request.employee === profile.name ? "You" : request.employee}<small>{request.team}</small></b></span> : null}<span><b>{request.leaveType}</b><small>{request.id}</small></span><span>{request.dateLabel}</span><span>{formatDuration(request)}{formatTimeRange(request) ? <small>{formatTimeRange(request)}</small> : null}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} /></button>)}
-          {!requests.length ? <div className={styles.emptyState}><Search size={23} /><strong>No requests here</strong><span>Choose another status.</span></div> : null}
+          {!requests.length ? <div className={styles.emptyState}><Search size={23} /><strong>{allRequests.length ? "No requests match this status" : "No leave requests yet"}</strong><span>{allRequests.length ? "Choose another status." : isEmployee ? "Use “New leave request” when you need time away." : "Leave added in this session will appear here."}</span></div> : null}
         </div>
         {selected ? <RequestDetail profile={profile} request={selected} /> : null}
       </div>
@@ -1485,7 +968,6 @@ function ApprovalCalendar({ selected, requests }: { selected: LeaveRequest; requ
   const rangeEnd = days[days.length - 1].iso;
   const teamLeave = requests.filter((request) => request.id !== selected.id && request.employee !== selected.employee && request.team === selected.team && request.status !== "Declined" && request.endDate >= rangeStart && request.startDate <= rangeEnd);
   const overlaps = teamLeave.filter((request) => requestsOverlap(selected, request));
-  const visibleHolidays = demoCalendarHolidays.filter((holiday) => holiday.date >= rangeStart && holiday.date <= rangeEnd);
 
   return (
     <section className={styles.calendarImpact} aria-labelledby="calendar-impact-title">
@@ -1497,7 +979,6 @@ function ApprovalCalendar({ selected, requests }: { selected: LeaveRequest; requ
         <span><i className={styles.legendApplicant} />This request</span>
         <span><i className={styles.legendApproved} />Approved leave</span>
         <span><i className={styles.legendPending} />Pending leave</span>
-        <span><i className={styles.legendHoliday} />Public holiday</span>
       </div>
       <div className={styles.reviewCalendarViewport} tabIndex={0} aria-label="Scrollable coverage calendar">
         <div className={styles.reviewCalendar} role="grid" aria-label={`Team leave from ${formatDateRange(rangeStart, rangeEnd)}`}>
@@ -1507,12 +988,10 @@ function ApprovalCalendar({ selected, requests }: { selected: LeaveRequest; requ
           <div className={styles.reviewCalendarGrid}>
             {days.map((day, index) => {
               const isRequestedDay = day.iso >= selected.startDate && day.iso <= selected.endDate;
-              const holiday = visibleHolidays.find((item) => item.date === day.iso);
               const otherLeave = teamLeave.filter((request) => day.iso >= request.startDate && day.iso <= request.endDate);
               return (
                 <div className={`${styles.reviewCalendarDay} ${day.isWeekend ? styles.reviewCalendarWeekend : ""} ${isRequestedDay ? styles.reviewCalendarRequestedDay : ""}`} role="gridcell" key={day.iso}>
                   <time dateTime={day.iso}><b>{day.day}</b>{day.day === 1 || index === 0 ? <span>{day.month}</span> : null}</time>
-                  {holiday ? <div className={styles.reviewHoliday}><CalendarDays size={13} /><span>{holiday.label}{holiday.isDemo ? <small>Demo</small> : null}</span></div> : null}
                   {isRequestedDay ? <article className={styles.reviewEventApplicant}><i>{selected.initials}</i><span><strong>{selected.employee}</strong><small>{formatTimeRange(selected) || "This request"}</small></span></article> : null}
                   {otherLeave.slice(0, 2).map((request) => <article className={request.status === "Approved" ? styles.reviewEventApproved : styles.reviewEventPending} key={request.id}><i>{request.initials}</i><span><strong>{request.employee}</strong><small>{formatTimeRange(request) || `${request.status} leave`}</small></span></article>)}
                   {otherLeave.length > 2 ? <span className={styles.reviewMoreLeave}>+{otherLeave.length - 2} more</span> : null}

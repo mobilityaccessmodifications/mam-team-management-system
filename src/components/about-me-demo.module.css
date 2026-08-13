@@ -1,41 +1,9 @@
 .workspace {
-  display: grid;
-  gap: 14px;
   max-width: 760px;
   color: #273136;
 }
 
-.specialDay {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid #ead4a2;
-  border-radius: 9px;
-  background: #fff9e8;
-  color: #665225;
-  padding: 12px 14px;
-}
-
-.specialDayIcon {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 8px;
-  background: #f7e6b0;
-  color: #9a711b;
-}
-
-.specialDay div { min-width: 0; }
-.specialDay strong,
-.specialDay p { display: block; }
-.specialDay strong { font-size: 13px; }
-.specialDay p { margin: 2px 0 0; color: #7e6d3f; font-size: 11px; }
-.specialDaySparkles { margin-left: auto; color: #c48b19; }
-
-.profileCard,
-.contactsCard {
+.profileCard {
   overflow: hidden;
   border: 1px solid #dce2e1;
   border-radius: 9px;
@@ -43,95 +11,32 @@
 }
 
 .profileSummary {
-  display: flex;
-  min-height: 92px;
+  display: grid;
+  grid-template-columns: minmax(120px, .45fr) minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 20px;
-  padding: 18px 20px;
+  min-height: 58px;
+  border-top: 1px solid #edf0ef;
+  padding: 12px 16px;
 }
+
+.profileSummary:first-child { border-top: 0; }
 
 .profileSummary > span {
-  color: #5e6c70;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.profileSummary > span i {
-  color: #adb6b3;
-  font-style: normal;
-  padding: 0 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #6c797d;
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .profileSummary > strong {
-  color: var(--accent-deep, #b84f1d);
-  font-size: 27px;
-  letter-spacing: -.04em;
-  white-space: nowrap;
+  color: #2f3b3f;
+  font-size: 14px;
+  font-weight: 750;
 }
 
-.profileSummary > strong small {
-  color: #667478;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-
-.contactsCard header {
-  border-bottom: 1px solid #e6ebea;
-  padding: 14px 16px;
-}
-
-.contactsCard h2 {
-  margin: 0;
-  font-size: 15px;
-  letter-spacing: -.01em;
-}
-
-.contactList { display: grid; }
-
-.contactList a {
-  display: grid;
-  grid-template-columns: 31px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  min-height: 56px;
-  border-top: 1px solid #edf0ef;
-  color: inherit;
-  padding: 9px 14px;
-  text-decoration: none;
-  transition: background .16s ease, color .16s ease;
-}
-
-.contactList a:first-child { border-top: 0; }
-.contactList a:hover { background: var(--accent-soft, #fffaf7); }
-.contactList a:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent, #f37022) 30%, transparent); outline-offset: -3px; }
-
-.contactIcon {
-  display: grid;
-  width: 29px;
-  height: 29px;
-  place-items: center;
-  border-radius: 7px;
-  background: #f1f5f3;
-  color: #517267;
-}
-
-.contactList strong,
-.contactList small { display: block; }
-.contactList strong { color: #324044; font-size: 12px; }
-.contactList small { margin-top: 2px; color: #66757a; font-size: 11px; }
-.contactAction { color: var(--accent-deep, #a94b1c); font-size: 12px; font-weight: 700; }
-
-@media (prefers-reduced-motion: no-preference) {
-  .specialDaySparkles { animation: quiet-sparkle 3.6s ease-in-out infinite; }
-}
-
-@keyframes quiet-sparkle {
-  0%, 100% { opacity: .62; transform: scale(.94); }
-  50% { opacity: 1; transform: scale(1.04); }
-}
-
-@media (max-width: 680px) {
-  .profileSummary { align-items: flex-start; flex-direction: column; gap: 8px; }
+@media (max-width: 520px) {
+  .profileSummary { grid-template-columns: 1fr; gap: 5px; }
 }

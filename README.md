@@ -1,112 +1,95 @@
 # Safer People System
 
-An internal people portal for Mobility Access Modifications (MAM) and Equipsy. It brings team availability, leave requests, manager decisions, people workflows and the organisation directory into one private workspace.
+Safer People System is the private people portal for Mobility Access Modifications (MAM) and Equipsy. It combines the live organisation directory, account administration, leave visibility and essential people workflows in one minimal workspace. Recruitment is excluded.
 
-The repository contains a deployable foundation and an interactive synthetic workflow demo. It demonstrates full-day and timed leave across one or more dates, sick leave, optional PDF/image evidence, manager approval of employee requests with a coverage calendar spanning three weeks before and after each request, direct manager leave entries, synthetic email previews with an approved production-only review-delivery path, and a privacy-preserving team calendar. It also includes a browser-local People workspace for synthetic onboarding, offboarding and employee check-ins, plus an embedded My profile panel with tenure and essential synthetic support contacts. Recruitment is deliberately excluded.
+## Current status
 
-An authenticated organisation directory is a separate data boundary. It contains only the name, position, company and reporting relationship needed to render the MAM and Equipsy organisation tree. The real roster is imported privately into Supabase after the target is verified; it is never committed to this repository, used in screenshots, or exposed through the anonymous synthetic-demo tables. MAM profiles use the orange accent and Equipsy profiles use the blue accent. For the current administrator review, the database-authorised HR account can add people, update titles and change reporting lines. Any later staff-account rollout requires its own approved access rules.
+- Frontend: Next.js 16 App Router, React 19 and TypeScript
+- Hosting: the MAM-owned Vercel project at `https://mam-team-management-system-ten.vercel.app`
+- Source: `mobilityaccessmodifications/mam-team-management-system`
+- Data and authentication: MAM Supabase project `xtwlrjqbusadghavchqm`
+- Directory: the privately imported MAM and Equipsy roster; no seeded or selectable fake people
+- Accounts: username/password login backed by Supabase Auth and a database-controlled account registry
+- Workflow review: leave, onboarding, offboarding and check-in records are created in the open browser session using people from the real directory; they are not yet durable staff records
 
-## Status
+MAM people use the orange accent and Equipsy people use blue. Company is also stated in text, so colour is never the only company indicator.
 
-- Phase: interactive workflow demo
-- Current product areas: leave management, synthetic onboarding/offboarding/check-ins, and an authenticated MAM/Equipsy organisation directory; Recruitment is excluded
-- Frontend: responsive, minimal operations workspace with realtime shared Leave demo state, browser-local People workflow state and a separate live organisation tree
-- Authentication: the approved review setup uses one pre-provisioned Supabase Auth username/password administrator account; the password stays only in Supabase Auth and is never stored in source or environment variables
-- Demo data: fixed synthetic profiles and Leave records are stored in the MAM Supabase project; People workflow records remain in the open browser only
-- Organisation data: the private Supabase directory stores the minimum real roster fields and is populated outside Git
-- Database: the shared demo schema remains isolated from the authenticated, RLS-protected organisation schema
-- GitHub: company repository at `mobilityaccessmodifications/mam-team-management-system`
-- Vercel: company-owned project linked to the `main` branch
-- Supabase: MAM organization project connected with browser-safe publishable credentials only
-- Email review transport: an optional production-only Next.js-to-n8n path for synthetic messages; n8n sends through `Microsoft Outlook - ai@mobilityaccess.com.au`, and every delivered message is hard-routed to `ai@mobilityaccess.com.au`
+## What works now
 
-## Stack
+After login, the server verifies that the Supabase Auth user is linked to an active directory person. The authorised administrator receives the master view and can:
 
-- Next.js 16 App Router, React 19, TypeScript
-- Supabase Auth, Postgres and private Storage
-- Vercel hosting and environment separation
-- n8n and the MAM AI Outlook mailbox for approved synthetic email-review delivery
-- npm with committed lockfile and pinned application dependencies
+- search and edit the live organisation tree;
+- preview the interface as another real directory person without impersonating that person's authenticated account;
+- create a login for an unlinked directory person;
+- view login names, account status and last sign-in time;
+- change a login name;
+- set a new password; and
+- disable or re-enable an account.
 
-## Local demo
+Supabase Auth stores passwords as non-reversible hashes. The administrator can set a replacement password and see that newly generated value once, but neither the application nor the administrator can retrieve an existing password.
 
-The synthetic UI can build and render without a Supabase connection for local development:
+The Leave workspace demonstrates full-day and timed leave across one or more dates, sick leave, optional PDF/image evidence, manager decisions, a review calendar spanning three weeks before and after a request, direct manager leave entries and a privacy-preserving team calendar. Times are limited to 6:00 am–6:00 pm in 15-minute intervals. Current leave requests, decisions and uploaded files exist only for the active browser session and use real directory people; refreshing clears them.
+
+The People workspace uses the real directory for profiles and for creating onboarding, offboarding and check-in workflow examples. No cases, reminders, contacts or employees are pre-seeded. Workflow task changes, evidence indicators and check-in records are browser-session state only and do not provision accounts, revoke external access, schedule reminders or send email.
+
+## Data boundaries
+
+- Real names, positions, companies and reporting relationships live only in the authenticated, RLS-protected Supabase directory. The private roster is never committed to Git or copied into fixtures.
+- Account links, normalised login names, status and audit metadata live in Supabase. Supabase Auth remains the only password store.
+- Leave and People workflow examples are non-durable browser-session records until their live business rules and RLS design are approved.
+- Private leave reasons and evidence are never shown in the shared calendar.
+- No email notification route or review-mailbox transport is active in the application.
+
+## Local development
+
+Use a development Supabase project or branch. Do not copy production secrets into local development.
 
 ```bash
 npm ci
+cp .env.example .env.local
 npm run dev -- -p 3001
 ```
 
 Open `http://localhost:3001`.
 
-In the connected review setup, the administrator lands in the HR master view. Its top-right **View as** selector can preview the workspace as HR, the Major Mod manager, the Minor Mod manager or several employees. This changes only the synthetic workspace being demonstrated; it never changes the authenticated Supabase user or grants database permissions. The intentionally minimal sidebar contains Home, one Leave workspace, the team calendar and People. For managers, Leave contains a clear in-page switch between team requests and the items waiting for their decision; employees only see their own leave. “Pending” counts every pending employee request visible in the current request list, while “To approve” counts only employee requests assigned to the current manager. Managers add their own leave directly to the calendar as approved records and never approve themselves. Approval records show the applicant highlighted in a weekly calendar grid, relevant team leave and a clearly marked synthetic public-holiday example; private reasons never appear there. A person can optionally choose a start time for the first date and an end time for the last date between 6:00 am and 6:00 pm in fixed 15-minute intervals; the demo totals only weekday working-window hours between them.
-
-The private organisation directory is not available in the disconnected local fallback. When Supabase Auth and the authenticated organisation schema are configured, the approved administrator can search the live MAM and Equipsy tree. Directory cards intentionally show only a person's name and position. Next.js verifies the signed-in user and asks the database whether that user is an authorised HR editor before opening the HR master view; the database still re-checks every organisation mutation. Choosing an HR-looking View-as profile never grants write access. Realtime updates are shared with other authorised viewers if more accounts are introduced later.
-
-A request can include up to three PDF or image files of 5 MB each. Files stay only in the open browser session during the synthetic demo, disappear on refresh or reset, and are shown only when the View-as profile is a manager or HR. “Email activity” remains a browser-local, non-durable log of the separate intended Team Leader, employee, HR and Accounts notifications. When the approved production-only transport is enabled, a Next.js server route rebuilds the message from the canonical synthetic Supabase row and asks n8n to send it through `Microsoft Outlook - ai@mobilityaccess.com.au`. Every physical delivery is hard-locked to `ai@mobilityaccess.com.au`; no real employee address is used. Team Leader messages link to the fixed production site, Accounts messages exclude the request reason and manager note, and no attachment is emailed. A transport failure is reported separately and never rolls back a saved request or decision. This synthetic email-review transport is separate from login and remains unchanged by the password cutover. The versioned staff/auth migration creates a private Supabase Storage bucket and RLS-backed metadata for real manager/HR-only access once authenticated identities are enabled.
-
-When `NEXT_PUBLIC_SHARED_DEMO=true` and the public Supabase variables are configured, submissions, decisions and resets are shared in realtime across open browsers. “Reset demo” restores the fixed fake dataset for everyone. The profile selector remains a role simulation, not authentication, so this mode must never contain real staff or leave data.
-
-The People workspace combines a compact My profile panel with role-specific lifecycle and check-in views. Employees see only their own check-ins. A single lifecycle tab appears only when assigned—My onboarding or Offboarding—and contains only their Employee-owned actions; employees without an active workflow see neither tab. Other employees' offboarding and all HR, IT, manager, asset, access and audit details remain hidden from employee views. Relevant managers see their assigned workflows, while HR can open supporting asset, access and activity details when needed. Its Check-ins tab uses the current schedule of 2 weeks, 1 month, 3 months and 5-month probation; prompts are due 3 days, 4 business days, 2 weeks, and 2 weeks plus a final 1 week before the respective check-in. Running a due reminder always adds an in-app preview; actual review-mailbox delivery is permitted only for fixed synthetic reminder fixtures on the server allowlist when the production transport is enabled. My profile derives a synthetic tenure from the selected profile, can show a subtle anniversary treatment on a configured demo date, and lists only synthetic manager, People and IT contacts. People/profile cases, selected evidence/upload state and reminder activity are browser-local, clear on reset or refresh, and do not create accounts or provision/revoke access.
-
-## Connected development
-
-1. Select the verified MAM Supabase project.
-2. Copy the safe template:
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-3. Fill the development project URL and publishable key, then set `NEXT_PUBLIC_SHARED_DEMO=true`. Do not add secret/service-role keys to `NEXT_PUBLIC_*` variables.
-4. Store the same browser-safe variables in the verified MAM Vercel project for Development, Preview and Production.
-5. Apply schema changes only after verifying the exact Supabase profile and project. Import any approved real organisation roster directly into the authenticated production table, never through a committed migration or fixture.
+The authenticated portal requires all three Supabase variables shown below. A disconnected local shell is not a substitute for the real directory and account boundary.
 
 ## Verification
-
-```bash
-npm run lint
-npm run typecheck
-npm run build
-```
-
-Or run all three:
 
 ```bash
 npm run check
 ```
 
+This runs lint, type-checking and the production build.
+
 ## Environment variables
 
 | Variable | Exposure | Purpose |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Browser-safe | MAM Supabase API URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser-safe | Modern Supabase publishable key; protected by RLS |
-| `NEXT_PUBLIC_SHARED_DEMO` | Browser-safe | Enables the shared synthetic dataset and realtime subscription |
+| `NEXT_PUBLIC_SUPABASE_URL` | Browser-safe | Supabase API URL for the selected environment |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser-safe | Publishable key constrained by RLS |
+| `SUPABASE_SECRET_KEY` | Server-only | Supabase Auth Admin access used by authorised account-management Server Actions |
 | `NEXT_PUBLIC_APP_URL` | Browser-safe | Exact application origin used for in-app links |
-| `MAM_DEMO_EMAIL_ENABLED` | Server-only | Enables the production-only synthetic review-email transport when set to `true` |
-| `MAM_N8N_LEAVE_WEBHOOK_URL` | Server-only | n8n webhook URL used only by the approved synthetic email route |
-| `MAM_N8N_LEAVE_WEBHOOK_SECRET` | Server-only | Shared secret used to authenticate the server-to-server n8n request |
 
-The administrator username and password are managed only in Supabase Auth. They are not application environment variables and must never be committed, copied into `.env.local`, or exposed to the browser.
+`SUPABASE_SECRET_KEY` must never use a `NEXT_PUBLIC_*` name, enter client code, appear in logs or be committed. Production keeps it only in the MAM Vercel project's encrypted Production environment. Login passwords are not application environment variables.
 
-See `docs/environment-management.md` for the full model.
+See `docs/environment-management.md` for the complete environment model.
 
 ## Project documentation
 
-- `AGENTS.md` — AI operating and safety rules
-- `docs/project-brief.md` — scope and delivery definition
-- `docs/business-rules.md` — confirmed rules and decisions still required
-- `docs/architecture.md` — application and data boundaries
-- `docs/environment-management.md` — API key and environment strategy
-- `docs/decisions/0001-platform.md` — why Next.js, Supabase and Vercel were selected
+- `AGENTS.md` — project operating and safety rules
+- `docs/project-brief.md` — current scope and delivery definition
+- `docs/business-rules.md` — confirmed rules and decisions required before live workflow use
+- `docs/architecture.md` — application, authentication and data boundaries
+- `docs/environment-management.md` — secrets and environment strategy
+- `docs/decisions/0001-platform.md` — platform decision
 
 ## Deployment order
 
-1. Confirm the MAM GitHub repository and its default branch are the intended deployment source.
-2. Select the MAM Supabase organization, review the quoted project cost, then create the project in Sydney (`ap-southeast-2`) unless MAM requires another region.
-3. Review and apply the database migration; run Supabase security and performance advisors.
-4. Confirm the MAM Vercel project remains linked to the GitHub repository.
-5. Add environment variables separately for Development, Preview and Production.
-6. Keep `MAM_DEMO_EMAIL_ENABLED` disabled in Development and Preview. For an approved Production test, configure the server-only n8n values, verify the n8n sender is `Microsoft Outlook - ai@mobilityaccess.com.au`, and verify its recipient remains hard-locked to `ai@mobilityaccess.com.au`.
-7. Deploy a preview, test the administrator password sign-in, server-verified HR master view, View-as demo selector and RLS boundaries, then obtain management approval before production.
+1. Verify GitHub owner `mobilityaccessmodifications` and repository `mam-team-management-system`.
+2. Verify Supabase organisation `fwlmbmospuwoaosffvmw` and project `xtwlrjqbusadghavchqm` before any read, migration or Auth change.
+3. Review and apply versioned migrations, then run Supabase security and performance advisors.
+4. Verify the Vercel target is `ai-7033s-projects/mam-team-management-system` and remains linked to the company repository.
+5. Store the publishable values and server-only secret separately for Development, Preview and Production.
+6. Test login, active/disabled account enforcement, account administration, organisation RLS and browser-session workflow privacy.
+7. Deploy without changing the established production URL.

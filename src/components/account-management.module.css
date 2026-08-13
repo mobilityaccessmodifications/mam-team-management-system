@@ -1,0 +1,727 @@
+.workspace {
+  --account-accent: var(--accent, var(--mam-orange, #e36e25));
+  --account-accent-deep: var(--accent-deep, #a8500f);
+  --account-accent-soft: var(--accent-soft, #fdf1e9);
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  color: #293337;
+}
+
+.header {
+  display: flex;
+  min-height: 58px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.header > div:first-child > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #6c797d;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.header h2 {
+  margin: 0;
+  font-family: var(--font-display, sans-serif);
+  font-size: clamp(28px, 4vw, 36px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+.header p {
+  margin: 7px 0 0;
+  color: #68757a;
+  font-size: 13px;
+}
+
+.accountCount {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 0 7px;
+  min-width: 95px;
+  border: 1px solid #dbe2e0;
+  border-radius: 8px;
+  background: #fff;
+  color: #627075;
+  padding: 9px 12px;
+}
+
+.accountCount svg {
+  grid-row: 1 / span 2;
+  color: var(--account-accent-deep);
+}
+
+.accountCount strong {
+  color: #293337;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.accountCount span {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.securityNote,
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  border: 1px solid #d9e4df;
+  border-radius: 8px;
+  background: #f7faf8;
+  color: #4b6259;
+  padding: 9px 12px;
+}
+
+.securityNote svg,
+.notice > svg {
+  flex: 0 0 auto;
+  color: #3c735e;
+}
+
+.securityNote p,
+.notice span {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.searchField {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid #ccd7d4;
+  border-radius: 8px;
+  background: #fff;
+  color: #788589;
+  padding: 0 12px;
+}
+
+.searchField:focus-within {
+  border-color: var(--account-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--account-accent) 15%, transparent);
+}
+
+.searchField input {
+  min-width: 0;
+  height: 40px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #293337;
+  font-size: 13px;
+}
+
+.searchField input::placeholder {
+  color: #8b9699;
+}
+
+.notice {
+  border-color: #cce2d8;
+  background: #f3faf6;
+}
+
+.notice button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  margin-left: auto;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #61746c;
+  cursor: pointer;
+}
+
+.accountList {
+  border: 1px solid #d9e0de;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.accountCard + .accountCard {
+  border-top: 1px solid #e8eceb;
+}
+
+.accountCard[data-open="true"] {
+  box-shadow: inset 3px 0 var(--account-accent);
+}
+
+.accountRow {
+  display: grid;
+  grid-template-columns: 38px minmax(170px, 1.15fr) minmax(170px, 0.9fr) auto minmax(260px, auto);
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  padding: 12px 14px;
+}
+
+.avatar {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 8px;
+  background: #fff0e7;
+  color: #a94d18;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.avatar[data-company="equipsy"] {
+  background: #e8f3fb;
+  color: #245f88;
+}
+
+.personCopy,
+.loginCopy {
+  min-width: 0;
+}
+
+.nameLine {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.nameLine strong,
+.loginCopy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameLine strong {
+  font-size: 13px;
+}
+
+.companyBadge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #fff0e7;
+  color: #9f4b1c;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  padding: 3px 6px;
+  text-transform: uppercase;
+}
+
+.companyBadge[data-company="equipsy"] {
+  background: #e8f3fb;
+  color: #245f88;
+}
+
+.personCopy p,
+.loginCopy small,
+.loginCopy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.personCopy p {
+  margin: 4px 0 0;
+  color: #748084;
+  font-size: 12px;
+}
+
+.loginCopy small {
+  margin-bottom: 2px;
+  color: #788589;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.loginCopy strong {
+  display: block;
+  font-size: 12px;
+}
+
+.loginCopy span {
+  margin-top: 3px;
+  color: #7d898d;
+  font-size: 12px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 25px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.status[data-status="active"] {
+  background: #e9f4ee;
+  color: #32694f;
+}
+
+.status[data-status="disabled"] {
+  background: #f5e9e7;
+  color: #914940;
+}
+
+.status[data-status="unlinked"] {
+  background: #edf0ef;
+  color: #697579;
+}
+
+.actions,
+.receiptActions,
+.confirmation > div,
+.formFooter > div {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.primaryButton,
+.secondaryButton,
+.dangerButton,
+.textButton,
+.iconButton {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 7px 10px;
+}
+
+.primaryButton {
+  border: 1px solid var(--account-accent);
+  background: var(--account-accent);
+  color: #fff;
+}
+
+.secondaryButton {
+  border: 1px solid #ccd6d3;
+  background: #fff;
+  color: #526166;
+}
+
+.dangerButton {
+  border: 1px solid #a94d43;
+  background: #a94d43;
+  color: #fff;
+}
+
+.textButton {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--account-accent-deep);
+}
+
+.iconButton {
+  width: 34px;
+  border: 1px solid #d5dddb;
+  background: #fff;
+  color: #677579;
+  padding: 0;
+}
+
+.primaryButton:hover,
+.dangerButton:hover {
+  filter: brightness(0.93);
+}
+
+.secondaryButton:hover,
+.iconButton:hover,
+.textButton:hover {
+  background: var(--account-accent-soft);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.dangerButton:disabled,
+.iconButton:disabled,
+.textButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.editor {
+  border-top: 1px solid #dce3e1;
+  background: #fafbf9;
+  padding: 14px 16px 16px 64px;
+}
+
+.editorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 12px;
+}
+
+.editorHeader > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #344044;
+}
+
+.editorHeader > div svg {
+  color: var(--account-accent-deep);
+}
+
+.editorHeader strong {
+  font-size: 14px;
+}
+
+.editorHeader > button {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #6d797d;
+  cursor: pointer;
+}
+
+.editor form {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.8fr) minmax(300px, 1.2fr);
+  gap: 13px;
+}
+
+.editor form:has(.field:only-child) {
+  grid-template-columns: minmax(240px, 520px);
+}
+
+.field,
+.passwordField {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.field > span,
+.fieldLabel > span {
+  color: #4d5b60;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.field input,
+.passwordInput {
+  min-width: 0;
+  height: 40px;
+  border: 1px solid #cbd5d2;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.field input {
+  width: 100%;
+  color: #283337;
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+.field input:focus-visible,
+.passwordInput:focus-within {
+  border-color: var(--account-accent);
+  outline: 2px solid color-mix(in srgb, var(--account-accent) 18%, transparent);
+  outline-offset: 0;
+}
+
+.fieldLabel {
+  display: flex;
+  min-height: 17px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fieldLabel button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--account-accent-deep);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0;
+}
+
+.passwordInput {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: center;
+}
+
+.passwordInput input {
+  min-width: 0;
+  height: 38px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #283337;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  padding: 0 10px;
+}
+
+.passwordInput button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #657277;
+  cursor: pointer;
+}
+
+.passwordField small {
+  color: #7b888b;
+  font-size: 12px;
+}
+
+.formFooter {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid #e1e6e4;
+  padding-top: 12px;
+}
+
+.error {
+  margin: 0;
+  color: #a2473d;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.passwordReceipt {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(220px, 0.8fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.passwordReceipt > div:first-child {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.passwordReceipt > div:first-child svg {
+  flex: 0 0 auto;
+  color: #397058;
+}
+
+.passwordReceipt strong {
+  display: block;
+  font-size: 13px;
+}
+
+.passwordReceipt p {
+  margin: 3px 0 0;
+  color: #6c797d;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.passwordReceipt code {
+  overflow-x: auto;
+  border: 1px solid #cddbd5;
+  border-radius: 7px;
+  background: #fff;
+  color: #293a33;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+
+.confirmation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.confirmation > p {
+  margin: 0;
+  color: #536166;
+  font-size: 13px;
+}
+
+.emptyState {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: #758286;
+  text-align: center;
+}
+
+.emptyState svg {
+  color: var(--account-accent);
+}
+
+.emptyState strong {
+  color: #455256;
+  font-size: 14px;
+}
+
+.emptyState button {
+  border: 0;
+  background: transparent;
+  color: var(--account-accent-deep);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 1040px) {
+  .accountRow {
+    grid-template-columns: 38px minmax(160px, 1fr) minmax(150px, 0.8fr) auto;
+  }
+
+  .actions {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+    margin-top: -3px;
+  }
+
+  .editor {
+    padding-left: 64px;
+  }
+
+  .passwordReceipt {
+    grid-template-columns: minmax(180px, 1fr) minmax(210px, 1fr);
+  }
+
+  .receiptActions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .accountCount {
+    align-self: flex-start;
+  }
+
+  .accountRow {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .loginCopy {
+    grid-column: 2 / -1;
+  }
+
+  .status {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .actions {
+    grid-column: 2 / -1;
+    flex-wrap: wrap;
+  }
+
+  .editor {
+    padding: 14px;
+  }
+
+  .editor form,
+  .passwordReceipt {
+    grid-template-columns: 1fr;
+  }
+
+  .receiptActions,
+  .formFooter {
+    grid-column: 1;
+  }
+
+  .formFooter,
+  .confirmation {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .formFooter > div,
+  .confirmation > div {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 430px) {
+  .securityNote {
+    align-items: flex-start;
+  }
+
+  .accountRow {
+    padding: 12px;
+  }
+
+  .actions > .textButton {
+    border-color: #dce3e1;
+  }
+
+  .receiptActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

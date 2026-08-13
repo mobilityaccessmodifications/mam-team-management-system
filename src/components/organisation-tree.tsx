@@ -39,6 +39,7 @@ export type OrganisationPerson = {
   reportsTo: string | null;
   kind?: "person" | "org_unit";
   sortOrder?: number;
+  isActive?: boolean;
 };
 
 export type OrganisationPersonDraft = {

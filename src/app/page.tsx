@@ -11,15 +11,20 @@ function firstValue(value: string | string[] | undefined) {
 
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   let isAdmin = false;
+  let currentPersonId: string | undefined;
   if (isSupabaseConfigured()) {
     const supabase = await createClient();
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData.user) redirect("/login");
 
-    const { data: canEditOrganisation, error: permissionError } = await supabase
-      .rpc("can_edit_internal_org");
-    isAdmin = !permissionError && canEditOrganisation === true;
-    if (!isAdmin) {
+    const [{ data: canManageAccounts }, { data: account, error: accountError }] = await Promise.all([
+      supabase.rpc("can_manage_portal_accounts"),
+      supabase.rpc("current_portal_account"),
+    ]);
+    const current = Array.isArray(account) ? account[0] : null;
+    isAdmin = canManageAccounts === true;
+    currentPersonId = current?.person_id ?? undefined;
+    if (accountError || !current || current.account_status !== "active" || !currentPersonId) {
       await supabase.auth.signOut({ scope: "local" });
       redirect("/login");
     }
@@ -34,7 +39,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     ? "people"
     : view === "leave" || view === "people" ? view : "home";
 
-  return <LeaveDemo isAdmin={isAdmin} initialNavigation={{
+  return <LeaveDemo isAdmin={isAdmin} currentPersonId={currentPersonId} initialNavigation={{
     view: resolvedView,
     section: section === "approvals" ? "approvals" : "requests",
     requestId,

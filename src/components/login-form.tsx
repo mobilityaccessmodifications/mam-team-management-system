@@ -19,9 +19,9 @@ export function LoginForm() {
         autoComplete="username"
         autoCapitalize="none"
         spellCheck={false}
-        maxLength={32}
+        maxLength={64}
         required
-        defaultValue="admin"
+        autoFocus
         aria-describedby={state.message ? "login-message" : undefined}
       />
       <label htmlFor="password">Password</label>
@@ -33,7 +33,6 @@ export function LoginForm() {
         minLength={8}
         maxLength={128}
         required
-        autoFocus
         aria-describedby={state.message ? "login-message" : undefined}
       />
       <button type="submit" disabled={pending}>
