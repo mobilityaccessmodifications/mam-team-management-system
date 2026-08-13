@@ -157,7 +157,7 @@ async function requireLinkedAccount(
 }
 
 export async function listPortalAccounts(): Promise<AccountDto[]> {
-  await requireAccountAdministrator();
+  const { supabase } = await requireAccountAdministrator();
   const admin = createAdminClient();
   const [{ data: people, error: peopleError }, { data: profiles, error: profilesError }] = await Promise.all([
     admin
@@ -168,15 +168,13 @@ export async function listPortalAccounts(): Promise<AccountDto[]> {
       .order("company_key")
       .order("sort_order")
       .returns<DirectoryRow[]>(),
-    admin
-      .from("profiles")
-      .select("id,login_name,account_status,account_version")
-      .returns<ProfileRow[]>(),
+    supabase.rpc("list_portal_account_summaries"),
   ]);
 
   if (peopleError || profilesError) throw new Error("Accounts could not be loaded.");
 
-  const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
+  const profileRows = Array.isArray(profiles) ? profiles as ProfileRow[] : [];
+  const profileById = new Map(profileRows.map((profile) => [profile.id, profile]));
   const userIds = (people ?? []).flatMap((person) => person.auth_user_id ? [person.auth_user_id] : []);
   const lastSignInById = new Map<string, string | null>();
 
