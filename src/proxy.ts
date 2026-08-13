@@ -4,6 +4,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isSupabaseConfigured, requireSupabaseConfig } from "@/lib/supabase/config";
 
 export async function proxy(request: NextRequest) {
+  // Supabase authenticates this server-to-server endpoint with a signed raw body.
+  // It must not wait for, or be redirected by, the browser-session refresh path.
+  if (request.nextUrl.pathname === "/api/auth/send-email-hook") {
+    return NextResponse.next({ request });
+  }
+
   if (!isSupabaseConfigured()) {
     return NextResponse.next({ request });
   }

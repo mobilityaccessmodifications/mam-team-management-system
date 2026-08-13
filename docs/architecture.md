@@ -8,6 +8,10 @@ Browser
        -> Shared synthetic demo: Supabase Postgres + Realtime (publishable key)
        -> Authenticated organisation directory
             -> Supabase Auth + RLS-protected Postgres + Realtime
+            -> Signed Send Email Hook
+                 -> Next.js raw-body verification
+                      -> MAM n8n authenticated webhook
+                           -> Microsoft Outlook - ai@mobilityaccess.com.au
        -> Production-only synthetic email route
             -> n8n authenticated webhook
                  -> Microsoft Outlook - ai@mobilityaccess.com.au
@@ -52,6 +56,8 @@ No external HR, payroll or AroFlo write integration exists in the foundation pha
 ## Authentication boundary
 
 - Passwordless email sign-in through Supabase Auth protects the internal organisation directory. The shared workflow selector remains synthetic and is not an identity mechanism.
+- Supabase's Send Email Hook signs the exact raw request using Standard Webhooks. A public Node.js route verifies that signature, rejects an explicitly unconfirmed or anonymous account, and accepts only an exact MAM email domain, the `magiclink` action and a six-digit code. It forwards only the lower-cased recipient, code, action and an opaque deterministic retry key to the dedicated MAM n8n Outlook workflow; user IDs and token hashes are never forwarded or logged. The route returns success only after n8n has accepted the item into its workflow, within a short timeout; Outlook delivery completes asynchronously and is verified separately.
+- The hook route is exempt from browser-session redirects but is not anonymous in practice: the signature and short timestamp window authenticate every request. Invalid requests fail closed, and downstream failures return a retryable response to Supabase.
 - Next.js `src/proxy.ts` refreshes auth cookies and performs only an optimistic redirect.
 - Server Actions and RLS remain responsible for authorization.
 - The server validates claims with `getClaims()`; it does not trust an unvalidated session cookie.

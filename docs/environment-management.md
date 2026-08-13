@@ -26,6 +26,9 @@ AROFLO_API_KEY
 MAM_DEMO_EMAIL_ENABLED
 MAM_N8N_LEAVE_WEBHOOK_URL
 MAM_N8N_LEAVE_WEBHOOK_SECRET
+MAM_SUPABASE_AUTH_HOOK_SECRET
+MAM_N8N_AUTH_EMAIL_WEBHOOK_URL
+MAM_N8N_AUTH_EMAIL_WEBHOOK_SECRET
 ```
 
 Group variables by provider name and use the same variable names in development, preview and production. The values change; the names and code do not.
@@ -48,6 +51,7 @@ That is identity isolation, not session isolation.
 - Real organisation rows belong only in the authenticated, RLS-protected Supabase table. Import them directly into the verified project; do not place them in `.env*`, migrations, source fixtures, Vercel variables, screenshots or the shared-demo tables.
 - `MAM_ALLOWED_EMAIL_DOMAINS` is a required, comma-separated server-only allowlist for the exact MAM and Equipsy work-email domains. Login fails closed when it is absent or empty.
 - `MAM_DEMO_EMAIL_ENABLED`, `MAM_N8N_LEAVE_WEBHOOK_URL` and `MAM_N8N_LEAVE_WEBHOOK_SECRET` are server-only. They must never use a `NEXT_PUBLIC_*` name or enter client code, screenshots or logs.
+- `MAM_SUPABASE_AUTH_HOOK_SECRET`, `MAM_N8N_AUTH_EMAIL_WEBHOOK_URL` and `MAM_N8N_AUTH_EMAIL_WEBHOOK_SECRET` are server-only Production authentication-email values. The hook secret must match Supabase Auth; the other two values belong only to the dedicated MAM n8n workflow. None may enter client code, screenshots or logs.
 - GitHub Actions: repository/environment secrets only when CI genuinely needs them.
 - Password manager or macOS Keychain: recovery copies and credentials used by local scripts.
 - Never create `.env.save`; use the password manager or deployment platform's controlled history instead.
@@ -65,6 +69,12 @@ The email path is deliberately narrower than the general three-environment model
 The Next.js route derives the message from canonical synthetic Supabase records and calls n8n with the shared secret. n8n owns the Outlook credential named `Microsoft Outlook - ai@mobilityaccess.com.au`; the Outlook credential does not belong in Vercel. Both the server route and n8n workflow must hard-lock the physical recipient to `ai@mobilityaccess.com.au` regardless of the intended Team Leader, employee, HR or Accounts template. The Team Leader link uses the fixed production origin `https://mam-team-management-system-ten.vercel.app`.
 
 These variables do not authorise real employee addresses, authentication, a database migration, attachment delivery or live HR data. Rotate the webhook secret in both Vercel Production and n8n if it is exposed. A provider failure is operational telemetry only and must not undo a successfully stored leave request or decision.
+
+## Authentication email environment
+
+The authentication-email bridge is separate from the synthetic review transport. Production Supabase signs each Send Email Hook request, and the Next.js route verifies the untouched body before accepting a six-digit `magiclink` code for an existing `mobilityaccess.com.au` account. Vercel then calls only the dedicated MAM n8n webhook, which owns the Outlook credential. A deterministic opaque event ID allows n8n to suppress retries without receiving a Supabase user ID or token hash. n8n acknowledges only after accepting the item into its workflow; the bridge does not wait for Outlook delivery inside Supabase's short hook budget, so mailbox delivery is monitored separately.
+
+Configure the three authentication-email variables only in the verified MAM Vercel Production project. Store the matching hook secret in the verified MAM Supabase Auth configuration and the matching downstream secret in the verified MAM n8n workflow. Rotate both sides together. Development and Preview must use isolated non-production hooks and mailboxes if testing is later approved; never copy these Production secrets into `.env.local`.
 
 ## Session workflow
 

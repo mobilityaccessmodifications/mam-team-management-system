@@ -88,6 +88,9 @@ npm run check
 | `MAM_DEMO_EMAIL_ENABLED` | Server-only | Enables the production-only synthetic review-email transport when set to `true` |
 | `MAM_N8N_LEAVE_WEBHOOK_URL` | Server-only | n8n webhook URL used only by the approved synthetic email route |
 | `MAM_N8N_LEAVE_WEBHOOK_SECRET` | Server-only | Shared secret used to authenticate the server-to-server n8n request |
+| `MAM_SUPABASE_AUTH_HOOK_SECRET` | Server-only | Standard Webhooks signing secret shared only with the Supabase Send Email Hook |
+| `MAM_N8N_AUTH_EMAIL_WEBHOOK_URL` | Server-only | Dedicated MAM n8n endpoint for verified six-digit authentication emails |
+| `MAM_N8N_AUTH_EMAIL_WEBHOOK_SECRET` | Server-only | Dedicated secret authenticating the Vercel-to-n8n authentication-email request |
 
 See `docs/environment-management.md` for the full model.
 
