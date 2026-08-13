@@ -4,7 +4,7 @@
   --equipsy: #2677b8;
   --equipsy-soft: #edf6fd;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   color: #273136;
 }
 
@@ -27,7 +27,7 @@
 }
 
 .heading h2 {
-  font-size: clamp(28px, 4vw, 36px);
+  font-size: clamp(26px, 4vw, 34px);
 }
 
 .heading p,
@@ -189,11 +189,115 @@
 }
 
 .treeViewport {
+  position: relative;
+  min-height: min(670px, calc(100dvh - 320px));
   border: 1px solid #dce2e1;
   border-radius: 10px;
-  background: #fff;
+  background-color: #f8faf9;
+  background-image: radial-gradient(circle, #dbe1df 0.7px, transparent 0.8px);
+  background-size: 18px 18px;
+  cursor: grab;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 58px 42px 54px;
+  scrollbar-color: #c9d1cf transparent;
+  touch-action: pan-x pan-y;
+}
+
+.treeViewport[data-panning="true"] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.chartMeta,
+.chartControls {
+  position: sticky;
+  z-index: 5;
+  top: -42px;
+}
+
+.chartMeta {
+  left: 0;
+  float: left;
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #dde3e1;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 0.94);
+  box-shadow: 0 5px 18px rgb(30 43 44 / 0.06);
+  color: #657276;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 7px 10px;
+  backdrop-filter: blur(10px);
+}
+
+.chartMeta span + span::before {
+  margin-right: 8px;
+  color: #bdc6c3;
+  content: "·";
+}
+
+.chartControls {
+  right: 0;
+  float: right;
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  border: 1px solid #dce3e0;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 0.95);
+  box-shadow: 0 5px 18px rgb(30 43 44 / 0.07);
   overflow: hidden;
-  padding: 18px;
+  backdrop-filter: blur(10px);
+}
+
+.chartControls button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-right: 1px solid #e4e9e7;
+  background: transparent;
+  color: #516065;
+  cursor: pointer;
+}
+
+.chartControls button:last-child {
+  border-right: 0;
+  border-left: 1px solid #e4e9e7;
+}
+
+.chartControls button:hover:not(:disabled) {
+  background: #fff7f2;
+  color: #bd4f15;
+}
+
+.chartControls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.chartControls > span {
+  min-width: 48px;
+  color: #637075;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.chartCanvas {
+  --chart-zoom: 0.85;
+  clear: both;
+  width: max-content;
+  min-width: 100%;
+  min-height: 480px;
+  padding: 22px 12px 40px;
+  zoom: var(--chart-zoom);
 }
 
 .tree,
@@ -204,35 +308,87 @@
 }
 
 .tree {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 410px), 1fr));
-  align-items: start;
-  gap: 18px;
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 46px;
 }
 
 .branch {
   position: relative;
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .branches {
-  display: grid;
-  gap: 8px;
-  margin: 9px 0 0 23px;
-  border-left: 1px solid #d8dfdd;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 18px;
 }
 
-.branches > .branch {
-  padding-left: 20px;
+.branches::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 18px;
+  border-left: 1px solid #c9d2cf;
+  content: "";
+}
+
+.branches > .branch::before,
+.branches > .branch::after {
+  position: absolute;
+  top: -18px;
+  border-color: #c9d2cf;
+  border-style: solid;
+  content: "";
 }
 
 .branches > .branch::before {
-  position: absolute;
-  top: 27px;
-  left: 0;
-  width: 16px;
-  border-top: 1px solid #d8dfdd;
-  content: "";
+  left: 50%;
+  width: calc(50% + 6px);
+  height: 18px;
+  border-width: 1px 0 0 1px;
+}
+
+.branches > .branch::after {
+  right: 50%;
+  width: calc(50% + 6px);
+  border-width: 1px 0 0;
+}
+
+.branches > .branch:first-child::after,
+.branches > .branch:last-child::before {
+  border-top-color: transparent;
+}
+
+.branches > .branch:only-child::before,
+.branches > .branch:only-child::after {
+  display: none;
+}
+
+.branches[data-compact="true"] {
+  display: grid;
+  width: max-content;
+  min-width: 260px;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 8px 10px;
+  border: 1px solid #dbe2df;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.62);
+  padding: 18px 10px 10px;
+}
+
+.branches[data-compact="true"] > .branch::before,
+.branches[data-compact="true"] > .branch::after {
+  display: none;
 }
 
 .card {
@@ -240,15 +396,17 @@
   --company-soft: var(--mam-soft);
   position: relative;
   display: grid;
-  min-height: 58px;
+  width: 190px;
+  min-height: 62px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   border: 1px solid #dce2e1;
-  border-radius: 8px;
+  border-radius: 7px;
   background: #fff;
-  box-shadow: inset 3px 0 var(--company);
-  padding: 10px 11px 10px 14px;
+  box-shadow: inset 3px 0 var(--company), 0 4px 14px rgb(31 44 45 / 0.05);
+  padding: 11px 12px 11px 14px;
+  transition: border-color 130ms ease, box-shadow 130ms ease, transform 130ms ease;
 }
 
 .card[data-company="equipsy"] {
@@ -260,6 +418,12 @@
   border-style: dashed;
   background: var(--company-soft);
   box-shadow: none;
+}
+
+.matchingCard {
+  border-color: var(--company);
+  box-shadow: inset 3px 0 var(--company), 0 0 0 3px var(--company-soft), 0 7px 22px rgb(31 44 45 / 0.1);
+  transform: translateY(-2px);
 }
 
 .cardCopy {
@@ -327,6 +491,35 @@
 }
 
 .nodeEdit:hover:not(:disabled) {
+  border-color: var(--company);
+  color: var(--company);
+}
+
+.branchToggle {
+  position: absolute;
+  z-index: 2;
+  bottom: -17px;
+  left: 50%;
+  display: inline-flex;
+  min-width: 34px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  transform: translateX(-50%);
+  border: 1px solid #d2dad7;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 2px 7px rgb(35 48 49 / 0.08);
+  color: #637176;
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 0 6px;
+}
+
+.branchToggle:hover {
   border-color: var(--company);
   color: var(--company);
 }
@@ -478,6 +671,8 @@
 .primaryAction:focus-visible,
 .secondaryAction:focus-visible,
 .nodeEdit:focus-visible,
+.branchToggle:focus-visible,
+.chartControls button:focus-visible,
 .filters button:focus-visible,
 .cancelAction:focus-visible,
 .saveAction:focus-visible,
@@ -517,16 +712,65 @@
   }
 
   .treeViewport {
-    padding: 12px;
+    min-height: 480px;
+    background-image: none;
+    cursor: auto;
+    overflow: visible;
+    padding: 10px;
+  }
+
+  .chartMeta {
+    display: none;
+  }
+
+  .chartControls {
+    position: static;
+    float: none;
+    margin: 0 0 10px auto;
+  }
+
+  .chartControls button:nth-child(-n + 3),
+  .chartControls > span {
+    display: none;
+  }
+
+  .chartControls button:last-child {
+    border-left: 0;
+  }
+
+  .chartCanvas {
+    width: auto;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    zoom: 1;
   }
 
   .tree {
+    display: grid;
+    width: auto;
+    min-width: 0;
     grid-template-columns: 1fr;
     gap: 12px;
   }
 
+  .branch {
+    display: block;
+    min-width: 0;
+  }
+
   .branches {
-    margin-left: 12px;
+    display: grid;
+    width: auto;
+    min-width: 0;
+    gap: 8px;
+    margin: 9px 0 0 12px;
+    border-left: 1px solid #d8dfdd;
+    padding: 0;
+  }
+
+  .branches::before {
+    display: none;
   }
 
   .branches > .branch {
@@ -534,11 +778,46 @@
   }
 
   .branches > .branch::before {
+    display: block;
+    top: 31px;
+    left: 0;
     width: 11px;
+    height: 0;
+    border-width: 1px 0 0;
+    border-top-color: #d8dfdd;
+  }
+
+  .branches > .branch::after {
+    display: none;
+  }
+
+  .branches[data-compact="true"] {
+    display: grid;
+    width: auto;
+    min-width: 0;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    border: 0;
+    border-left: 1px solid #d8dfdd;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+  }
+
+  .branches[data-compact="true"] > .branch::before {
+    display: block;
   }
 
   .card {
+    width: 100%;
     min-height: 62px;
+  }
+
+  .branchToggle {
+    right: 9px;
+    bottom: -13px;
+    left: auto;
+    transform: none;
   }
 
   .nodeEdit span {
