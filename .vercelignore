@@ -11,5 +11,10 @@ AGENTS.md
 node_modules/
 output/
 .playwright-cli/
+.autoreview-tmp*/
 supabase/.temp/
 *.tsbuildinfo
+
+# Local HR/accounting exports and review artifacts are never app assets.
+*.xls*
+*.csv
