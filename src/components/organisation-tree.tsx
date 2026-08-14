@@ -58,6 +58,8 @@ export type OrganisationTreeProps = {
     id: string,
     person: OrganisationPersonDraft,
   ) => Promise<void>;
+  /** Opens the HR-only record editor without exposing private fields in the tree. */
+  onOpenEmployeeRecord?: (personId: string) => void;
   className?: string;
 };
 
@@ -475,6 +477,7 @@ export function OrganisationTree({
   canEdit = false,
   onCreate,
   onUpdate,
+  onOpenEmployeeRecord,
   className,
 }: OrganisationTreeProps) {
   const [query, setQuery] = useState("");
@@ -1309,6 +1312,16 @@ export function OrganisationTree({
                 <Focus aria-hidden="true" size={15} />
                 {focusedRootId === selectedProfile.id ? "Show all" : "View this team"}
               </button>
+              {onOpenEmployeeRecord && isPerson(selectedProfile) ? (
+                <button
+                  className={styles.secondaryAction}
+                  onClick={() => onOpenEmployeeRecord(selectedProfile.id)}
+                  type="button"
+                >
+                  <Pencil aria-hidden="true" size={15} />
+                  Open HR record
+                </button>
+              ) : null}
               {canEdit && isPerson(selectedProfile) ? (
                 <>
                   <button

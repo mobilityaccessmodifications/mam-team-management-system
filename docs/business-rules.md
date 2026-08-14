@@ -8,8 +8,13 @@
 - Nixon owns delivery priority; team-supplied priority is input, not a command.
 - Employee and HR information is confidential.
 - The organisation tree shows only the name, position, company and reporting relationship required to understand the structure.
+- Employee contact and employment details are held in a private one-to-one HR record, not in the organisation tree.
+- Only a database-controlled HR role may view or edit the HR Directory or export its employee CSV. Account-administrator permission, View-as mode and a browser-selected profile do not grant HR access.
+- The HR Directory is the unified employee editor. Its committed name, title, company, reporting and start-date changes update the canonical directory and are distributed to authorised sessions through Realtime.
+- The HR CSV uses the agreed 12 employee columns and field order. It excludes portal logins, Auth aliases, existing passwords and any newly issued password.
 - MAM uses the orange accent and Equipsy uses blue; company remains visible as text.
 - Real roster names and positions are imported privately into the verified production project. They must not be committed to Git, copied into fixtures or used in screenshots.
+- A supplied HR workbook must be staged and reconciled with the live directory before import. It does not authorise automatic identity replacement, deactivation or portal-account relinking.
 - Every portal account must link to one active person in the real directory. There are no fake or synthetic selectable profiles.
 - The server verifies the signed-in account and its active status before opening the application. Client-side View-as state never grants permission or impersonates another authenticated account.
 - The authorised administrator may view account login names, status and last sign-in time; create a login; change a login name; set a new password; and disable or enable an account.
@@ -59,6 +64,7 @@
 - Detailed reasons and evidence do not appear in the shared calendar.
 - Login pages and account lists do not expose internal Auth email aliases.
 - Password values are never persisted in application tables, logs, screenshots or source. Existing passwords are never displayed.
+- HR employee CSV exports are available only to an authorised HR session and are not stored by the application, committed to Git or used as fixtures.
 - Medical evidence requires an approved retention/deletion period and malware-scanning decision before durable use.
 - Onboarding/offboarding evidence, exit information, access records and audit history require role-specific access, retention and deletion rules before durable use.
 - Production staff data must not be copied into Development or Preview.

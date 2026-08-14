@@ -37,6 +37,7 @@ import {
   AccountManagement,
   type AccountDto,
 } from "@/components/account-management";
+import { EmployeeDirectory } from "@/components/employee-directory";
 import styles from "@/components/leave-demo.module.css";
 import { PeopleOperationsDemo } from "@/components/people-operations-demo";
 import type {
@@ -331,6 +332,9 @@ export function LeaveDemo({
   const [isMutating, setIsMutating] = useState(false);
   const [organisationRows, setOrganisationRows] = useState<InternalOrgRow[]>([]);
   const [canEditOrganisation, setCanEditOrganisation] = useState(false);
+  const [canManageEmployeeDirectory, setCanManageEmployeeDirectory] = useState(false);
+  const [employeeDirectoryRefreshKey, setEmployeeDirectoryRefreshKey] = useState(0);
+  const [employeeDirectorySelectedPersonId, setEmployeeDirectorySelectedPersonId] = useState<string | null>(null);
   const [organisationState, setOrganisationState] = useState<DirectoryState>("connecting");
   const [accounts, setAccounts] = useState<AccountDto[]>([]);
   const [accountsError, setAccountsError] = useState("");
@@ -351,13 +355,14 @@ export function LeaveDemo({
 
   const loadOrganisation = useCallback(async () => {
     if (!directorySupabase) return;
-    const [{ data: rows, error }, { data: canEdit }] = await Promise.all([
+    const [{ data: rows, error }, { data: canEdit }, { data: canManageEmployeeDirectory }] = await Promise.all([
       directorySupabase
         .from("internal_org_people")
         .select("id,node_kind,company_key,full_name,position_title,parent_id,sort_order,is_active,updated_at,version")
         .order("sort_order", { ascending: true })
         .order("position_title", { ascending: true }),
       directorySupabase.rpc("can_edit_internal_org"),
+      directorySupabase.rpc("can_manage_employee_directory"),
     ]);
 
     if (error) {
@@ -366,6 +371,7 @@ export function LeaveDemo({
     }
     setOrganisationRows((rows ?? []) as InternalOrgRow[]);
     setCanEditOrganisation(canEdit === true);
+    setCanManageEmployeeDirectory(canManageEmployeeDirectory === true);
     setOrganisationState("live");
   }, [directorySupabase]);
 
@@ -386,6 +392,7 @@ export function LeaveDemo({
         },
         () => {
           if (!mounted) return;
+          setEmployeeDirectoryRefreshKey((current) => current + 1);
           window.clearTimeout(refreshTimer);
           refreshTimer = window.setTimeout(() => void loadOrganisation(), 120);
         },
@@ -736,11 +743,21 @@ export function LeaveDemo({
           {activeView === "calendar" ? <CalendarView requests={calendarRequests} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
+              key={canManageEmployeeDirectory ? "hr-directory" : "standard-people"}
               activeProfile={activeProfile}
               organisationProfiles={organisationPeople}
               canEditOrganisation={canEditOrganisation}
               onCreateOrganisationPerson={createOrganisationPerson}
               onUpdateOrganisationPerson={updateOrganisationPerson}
+              onOpenEmployeeDirectoryRecord={setEmployeeDirectorySelectedPersonId}
+              renderEmployeeDirectory={canManageEmployeeDirectory ? <EmployeeDirectory
+                onRecordsChanged={async () => {
+                  await Promise.all([loadOrganisation(), loadAccounts()]);
+                }}
+                onSelectedPersonId={setEmployeeDirectorySelectedPersonId}
+                refreshKey={employeeDirectoryRefreshKey}
+                selectedPersonId={employeeDirectorySelectedPersonId}
+              /> : undefined}
               renderAccounts={isAdmin ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
                 : accountsError

@@ -1,0 +1,56 @@
+export type EmployeeDirectoryCompany = "mam" | "equipsy";
+
+/**
+ * The HR-only employee record returned by the explicitly authorised directory
+ * RPC. It deliberately contains no login, password or auth-provider details.
+ */
+export type EmployeeDirectoryRecord = {
+  personId: string;
+  personVersion: number;
+  detailVersion: number;
+  company: EmployeeDirectoryCompany;
+  isActive: boolean;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  positionTitle: string;
+  teamName: string;
+  managerId: string | null;
+  managerName: string;
+  workEmail: string;
+  personalEmail: string;
+  phone: string;
+  country: string;
+  dateOfBirth: string;
+  startedDate: string;
+  scheduledEmploymentEndDate: string;
+};
+
+export type EmployeeDirectoryDraft = {
+  firstName: string;
+  lastName: string;
+  workEmail: string;
+  personalEmail: string;
+  phone: string;
+  positionTitle: string;
+  teamName: string;
+  managerId: string | null;
+  country: string;
+  dateOfBirth: string;
+  startedDate: string;
+  scheduledEmploymentEndDate: string;
+  company: EmployeeDirectoryCompany;
+  isActive: boolean;
+};
+
+export type CreateEmployeeDirectoryInput = EmployeeDirectoryDraft;
+
+export type UpdateEmployeeDirectoryInput = EmployeeDirectoryDraft & {
+  personId: string;
+  personVersion: number;
+  detailVersion: number;
+};
+
+export type EmployeeDirectoryMutationResult = {
+  record: EmployeeDirectoryRecord;
+};

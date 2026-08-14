@@ -28,7 +28,7 @@ import {
 import styles from "@/components/people-operations-demo.module.css";
 
 type AccessRole = "hr" | "manager" | "employee";
-type PeopleSection = "profile" | "organisation" | "tasks" | "accounts";
+type PeopleSection = "profile" | "directory" | "organisation" | "tasks" | "accounts";
 type PeopleTaskSection = "onboarding" | "offboarding" | "checkins";
 type WorkflowKind = "onboarding" | "offboarding";
 type TaskOwner = "HR" | "Team Leader" | "IT" | "Accounts" | "Analyst" | "Warehouse" | "Employee";
@@ -264,6 +264,8 @@ export function PeopleOperationsDemo({
   canEditOrganisation,
   onCreateOrganisationPerson,
   onUpdateOrganisationPerson,
+  onOpenEmployeeDirectoryRecord,
+  renderEmployeeDirectory,
   renderAccounts,
 }: {
   activeProfile: PeopleOperationsProfile;
@@ -273,9 +275,15 @@ export function PeopleOperationsDemo({
   onUpdateOrganisationPerson: (id: string, person: OrganisationPersonDraft) => Promise<void>;
   /** @deprecated Ignored; retained until the parent removes the old email log adapter. */
   onEmailPreview?: (previews: PeopleOperationsEmailPreview[]) => Promise<PeopleOperationsEmailResult>;
+  /** Rendered only after the real signed-in session has passed the HR directory check. */
+  renderEmployeeDirectory?: ReactNode;
+  /** Opens the selected safe tree node in the HR-only directory detail drawer. */
+  onOpenEmployeeDirectoryRecord?: (personId: string) => void;
   renderAccounts?: ReactNode;
 }) {
-  const [section, setSection] = useState<PeopleSection>("profile");
+  const [section, setSection] = useState<PeopleSection>(
+    renderEmployeeDirectory ? "directory" : "profile",
+  );
   const [taskSection, setTaskSection] = useState<PeopleTaskSection>("checkins");
   const [workflows, setWorkflows] = useState<PeopleWorkflow[]>(initialWorkflows);
   const [people, setPeople] = useState<CheckInPerson[]>(initialPeople);
@@ -438,14 +446,18 @@ export function PeopleOperationsDemo({
     </header>
 
     <nav className={styles.sectionSwitch} aria-label="People sections">
-      <button type="button" aria-pressed={section === "profile"} className={section === "profile" ? styles.sectionActive : undefined} onClick={() => setSection("profile")}><span><strong>Profile</strong></span></button>
+      {renderEmployeeDirectory ? <button type="button" aria-pressed={section === "directory"} className={section === "directory" ? styles.sectionActive : undefined} onClick={() => setSection("directory")}><span><strong>Directory</strong></span></button> : <button type="button" aria-pressed={section === "profile"} className={section === "profile" ? styles.sectionActive : undefined} onClick={() => setSection("profile")}><span><strong>Profile</strong></span></button>}
       <button type="button" aria-pressed={section === "organisation"} className={section === "organisation" ? styles.sectionActive : undefined} onClick={() => setSection("organisation")}><span><strong>Organisation</strong></span></button>
       <button type="button" aria-pressed={section === "tasks"} className={section === "tasks" ? styles.sectionActive : undefined} onClick={() => setSection("tasks")}><span><strong>People tasks</strong></span></button>
       {renderAccounts ? <button type="button" aria-pressed={section === "accounts"} className={section === "accounts" ? styles.sectionActive : undefined} onClick={() => setSection("accounts")}><span><strong>Accounts</strong></span></button> : null}
     </nav>
 
     {section === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} manager={activeProfile.manager} company={activeProfile.company} /> : null}
-    {section === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} /> : null}
+    {section === "directory" ? renderEmployeeDirectory : null}
+    {section === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation && !renderEmployeeDirectory} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onOpenEmployeeRecord={renderEmployeeDirectory ? (personId) => {
+      onOpenEmployeeDirectoryRecord?.(personId);
+      setSection("directory");
+    } : undefined} /> : null}
     {section === "accounts" ? renderAccounts : null}
     {section === "tasks" ? <nav className={styles.taskSwitch} aria-label="Task type">
       {!isEmployee || employeeLifecycleSection === "onboarding" ? <button type="button" aria-pressed={visibleTaskSection === "onboarding"} onClick={() => setTaskSection("onboarding")}>Onboarding</button> : null}

@@ -8,7 +8,7 @@ Safer People System is the private people portal for Mobility Access Modificatio
 - Hosting: the MAM-owned Vercel project at `https://mam-team-management-system-ten.vercel.app`
 - Source: `mobilityaccessmodifications/mam-team-management-system`
 - Data and authentication: MAM Supabase project `xtwlrjqbusadghavchqm`
-- Directory: the privately imported MAM and Equipsy roster; no seeded or selectable fake people
+- Directory: the privately imported MAM and Equipsy roster, with a private one-to-one HR employee-detail store; no seeded or selectable fake people
 - Accounts: username/password login backed by Supabase Auth and a database-controlled account registry
 - Workflow review: leave, onboarding, offboarding and check-in records are created in the open browser session using people from the real directory; they are not yet durable staff records
 
@@ -18,13 +18,15 @@ MAM people use the orange accent and Equipsy people use blue. Company is also st
 
 After login, the server verifies that the Supabase Auth user is linked to an active directory person. The authorised administrator receives the master view and can:
 
-- search and edit the live organisation tree;
+- search the live organisation tree;
 - preview the interface as another real directory person without impersonating that person's authenticated account;
 - create a login for an unlinked directory person;
 - view login names, account status and last sign-in time;
 - change a login name;
 - set a new password; and
 - disable or re-enable an account.
+
+An authorised HR manager also receives a **Directory** tab. It is the single employee editor: HR can add a person or update the person’s work contact, personal contact, employment and reporting details there, then export the approved 12-column employee CSV. This is separate from portal accounts: the export never includes login names, Auth addresses or passwords.
 
 Supabase Auth stores passwords as non-reversible hashes. The administrator can set a replacement password and see that newly generated value once, but neither the application nor the administrator can retrieve an existing password.
 
@@ -34,7 +36,11 @@ The People workspace uses the real directory for profiles and for creating onboa
 
 ## Data boundaries
 
-- Real names, positions, companies and reporting relationships live only in the authenticated, RLS-protected Supabase directory. The private roster is never committed to Git or copied into fixtures.
+- Real names, positions, companies and reporting relationships live only in the authenticated, RLS-protected Supabase directory. The organisation tree deliberately exposes only the safe name, position, company and reporting relationship needed to understand the structure.
+- HR employee details live in a private one-to-one record linked to the organisation person. They are available only through HR-authorised database functions; the private roster is never committed to Git or copied into fixtures.
+- The HR CSV export has the exact 12 employee columns in the agreed order—First Name, Last Name, Work Email, Personal Email, Phone, Job Title, Team, Manager, Country, Date of birth, Start date and Scheduled Employment End Date—and contains no portal-account or credential data. It is generated only for an authorised HR session and is not stored in Git.
+- The employee editor writes the canonical organisation fields and broadcasts committed changes through Realtime, so the safe organisation tree updates in other authorised sessions.
+- A supplied HR workbook is staged and reconciled before import. It is never an instruction to automatically replace identities, deactivate people or relink existing accounts.
 - Account links, normalised login names, status and audit metadata live in Supabase. Supabase Auth remains the only password store.
 - Leave and People workflow examples are non-durable browser-session records until their live business rules and RLS design are approved.
 - Private leave reasons and evidence are never shown in the shared calendar.

@@ -32,6 +32,8 @@ The values change by environment; the names and code do not.
 - `SUPABASE_SECRET_KEY`: server-only Auth Admin credential. It is needed for username resolution and authorised account-management Server Actions. It must never use a `NEXT_PUBLIC_*` name, enter a Client Component, appear in logs/screenshots or be committed.
 - Login passwords: held by Supabase Auth, not by environment variables. Never store a staff/admin password in `.env.local`, Vercel, GitHub, source, logs or screenshots.
 - Real directory rows: import directly into the verified authenticated Supabase project. Do not place them in environment files, migrations, fixtures, screenshots or client constants.
+- Private HR employee details and HR CSV exports follow the same rule: they remain in the verified protected data boundary and must not be placed in environment files, Git, fixtures, screenshots or client constants.
+- A source workbook is staged and reconciled privately before import. It must not automatically replace identities, deactivate people or relink existing portal accounts.
 - GitHub Actions: repository/environment secrets only when CI genuinely requires them.
 - Password manager or macOS Keychain: recovery copies and credentials used by approved local tooling.
 - Never create `.env.save`; use controlled platform history or the password manager.
@@ -41,6 +43,10 @@ The values change by environment; the names and code do not.
 The browser uses the publishable key and the signed-in user's cookie-backed session. Account-management operations cross a Server Action that first verifies the session and database-controlled administrator permission. Only then may server code create/read an Auth user, set a password or change the Auth ban state with `SUPABASE_SECRET_KEY`.
 
 The administrator may receive a newly supplied create/reset password once so it can be handed over securely. The secret key cannot reveal an existing password: Supabase Auth stores password hashes and does not provide a password-read API.
+
+## HR employee-data boundary
+
+The organisation tree is deliberately limited to safe structural information: name, position, company and reporting relationship. Private employee details are available only to a database-controlled HR role through authenticated server actions and controlled database functions. The HR CSV is generated on demand for that HR session using the agreed 12-column shape; it excludes login names, Auth aliases and password data, and the application does not retain the export.
 
 ## Environment verification
 
