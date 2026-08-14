@@ -28,7 +28,7 @@ There is no external HR, payroll, AroFlo, calendar, email or provisioning write 
 - Every authenticated employee may use the organisation tree. It exposes name, position, company and reporting relationships; a narrow controlled DTO may additionally return only the selected person’s work email. It never returns phone numbers, personal email addresses, dates of birth or other private employee details.
 - An HR-authorised **Directory** tab is the unified employee editor. It writes the canonical organisation name, title, company, reporting fields and start date together with the person’s private HR detail record. Database functions reject invalid or cyclic reporting relationships, and Realtime distributes committed structural changes to other authorised sessions.
 - A supplied HR workbook is staged and reconciled against the live directory before import. Matching is never used to automatically replace identities, deactivate people or relink portal accounts.
-- There is no demo-role or profile-switching control. The signed-in session and database-controlled role determine every visible surface and permitted action.
+- There are no demo roles or synthetic profile controls. A signed-in system administrator with the database-controlled HR capability may use an explicitly labelled, read-only employee-access preview backed only by active real directory people. It derives only employee or active-manager presentation (never title-derived HR access), scopes leave/workflow data accordingly, hides private leave notes/evidence and HR-only records/actions, never impersonates an Auth user and cannot grant a database capability.
 
 ## Portal accounts
 

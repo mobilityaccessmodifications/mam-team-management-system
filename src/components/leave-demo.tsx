@@ -50,6 +50,7 @@ type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals";
 type RequestStatus = "Pending" | "Approved" | "Declined";
 type AccessRole = "hr" | "manager" | "employee";
+type PreviewAccessRole = Exclude<AccessRole, "hr">;
 
 type LeaveRequest = {
   id: string;
@@ -291,6 +292,13 @@ function getCalendarRequests(requests: LeaveRequest[], profile: Profile) {
   return requests.filter((request) => request.team === profile.team);
 }
 
+function getPreviewRequests(requests: LeaveRequest[], profile: Profile) {
+  if (profile.accessRole === "manager") {
+    return requests.filter((request) => request.manager === profile.name || request.employee === profile.name);
+  }
+  return requests.filter((request) => request.employee === profile.name);
+}
+
 function initialsForName(name: string) {
   return name
     .split(/\s+/)
@@ -304,6 +312,12 @@ function initialsForName(name: string) {
 function accessRoleForOrgPerson(row: InternalOrgRow, managerIds: Set<string>): AccessRole {
   if (/\bHR\b|PEOPLE\s*&\s*CULTURE/i.test(row.position_title)) return "hr";
   return managerIds.has(row.id) ? "manager" : "employee";
+}
+
+function previewAccessRoleForOrgPerson(personId: string, rows: InternalOrgRow[]): PreviewAccessRole {
+  return rows.some((row) => row.is_active && row.parent_id === personId)
+    ? "manager"
+    : "employee";
 }
 
 export function LeaveDemo({
@@ -335,6 +349,9 @@ export function LeaveDemo({
   const [accounts, setAccounts] = useState<AccountDto[]>([]);
   const [accountsError, setAccountsError] = useState("");
   const [accountsLoading, setAccountsLoading] = useState(false);
+  // This is intentionally UI-only. It never changes the authenticated user or
+  // the capability checks that protect HR records and organisation writes.
+  const [previewPersonId, setPreviewPersonId] = useState("");
 
   const loadAccounts = useCallback(async () => {
     if (!isAdmin || !canManageEmployeeDirectory) {
@@ -458,17 +475,36 @@ export function LeaveDemo({
         };
       });
   }, [organisationRows]);
-  const selectedProfile = directoryProfiles.find((profile) => profile.id === currentPersonId);
-  if (!selectedProfile) {
+  const signedInProfile = directoryProfiles.find((profile) => profile.id === currentPersonId);
+  if (!signedInProfile) {
     return <DirectoryLoading state={organisationState} />;
   }
-  const activeProfile: Profile = canManageEmployeeDirectory
-    ? { ...selectedProfile, accessRole: "hr" }
-    : selectedProfile;
+  const adminProfile: Profile = canManageEmployeeDirectory
+    ? { ...signedInProfile, accessRole: "hr" }
+    : signedInProfile;
+  const canPreviewEmployeeAccess = isAdmin && canManageEmployeeDirectory;
+  const previewCandidate = canPreviewEmployeeAccess && previewPersonId
+    ? directoryProfiles.find((profile) => profile.id === previewPersonId)
+    : undefined;
+  // A preview is never an HR presentation. HR is an actual database capability,
+  // while manager presentation is derived only from active direct reports.
+  const previewProfile: Profile | undefined = previewCandidate
+    ? {
+        ...previewCandidate,
+        accessRole: previewAccessRoleForOrgPerson(previewCandidate.id, organisationRows),
+      }
+    : undefined;
+  const isPreviewingEmployeeAccess = Boolean(previewProfile);
+  const activeProfile = previewProfile ?? adminProfile;
+  const showHrWorkspace = canManageEmployeeDirectory && !isPreviewingEmployeeAccess;
 
   const viewTitles = getViewTitles(activeProfile);
-  const visibleRequests = getVisibleRequests(requests, activeProfile);
-  const calendarRequests = getCalendarRequests(requests, activeProfile);
+  const visibleRequests = isPreviewingEmployeeAccess
+    ? getPreviewRequests(requests, activeProfile)
+    : getVisibleRequests(requests, activeProfile);
+  const calendarRequests = isPreviewingEmployeeAccess
+    ? getPreviewRequests(requests, activeProfile)
+    : getCalendarRequests(requests, activeProfile);
   const approvalQueue = activeProfile.accessRole === "manager"
     ? requests.filter((request) => request.approvalRequired && request.status === "Pending" && request.manager === activeProfile.name)
     : [];
@@ -530,6 +566,22 @@ export function LeaveDemo({
     window.setTimeout(() => setToast(""), 3200);
   }
 
+  function changeEmployeeAccessPreview(personId: string) {
+    const nextProfile = directoryProfiles.find((profile) => profile.id === personId);
+    setPreviewPersonId(nextProfile?.id ?? "");
+    setShowRequestForm(false);
+    setFormError("");
+    setManagerNote("");
+    setSelectedRequestId("");
+    setLeaveSection("requests");
+
+    if (nextProfile) {
+      announce(`Previewing ${nextProfile.name}'s employee access. HR tools and private records are hidden.`);
+    } else {
+      announce("Returned to the HR workspace.");
+    }
+  }
+
   function chooseLeaveSection(section: LeaveSection, requestedId?: string) {
     if (section === "approvals" && activeProfile.accessRole !== "manager") return;
     if (section === "approvals" && approvalQueue[0]) {
@@ -559,7 +611,7 @@ export function LeaveDemo({
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isMutating) return;
+    if (isMutating || isPreviewingEmployeeAccess) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     const leaveType = String(data.get("leaveType"));
@@ -663,7 +715,7 @@ export function LeaveDemo({
   }
 
   async function decideRequest(status: "Approved" | "Declined") {
-    if (!selectedRequest || isMutating) return;
+    if (!selectedRequest || isMutating || isPreviewingEmployeeAccess) return;
     if (status === "Declined" && !managerNote.trim()) {
       announce("Add a manager comment before declining this request.");
       return;
@@ -712,29 +764,44 @@ export function LeaveDemo({
           <div className={styles.mobileBrand}><BrandMark compact /></div>
           <div className={styles.topActions}>
             <span className={styles.demoStatus} data-state={organisationState} role="status"><i />{organisationState === "live" ? "Live directory" : organisationState === "connecting" ? "Connecting" : "Directory issue"}</span>
+            {canPreviewEmployeeAccess ? <div className={styles.accessPreview} data-previewing={isPreviewingEmployeeAccess || undefined}>
+              <label htmlFor="employee-access-preview"><Eye size={15} aria-hidden="true" /><span>Preview employee access</span></label>
+              <select id="employee-access-preview" value={previewProfile?.id ?? ""} onChange={(event) => changeEmployeeAccessPreview(event.target.value)}>
+                <option value="">HR workspace</option>
+                {directoryProfiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name} · {profile.roleLabel}</option>)}
+              </select>
+              {isPreviewingEmployeeAccess ? <button className={styles.exitPreviewButton} type="button" onClick={() => changeEmployeeAccessPreview("")}>Return to HR</button> : null}
+            </div> : null}
             {directorySupabase ? <form action={signOut}><button className={styles.signOutButton} type="submit" aria-label="Sign out"><LogOut size={15} /><span className={styles.actionLabel}>Sign out</span></button></form> : null}
           </div>
         </header>
 
         <main className={styles.main} id="main-content">
+          {isPreviewingEmployeeAccess ? <section className={styles.previewNotice} role="status">
+            <Eye size={18} aria-hidden="true" />
+            <span><strong>Previewing {activeProfile.name}&apos;s employee access</strong><small>This is a read-only interface preview. You remain signed in as {adminProfile.name}; HR tools and private records are hidden.</small></span>
+            <button type="button" onClick={() => changeEmployeeAccessPreview("")}>Return to HR view</button>
+          </section> : null}
           {activeView !== "people" ? <section className={styles.pageHeader}>
             <div><h1>{viewTitles[activeView].title}</h1>{viewTitles[activeView].helper ? <p>{viewTitles[activeView].helper}</p> : null}</div>
-            <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)} disabled={isMutating}><Plus size={17} /> {activeProfile.accessRole === "employee" ? "New leave request" : "Add leave"}</button>
+            <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)} disabled={isMutating || isPreviewingEmployeeAccess}><Plus size={17} /> {activeProfile.accessRole === "employee" ? "New leave request" : "Add leave"}</button>
           </section> : null}
 
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} onNavigate={navigate} onSelect={selectRequest} /> : null}
-          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} busy={isMutating} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
+          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} busy={isMutating} readOnly={isPreviewingEmployeeAccess} hidePrivateDetails={isPreviewingEmployeeAccess} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
           {activeView === "calendar" ? <CalendarView requests={calendarRequests} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
-              key={canManageEmployeeDirectory ? "hr-directory" : "standard-people"}
+              key={showHrWorkspace ? "hr-directory" : isPreviewingEmployeeAccess ? `employee-preview:${activeProfile.id}` : "standard-people"}
               activeProfile={activeProfile}
               organisationProfiles={organisationPeople}
-              canEditOrganisation={canEditOrganisation && canManageEmployeeDirectory}
+              canEditOrganisation={false}
+              canArrangeOrganisation={canEditOrganisation && showHrWorkspace}
+              isAccessPreview={isPreviewingEmployeeAccess}
               onCreateOrganisationPerson={createOrganisationPerson}
               onUpdateOrganisationPerson={updateOrganisationPerson}
-              onOpenEmployeeDirectoryRecord={setEmployeeDirectorySelectedPersonId}
-              renderEmployeeDirectory={canManageEmployeeDirectory ? <EmployeeDirectory
+              onOpenEmployeeDirectoryRecord={showHrWorkspace ? setEmployeeDirectorySelectedPersonId : undefined}
+              renderEmployeeDirectory={showHrWorkspace ? <EmployeeDirectory
                 onRecordsChanged={async () => {
                   await Promise.all([loadOrganisation(), loadAccounts()]);
                 }}
@@ -742,7 +809,7 @@ export function LeaveDemo({
                 refreshKey={employeeDirectoryRefreshKey}
                 selectedPersonId={employeeDirectorySelectedPersonId}
               /> : undefined}
-              renderAccounts={isAdmin && canManageEmployeeDirectory ? accountsLoading
+              renderAccounts={isAdmin && showHrWorkspace ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
                 : accountsError
                 ? <div className={styles.emptyState}><ShieldCheck size={24} /><strong>Accounts could not be loaded</strong><span>{accountsError}</span></div>
@@ -852,7 +919,7 @@ function PanelHeader({ title, action, onAction }: { title: string; action?: stri
   return <header className={styles.panelHeader}><h2>{title}</h2>{action && onAction ? <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button> : null}</header>;
 }
 
-function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, selectedId, note, calendarRequests, busy, onFilter, onSection, onNote, onSelect, onDecision }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; selectedId: string; note: string; calendarRequests: LeaveRequest[]; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void }) {
+function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, selectedId, note, calendarRequests, busy, readOnly, hidePrivateDetails, onFilter, onSection, onNote, onSelect, onDecision }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; selectedId: string; note: string; calendarRequests: LeaveRequest[]; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void }) {
   const canApprove = profile.accessRole === "manager";
   return (
     <section className={styles.leaveDesk}>
@@ -866,13 +933,13 @@ function LeaveView({ profile, section, requests, allRequests, selected, filter, 
           </button>
         </div>
       ) : null}
-      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} /> : null}
-      {section === "approvals" && canApprove ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} requests={calendarRequests} busy={busy} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
+      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} hidePrivateDetails={hidePrivateDetails} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} /> : null}
+      {section === "approvals" && canApprove ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} requests={calendarRequests} busy={busy} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
     </section>
   );
 }
 
-function RequestsView({ profile, requests, allRequests, selected, filter, onFilter, onSelect }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void }) {
+function RequestsView({ profile, requests, allRequests, selected, filter, hidePrivateDetails, onFilter, onSelect }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; hidePrivateDetails: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void }) {
   const filters: ("All" | RequestStatus)[] = ["All", "Pending", "Approved", "Declined"];
   const isEmployee = profile.accessRole === "employee";
   return (
@@ -886,16 +953,16 @@ function RequestsView({ profile, requests, allRequests, selected, filter, onFilt
           {requests.map((request) => <button className={`${styles.tableRow} ${isEmployee ? styles.employeeTableRow : ""} ${selected?.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} role="row" key={request.id}>{!isEmployee ? <span><i>{request.initials}</i><b>{request.employee === profile.name ? "You" : request.employee}<small>{request.team}</small></b></span> : null}<span><b>{request.leaveType}</b><small>{request.id}</small></span><span>{request.dateLabel}</span><span>{formatDuration(request)}{formatTimeRange(request) ? <small>{formatTimeRange(request)}</small> : null}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} /></button>)}
           {!requests.length ? <div className={styles.emptyState}><Search size={23} /><strong>{allRequests.length ? "No requests match this status" : "No leave requests yet"}</strong><span>{allRequests.length ? "Choose another status." : isEmployee ? "Use “New leave request” when you need time away." : "Leave added in this session will appear here."}</span></div> : null}
         </div>
-        {selected ? <RequestDetail profile={profile} request={selected} /> : null}
+        {selected ? <RequestDetail profile={profile} request={selected} hidePrivateDetails={hidePrivateDetails} /> : null}
       </div>
     </section>
   );
 }
 
-function RequestDetail({ profile, request }: { profile: Profile; request: LeaveRequest }) {
-  const canViewAttachments = profile.accessRole === "manager" || profile.accessRole === "hr";
+function RequestDetail({ profile, request, hidePrivateDetails }: { profile: Profile; request: LeaveRequest; hidePrivateDetails: boolean }) {
+  const canViewAttachments = !hidePrivateDetails && (profile.accessRole === "manager" || profile.accessRole === "hr");
   const showEmployee = profile.accessRole !== "employee" && request.employee !== profile.name;
-  return <aside className={styles.detailPanel} aria-label={`${request.id} details`}><header className={!showEmployee ? styles.personalDetailHeader : undefined}>{showEmployee ? <span className={styles.avatarOrange}>{request.initials}</span> : null}<span><small>{request.id}</small>{showEmployee ? <><h2>{request.employee}</h2><p>{request.team}</p></> : <h2>{request.leaveType}</h2>}</span></header><StatusPill status={request.status} /><dl>{showEmployee ? <div><dt>Leave type</dt><dd>{request.leaveType}</dd></div> : null}<div><dt>When</dt><dd>{request.dateLabel}</dd></div><div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div><div><dt>Approval</dt><dd>{request.approvalRequired ? request.manager : "Not required"}</dd></div></dl>{request.employeeNote !== "No note added." ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}{canViewAttachments ? <AttachmentList attachments={request.attachments} /> : null}{request.managerNote ? <section><span>Manager decision note</span><p>{request.managerNote}</p></section> : null}</aside>;
+  return <aside className={styles.detailPanel} aria-label={`${request.id} details`}><header className={!showEmployee ? styles.personalDetailHeader : undefined}>{showEmployee ? <span className={styles.avatarOrange}>{request.initials}</span> : null}<span><small>{request.id}</small>{showEmployee ? <><h2>{request.employee}</h2><p>{request.team}</p></> : <h2>{request.leaveType}</h2>}</span></header><StatusPill status={request.status} /><dl>{showEmployee ? <div><dt>Leave type</dt><dd>{request.leaveType}</dd></div> : null}<div><dt>When</dt><dd>{request.dateLabel}</dd></div><div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div><div><dt>Approval</dt><dd>{request.approvalRequired ? request.manager : "Not required"}</dd></div></dl>{!hidePrivateDetails && request.employeeNote !== "No note added." ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}{canViewAttachments ? <AttachmentList attachments={request.attachments} /> : null}{!hidePrivateDetails && request.managerNote ? <section><span>Manager decision note</span><p>{request.managerNote}</p></section> : null}</aside>;
 }
 
 function AttachmentList({ attachments }: { attachments?: LeaveAttachment[] }) {
@@ -903,17 +970,17 @@ function AttachmentList({ attachments }: { attachments?: LeaveAttachment[] }) {
   return <section className={styles.attachmentList}><span><Paperclip size={14} /> Supporting files · private</span>{attachments.map((attachment) => { const Icon = attachment.mimeType === "application/pdf" ? FileText : FileImage; return <a href={attachment.previewUrl} target="_blank" rel="noreferrer" key={attachment.id}><Icon size={17} /><span><strong>{attachment.name}</strong><small>{formatFileSize(attachment.sizeBytes)}</small></span><Eye size={15} /></a>; })}<small><ShieldCheck size={13} /> Only managers and HR can open these files.</small></section>;
 }
 
-function ApprovalsView({ pending, selected, selectedId, note, requests, busy, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; requests: LeaveRequest[]; busy: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
+function ApprovalsView({ pending, selected, selectedId, note, requests, busy, readOnly, hidePrivateDetails, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; requests: LeaveRequest[]; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
   const showQueue = pending.length > 1 || !selected;
   return <div className={`${styles.approvalGrid} ${!selected ? styles.approvalGridEmpty : ""} ${!showQueue ? styles.approvalGridSingle : ""}`}>
     {showQueue ? <section className={`${styles.panel} ${styles.queue}`}><PanelHeader title="Requests" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} disabled={busy} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Nothing needs review</strong></div>}</section> : null}
     {selected ? <section className={`${styles.panel} ${styles.approvalRecord}`}>
       <header className={styles.approvalHeader}><span className={styles.avatarOrange}>{selected.initials}</span><span><small>{selected.id}</small><h2>{selected.employee}</h2><p>{selected.team}</p></span><StatusPill status={selected.status} /></header>
       <div className={styles.factGrid}><article><CalendarDays size={17} /><span><small>When</small><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><small>Duration</small><strong>{formatDurationWithTime(selected)}</strong></span></article><article><ClipboardList size={17} /><span><small>Leave type</small><strong>{selected.leaveType}</strong></span></article></div>
-      <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div>
-      <AttachmentList attachments={selected.attachments} />
+      {!hidePrivateDetails && <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div>}
+      {!hidePrivateDetails && <AttachmentList attachments={selected.attachments} />}
       <ApprovalCalendar selected={selected} requests={requests} />
-      {selected.status === "Pending" ? <div className={styles.decisionBox}><label><span>Decision note <small>Required when declining</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} placeholder="Add context that will remain with this record." disabled={busy} /></label><div><button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")} disabled={busy}><XCircle size={16} /> {busy ? "Sending…" : "Decline"}</button><button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")} disabled={busy}><CheckCircle2 size={16} /> {busy ? "Sending…" : "Approve leave"}</button></div></div> : <div className={styles.decisionRecorded}><CheckCircle2 size={19} /><span><strong>Decision recorded</strong><small>The employee view and leave register show {selected.status.toLowerCase()}.</small></span></div>}
+      {selected.status === "Pending" ? <div className={styles.decisionBox}><label><span>Decision note <small>Required when declining</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} placeholder="Add context that will remain with this record." disabled={busy || readOnly} /></label><div><button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")} disabled={busy || readOnly}><XCircle size={16} /> {busy ? "Sending…" : readOnly ? "Preview only" : "Decline"}</button><button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")} disabled={busy || readOnly}><CheckCircle2 size={16} /> {busy ? "Sending…" : readOnly ? "Preview only" : "Approve leave"}</button></div></div> : <div className={styles.decisionRecorded}><CheckCircle2 size={19} /><span><strong>Decision recorded</strong><small>The employee view and leave register show {selected.status.toLowerCase()}.</small></span></div>}
     </section> : null}
   </div>;
 }

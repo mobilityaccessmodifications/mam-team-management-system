@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   Focus,
+  GripVertical,
   LocateFixed,
   Mail,
   Maximize2,
@@ -15,11 +16,13 @@ import {
   Search,
   UnfoldVertical,
   UserPlus,
+  WandSparkles,
   X,
 } from "lucide-react";
 import {
   CSSProperties,
   FormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
   useEffect,
   useId,
@@ -53,6 +56,8 @@ export type OrganisationPersonDraft = {
 
 export type OrganisationTreeProps = {
   profiles: OrganisationPerson[];
+  /** Enables local-only visual arranging without enabling record mutations. */
+  canArrange?: boolean;
   canEdit?: boolean;
   onCreate?: (person: OrganisationPersonDraft) => Promise<void>;
   onUpdate?: (
@@ -98,6 +103,16 @@ type Connector = {
   company: OrganisationCompany;
   path: string;
 };
+type NodeOffset = { x: number; y: number };
+type NodeDragState = {
+  id: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startOffset: NodeOffset;
+  node: PositionedNode;
+  moved: boolean;
+};
 type ChartLayout = {
   nodes: PositionedNode[];
   connectors: Connector[];
@@ -110,17 +125,19 @@ const companyLabels: Record<OrganisationCompany, string> = {
   equipsy: "Equipsy",
 };
 
-const CARD_WIDTH = 168;
-const CARD_HEIGHT = 54;
+const CARD_WIDTH = 188;
+const CARD_HEIGHT = 64;
 const HORIZONTAL_GAP = 30;
-const VERTICAL_GAP = 62;
+const VERTICAL_GAP = 68;
 const STACK_GAP = 13;
 const STACK_BUS = 24;
 const ROOT_GAP = 88;
 const CANVAS_MARGIN = 54;
-const DEFAULT_ZOOM = 0.78;
-const MIN_ZOOM = 0.35;
+const DEFAULT_ZOOM = 0.92;
+const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 1.35;
+const DRAG_THRESHOLD = 5;
+const ARRANGE_DURATION = 260;
 
 const emptyDraft: OrganisationPersonDraft = {
   name: "",
@@ -136,6 +153,16 @@ function isPerson(profile: OrganisationPerson) {
 
 function normalise(value: string) {
   return value.trim().toLocaleLowerCase();
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getScrollBehavior(): ScrollBehavior {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth";
 }
 
 function safeWorkEmail(value: string | null) {
@@ -412,6 +439,31 @@ function layoutForest(
   };
 }
 
+function getConnectorPath(
+  connector: Connector,
+  nodesById: Map<string, PositionedNode>,
+  offsets: Record<string, NodeOffset>,
+) {
+  const from = nodesById.get(connector.fromId);
+  const to = nodesById.get(connector.toId);
+  const fromOffset = offsets[connector.fromId];
+  const toOffset = offsets[connector.toId];
+
+  if (!from || !to || (!fromOffset && !toOffset)) return connector.path;
+
+  const fromX = from.x + (fromOffset?.x ?? 0) + from.width / 2;
+  const fromY = from.y + (fromOffset?.y ?? 0) + from.height;
+  const toX = to.x + (toOffset?.x ?? 0) + to.width / 2;
+  const toY = to.y + (toOffset?.y ?? 0);
+
+  if (Math.abs(fromX - toX) < 1) {
+    return `M ${fromX} ${fromY} V ${toY}`;
+  }
+
+  const middleY = fromY + (toY - fromY) / 2;
+  return `M ${fromX} ${fromY} V ${middleY} H ${toX} V ${toY}`;
+}
+
 function MobileTreeBranch({
   node,
   collapsedIds,
@@ -431,7 +483,7 @@ function MobileTreeBranch({
   const hasChildren = node.children.length > 0;
 
   return (
-    <li className={styles.mobileBranch}>
+    <li className={styles.mobileBranch} data-company={node.company}>
       <div className={styles.mobileNode}>
         <button
           aria-current={selectedId === node.id ? "true" : undefined}
@@ -483,6 +535,7 @@ function MobileTreeBranch({
 
 export function OrganisationTree({
   profiles,
+  canArrange: canArrangeProp,
   canEdit = false,
   onCreate,
   onUpdate,
@@ -492,12 +545,18 @@ export function OrganisationTree({
 }: OrganisationTreeProps) {
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [companyFilter, setCompanyFilter] = useState<CompanyFilter>("all");
   const [focusedRootId, setFocusedRootId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [panning, setPanning] = useState(false);
+  const [arrangeMode, setArrangeMode] = useState(false);
+  const [manualOffsets, setManualOffsets] = useState<Record<string, NodeOffset>>({});
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+  const [arranging, setArranging] = useState(false);
+  const [interactionMessage, setInteractionMessage] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const [editor, setEditor] = useState<EditorState>(null);
   const [draft, setDraft] = useState<OrganisationPersonDraft>(emptyDraft);
@@ -510,8 +569,15 @@ export function OrganisationTree({
   } | null>(null);
   const titleId = useId();
   const descriptionId = useId();
+  const searchResultsId = useId();
   const markerPrefix = useId().replaceAll(":", "");
   const viewportRef = useRef<HTMLDivElement>(null);
+  const initialViewportRef = useRef(false);
+  const suppressCardClickRef = useRef(false);
+  const nodeDragRef = useRef<NodeDragState | null>(null);
+  const pendingOffsetRef = useRef<{ id: string; offset: NodeOffset } | null>(null);
+  const dragFrameRef = useRef<number | null>(null);
+  const arrangeTimerRef = useRef<number | null>(null);
   const workContactRequestRef = useRef(0);
   const panRef = useRef<{
     pointerId: number;
@@ -520,6 +586,22 @@ export function OrganisationTree({
     scrollLeft: number;
     scrollTop: number;
   } | null>(null);
+
+  // In the HR portal, employee records are the source of truth. The legacy
+  // lightweight chart editor remains available only to older callers that have
+  // not supplied the HR record entry point.
+  const canArrange = canArrangeProp ?? canEdit;
+  const canUseLegacyTreeEditor = canEdit && !onOpenEmployeeRecord;
+  const profileLayoutKey = useMemo(
+    () =>
+      profiles
+        .map(
+          (profile) =>
+            `${profile.id}\u0000${profile.name}\u0000${profile.position}\u0000${profile.company}\u0000${profile.reportsTo ?? ""}\u0000${profile.sortOrder ?? ""}\u0000${profile.isActive ?? ""}`,
+        )
+        .join("\u0001"),
+    [profiles],
+  );
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
@@ -542,6 +624,28 @@ export function OrganisationTree({
       document.removeEventListener("fullscreenchange", handleFullscreen);
     };
   }, [editor, saving, selectedId]);
+
+  useEffect(() => {
+    return () => {
+      if (dragFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+      }
+      if (arrangeTimerRef.current !== null) {
+        window.clearTimeout(arrangeTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setManualOffsets({});
+      setArrangeMode(false);
+      setDraggingNodeId(null);
+      setInteractionMessage("");
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [profileLayoutKey]);
 
   const orderedProfiles = useMemo(() => sortPeople(profiles), [profiles]);
   const profileById = useMemo(
@@ -582,6 +686,15 @@ export function OrganisationTree({
     );
   }, [focusScopeIds, orderedProfiles, query]);
 
+  const visibleSearchMatches = useMemo(
+    () => searchMatches.slice(0, 8),
+    [searchMatches],
+  );
+  const activeSearchResultIndex = Math.min(
+    activeSearchIndex,
+    Math.max(visibleSearchMatches.length - 1, 0),
+  );
+
   const matchingIds = useMemo(
     () => new Set(searchMatches.map((profile) => profile.id)),
     [searchMatches],
@@ -615,6 +728,10 @@ export function OrganisationTree({
     () => layoutForest(forest, effectiveCollapsedIds),
     [effectiveCollapsedIds, forest],
   );
+  const layoutNodesById = useMemo(
+    () => new Map(layout.nodes.map((item) => [item.node.id, item])),
+    [layout.nodes],
+  );
 
   const selectedProfile = selectedId ? profileById.get(selectedId) : undefined;
   const selectedManager = selectedProfile?.reportsTo
@@ -632,10 +749,21 @@ export function OrganisationTree({
   const selectedTeamSize = selectedProfile
     ? getDescendantIds(selectedProfile.id, orderedProfiles).size
     : 0;
-  const highlightedIds = useMemo(() => {
+  const relatedIds = useMemo(() => {
     if (!selectedId) return new Set<string>();
-    return addAncestorIds(new Set([selectedId]), profileById);
-  }, [profileById, selectedId]);
+    return addAncestorIds(
+      getDescendantIds(selectedId, orderedProfiles).add(selectedId),
+      profileById,
+    );
+  }, [orderedProfiles, profileById, selectedId]);
+  const primaryRootId = useMemo(
+    () =>
+      [...forest].sort(
+        (left, right) =>
+          countTreeDescendants(right) - countTreeDescendants(left),
+      )[0]?.id ?? null,
+    [forest],
+  );
 
   const requestWorkContact = (personId: string) => {
     const profile = profileById.get(personId);
@@ -664,7 +792,7 @@ export function OrganisationTree({
   };
 
   const activeEditor =
-    canEdit &&
+    canUseLegacyTreeEditor &&
     (editor?.mode === "create" ||
       (editor?.mode === "update" &&
         profiles.some(
@@ -725,7 +853,7 @@ export function OrganisationTree({
       const viewportRect = viewport.getBoundingClientRect();
       const nodeRect = node.getBoundingClientRect();
       viewport.scrollTo({
-        behavior: "smooth",
+        behavior: getScrollBehavior(),
         left:
           viewport.scrollLeft +
           nodeRect.left -
@@ -739,6 +867,32 @@ export function OrganisationTree({
       });
     }, delay);
   };
+
+  useEffect(() => {
+    if (initialViewportRef.current || !primaryRootId) return;
+    initialViewportRef.current = true;
+
+    const timer = window.setTimeout(() => {
+      const viewport = viewportRef.current;
+      const node = viewport?.querySelector<HTMLElement>(
+        `[data-node-id="${primaryRootId}"]`,
+      );
+      if (!viewport || !node) return;
+      const viewportRect = viewport.getBoundingClientRect();
+      const nodeRect = node.getBoundingClientRect();
+      viewport.scrollTo({
+        behavior: "auto",
+        left:
+          viewport.scrollLeft +
+          nodeRect.left -
+          viewportRect.left -
+          (viewport.clientWidth - nodeRect.width) / 2,
+        top: 0,
+      });
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [layout.height, layout.width, primaryRootId]);
 
   const expandAncestorBranches = (id: string) => {
     setCollapsedIds((current) => {
@@ -809,6 +963,11 @@ export function OrganisationTree({
       branchIds.size > 0 &&
       [...branchIds].every((id) => effectiveCollapsedIds.has(id));
     setCollapsedIds(allCollapsed ? new Set() : new Set(branchIds));
+    setInteractionMessage(
+      allCollapsed
+        ? "All reporting lines expanded."
+        : "All reporting lines collapsed.",
+    );
   };
 
   const fitChart = () => {
@@ -825,11 +984,53 @@ export function OrganisationTree({
     setZoom(nextZoom);
     window.requestAnimationFrame(() => {
       viewport.scrollTo({
-        behavior: "smooth",
+        behavior: getScrollBehavior(),
         left: Math.max(0, (layout.width * nextZoom - viewport.clientWidth) / 2),
         top: 0,
       });
     });
+  };
+
+  const cleanUpChart = () => {
+    if (!canArrange) return;
+    const hasManualPositions = Object.keys(manualOffsets).length > 0;
+    setArrangeMode(false);
+    setDraggingNodeId(null);
+
+    if (!hasManualPositions) {
+      setInteractionMessage("The chart already matches the reporting structure.");
+      return;
+    }
+
+    if (arrangeTimerRef.current !== null) {
+      window.clearTimeout(arrangeTimerRef.current);
+    }
+    setArranging(true);
+    setManualOffsets({});
+    setInteractionMessage("Chart restored to the reporting structure.");
+    arrangeTimerRef.current = window.setTimeout(() => {
+      arrangeTimerRef.current = null;
+      setArranging(false);
+    }, ARRANGE_DURATION);
+  };
+
+  const toggleArrangeMode = () => {
+    if (!canArrange) return;
+    if (arrangeMode) {
+      setArrangeMode(false);
+      setInteractionMessage(
+        "Arrange mode off. Local positions remain until you clean up the chart or refresh.",
+      );
+      return;
+    }
+
+    workContactRequestRef.current += 1;
+    setWorkContact(null);
+    setSelectedId(null);
+    setArrangeMode(true);
+    setInteractionMessage(
+      "Arrange mode on. Drag a person to compare positions. Clean up restores the reporting layout.",
+    );
   };
 
   const resetView = () => {
@@ -841,11 +1042,14 @@ export function OrganisationTree({
     setWorkContact(null);
     setCollapsedIds(new Set());
     setZoom(DEFAULT_ZOOM);
+    setArrangeMode(false);
+    setManualOffsets({});
+    setInteractionMessage("");
     const viewport = viewportRef.current;
     if (!viewport) return;
     window.requestAnimationFrame(() => {
       viewport.scrollTo({
-        behavior: "smooth",
+        behavior: getScrollBehavior(),
         left: Math.max(
           0,
           (layout.width * DEFAULT_ZOOM - viewport.clientWidth) / 2,
@@ -896,18 +1100,130 @@ export function OrganisationTree({
     setPanning(false);
   };
 
+  const handleViewportKeyDown = (
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (event.target !== event.currentTarget) return;
+    const directions: Record<string, { left?: number; top?: number }> = {
+      ArrowDown: { top: 140 },
+      ArrowLeft: { left: -140 },
+      ArrowRight: { left: 140 },
+      ArrowUp: { top: -140 },
+    };
+    const direction = directions[event.key];
+    const viewport = viewportRef.current;
+    if (!direction || !viewport) return;
+
+    event.preventDefault();
+    viewport.scrollBy({ ...direction, behavior: getScrollBehavior() });
+  };
+
+  const flushPendingOffset = () => {
+    const pending = pendingOffsetRef.current;
+    if (!pending) return;
+    pendingOffsetRef.current = null;
+    dragFrameRef.current = null;
+    setManualOffsets((current) => ({ ...current, [pending.id]: pending.offset }));
+  };
+
+  const scheduleOffset = (id: string, offset: NodeOffset) => {
+    pendingOffsetRef.current = { id, offset };
+    if (dragFrameRef.current !== null) return;
+    dragFrameRef.current = window.requestAnimationFrame(flushPendingOffset);
+  };
+
+  const startNodeDrag = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    node: PositionedNode,
+  ) => {
+    if (!canArrange || !arrangeMode || event.button !== 0) return;
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    nodeDragRef.current = {
+      id: node.node.id,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startOffset: manualOffsets[node.node.id] ?? { x: 0, y: 0 },
+      node,
+      moved: false,
+    };
+    setDraggingNodeId(node.node.id);
+  };
+
+  const moveNodeDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = nodeDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const deltaX = (event.clientX - drag.startX) / zoom;
+    const deltaY = (event.clientY - drag.startY) / zoom;
+    if (!drag.moved && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD) return;
+
+    drag.moved = true;
+    event.preventDefault();
+    event.stopPropagation();
+    scheduleOffset(drag.id, {
+      x: clamp(
+        drag.startOffset.x + deltaX,
+        CANVAS_MARGIN - drag.node.x,
+        layout.width - CANVAS_MARGIN - drag.node.width - drag.node.x,
+      ),
+      y: clamp(
+        drag.startOffset.y + deltaY,
+        CANVAS_MARGIN - drag.node.y,
+        layout.height - CANVAS_MARGIN - drag.node.height - drag.node.y,
+      ),
+    });
+  };
+
+  const finishNodeDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = nodeDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    if (dragFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+      flushPendingOffset();
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    nodeDragRef.current = null;
+    setDraggingNodeId(null);
+    if (drag.moved) {
+      suppressCardClickRef.current = true;
+      window.setTimeout(() => {
+        suppressCardClickRef.current = false;
+      }, 0);
+      setInteractionMessage(
+        `${drag.node.node.name} moved locally. Clean up restores the reporting layout.`,
+      );
+      return;
+    }
+
+    if (event.type !== "pointercancel") {
+      suppressCardClickRef.current = true;
+      selectProfile(drag.id);
+      window.setTimeout(() => {
+        suppressCardClickRef.current = false;
+      }, 0);
+    }
+  };
+
   const openCreate = (
     reportsTo: string | null = null,
     company: OrganisationCompany =
       companyFilter === "all" ? "mam" : companyFilter,
   ) => {
+    if (!canUseLegacyTreeEditor) return;
     setDraft({ ...emptyDraft, company, reportsTo });
     setError("");
     setEditor({ mode: "create" });
   };
 
   const openUpdate = (profile: OrganisationPerson) => {
-    if (!isPerson(profile)) return;
+    if (!canUseLegacyTreeEditor || !isPerson(profile)) return;
     setDraft({
       name: profile.name,
       position: profile.position,
@@ -981,16 +1297,32 @@ export function OrganisationTree({
           <p>Select a person to view their reporting line and work contact.</p>
         </div>
 
-        {canEdit ? (
-          <button
-            className={styles.primaryAction}
-            disabled={!onCreate}
-            onClick={() => openCreate()}
-            type="button"
-          >
-            <Plus aria-hidden="true" size={16} />
-            Add person
-          </button>
+        {canArrange || canUseLegacyTreeEditor ? (
+          <div className={styles.headerActions}>
+            {canArrange ? (
+              <button
+                aria-pressed={arrangeMode}
+                className={styles.arrangeAction}
+                data-active={arrangeMode}
+                onClick={toggleArrangeMode}
+                type="button"
+              >
+                <GripVertical aria-hidden="true" size={16} />
+                {arrangeMode ? "Finish arranging" : "Arrange"}
+              </button>
+            ) : null}
+            {canUseLegacyTreeEditor ? (
+              <button
+                className={styles.primaryAction}
+                disabled={!onCreate}
+                onClick={() => openCreate()}
+                type="button"
+              >
+                <Plus aria-hidden="true" size={16} />
+                Add person
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </header>
 
@@ -1000,32 +1332,72 @@ export function OrganisationTree({
             <Search aria-hidden="true" size={16} />
             <span className={styles.srOnly}>Search the organisation</span>
             <input
+              aria-activedescendant={
+                visibleSearchMatches[activeSearchResultIndex]
+                  ? `${searchResultsId}-${visibleSearchMatches[activeSearchResultIndex].id}`
+                  : undefined
+              }
+              aria-autocomplete="list"
+              aria-controls={searchResultsId}
+              aria-expanded={searchOpen && Boolean(normalise(query))}
               onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
               onChange={(event) => {
                 setQuery(event.target.value);
+                setActiveSearchIndex(0);
                 setSearchOpen(true);
               }}
               onFocus={() => setSearchOpen(true)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && searchMatches[0]) {
+                if (event.key === "ArrowDown" && visibleSearchMatches.length) {
                   event.preventDefault();
-                  selectSearchResult(searchMatches[0].id);
+                  setActiveSearchIndex((current) =>
+                    Math.min(current + 1, visibleSearchMatches.length - 1),
+                  );
+                } else if (event.key === "ArrowUp" && visibleSearchMatches.length) {
+                  event.preventDefault();
+                  setActiveSearchIndex((current) =>
+                    Math.max(
+                      Math.min(current, visibleSearchMatches.length - 1) - 1,
+                      0,
+                    ),
+                  );
+                } else if (
+                  event.key === "Enter" &&
+                  visibleSearchMatches[activeSearchResultIndex]
+                ) {
+                  event.preventDefault();
+                  selectSearchResult(
+                    visibleSearchMatches[activeSearchResultIndex].id,
+                  );
+                } else if (event.key === "Escape") {
+                  setSearchOpen(false);
+                  event.currentTarget.blur();
                 }
               }}
               placeholder="Search name or position"
+              role="combobox"
               type="search"
               value={query}
             />
           </label>
           {searchOpen && normalise(query) ? (
-            <div className={styles.searchResults}>
-              {searchMatches.length ? (
-                searchMatches.slice(0, 8).map((profile) => (
+            <div
+              className={styles.searchResults}
+              id={searchResultsId}
+              role="listbox"
+            >
+              {visibleSearchMatches.length ? (
+                visibleSearchMatches.map((profile, index) => (
                   <button
+                    aria-selected={index === activeSearchResultIndex}
                     data-company={profile.company}
+                    data-active={index === activeSearchResultIndex}
+                    id={`${searchResultsId}-${profile.id}`}
                     key={profile.id}
                     onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={() => setActiveSearchIndex(index)}
                     onClick={() => selectSearchResult(profile.id)}
+                    role="option"
                     type="button"
                   >
                     <span>{profile.name}</span>
@@ -1065,7 +1437,7 @@ export function OrganisationTree({
       </div>
 
       {activeFocus ? (
-        <div className={styles.focusBar}>
+        <div className={styles.focusBar} data-company={activeFocus.company}>
           <span>
             Viewing <strong>{activeFocus.name}&apos;s team</strong>
           </span>
@@ -1079,24 +1451,46 @@ export function OrganisationTree({
         {normalise(query)
           ? `${matchingIds.size} ${matchingIds.size === 1 ? "match" : "matches"}`
           : `${visiblePersonCount} ${visiblePersonCount === 1 ? "person" : "people"}`}
+        {interactionMessage ? ` ${interactionMessage}` : ""}
       </span>
 
       {forest.length ? (
         <div
+          aria-label="Organisation chart. Select a person for details. Use arrow keys to pan the chart."
           className={styles.treeViewport}
+          data-arrange={arrangeMode}
           data-panning={panning}
+          onKeyDown={handleViewportKeyDown}
           onPointerCancel={stopPan}
           onPointerDown={startPan}
           onPointerMove={movePan}
           onPointerUp={stopPan}
           ref={viewportRef}
+          tabIndex={0}
         >
           <div className={styles.chartMeta}>
             <span>{visiblePersonCount} people</span>
-            <span>Drag canvas to move</span>
+            <span>
+              {arrangeMode
+                ? "Arrange mode · drag a person"
+                : "Drag empty space to pan"}
+            </span>
           </div>
 
           <div aria-label="Chart view controls" className={styles.chartControls}>
+            {canArrange ? (
+              <button
+                aria-label="Clean up chart and restore the reporting layout"
+                className={styles.cleanUpControl}
+                disabled={!Object.keys(manualOffsets).length && !arrangeMode}
+                onClick={cleanUpChart}
+                title="Clean up chart"
+                type="button"
+              >
+                <WandSparkles aria-hidden="true" size={15} />
+                <span>Clean up</span>
+              </button>
+            ) : null}
             <button
               aria-label="Zoom out"
               disabled={zoom <= MIN_ZOOM}
@@ -1124,8 +1518,15 @@ export function OrganisationTree({
             >
               <Plus aria-hidden="true" size={15} />
             </button>
-            <button aria-label="Fit chart to screen" onClick={fitChart} type="button">
+            <button
+              aria-label="Fit chart to screen"
+              className={styles.namedChartControl}
+              onClick={fitChart}
+              title="Fit chart to screen"
+              type="button"
+            >
               <LocateFixed aria-hidden="true" size={15} />
+              <span>Fit</span>
             </button>
             <button
               aria-label="Expand or collapse all reporting lines"
@@ -1187,13 +1588,18 @@ export function OrganisationTree({
                 {layout.connectors.map((connector) => {
                   const active =
                     !selectedId ||
-                    (highlightedIds.has(connector.fromId) &&
-                      highlightedIds.has(connector.toId));
+                    (relatedIds.has(connector.fromId) &&
+                      relatedIds.has(connector.toId));
                   return (
                     <path
                       className={styles.connector}
-                      d={connector.path}
+                      d={getConnectorPath(
+                        connector,
+                        layoutNodesById,
+                        manualOffsets,
+                      )}
                       data-active={active}
+                      data-arranging={arranging}
                       data-company={connector.company}
                       key={connector.id}
                       markerEnd={`url(#${markerPrefix}-${connector.company})`}
@@ -1204,11 +1610,15 @@ export function OrganisationTree({
 
               {layout.nodes.map((item) => {
                 const collapsed = effectiveCollapsedIds.has(item.node.id);
-                const highlighted = highlightedIds.has(item.node.id);
-                const muted = Boolean(selectedId) && !highlighted;
+                const related = relatedIds.has(item.node.id);
+                const offset = manualOffsets[item.node.id] ?? { x: 0, y: 0 };
+                const muted = Boolean(selectedId) && !related;
                 return (
                   <div
                     className={styles.nodeWrap}
+                    data-arrange={arrangeMode}
+                    data-dragging={draggingNodeId === item.node.id}
+                    data-manual={Boolean(manualOffsets[item.node.id])}
                     data-muted={muted}
                     data-node-id={item.node.id}
                     data-selected={selectedId === item.node.id}
@@ -1218,20 +1628,44 @@ export function OrganisationTree({
                       top: item.y,
                       width: item.width,
                       height: item.height,
+                      transform: `translate3d(${offset.x}px, ${offset.y}px, 0)`,
                     }}
                   >
                     <button
                       aria-current={selectedId === item.node.id ? "true" : undefined}
                       aria-label={`${item.node.name}, ${item.node.position || companyLabels[item.node.company]}, ${companyLabels[item.node.company]}`}
                       className={styles.personCard}
+                      data-arrange={arrangeMode}
                       data-company={item.node.company}
-                      data-highlighted={highlighted}
+                      data-highlighted={related}
                       data-matching={matchingIds.has(item.node.id)}
-                      onClick={() => selectProfile(item.node.id)}
+                      onClick={() => {
+                        if (suppressCardClickRef.current) {
+                          suppressCardClickRef.current = false;
+                          return;
+                        }
+                        selectProfile(item.node.id);
+                      }}
+                      onPointerCancel={finishNodeDrag}
+                      onPointerDown={(event) => startNodeDrag(event, item)}
+                      onPointerMove={moveNodeDrag}
+                      onPointerUp={finishNodeDrag}
+                      title={
+                        arrangeMode
+                          ? "Drag to compare positions. Clean up restores the reporting layout."
+                          : `${item.node.name}, ${item.node.position || companyLabels[item.node.company]}`
+                      }
                       type="button"
                     >
                       <span className={styles.positionBand}>
                         {item.node.position || companyLabels[item.node.company]}
+                        {canArrange && arrangeMode ? (
+                          <GripVertical
+                            aria-hidden="true"
+                            className={styles.dragGrip}
+                            size={13}
+                          />
+                        ) : null}
                       </span>
                       <span className={styles.nameBand}>{item.node.name}</span>
                       <span className={styles.srOnly}>
@@ -1267,7 +1701,7 @@ export function OrganisationTree({
             {forest.map((root) => (
               <MobileTreeBranch
                 collapsedIds={effectiveCollapsedIds}
-                highlightedIds={highlightedIds}
+                highlightedIds={relatedIds}
                 key={root.id}
                 node={root}
                 onSelect={selectProfile}
@@ -1406,7 +1840,7 @@ export function OrganisationTree({
                   Open HR record
                 </button>
               ) : null}
-              {canEdit && isPerson(selectedProfile) ? (
+              {canUseLegacyTreeEditor && isPerson(selectedProfile) ? (
                 <>
                   <button
                     className={styles.secondaryAction}

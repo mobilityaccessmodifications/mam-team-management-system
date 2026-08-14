@@ -365,6 +365,112 @@
   margin-left: auto;
 }
 
+.accessPreview {
+  min-height: 38px;
+  display: grid;
+  grid-template-columns: auto minmax(150px, 230px) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 4px 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.accessPreview[data-previewing] {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  background: var(--accent-soft);
+}
+
+.accessPreview label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #526062;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.accessPreview label svg {
+  color: var(--accent-deep);
+}
+
+.accessPreview select {
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 24px 0 7px;
+  border: 0;
+  border-radius: 5px;
+  outline: 0;
+  background: #f4f6f5;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.accessPreview select:focus-visible,
+.exitPreviewButton:focus-visible,
+.previewNotice button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  outline-offset: 2px;
+}
+
+.exitPreviewButton,
+.previewNotice button {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent-deep);
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.exitPreviewButton:hover,
+.previewNotice button:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.previewNotice {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  margin: 0 0 18px;
+  padding: 12px 13px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+
+.previewNotice > span {
+  min-width: 0;
+}
+
+.previewNotice strong,
+.previewNotice small {
+  display: block;
+}
+
+.previewNotice strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.previewNotice small {
+  margin-top: 3px;
+  color: #596769;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .iconButton,
 .resetButton,
 .signOutButton,
@@ -3145,6 +3251,15 @@
     width: min(420px, 55vw);
   }
 
+  .topActions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .accessPreview {
+    grid-template-columns: auto minmax(130px, 1fr) auto;
+  }
+
   .homeGrid,
   .approvalGrid,
   .activityLayout {
@@ -3227,6 +3342,36 @@
     min-height: 36px;
     padding: 0 8px;
     font-size: 11px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .topActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .accessPreview {
+    flex: 1 0 100%;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .accessPreview label {
+    grid-column: 1 / -1;
+  }
+
+  .previewNotice {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .previewNotice button {
+    grid-column: 2;
+    justify-self: start;
+    padding-left: 0;
   }
 
   .emailActivityButton {

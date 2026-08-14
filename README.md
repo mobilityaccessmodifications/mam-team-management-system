@@ -8,7 +8,7 @@ Safer People System is the private people portal for Mobility Access Modificatio
 - Hosting: the MAM-owned Vercel project at `https://mam-team-management-system-ten.vercel.app`
 - Source: `mobilityaccessmodifications/mam-team-management-system`
 - Data and authentication: MAM Supabase project `xtwlrjqbusadghavchqm`
-- Directory: the live MAM and Equipsy roster, with a private one-to-one HR employee-detail store; there is no demo-role or profile switcher
+- Directory: the live MAM and Equipsy roster, with a private one-to-one HR employee-detail store; there are no demo roles, and the authorised system administrator has a clearly labelled read-only employee-access preview using active real people only
 - Accounts: username/password login backed by Supabase Auth and a database-controlled account registry
 - Workflow review: leave, onboarding, offboarding and check-in records are created in the open browser session using people from the real directory; they are not yet durable staff records
 

@@ -263,15 +263,19 @@ export function PeopleOperationsDemo({
   activeProfile,
   organisationProfiles,
   canEditOrganisation,
+  canArrangeOrganisation = false,
   onCreateOrganisationPerson,
   onUpdateOrganisationPerson,
   onOpenEmployeeDirectoryRecord,
   renderEmployeeDirectory,
   renderAccounts,
+  isAccessPreview = false,
 }: {
   activeProfile: PeopleOperationsProfile;
   organisationProfiles: OrganisationPerson[];
   canEditOrganisation: boolean;
+  /** Allows the safe visual arrangement controls for a normal HR workspace only. */
+  canArrangeOrganisation?: boolean;
   onCreateOrganisationPerson: (person: OrganisationPersonDraft) => Promise<void>;
   onUpdateOrganisationPerson: (id: string, person: OrganisationPersonDraft) => Promise<void>;
   /** @deprecated Ignored; retained until the parent removes the old email log adapter. */
@@ -281,6 +285,8 @@ export function PeopleOperationsDemo({
   /** Opens the selected safe tree node in the HR-only directory detail drawer. */
   onOpenEmployeeDirectoryRecord?: (personId: string) => void;
   renderAccounts?: ReactNode;
+  /** Read-only UI preview for an administrator; it never changes the session. */
+  isAccessPreview?: boolean;
 }) {
   const [section, setSection] = useState<PeopleSection>(
     renderEmployeeDirectory ? "directory" : "profile",
@@ -295,18 +301,18 @@ export function PeopleOperationsDemo({
   const [createMode, setCreateMode] = useState<WorkflowKind | "checkin">("onboarding");
   const [toast, setToast] = useState("");
 
-  const canManage = activeProfile.accessRole === "hr" || activeProfile.accessRole === "manager";
+  const canManage = !isAccessPreview && (activeProfile.accessRole === "hr" || activeProfile.accessRole === "manager");
   const isEmployee = activeProfile.accessRole === "employee";
   const accessibleWorkflows = useMemo(() => workflows.filter((workflow) => {
-    if (activeProfile.accessRole === "hr") return true;
+    if (activeProfile.accessRole === "hr" && !isAccessPreview) return true;
     if (activeProfile.accessRole === "manager") return workflow.manager === activeProfile.name;
     return workflow.employee === activeProfile.name;
-  }), [activeProfile, workflows]);
+  }), [activeProfile, isAccessPreview, workflows]);
   const visiblePeople = useMemo(() => people.filter((person) => {
-    if (activeProfile.accessRole === "hr") return true;
+    if (activeProfile.accessRole === "hr" && !isAccessPreview) return true;
     if (activeProfile.accessRole === "manager") return person.manager === activeProfile.name;
     return person.name === activeProfile.name;
-  }), [activeProfile, people]);
+  }), [activeProfile, isAccessPreview, people]);
   const visibleReminders = useMemo(() => reminders.filter((reminder) => visiblePeople.some((person) => person.id === reminder.personId)), [reminders, visiblePeople]);
   const employeeWorkflow = isEmployee
     ? accessibleWorkflows.find((workflow) => workflow.kind === "offboarding") ?? accessibleWorkflows.find((workflow) => workflow.kind === "onboarding")
@@ -326,11 +332,13 @@ export function PeopleOperationsDemo({
   }
 
   function openCreate(mode: WorkflowKind | "checkin") {
+    if (isAccessPreview) return;
     setCreateMode(mode);
     setShowCreate(true);
   }
 
   function updateTask(workflowId: string, taskId: string, nextStatus: TaskStatus, evidence?: string) {
+    if (isAccessPreview) return;
     setWorkflows((current) => current.map((workflow) => {
       if (workflow.id !== workflowId) return workflow;
       const previousTask = workflow.tasks.find((task) => task.id === taskId);
@@ -342,6 +350,7 @@ export function PeopleOperationsDemo({
   }
 
   function attachEvidence(event: ChangeEvent<HTMLInputElement>, workflowId: string, taskId: string) {
+    if (isAccessPreview) return;
     const file = event.target.files?.[0];
     if (!file) return;
     updateTask(workflowId, taskId, "In Progress", file.name);
@@ -350,6 +359,7 @@ export function PeopleOperationsDemo({
   }
 
   function updateAsset(workflowId: string, assetId: string) {
+    if (isAccessPreview) return;
     setWorkflows((current) => current.map((workflow) => {
       if (workflow.id !== workflowId) return workflow;
       const asset = workflow.assets.find((item) => item.id === assetId);
@@ -360,6 +370,7 @@ export function PeopleOperationsDemo({
   }
 
   function updateAccess(workflowId: string, requestId: string) {
+    if (isAccessPreview) return;
     setWorkflows((current) => current.map((workflow) => {
       if (workflow.id !== workflowId) return workflow;
       const request = workflow.access.find((item) => item.id === requestId);
@@ -370,17 +381,20 @@ export function PeopleOperationsDemo({
   }
 
   function completeCheckIn(reminderId: string) {
+    if (isAccessPreview) return;
     setReminders((current) => current.map((reminder) => reminder.id === reminderId ? { ...reminder, status: "Completed" } : reminder));
     announce("Check-in marked complete.");
   }
 
   function snoozeCheckIn(reminderId: string) {
+    if (isAccessPreview) return;
     setReminders((current) => current.map((reminder) => reminder.id === reminderId ? { ...reminder, notifyDate: addDays(reminder.notifyDate, 7), snoozedUntil: addDays(reminder.notifyDate, 7) } : reminder));
     announce("Reminder moved one week later.");
   }
 
   function createCase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isAccessPreview) return;
     const data = new FormData(event.currentTarget);
     const personId = String(data.get("personId") || "");
     const directoryPerson = organisationProfiles.find((person) => (
@@ -455,7 +469,7 @@ export function PeopleOperationsDemo({
 
     {section === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} manager={activeProfile.manager} company={activeProfile.company} /> : null}
     {section === "directory" ? renderEmployeeDirectory : null}
-    {section === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation && !renderEmployeeDirectory} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={renderEmployeeDirectory ? (personId) => {
+    {section === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation && !renderEmployeeDirectory} canArrange={canArrangeOrganisation && !isAccessPreview} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={renderEmployeeDirectory ? (personId) => {
       onOpenEmployeeDirectoryRecord?.(personId);
       setSection("directory");
     } : undefined} /> : null}
@@ -466,14 +480,14 @@ export function PeopleOperationsDemo({
       {!isEmployee || employeeLifecycleSection === "offboarding" ? <button type="button" aria-pressed={visibleTaskSection === "offboarding"} onClick={() => setTaskSection("offboarding")}>Offboarding</button> : null}
     </nav> : null}
     {section === "tasks" && visibleTaskSection === "checkins" ? <CheckInsView people={visiblePeople} reminders={visibleReminders} selectedPerson={selectedPerson} selectedPersonId={selectedPerson?.id} activeProfile={activeProfile} canManage={canManage} onSelectPerson={setSelectedPersonId} onComplete={completeCheckIn} onSnooze={snoozeCheckIn} /> : null}
-    {section === "tasks" && (visibleTaskSection === "onboarding" || visibleTaskSection === "offboarding") ? <WorkflowsView workflows={activeWorkflows} selected={selectedWorkflow} selectedId={selectedWorkflow?.id} activeProfile={activeProfile} onSelect={setSelectedWorkflowId} onTaskUpdate={updateTask} onAttach={attachEvidence} onAssetUpdate={updateAsset} onAccessUpdate={updateAccess} /> : null}
+    {section === "tasks" && (visibleTaskSection === "onboarding" || visibleTaskSection === "offboarding") ? <WorkflowsView workflows={activeWorkflows} selected={selectedWorkflow} selectedId={selectedWorkflow?.id} activeProfile={activeProfile} onSelect={setSelectedWorkflowId} onTaskUpdate={updateTask} onAttach={attachEvidence} onAssetUpdate={updateAsset} onAccessUpdate={updateAccess} isAccessPreview={isAccessPreview} /> : null}
 
     {showCreate ? <CreateCaseModal mode={createMode} profiles={organisationProfiles} onClose={() => setShowCreate(false)} onSubmit={createCase} /> : null}
     <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`} role="status" aria-live="polite"><CheckCircle2 size={16} />{toast}</div>
   </section>;
 }
 
-function WorkflowsView({ workflows, selected, selectedId, activeProfile, onSelect, onTaskUpdate, onAttach, onAssetUpdate, onAccessUpdate }: {
+function WorkflowsView({ workflows, selected, selectedId, activeProfile, onSelect, onTaskUpdate, onAttach, onAssetUpdate, onAccessUpdate, isAccessPreview = false }: {
   workflows: PeopleWorkflow[];
   selected?: PeopleWorkflow;
   selectedId?: string;
@@ -483,6 +497,7 @@ function WorkflowsView({ workflows, selected, selectedId, activeProfile, onSelec
   onAttach: (event: ChangeEvent<HTMLInputElement>, workflowId: string, taskId: string) => void;
   onAssetUpdate: (workflowId: string, assetId: string) => void;
   onAccessUpdate: (workflowId: string, requestId: string) => void;
+  isAccessPreview?: boolean;
 }) {
   if (!workflows.length || !selected) return <div className={styles.emptyState}><UsersRound size={26} /><strong>{activeProfile.accessRole === "employee" ? "No people tasks are assigned to you" : "No workflows yet"}</strong><span>{activeProfile.accessRole === "employee" ? "Assigned tasks will appear here." : "Start a workflow for someone in the organisation directory."}</span></div>;
   const isEmployee = activeProfile.accessRole === "employee";
@@ -492,8 +507,8 @@ function WorkflowsView({ workflows, selected, selectedId, activeProfile, onSelec
   const visibleOverdue = isEmployee ? visibleTasks.filter((task) => task.status === "Overdue").length : workflowOverdueCount(selected);
   const status = isEmployee ? progress === 100 ? "Complete" : visibleOverdue ? "Needs attention" : "In progress" : workflowStatus(selected);
   const showWorkflowList = !isEmployee && workflows.length > 1;
-  const canActionTask = (task: WorkflowTask) => activeProfile.accessRole === "hr" || (activeProfile.accessRole === "manager" && selected.manager === activeProfile.name && task.owner === "Team Leader") || (isEmployee && selected.employee === activeProfile.name && task.owner === "Employee");
-  const canActionRecord = (owner: string) => activeProfile.accessRole === "hr" || (activeProfile.accessRole === "manager" && selected.manager === activeProfile.name && owner === "Team Leader");
+  const canActionTask = (task: WorkflowTask) => !isAccessPreview && (activeProfile.accessRole === "hr" || (activeProfile.accessRole === "manager" && selected.manager === activeProfile.name && task.owner === "Team Leader") || (isEmployee && selected.employee === activeProfile.name && task.owner === "Employee"));
+  const canActionRecord = (owner: string) => !isAccessPreview && (activeProfile.accessRole === "hr" || (activeProfile.accessRole === "manager" && selected.manager === activeProfile.name && owner === "Team Leader"));
   const visibleAssets = activeProfile.accessRole === "hr" ? selected.assets : selected.assets.filter((asset) => asset.owner === "Team Leader");
   const visibleAccess = activeProfile.accessRole === "hr" ? selected.access : selected.access.filter((request) => request.owner === "Team Leader");
   const showSupporting = !isEmployee && (activeProfile.accessRole === "hr" || visibleAssets.length > 0 || visibleAccess.length > 0);
