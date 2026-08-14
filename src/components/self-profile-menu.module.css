@@ -130,6 +130,45 @@
   background: linear-gradient(115deg, color-mix(in srgb, var(--accent-soft, #fff0e7) 78%, #fff), #fff 70%);
 }
 
+.hrPreviewContext {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 10px 17px;
+  border-bottom: 1px solid #f0d6c7;
+  background: color-mix(in srgb, var(--accent-soft, #fff0e7) 60%, #fff);
+  color: var(--accent-deep, #a84416);
+}
+
+.hrPreviewContext > svg {
+  margin-top: 1px;
+}
+
+.hrPreviewContext span {
+  min-width: 0;
+}
+
+.hrPreviewContext strong,
+.hrPreviewContext small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hrPreviewContext strong {
+  font-size: 11px;
+  font-weight: 790;
+}
+
+.hrPreviewContext small {
+  margin-top: 2px;
+  color: #7d665d;
+  font-size: 10px;
+  font-weight: 620;
+}
+
 .profilePending {
   margin: 0;
   padding: 14px 17px;

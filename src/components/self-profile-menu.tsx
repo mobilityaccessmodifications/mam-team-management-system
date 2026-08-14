@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleUserRound,
+  Eye,
   LockKeyhole,
   Mail,
   Phone,
@@ -27,8 +28,8 @@ import {
 import styles from "@/components/self-profile-menu.module.css";
 
 /**
- * The signed-in person's safe profile information. Do not pass another
- * employee's private contact details into this component.
+ * A profile DTO already authorised for the current viewer. The caller must
+ * not substitute organisation-tree data for private contact fields.
  */
 export type SelfProfileData = {
   name: string;
@@ -55,16 +56,26 @@ export type SelfProfileSaveResult = void | {
   message?: string;
 };
 
+/**
+ * `hr-preview` is used only after an HR-authorised selected-employee fetch.
+ * It makes the context explicit without changing the data the menu can show.
+ */
+export type SelfProfileMenuMode = "self" | "hr-preview";
+
 export type SelfProfileMenuProps = {
-  /** The actual signed-in person's profile, rather than an access-preview profile. */
+  /** An authorised profile DTO for the person named in the trigger. */
   profile: SelfProfileData;
   /**
-   * Persist only the editable self-service fields. The caller must still check
-   * the signed-in identity and authorise the update on the server.
+   * Persist only the editable contact fields. The caller must still check the
+   * signed-in identity or HR capability and authorise the update on the server.
    */
   onSave: (changes: SelfProfileChanges) => Promise<SelfProfileSaveResult>;
   /** Use while the profile record is initially loading. */
   disabled?: boolean;
+  /** Distinguishes an employee's self-service card from an HR-selected card. */
+  mode?: SelfProfileMenuMode;
+  /** Included in HR context copy only; it must be the authenticated HR viewer. */
+  viewerName?: string;
 };
 
 type Feedback =
@@ -101,6 +112,8 @@ export function SelfProfileMenu({
   profile,
   onSave,
   disabled = false,
+  mode = "self",
+  viewerName,
 }: SelfProfileMenuProps) {
   const panelId = useId();
   const titleId = useId();
@@ -113,6 +126,7 @@ export function SelfProfileMenu({
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   const profileKey = [
+    mode,
     profile.name,
     profile.title,
     profile.company,
@@ -145,7 +159,15 @@ export function SelfProfileMenu({
   const displayTitle = profile.title.trim() || "Team member";
   const organisation = companyName(profile.company);
   const today = new Date().toISOString().slice(0, 10);
-  const canEditSelfProfile = !disabled;
+  const isHrPreview = mode === "hr-preview";
+  const canEditProfile = !disabled;
+  const contactHeading = isHrPreview ? "Contact details" : "My contact details";
+  const contactHelp = isHrPreview
+    ? "Update only the fields HR has confirmed for this employee."
+    : "You can keep these details up to date yourself.";
+  const saveDefaultMessage = isHrPreview
+    ? "Employee profile changes are saved."
+    : "Your profile changes are saved.";
 
   const closeMenu = useCallback((restoreFocus = false) => {
     setIsOpen(false);
@@ -175,21 +197,21 @@ export function SelfProfileMenu({
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     requestAnimationFrame(() => {
-      if (canEditSelfProfile) firstInputRef.current?.focus();
+      if (canEditProfile) firstInputRef.current?.focus();
     });
 
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [canEditSelfProfile, closeMenu, isOpen]);
+  }, [canEditProfile, closeMenu, isOpen]);
 
   const isDirty = draft.personalEmail !== savedValues.personalEmail
     || draft.phone !== savedValues.phone
     || draft.dateOfBirth !== savedValues.dateOfBirth;
 
   function openMenu() {
-    if (!canEditSelfProfile) return;
+    if (!canEditProfile) return;
     setDraftState({ profileKey, values: savedValues });
     setFeedback(idleFeedback);
     setIsOpen(true);
@@ -205,7 +227,7 @@ export function SelfProfileMenu({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canEditSelfProfile || isSaving) return;
+    if (!canEditProfile || isSaving) return;
     const form = event.currentTarget;
     if (!form.checkValidity()) {
       form.reportValidity();
@@ -229,7 +251,7 @@ export function SelfProfileMenu({
       const result = await onSave(changes);
       setSavedLocally({ profileKey, values: changes });
       setDraftState({ profileKey, values: changes });
-      setFeedback({ tone: "success", message: result?.message ?? "Your profile changes are saved." });
+      setFeedback({ tone: "success", message: result?.message ?? saveDefaultMessage });
     } catch (error) {
       // Server Actions deliberately return generic errors except for this
       // optimistic-concurrency case. Keep arbitrary server messages out of
@@ -255,7 +277,7 @@ export function SelfProfileMenu({
         aria-haspopup="dialog"
         aria-label={`Open ${displayName}'s profile`}
         className={`${styles.trigger} ${isOpen ? styles.triggerOpen : ""}`}
-        disabled={!canEditSelfProfile}
+        disabled={!canEditProfile}
         onClick={() => isOpen ? closeMenu() : openMenu()}
         ref={triggerRef}
         type="button"
@@ -288,7 +310,11 @@ export function SelfProfileMenu({
             </button>
           </header>
 
-          {!canEditSelfProfile ? <p className={styles.profilePending} role="status">Your private profile is loading.</p> : <>
+          {!canEditProfile ? <p className={styles.profilePending} role="status">This profile is loading.</p> : <>
+            {isHrPreview ? <div className={styles.hrPreviewContext} role="status">
+              <Eye aria-hidden="true" size={15} />
+              <span><strong>HR selected view</strong><small>{viewerName ? `Signed in as ${viewerName}` : "Authorised HR access"}</small></span>
+            </div> : null}
             <div className={styles.organisationSummary} aria-label="Your organisation details">
               <span><Building2 aria-hidden="true" size={15} /><b>Company</b><strong>{organisation || "Not listed"}</strong></span>
               <span><BriefcaseBusiness aria-hidden="true" size={15} /><b>Team</b><strong>{profile.team?.trim() || "Not listed"}</strong></span>
@@ -299,13 +325,13 @@ export function SelfProfileMenu({
               <section className={styles.section} aria-labelledby={`${panelId}-contact`}>
                 <div className={styles.sectionHeading}>
                   <CircleUserRound aria-hidden="true" size={17} />
-                  <span><strong id={`${panelId}-contact`}>My contact details</strong><small>You can keep these details up to date yourself.</small></span>
+                  <span><strong id={`${panelId}-contact`}>{contactHeading}</strong><small>{contactHelp}</small></span>
                 </div>
 
                 <label className={styles.field} htmlFor={personalEmailId}>
                   <span><Mail aria-hidden="true" size={15} /> Personal email</span>
                   <input
-                    autoComplete="email"
+                    autoComplete={isHrPreview ? "off" : "email"}
                     id={personalEmailId}
                     onChange={(event) => updateDraft("personalEmail", event.target.value)}
                     placeholder="you@example.com"
@@ -313,12 +339,12 @@ export function SelfProfileMenu({
                     type="email"
                     value={draft.personalEmail}
                   />
-                  <small className={styles.helpText}>For HR contact only; changing it does not change your sign-in.</small>
+                  <small className={styles.helpText}>{isHrPreview ? "Changing this does not change the employee's sign-in." : "For HR contact only; changing it does not change your sign-in."}</small>
                 </label>
                 <label className={styles.field} htmlFor={phoneId}>
                   <span><Phone aria-hidden="true" size={15} /> Phone</span>
                   <input
-                    autoComplete="tel"
+                    autoComplete={isHrPreview ? "off" : "tel"}
                     id={phoneId}
                     inputMode="tel"
                     onChange={(event) => updateDraft("phone", event.target.value)}
@@ -330,7 +356,7 @@ export function SelfProfileMenu({
                 <label className={styles.field} htmlFor={birthDateId}>
                   <span><CalendarDays aria-hidden="true" size={15} /> Date of birth</span>
                   <input
-                    autoComplete="bday"
+                    autoComplete={isHrPreview ? "off" : "bday"}
                     id={birthDateId}
                     max={today}
                     onChange={(event) => updateDraft("dateOfBirth", event.target.value)}

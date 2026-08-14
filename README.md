@@ -8,7 +8,7 @@ Safer People System is the private people portal for Mobility Access Modificatio
 - Hosting: the MAM-owned Vercel project at `https://mam-team-management-system-ten.vercel.app`
 - Source: `mobilityaccessmodifications/mam-team-management-system`
 - Data and authentication: MAM Supabase project `xtwlrjqbusadghavchqm`
-- Directory: the live MAM and Equipsy roster, with a private one-to-one HR employee-detail store; there are no demo roles, every active linked employee has a limited top-right self-service profile, and the authorised system administrator has a clearly labelled read-only employee-access preview using active real people only
+- Directory: the live MAM and Equipsy roster, with a private one-to-one HR employee-detail store; there are no demo roles, every active linked employee has a limited top-right self-service profile, and an authorised HR administrator may select a real employee view from the sidebar
 - Accounts: username/password login backed by Supabase Auth and a database-controlled account registry
 - Workflow review: leave, onboarding, offboarding and check-in records are created in the open browser session using people from the real directory; they are not yet durable staff records
 
@@ -18,7 +18,7 @@ MAM people use the orange accent and Equipsy people use blue. Company is also st
 
 After login, the server verifies that the Supabase Auth user is linked to an active directory person. Every employee can use the live organisation tree, search it, and open a selected person’s work email. The tree does not expose a private employee list or private profile fields.
 
-Every active linked employee also has a top-right **My profile** control. It shows that person’s own safe work identity, team and manager context, their HR-managed work email, and their own private contact details. They may update only their phone number, personal email and date of birth. Work email is intentionally read-only and must be changed by HR. This control never exposes another employee’s profile or the employee list.
+Every active linked employee also has a top-right **My profile** control. It shows that person’s own safe work identity, team and manager context, their HR-managed work email, and their own private contact details. They may update only their phone number, personal email and date of birth. Work email is intentionally read-only and must be changed by HR. When an actual HR administrator uses the sidebar’s **Change view** control, the same top-right profile follows the selected real employee through a separate HR-authorised path; HR may correct those same three private contact fields. That does not change the signed-in Auth identity or give the employee workspace any HR permissions.
 
 Only a database-authorised HR user receives the master view. HR can:
 
@@ -40,7 +40,7 @@ The People workspace uses the real directory only for creating onboarding, offbo
 ## Data boundaries
 
 - Real names, positions, companies and reporting relationships live only in the authenticated, RLS-protected Supabase directory. Every authenticated employee may use the organisation tree, which exposes the safe name, position, company and reporting relationship and, only when a person is selected, that person’s work email.
-- HR employee details live in a private one-to-one record linked to the organisation person. Only HR-authorised database functions may return the complete employee list or arbitrary private profiles. A separate controlled self-profile response may return an active linked employee’s own phone number, personal email, date of birth and read-only work email; it never accepts a browser-supplied person identifier. The private roster is never committed to Git or copied into fixtures.
+- HR employee details live in a private one-to-one record linked to the organisation person. Only HR-authorised database functions may return the complete employee list or an arbitrary selected private profile. A separate controlled self-profile response may return an active linked employee’s own phone number, personal email, date of birth and read-only work email; it never accepts a browser-supplied person identifier. The private roster is never committed to Git or copied into fixtures.
 - The HR CSV export has the exact 12 employee columns in the agreed order—First Name, Last Name, Work Email, Personal Email, Phone, Job Title, Team, Manager, Country, Date of birth, Start date and Scheduled Employment End Date—and contains no portal-account or credential data. It is generated only for an authorised HR session and is not stored in Git.
 - The HR employee editor writes the canonical organisation fields and broadcasts committed changes through Realtime, so the safe organisation tree updates in other authorised sessions. Self-service contact changes are saved to the same private employee-detail record but do not change the public organisation fields.
 - A supplied HR workbook is staged and reconciled before import. It is never an instruction to automatically replace identities, deactivate people or relink existing accounts.
@@ -100,5 +100,5 @@ See `docs/environment-management.md` for the complete environment model.
 3. Review and apply versioned migrations, then run Supabase security and performance advisors.
 4. Verify the Vercel target is `ai-7033s-projects/mam-team-management-system` and remains linked to the company repository.
 5. Store the publishable values and server-only secret separately for Development, Preview and Production.
-6. Test login, active/disabled account enforcement, the top-right self-profile’s own-record-only update boundary and read-only work email, HR-only account and Directory access, the employee-only organisation-tree work-email view, and browser-session workflow privacy.
+6. Test login, active/disabled account enforcement, the top-right self-profile’s self-only update boundary and read-only work email, the HR-only selected-profile contact editor, HR-only account and Directory access, the employee-only organisation-tree work-email view, and browser-session workflow privacy.
 7. Deploy without changing the established production URL.

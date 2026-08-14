@@ -26,8 +26,11 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import {
   getCurrentEmployeeSelfProfile,
+  getSelectedEmployeeProfile,
   updateCurrentEmployeeSelfProfile,
+  updateSelectedEmployeeProfile,
   type CurrentEmployeeSelfProfile,
+  type SelectedEmployeeProfile,
 } from "@/app/profile/actions";
 import {
   createPortalAccount,
@@ -362,6 +365,9 @@ export function LeaveDemo({
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [selfProfile, setSelfProfile] = useState<CurrentEmployeeSelfProfile | null>(null);
   const [selfProfileLoading, setSelfProfileLoading] = useState(Boolean(currentPersonId));
+  // Private selected-employee details are never derived from the organisation
+  // tree. This state is populated only by the HR-authorised server action.
+  const [selectedEmployeeProfile, setSelectedEmployeeProfile] = useState<SelectedEmployeeProfile | null>(null);
   // This is intentionally UI-only. It never changes the authenticated user or
   // the capability checks that protect HR records and organisation writes.
   const [previewPersonId, setPreviewPersonId] = useState("");
@@ -518,6 +524,33 @@ export function LeaveDemo({
         };
       });
   }, [organisationRows]);
+  const canPreviewEmployeeAccess = isAdmin && canManageEmployeeDirectory;
+  const selectedPreviewCandidate = canPreviewEmployeeAccess && previewPersonId
+    ? directoryProfiles.find((profile) => profile.id === previewPersonId)
+    : undefined;
+  const selectedPreviewPersonId = selectedPreviewCandidate?.id ?? "";
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedPreviewPersonId) return;
+
+    void getSelectedEmployeeProfile(selectedPreviewPersonId)
+      .then((profile) => {
+        if (!cancelled && profile.personId === selectedPreviewPersonId) {
+          setSelectedEmployeeProfile(profile);
+        }
+      })
+      .catch(() => {
+        // The org-tree fallback below has no private contact fields and stays
+        // disabled. The server action independently re-checks HR authority.
+        if (!cancelled) setSelectedEmployeeProfile(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeDirectoryRefreshKey, selectedPreviewPersonId]);
+
   const signedInProfile = directoryProfiles.find((profile) => profile.id === currentPersonId);
   if (!signedInProfile) {
     return <DirectoryLoading state={organisationState} />;
@@ -525,16 +558,12 @@ export function LeaveDemo({
   const adminProfile: Profile = canManageEmployeeDirectory
     ? { ...signedInProfile, accessRole: "hr" }
     : signedInProfile;
-  const canPreviewEmployeeAccess = isAdmin && canManageEmployeeDirectory;
-  const previewCandidate = canPreviewEmployeeAccess && previewPersonId
-    ? directoryProfiles.find((profile) => profile.id === previewPersonId)
-    : undefined;
   // A preview is never an HR presentation. HR is an actual database capability,
   // while manager presentation is derived only from active direct reports.
-  const previewProfile: Profile | undefined = previewCandidate
+  const previewProfile: Profile | undefined = selectedPreviewCandidate
     ? {
-        ...previewCandidate,
-        accessRole: previewAccessRoleForOrgPerson(previewCandidate.id, organisationRows),
+        ...selectedPreviewCandidate,
+        accessRole: previewAccessRoleForOrgPerson(selectedPreviewCandidate.id, organisationRows),
       }
     : undefined;
   const isPreviewingEmployeeAccess = Boolean(previewProfile);
@@ -547,6 +576,27 @@ export function LeaveDemo({
     team: signedInProfile.team,
     manager: signedInProfile.manager,
   };
+  const topbarPreviewFallback: SelfProfileData | null = previewProfile ? {
+    name: previewProfile.name,
+    title: previewProfile.roleLabel,
+    company: previewProfile.company,
+    team: previewProfile.team,
+    manager: previewProfile.manager,
+  } : null;
+  const authorisedPreviewProfile = selectedEmployeeProfile && selectedEmployeeProfile.personId === previewProfile?.id
+    ? selectedEmployeeProfile
+    : null;
+  // The top-right card changes with the employee view. Until the dedicated
+  // HR-only profile request completes, it shows only public organisation data
+  // and remains non-editable rather than exposing stale private contact data.
+  const topbarProfile: SelfProfileData = isPreviewingEmployeeAccess
+    ? authorisedPreviewProfile
+      ? authorisedPreviewProfile
+      : topbarPreviewFallback ?? topbarSelfProfile
+    : topbarSelfProfile;
+  const topbarProfileLoading = isPreviewingEmployeeAccess
+    ? !authorisedPreviewProfile
+    : !selfProfile || selfProfileLoading;
 
   const viewTitles = getViewTitles(activeProfile);
   const visibleRequests = isPreviewingEmployeeAccess
@@ -624,6 +674,23 @@ export function LeaveDemo({
     return { message: "Your contact details are saved." };
   }
 
+  async function saveSelectedEmployeeProfile(changes: SelfProfileChanges) {
+    if (!canPreviewEmployeeAccess || !previewProfile || !selectedEmployeeProfile || selectedEmployeeProfile.personId !== previewProfile.id) {
+      throw new Error("The selected employee profile is still loading.");
+    }
+    const updated = await updateSelectedEmployeeProfile({
+      ...changes,
+      personId: selectedEmployeeProfile.personId,
+      detailVersion: selectedEmployeeProfile.detailVersion,
+    });
+    setSelectedEmployeeProfile(updated);
+    if (updated.personId === currentPersonId) setSelfProfile(updated);
+    // Keep the HR directory and the public organisation tree in step with the
+    // selected profile change, without publishing private contact fields.
+    setEmployeeDirectoryRefreshKey((current) => current + 1);
+    return { message: `${updated.name}'s contact details are saved.` };
+  }
+
   function announce(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 3200);
@@ -635,6 +702,7 @@ export function LeaveDemo({
     if (personId && !nextProfile) return;
 
     setPreviewPersonId(nextProfile?.id ?? "");
+    setSelectedEmployeeProfile(null);
     setShowRequestForm(false);
     setFormError("");
     setManagerNote("");
@@ -833,7 +901,7 @@ export function LeaveDemo({
               <Eye aria-hidden="true" size={17} />
               <span>
                 <strong>Change view</strong>
-                <small role="status">{previewProfile ? `Previewing ${previewProfile.name}` : "My HR workspace"}</small>
+                <small role="status">{previewProfile ? !authorisedPreviewProfile ? `Loading ${previewProfile.name}'s profile` : `Viewing ${previewProfile.name}` : "My HR workspace"}</small>
               </span>
             </label>
             <select
@@ -851,7 +919,7 @@ export function LeaveDemo({
             </select>
             {isPreviewingEmployeeAccess ? (
               <div className={styles.viewSwitcherActive} id="employee-access-preview-note">
-                <small>Preview only · signed in as {signedInProfile.name}</small>
+                <small>Employee workspace preview · signed in as {signedInProfile.name}</small>
                 <button type="button" onClick={() => changeEmployeeAccessPreview("")}>
                   <RotateCcw aria-hidden="true" size={14} /> Return to HR view
                 </button>
@@ -868,9 +936,11 @@ export function LeaveDemo({
             <span className={styles.demoStatus} data-state={organisationState} role="status"><i />{organisationState === "live" ? "Live directory" : organisationState === "connecting" ? "Connecting" : "Directory issue"}</span>
             {directorySupabase ? <form action={signOut}><button className={styles.signOutButton} type="submit" aria-label="Sign out"><LogOut size={15} /><span className={styles.actionLabel}>Sign out</span></button></form> : null}
             <SelfProfileMenu
-              disabled={!selfProfile || selfProfileLoading}
-              onSave={saveMyProfile}
-              profile={topbarSelfProfile}
+              disabled={topbarProfileLoading}
+              mode={isPreviewingEmployeeAccess ? "hr-preview" : "self"}
+              onSave={isPreviewingEmployeeAccess ? saveSelectedEmployeeProfile : saveMyProfile}
+              profile={topbarProfile}
+              viewerName={isPreviewingEmployeeAccess ? signedInProfile.name : undefined}
             />
           </div>
         </header>
