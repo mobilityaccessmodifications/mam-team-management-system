@@ -9,8 +9,10 @@
 - Employee and HR information is confidential.
 - Every authenticated employee may use the organisation tree. It shows the name, position, company and reporting relationship required to understand the structure, and may reveal only a selected person’s work email.
 - Employee contact and employment details are held in a private one-to-one HR record. The organisation tree never exposes phone numbers, personal email addresses, dates of birth or other private employee fields.
-- Only a database-controlled HR role may view the complete employee list, open or edit a private employee profile, access the Accounts view, or export the employee CSV. A browser-selected profile, client state or any former account-administrator permission does not grant HR access.
+- Every active directory-linked employee may open the top-right self-profile. It may show only that employee’s own phone number, personal email, date of birth and read-only work email; they may update only their own phone number, personal email and date of birth. It never accepts a selected employee from the browser and does not expose a roster or another person’s private details.
+- Only a database-controlled HR role may view the complete employee list, open or edit an arbitrary private employee profile, access the Accounts view, or export the employee CSV. A browser-selected profile, client state or any former account-administrator permission does not grant HR access.
 - The HR Directory is the unified employee editor. Its committed name, title, company, reporting and start-date changes update the canonical directory and are distributed to authorised sessions through Realtime.
+- Employee self-service contact changes update the same private employee-detail record but do not change the public organisation tree, work identity, work email, reporting relationship or account settings.
 - The HR CSV uses the agreed 12 employee columns and field order. It excludes portal logins, Auth aliases, existing passwords and any newly issued password.
 - MAM uses the orange accent and Equipsy uses blue; company remains visible as text.
 - Real roster names and positions are imported privately into the verified production project. They must not be committed to Git, copied into fixtures or used in screenshots.
@@ -61,6 +63,7 @@
 
 - The team calendar shows only what is required for coverage.
 - Organisation cards show only safe structural information. A selected person may expose their work email; phone number, personal email, date of birth, payroll, leave-reason, medical and work-location data never belongs in the employee-visible tree.
+- The top-right self-profile is the sole non-HR private-contact exception: it is scoped to the signed-in employee’s own record and exposes no private details for anyone else.
 - Detailed reasons and evidence do not appear in the shared calendar.
 - Login pages and account lists do not expose internal Auth email aliases.
 - Password values are never persisted in application tables, logs, screenshots or source. Existing passwords are never displayed.

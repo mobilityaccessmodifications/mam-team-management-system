@@ -8,7 +8,7 @@ Safer People System is the private people portal for Mobility Access Modificatio
 - Hosting: the MAM-owned Vercel project at `https://mam-team-management-system-ten.vercel.app`
 - Source: `mobilityaccessmodifications/mam-team-management-system`
 - Data and authentication: MAM Supabase project `xtwlrjqbusadghavchqm`
-- Directory: the live MAM and Equipsy roster, with a private one-to-one HR employee-detail store; there are no demo roles, and the authorised system administrator has a clearly labelled read-only employee-access preview using active real people only
+- Directory: the live MAM and Equipsy roster, with a private one-to-one HR employee-detail store; there are no demo roles, every active linked employee has a limited top-right self-service profile, and the authorised system administrator has a clearly labelled read-only employee-access preview using active real people only
 - Accounts: username/password login backed by Supabase Auth and a database-controlled account registry
 - Workflow review: leave, onboarding, offboarding and check-in records are created in the open browser session using people from the real directory; they are not yet durable staff records
 
@@ -17,6 +17,8 @@ MAM people use the orange accent and Equipsy people use blue. Company is also st
 ## What works now
 
 After login, the server verifies that the Supabase Auth user is linked to an active directory person. Every employee can use the live organisation tree, search it, and open a selected person’s work email. The tree does not expose a private employee list or private profile fields.
+
+Every active linked employee also has a top-right **My profile** control. It shows that person’s own safe work identity, team and manager context, their HR-managed work email, and their own private contact details. They may update only their phone number, personal email and date of birth. Work email is intentionally read-only and must be changed by HR. This control never exposes another employee’s profile or the employee list.
 
 Only a database-authorised HR user receives the master view. HR can:
 
@@ -27,7 +29,7 @@ Only a database-authorised HR user receives the master view. HR can:
 - disable or re-enable an account; and
 - open the private employee Directory, add or edit a person, and export the approved employee CSV.
 
-The **Directory** is HR-only and is the single employee editor. It contains the complete employee list and the private contact and employment fields needed by HR, such as work and personal contact details, phone number and date of birth. Employees never receive this list, these details, the CSV export or the Accounts view. The employee CSV is separate from portal accounts: it never includes login names, Auth addresses or passwords.
+The **Directory** is HR-only and is the single all-staff employee editor. It contains the complete employee list and the private contact and employment fields needed by HR, such as work and personal contact details, phone number and date of birth. An employee’s My profile updates only their permitted fields in that same private record; it is not an alternative all-staff Directory. Employees never receive the roster, another person’s private details, the CSV export or the Accounts view. The employee CSV is separate from portal accounts: it never includes login names, Auth addresses or passwords.
 
 Supabase Auth stores passwords as non-reversible hashes. HR can set a replacement password and see that newly generated value once, but neither the application nor HR can retrieve an existing password.
 
@@ -38,9 +40,9 @@ The People workspace uses the real directory only for creating onboarding, offbo
 ## Data boundaries
 
 - Real names, positions, companies and reporting relationships live only in the authenticated, RLS-protected Supabase directory. Every authenticated employee may use the organisation tree, which exposes the safe name, position, company and reporting relationship and, only when a person is selected, that person’s work email.
-- HR employee details live in a private one-to-one record linked to the organisation person. Only HR-authorised database functions may return the complete employee list or private fields such as phone number, personal email and date of birth; the private roster is never committed to Git or copied into fixtures.
+- HR employee details live in a private one-to-one record linked to the organisation person. Only HR-authorised database functions may return the complete employee list or arbitrary private profiles. A separate controlled self-profile response may return an active linked employee’s own phone number, personal email, date of birth and read-only work email; it never accepts a browser-supplied person identifier. The private roster is never committed to Git or copied into fixtures.
 - The HR CSV export has the exact 12 employee columns in the agreed order—First Name, Last Name, Work Email, Personal Email, Phone, Job Title, Team, Manager, Country, Date of birth, Start date and Scheduled Employment End Date—and contains no portal-account or credential data. It is generated only for an authorised HR session and is not stored in Git.
-- The employee editor writes the canonical organisation fields and broadcasts committed changes through Realtime, so the safe organisation tree updates in other authorised sessions.
+- The HR employee editor writes the canonical organisation fields and broadcasts committed changes through Realtime, so the safe organisation tree updates in other authorised sessions. Self-service contact changes are saved to the same private employee-detail record but do not change the public organisation fields.
 - A supplied HR workbook is staged and reconciled before import. It is never an instruction to automatically replace identities, deactivate people or relink existing accounts.
 - Account links, normalised login names, status and audit metadata live in Supabase. The Accounts view and account-management actions are HR-only. Supabase Auth remains the only password store.
 - Leave and People workflow examples are non-durable browser-session records until their live business rules and RLS design are approved.
@@ -98,5 +100,5 @@ See `docs/environment-management.md` for the complete environment model.
 3. Review and apply versioned migrations, then run Supabase security and performance advisors.
 4. Verify the Vercel target is `ai-7033s-projects/mam-team-management-system` and remains linked to the company repository.
 5. Store the publishable values and server-only secret separately for Development, Preview and Production.
-6. Test login, active/disabled account enforcement, HR-only account and Directory access, the employee-only organisation-tree work-email view, and browser-session workflow privacy.
+6. Test login, active/disabled account enforcement, the top-right self-profile’s own-record-only update boundary and read-only work email, HR-only account and Directory access, the employee-only organisation-tree work-email view, and browser-session workflow privacy.
 7. Deploy without changing the established production URL.

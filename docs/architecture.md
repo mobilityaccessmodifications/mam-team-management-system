@@ -7,6 +7,9 @@ Browser
   -> Vercel / Next.js
        -> Supabase Auth session (username resolved server-side)
        -> RLS-protected organisation-tree DTO (publishable key; selected work email only)
+       -> authenticated self-profile Server Actions
+            -> controlled own-record database functions
+            -> own phone, personal email and date of birth; read-only work email
        -> HR-authorised employee-directory Server Actions and CSV route
             -> controlled database functions
             -> private employee-detail records
@@ -26,9 +29,10 @@ There is no external HR, payroll, AroFlo, calendar, email or provisioning write 
 - Next.js verifies the current Auth session and loads its active portal-account link before rendering the application.
 - Database membership, controlled administrator records and RLS are the authorisation boundary. User-editable metadata and client state are never accepted as permission claims.
 - Every authenticated employee may use the organisation tree. It exposes name, position, company and reporting relationships; a narrow controlled DTO may additionally return only the selected person’s work email. It never returns phone numbers, personal email addresses, dates of birth or other private employee details.
+- Every active directory-linked employee may open the top-right self-profile control. Its narrow server-side DTO is derived from the current Auth session, not a person ID supplied by the browser. It shows that employee’s own phone, personal email and date of birth alongside a read-only HR-managed work email; it cannot return any other employee’s private fields.
 - An HR-authorised **Directory** tab is the unified employee editor. It writes the canonical organisation name, title, company, reporting fields and start date together with the person’s private HR detail record. Database functions reject invalid or cyclic reporting relationships, and Realtime distributes committed structural changes to other authorised sessions.
 - A supplied HR workbook is staged and reconciled against the live directory before import. Matching is never used to automatically replace identities, deactivate people or relink portal accounts.
-- There are no demo roles or synthetic profile controls. A signed-in system administrator with the database-controlled HR capability may use an explicitly labelled, read-only employee-access preview backed only by active real directory people. It derives only employee or active-manager presentation (never title-derived HR access), scopes leave/workflow data accordingly, hides private leave notes/evidence and HR-only records/actions, never impersonates an Auth user and cannot grant a database capability.
+- There are no demo roles or fake selectable profiles. A signed-in system administrator with the database-controlled HR capability may use an explicitly labelled, read-only employee-access preview backed only by active real directory people. It derives only employee or active-manager presentation (never title-derived HR access), scopes leave/workflow data accordingly, hides private leave notes/evidence and HR-only records/actions, never impersonates an Auth user and cannot grant a database capability.
 
 ## Portal accounts
 
@@ -52,9 +56,13 @@ Only an authorised HR browser receives the account-management DTO: directory ide
 
 `private.employee_directory_details` is a one-to-one extension of the safe organisation person record. It holds the approved employee fields that do not belong in the organisation tree: first and last name, work and personal contact details, team, country, date of birth and scheduled employment-end information. A separate narrow controlled response can provide a selected person’s work email to the organisation-tree inspector; it does not make the private table queryable by employees. The canonical start date, title, company and reporting parent remain on the organisation record so the tree and Directory cannot drift.
 
-Only a database-controlled HR role may call the employee-directory list, create and update functions or download the CSV. These functions use the signed-in session and controlled role checks; they do not use the Supabase Auth Admin secret. Returned employee-directory data is a deliberately narrow HR DTO, never a direct browser query of the private table. Non-HR users receive neither the Directory list nor a private employee-profile response.
+Only a database-controlled HR role may call the employee-directory list, create and update arbitrary employees or download the CSV. These functions use the signed-in session and controlled role checks; they do not use the Supabase Auth Admin secret. Returned employee-directory data is a deliberately narrow HR DTO, never a direct browser query of the private table. Non-HR users receive neither the Directory list nor another employee’s private profile.
 
 The CSV route emits the exact employee headers and order: First Name, Last Name, Work Email, Personal Email, Phone, Job Title, Team, Manager, Country, Date of birth, Start date and Scheduled Employment End Date. It protects against spreadsheet formula injection and excludes portal-account data, Auth aliases and passwords. It is generated for the current HR session only; exports are not persisted by the application.
+
+## Self-service profile
+
+The top-right self-profile is intentionally separate from the HR Directory. Its read and update functions derive the target person from the current active linked Auth account and accept no employee identifier. The only writable fields are the employee’s own phone number, personal email and date of birth. Work email, work identity, title, reporting relationship, account data and all other employee records remain HR-managed. Updates use the same private employee-detail record and an optimistic detail version, record only changed field labels in the existing audit trail, and never copy private contact values into the public organisation tree.
 
 ## Browser-session workflows
 
@@ -78,7 +86,7 @@ This boundary keeps the real directory and account registry functional while lea
 - `leave_requests`, `leave_request_events` and `leave_request_attachments`: RLS-first future live leave model; not used by the current browser-session demonstration.
 - `leave-evidence`: non-public Storage boundary prepared for a future approved live attachment flow.
 
-The former shared fake-profile/fake-leave tables and their public mutation functions are removed by the account-management migration.
+The former shared fake-profile/fake-leave tables and their public mutation functions are removed by the account-management migration. The self-profile functions are the only authenticated non-HR access path to private employee-detail data, and each is restricted to the caller’s own record.
 
 ## Environments
 

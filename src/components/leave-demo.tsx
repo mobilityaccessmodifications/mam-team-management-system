@@ -24,6 +24,11 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import {
+  getCurrentEmployeeSelfProfile,
+  updateCurrentEmployeeSelfProfile,
+  type CurrentEmployeeSelfProfile,
+} from "@/app/profile/actions";
+import {
   createPortalAccount,
   listPortalAccounts,
   resetPortalPassword,
@@ -36,6 +41,11 @@ import {
   type AccountDto,
 } from "@/components/account-management";
 import { EmployeeDirectory } from "@/components/employee-directory";
+import {
+  SelfProfileMenu,
+  type SelfProfileChanges,
+  type SelfProfileData,
+} from "@/components/self-profile-menu";
 import styles from "@/components/leave-demo.module.css";
 import { PeopleOperationsDemo } from "@/components/people-operations-demo";
 import type {
@@ -349,6 +359,8 @@ export function LeaveDemo({
   const [accounts, setAccounts] = useState<AccountDto[]>([]);
   const [accountsError, setAccountsError] = useState("");
   const [accountsLoading, setAccountsLoading] = useState(false);
+  const [selfProfile, setSelfProfile] = useState<CurrentEmployeeSelfProfile | null>(null);
+  const [selfProfileLoading, setSelfProfileLoading] = useState(Boolean(currentPersonId));
   // This is intentionally UI-only. It never changes the authenticated user or
   // the capability checks that protect HR records and organisation writes.
   const [previewPersonId, setPreviewPersonId] = useState("");
@@ -393,6 +405,26 @@ export function LeaveDemo({
     setOrganisationState("live");
   }, [directorySupabase]);
 
+  const loadSelfProfile = useCallback(async () => {
+    if (!currentPersonId) {
+      setSelfProfile(null);
+      setSelfProfileLoading(false);
+      return;
+    }
+
+    setSelfProfileLoading(true);
+    try {
+      setSelfProfile(await getCurrentEmployeeSelfProfile());
+    } catch {
+      // Do not substitute organisation-tree fields for the private profile
+      // DTO. A failed self-only lookup must not accidentally display or save
+      // another person's contact data.
+      setSelfProfile(null);
+    } finally {
+      setSelfProfileLoading(false);
+    }
+  }, [currentPersonId]);
+
   useEffect(() => {
     if (!directorySupabase) return;
     let mounted = true;
@@ -411,6 +443,11 @@ export function LeaveDemo({
         () => {
           if (!mounted) return;
           setEmployeeDirectoryRefreshKey((current) => current + 1);
+          // HR contact edits deliberately touch only the person's safe public
+          // org row. Refresh the authenticated person's self-only DTO too so
+          // their top-right card stays current without publishing any private
+          // fields through Realtime.
+          void loadSelfProfile();
           window.clearTimeout(refreshTimer);
           refreshTimer = window.setTimeout(() => void loadOrganisation(), 120);
         },
@@ -422,13 +459,18 @@ export function LeaveDemo({
       window.clearTimeout(refreshTimer);
       void directorySupabase.removeChannel(channel);
     };
-  }, [directorySupabase, loadOrganisation]);
+  }, [directorySupabase, loadOrganisation, loadSelfProfile]);
 
   useEffect(() => {
     if (!isAdmin || !canManageEmployeeDirectory) return;
     const timer = window.setTimeout(() => void loadAccounts(), 0);
     return () => window.clearTimeout(timer);
   }, [canManageEmployeeDirectory, isAdmin, loadAccounts]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadSelfProfile(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadSelfProfile]);
 
   const organisationPeople = useMemo<OrganisationPerson[]>(() => organisationRows
     .filter((row) => row.node_kind !== "vacancy")
@@ -497,6 +539,13 @@ export function LeaveDemo({
   const isPreviewingEmployeeAccess = Boolean(previewProfile);
   const activeProfile = previewProfile ?? adminProfile;
   const showHrWorkspace = canManageEmployeeDirectory && !isPreviewingEmployeeAccess;
+  const topbarSelfProfile: SelfProfileData = selfProfile ?? {
+    name: signedInProfile.name,
+    title: signedInProfile.roleLabel,
+    company: signedInProfile.company,
+    team: signedInProfile.team,
+    manager: signedInProfile.manager,
+  };
 
   const viewTitles = getViewTitles(activeProfile);
   const visibleRequests = isPreviewingEmployeeAccess
@@ -559,6 +608,19 @@ export function LeaveDemo({
       if (existingIndex < 0) return [...current, account];
       return current.map((candidate) => candidate.personId === account.personId ? account : candidate);
     });
+  }
+
+  async function saveMyProfile(changes: SelfProfileChanges) {
+    if (!selfProfile) throw new Error("Your profile is still loading.");
+    const updated = await updateCurrentEmployeeSelfProfile({
+      ...changes,
+      detailVersion: selfProfile.detailVersion,
+    });
+    setSelfProfile(updated);
+    // A self-service edit deliberately triggers the same public-row realtime
+    // refresh used by HR. Update the local HR directory immediately too.
+    setEmployeeDirectoryRefreshKey((current) => current + 1);
+    return { message: "Your contact details are saved." };
   }
 
   function announce(message: string) {
@@ -773,6 +835,11 @@ export function LeaveDemo({
               {isPreviewingEmployeeAccess ? <button className={styles.exitPreviewButton} type="button" onClick={() => changeEmployeeAccessPreview("")}>Return to HR</button> : null}
             </div> : null}
             {directorySupabase ? <form action={signOut}><button className={styles.signOutButton} type="submit" aria-label="Sign out"><LogOut size={15} /><span className={styles.actionLabel}>Sign out</span></button></form> : null}
+            <SelfProfileMenu
+              disabled={!selfProfile || selfProfileLoading || isPreviewingEmployeeAccess}
+              onSave={saveMyProfile}
+              profile={topbarSelfProfile}
+            />
           </div>
         </header>
 
