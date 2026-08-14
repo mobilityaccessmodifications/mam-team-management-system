@@ -629,7 +629,10 @@ export function LeaveDemo({
   }
 
   function changeEmployeeAccessPreview(personId: string) {
+    if (!canPreviewEmployeeAccess) return;
     const nextProfile = directoryProfiles.find((profile) => profile.id === personId);
+    if (personId && !nextProfile) return;
+
     setPreviewPersonId(nextProfile?.id ?? "");
     setShowRequestForm(false);
     setFormError("");
@@ -826,17 +829,20 @@ export function LeaveDemo({
           <div className={styles.mobileBrand}><BrandMark compact /></div>
           <div className={styles.topActions}>
             <span className={styles.demoStatus} data-state={organisationState} role="status"><i />{organisationState === "live" ? "Live directory" : organisationState === "connecting" ? "Connecting" : "Directory issue"}</span>
-            {canPreviewEmployeeAccess ? <div className={styles.accessPreview} data-previewing={isPreviewingEmployeeAccess || undefined}>
-              <label htmlFor="employee-access-preview"><Eye size={15} aria-hidden="true" /><span>Preview employee access</span></label>
-              <select id="employee-access-preview" value={previewProfile?.id ?? ""} onChange={(event) => changeEmployeeAccessPreview(event.target.value)}>
-                <option value="">HR workspace</option>
-                {directoryProfiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name} · {profile.roleLabel}</option>)}
-              </select>
-              {isPreviewingEmployeeAccess ? <button className={styles.exitPreviewButton} type="button" onClick={() => changeEmployeeAccessPreview("")}>Return to HR</button> : null}
-            </div> : null}
             {directorySupabase ? <form action={signOut}><button className={styles.signOutButton} type="submit" aria-label="Sign out"><LogOut size={15} /><span className={styles.actionLabel}>Sign out</span></button></form> : null}
             <SelfProfileMenu
-              disabled={!selfProfile || selfProfileLoading || isPreviewingEmployeeAccess}
+              accessPreview={canPreviewEmployeeAccess ? {
+                people: directoryProfiles.map((profile) => ({
+                  id: profile.id,
+                  name: profile.name,
+                  roleLabel: profile.roleLabel,
+                })),
+                previewedPersonName: previewProfile?.name,
+                selectedPersonId: previewProfile?.id ?? "",
+                onSelect: changeEmployeeAccessPreview,
+              } : undefined}
+              disabled={!selfProfile || selfProfileLoading}
+              isAccessPreview={isPreviewingEmployeeAccess}
               onSave={saveMyProfile}
               profile={topbarSelfProfile}
             />
@@ -844,11 +850,6 @@ export function LeaveDemo({
         </header>
 
         <main className={styles.main} id="main-content">
-          {isPreviewingEmployeeAccess ? <section className={styles.previewNotice} role="status">
-            <Eye size={18} aria-hidden="true" />
-            <span><strong>Previewing {activeProfile.name}&apos;s employee access</strong><small>This is a read-only interface preview. You remain signed in as {adminProfile.name}; HR tools and private records are hidden.</small></span>
-            <button type="button" onClick={() => changeEmployeeAccessPreview("")}>Return to HR view</button>
-          </section> : null}
           {activeView !== "people" ? <section className={styles.pageHeader}>
             <div><h1>{viewTitles[activeView].title}</h1>{viewTitles[activeView].helper ? <p>{viewTitles[activeView].helper}</p> : null}</div>
             <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)} disabled={isMutating || isPreviewingEmployeeAccess}><Plus size={17} /> {activeProfile.accessRole === "employee" ? "New leave request" : "Add leave"}</button>
