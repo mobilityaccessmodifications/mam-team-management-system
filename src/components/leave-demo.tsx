@@ -3,9 +3,7 @@
 import {
   ArrowUpRight,
   CalendarDays,
-  Check,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   ClipboardList,
   Clock3,
@@ -319,7 +317,6 @@ export function LeaveDemo({
 }) {
   const directorySupabase = isSupabaseConfigured() ? createClient() : null;
   const [activeView, setActiveView] = useState<AppView>(initialNavigation?.view ?? "home");
-  const [activeProfileId, setActiveProfileId] = useState(currentPersonId ?? "");
   const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests);
   const [selectedRequestId, setSelectedRequestId] = useState(initialNavigation?.requestId ?? "");
   const [leaveSection, setLeaveSection] = useState<LeaveSection>(initialNavigation?.section ?? "requests");
@@ -328,7 +325,6 @@ export function LeaveDemo({
   const [managerNote, setManagerNote] = useState("");
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
-  const [showProfiles, setShowProfiles] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [organisationRows, setOrganisationRows] = useState<InternalOrgRow[]>([]);
   const [canEditOrganisation, setCanEditOrganisation] = useState(false);
@@ -338,10 +334,15 @@ export function LeaveDemo({
   const [organisationState, setOrganisationState] = useState<DirectoryState>("connecting");
   const [accounts, setAccounts] = useState<AccountDto[]>([]);
   const [accountsError, setAccountsError] = useState("");
-  const [accountsLoading, setAccountsLoading] = useState(isAdmin);
+  const [accountsLoading, setAccountsLoading] = useState(false);
 
   const loadAccounts = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!isAdmin || !canManageEmployeeDirectory) {
+      setAccounts([]);
+      setAccountsError("");
+      setAccountsLoading(false);
+      return;
+    }
     setAccountsLoading(true);
     try {
       setAccounts(await listPortalAccounts());
@@ -351,7 +352,7 @@ export function LeaveDemo({
     } finally {
       setAccountsLoading(false);
     }
-  }, [isAdmin]);
+  }, [canManageEmployeeDirectory, isAdmin]);
 
   const loadOrganisation = useCallback(async () => {
     if (!directorySupabase) return;
@@ -407,10 +408,10 @@ export function LeaveDemo({
   }, [directorySupabase, loadOrganisation]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin || !canManageEmployeeDirectory) return;
     const timer = window.setTimeout(() => void loadAccounts(), 0);
     return () => window.clearTimeout(timer);
-  }, [isAdmin, loadAccounts]);
+  }, [canManageEmployeeDirectory, isAdmin, loadAccounts]);
 
   const organisationPeople = useMemo<OrganisationPerson[]>(() => organisationRows
     .filter((row) => row.node_kind !== "vacancy")
@@ -457,15 +458,11 @@ export function LeaveDemo({
         };
       });
   }, [organisationRows]);
-  const selectedProfile = isAdmin
-    ? directoryProfiles.find((profile) => profile.id === activeProfileId)
-      ?? directoryProfiles.find((profile) => profile.id === currentPersonId)
-      ?? directoryProfiles[0]
-    : directoryProfiles.find((profile) => profile.id === currentPersonId);
+  const selectedProfile = directoryProfiles.find((profile) => profile.id === currentPersonId);
   if (!selectedProfile) {
     return <DirectoryLoading state={organisationState} />;
   }
-  const activeProfile: Profile = isAdmin && selectedProfile.id === currentPersonId
+  const activeProfile: Profile = canManageEmployeeDirectory
     ? { ...selectedProfile, accessRole: "hr" }
     : selectedProfile;
 
@@ -558,18 +555,6 @@ export function LeaveDemo({
     chooseLeaveSection(section, id);
     setActiveView("leave");
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function switchProfile(profile: Profile) {
-    if (!isAdmin) return;
-    setActiveProfileId(profile.id);
-    setActiveView("home");
-    setLeaveSection("requests");
-    setSelectedRequestId(requests.find((request) => request.employee === profile.name)?.id ?? "");
-    setStatusFilter("All");
-    setManagerNote("");
-    setShowProfiles(false);
-    announce(`Now viewing as ${profile.name} · ${profile.roleLabel}.`);
   }
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
@@ -728,7 +713,6 @@ export function LeaveDemo({
           <div className={styles.topActions}>
             <span className={styles.demoStatus} data-state={organisationState} role="status"><i />{organisationState === "live" ? "Live directory" : organisationState === "connecting" ? "Connecting" : "Directory issue"}</span>
             {directorySupabase ? <form action={signOut}><button className={styles.signOutButton} type="submit" aria-label="Sign out"><LogOut size={15} /><span className={styles.actionLabel}>Sign out</span></button></form> : null}
-            {isAdmin ? <ProfileSwitcher activeProfile={activeProfile} profiles={directoryProfiles} open={showProfiles} onToggle={() => setShowProfiles((current) => !current)} onSelect={switchProfile} /> : null}
           </div>
         </header>
 
@@ -746,7 +730,7 @@ export function LeaveDemo({
               key={canManageEmployeeDirectory ? "hr-directory" : "standard-people"}
               activeProfile={activeProfile}
               organisationProfiles={organisationPeople}
-              canEditOrganisation={canEditOrganisation}
+              canEditOrganisation={canEditOrganisation && canManageEmployeeDirectory}
               onCreateOrganisationPerson={createOrganisationPerson}
               onUpdateOrganisationPerson={updateOrganisationPerson}
               onOpenEmployeeDirectoryRecord={setEmployeeDirectorySelectedPersonId}
@@ -758,7 +742,7 @@ export function LeaveDemo({
                 refreshKey={employeeDirectoryRefreshKey}
                 selectedPersonId={employeeDirectorySelectedPersonId}
               /> : undefined}
-              renderAccounts={isAdmin ? accountsLoading
+              renderAccounts={isAdmin && canManageEmployeeDirectory ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
                 : accountsError
                 ? <div className={styles.emptyState}><ShieldCheck size={24} /><strong>Accounts could not be loaded</strong><span>{accountsError}</span></div>
@@ -816,51 +800,6 @@ function DirectoryLoading({ state }: { state: DirectoryState }) {
       </main>
     </div>
   </div>;
-}
-
-function ProfileSwitcher({ activeProfile, profiles, open, onToggle, onSelect }: { activeProfile: Profile; profiles: Profile[]; open: boolean; onToggle: () => void; onSelect: (profile: Profile) => void }) {
-  const [query, setQuery] = useState("");
-  const groups = [
-    { label: "MAM", profiles: profiles.filter((profile) => profile.company === "mam") },
-    { label: "Equipsy", profiles: profiles.filter((profile) => profile.company === "equipsy") },
-  ].map((group) => ({
-    ...group,
-    profiles: group.profiles.filter((profile) => `${profile.name} ${profile.roleLabel}`.toLowerCase().includes(query.trim().toLowerCase())),
-  })).filter((group) => group.profiles.length);
-
-  return (
-    <div className={styles.profileSwitcher}>
-      <button
-        className={styles.profileTrigger}
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-label={`Admin preview: view as ${activeProfile.name}, ${activeProfile.roleLabel}`}
-      >
-        <span className={styles.profileAvatar} data-company={activeProfile.company}>{activeProfile.initials}</span>
-        <span><strong>{activeProfile.name}</strong><small>View as · {activeProfile.roleLabel}</small></span>
-        <ChevronDown className={open ? styles.profileChevronOpen : ""} size={15} />
-      </button>
-      {open ? (
-        <div className={styles.profileMenu} aria-label="Admin preview: view as another profile">
-          <header><span>Admin preview</span><small>View the workspace as another team member</small><label className={styles.profileSearch}><Search size={14} /><span className={styles.srOnly}>Search profiles</span><input type="search" placeholder="Search name or position" value={query} onChange={(event) => setQuery(event.target.value)} /></label></header>
-          {groups.map((group) => (
-            <section key={group.label}>
-              <span>{group.label}</span>
-              {group.profiles.map((profile) => (
-                <button type="button" onClick={() => onSelect(profile)} key={profile.id}>
-                  <span className={styles.profileAvatar} data-company={profile.company}>{profile.initials}</span>
-                  <span><strong>{profile.name}</strong><small>{profile.roleLabel}</small></span>
-                  {profile.id === activeProfile.id ? <Check size={15} /> : null}
-                </button>
-              ))}
-            </section>
-          ))}
-          <footer><ShieldCheck size={14} /> View as changes the preview only; database permissions stay with your signed-in account</footer>
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 function StatusPill({ status }: { status: RequestStatus }) {

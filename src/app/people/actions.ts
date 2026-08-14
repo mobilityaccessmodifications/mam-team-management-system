@@ -7,6 +7,7 @@ import {
   listEmployeeDirectoryRecordsForManager,
   requireEmployeeDirectoryManager,
 } from "@/lib/employee-directory";
+import { getOrganisationPersonWorkEmailForMember } from "@/lib/organisation-directory";
 import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryCompany,
@@ -128,6 +129,16 @@ function mutationError(error: { message?: string } | null) {
 /** Returns only HR-authorised employee records; never account credentials. */
 export async function listEmployeeDirectoryRecords(): Promise<EmployeeDirectoryRecord[]> {
   return listEmployeeDirectoryRecordsForManager();
+}
+
+/**
+ * Resolves one selected colleague's work contact on demand. The server-side
+ * data-access layer and database RPC both re-check internal membership.
+ */
+export async function getOrganisationPersonWorkEmail(
+  personId: string,
+): Promise<string | null> {
+  return getOrganisationPersonWorkEmailForMember(personId);
 }
 
 export async function createEmployeeDirectoryRecord(

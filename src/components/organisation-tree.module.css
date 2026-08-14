@@ -692,7 +692,8 @@
 }
 
 .relationships > button,
-.reportList button {
+.reportList button,
+.workEmail {
   display: grid;
   gap: 2px;
   border: 1px solid #dce3e1;
@@ -706,9 +707,25 @@
 }
 
 .relationships > button:hover,
-.reportList button:hover {
+.reportList button:hover,
+.workEmail:hover {
   border-color: #efad85;
   background: #fff9f5;
+}
+
+.workEmail {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  color: #26566f;
+  text-decoration: none;
+}
+
+.workEmail svg {
+  color: var(--mam-dark);
+}
+
+.workEmail strong {
+  overflow-wrap: anywhere;
 }
 
 .relationships strong {
@@ -860,7 +877,8 @@
 .saveAction:focus-visible,
 .inspectorHeader button:focus-visible,
 .drawerHeader > button:focus-visible,
-.focusBar button:focus-visible {
+.focusBar button:focus-visible,
+.workEmail:focus-visible {
   outline: 3px solid rgb(255 117 31 / 0.3);
   outline-offset: 2px;
 }

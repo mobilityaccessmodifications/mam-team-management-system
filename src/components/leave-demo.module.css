@@ -365,201 +365,6 @@
   margin-left: auto;
 }
 
-.profileSwitcher {
-  position: relative;
-}
-
-.profileTrigger {
-  min-width: 232px;
-  min-height: 46px;
-  display: grid;
-  grid-template-columns: 34px 1fr 16px;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px 4px 5px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: white;
-  color: var(--ink);
-  text-align: left;
-}
-
-.profileTrigger:hover,
-.profileTrigger[aria-expanded="true"] {
-  border-color: var(--line-dark);
-  background: #fafbf9;
-}
-
-.profileTrigger > span:nth-child(2),
-.profileMenu button > span:nth-child(2) {
-  min-width: 0;
-}
-
-.profileTrigger strong,
-.profileTrigger small,
-.profileMenu button strong,
-.profileMenu button small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.profileTrigger strong,
-.profileMenu button strong {
-  font-size: 13px;
-  font-weight: 720;
-}
-
-.profileTrigger small,
-.profileMenu button small {
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.profileTrigger > svg {
-  color: #8a9492;
-  transition: transform 140ms ease;
-}
-
-.profileChevronOpen {
-  transform: rotate(180deg);
-}
-
-.profileAvatar {
-  width: 34px;
-  height: 34px;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 6px 2px 6px 6px;
-  font-family: var(--font-geist-mono), monospace;
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.profileAvatar[data-company="mam"] {
-  background: var(--orange-soft);
-  color: var(--orange-deep);
-}
-
-.profileAvatar[data-company="equipsy"] {
-  background: var(--blue-soft);
-  color: var(--blue);
-}
-
-.profileSearch {
-  display: flex;
-  min-height: 38px;
-  align-items: center;
-  gap: 7px;
-  margin-top: 12px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--muted);
-  padding: 0 9px;
-}
-
-.profileSearch input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--ink);
-  font-size: 12px;
-}
-
-.profileMenu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 90;
-  width: 410px;
-  max-height: min(650px, calc(100vh - 86px));
-  overflow-y: auto;
-  border: 1px solid var(--line-dark);
-  border-radius: 10px;
-  background: white;
-  box-shadow: 0 20px 55px rgba(28, 36, 37, 0.17);
-  animation: riseIn 140ms ease-out;
-}
-
-.profileMenu > header {
-  padding: 17px 18px 15px;
-  border-bottom: 1px solid var(--line);
-}
-
-.profileMenu > header span,
-.profileMenu > header small {
-  display: block;
-}
-
-.profileMenu > header span {
-  font-size: 15px;
-  font-weight: 750;
-}
-
-.profileMenu > header small {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.profileMenu > section {
-  display: grid;
-  gap: 2px;
-  padding: 11px;
-  border-bottom: 1px solid var(--line);
-}
-
-.profileMenu > section > span {
-  padding: 2px 6px 5px;
-  color: #8a9492;
-  font-family: var(--font-geist-mono), monospace;
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.profileMenu section button {
-  width: 100%;
-  min-height: 58px;
-  display: grid;
-  grid-template-columns: 34px 1fr 18px;
-  align-items: center;
-  gap: 11px;
-  padding: 8px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--ink);
-  text-align: left;
-}
-
-.profileMenu section button:hover {
-  background: #f5f7f6;
-}
-
-.profileMenu section button > svg {
-  color: var(--orange);
-}
-
-.profileMenu > footer {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 14px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.profileMenu > footer svg {
-  color: var(--green);
-}
-
 .iconButton,
 .resetButton,
 .signOutButton,
@@ -3114,11 +2919,6 @@
   font-size: 13px;
 }
 
-.profileTrigger {
-  min-width: 214px;
-  min-height: 42px;
-}
-
 .main {
   width: min(100%, 1180px);
   padding: 25px 26px 44px;
@@ -3241,8 +3041,6 @@
 }
 
 .navItem:focus-visible,
-.profileTrigger:focus-visible,
-.profileMenu button:focus-visible,
 .emailActivityButton:focus-visible,
 .signOutButton:focus-visible,
 .resetButton:focus-visible,
@@ -3454,22 +3252,6 @@
     top: 5px;
     right: 4px;
     font-size: 10px;
-  }
-
-  .profileTrigger {
-    width: 46px;
-    min-width: 46px;
-    grid-template-columns: 34px;
-    padding: 5px;
-  }
-
-  .profileTrigger > span:nth-child(2),
-  .profileTrigger > svg {
-    display: none;
-  }
-
-  .profileMenu {
-    width: min(410px, calc(100vw - 28px));
   }
 
   .main {

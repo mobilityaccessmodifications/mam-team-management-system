@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Focus,
   LocateFixed,
+  Mail,
   Maximize2,
   Minimize2,
   Minus,
@@ -60,6 +61,8 @@ export type OrganisationTreeProps = {
   ) => Promise<void>;
   /** Opens the HR-only record editor without exposing private fields in the tree. */
   onOpenEmployeeRecord?: (personId: string) => void;
+  /** Loads only the selected person's employee-visible work contact on demand. */
+  onRequestWorkEmail?: (personId: string) => Promise<string | null>;
   className?: string;
 };
 
@@ -133,6 +136,12 @@ function isPerson(profile: OrganisationPerson) {
 
 function normalise(value: string) {
   return value.trim().toLocaleLowerCase();
+}
+
+function safeWorkEmail(value: string | null) {
+  if (typeof value !== "string") return null;
+  const email = value.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 }
 
 function sortPeople<T extends OrganisationPerson>(profiles: T[]) {
@@ -478,6 +487,7 @@ export function OrganisationTree({
   onCreate,
   onUpdate,
   onOpenEmployeeRecord,
+  onRequestWorkEmail,
   className,
 }: OrganisationTreeProps) {
   const [query, setQuery] = useState("");
@@ -493,10 +503,16 @@ export function OrganisationTree({
   const [draft, setDraft] = useState<OrganisationPersonDraft>(emptyDraft);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [workContact, setWorkContact] = useState<{
+    personId: string;
+    state: "loading" | "ready" | "error";
+    email: string | null;
+  } | null>(null);
   const titleId = useId();
   const descriptionId = useId();
   const markerPrefix = useId().replaceAll(":", "");
   const viewportRef = useRef<HTMLDivElement>(null);
+  const workContactRequestRef = useRef(0);
   const panRef = useRef<{
     pointerId: number;
     x: number;
@@ -509,7 +525,11 @@ export function OrganisationTree({
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (editor && !saving) setEditor(null);
-      else if (selectedId) setSelectedId(null);
+      else if (selectedId) {
+        workContactRequestRef.current += 1;
+        setWorkContact(null);
+        setSelectedId(null);
+      }
     };
     const handleFullscreen = () => {
       setFullscreen(document.fullscreenElement === viewportRef.current);
@@ -617,6 +637,32 @@ export function OrganisationTree({
     return addAncestorIds(new Set([selectedId]), profileById);
   }, [profileById, selectedId]);
 
+  const requestWorkContact = (personId: string) => {
+    const profile = profileById.get(personId);
+    const requestId = workContactRequestRef.current + 1;
+    workContactRequestRef.current = requestId;
+
+    if (!profile || !isPerson(profile) || !onRequestWorkEmail) {
+      setWorkContact(null);
+      return;
+    }
+
+    setWorkContact({ personId, state: "loading", email: null });
+    void onRequestWorkEmail(personId)
+      .then((email) => {
+        if (workContactRequestRef.current !== requestId) return;
+        setWorkContact({
+          personId,
+          state: "ready",
+          email: safeWorkEmail(email),
+        });
+      })
+      .catch(() => {
+        if (workContactRequestRef.current !== requestId) return;
+        setWorkContact({ personId, state: "error", email: null });
+      });
+  };
+
   const activeEditor =
     canEdit &&
     (editor?.mode === "create" ||
@@ -716,6 +762,7 @@ export function OrganisationTree({
     }
     expandAncestorBranches(id);
     setSelectedId(id);
+    requestWorkContact(id);
     setSearchOpen(false);
     centerNode(id, visibleIds.has(id) ? 30 : 100);
   };
@@ -725,6 +772,7 @@ export function OrganisationTree({
     setQuery("");
     setSearchOpen(false);
     setSelectedId(id);
+    requestWorkContact(id);
     centerNode(id, 100);
   };
 
@@ -789,6 +837,8 @@ export function OrganisationTree({
     setCompanyFilter("all");
     setQuery("");
     setSelectedId(null);
+    workContactRequestRef.current += 1;
+    setWorkContact(null);
     setCollapsedIds(new Set());
     setZoom(DEFAULT_ZOOM);
     const viewport = viewportRef.current;
@@ -928,7 +978,7 @@ export function OrganisationTree({
         <div>
           <span className={styles.eyebrow}>People</span>
           <h2 id={titleId}>Organisation</h2>
-          <p>Select a person to explore their reporting line.</p>
+          <p>Select a person to view their reporting line and work contact.</p>
         </div>
 
         {canEdit ? (
@@ -1003,6 +1053,8 @@ export function OrganisationTree({
                 setFocusedRootId(null);
                 setQuery("");
                 setSelectedId(null);
+                workContactRequestRef.current += 1;
+                setWorkContact(null);
               }}
               type="button"
             >
@@ -1251,7 +1303,11 @@ export function OrganisationTree({
               </div>
               <button
                 aria-label="Close person details"
-                onClick={() => setSelectedId(null)}
+                onClick={() => {
+                  workContactRequestRef.current += 1;
+                  setWorkContact(null);
+                  setSelectedId(null);
+                }}
                 type="button"
               >
                 <X aria-hidden="true" size={18} />
@@ -1269,6 +1325,33 @@ export function OrganisationTree({
                   <dd>{selectedTeamSize}</dd>
                 </div>
               </dl>
+
+              {isPerson(selectedProfile) ? (
+                <section className={styles.relationships}>
+                  <span>Work email</span>
+                  {workContact?.personId === selectedProfile.id
+                    && workContact.state === "loading" ? (
+                      <p aria-live="polite">Loading work contact…</p>
+                    ) : workContact?.personId === selectedProfile.id
+                      && workContact.state === "ready"
+                      && workContact.email ? (
+                        <a
+                          className={styles.workEmail}
+                          href={`mailto:${encodeURIComponent(workContact.email)}`}
+                        >
+                          <Mail aria-hidden="true" size={15} />
+                          <strong>{workContact.email}</strong>
+                        </a>
+                      ) : workContact?.personId === selectedProfile.id
+                        && workContact.state === "error" ? (
+                          <p>Work contact could not be loaded. Try again.</p>
+                        ) : onRequestWorkEmail ? (
+                          <p>Work email not listed.</p>
+                        ) : (
+                          <p>Work contact is unavailable.</p>
+                        )}
+                </section>
+              ) : null}
 
               <section className={styles.relationships}>
                 <span>Reports to</span>
@@ -1297,6 +1380,7 @@ export function OrganisationTree({
                   <p>No direct reports</p>
                 )}
               </section>
+
             </div>
 
             <footer className={styles.inspectorActions}>

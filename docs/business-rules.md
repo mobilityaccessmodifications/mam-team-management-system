@@ -7,18 +7,18 @@
 - The initial release remains a management review before all-staff rollout.
 - Nixon owns delivery priority; team-supplied priority is input, not a command.
 - Employee and HR information is confidential.
-- The organisation tree shows only the name, position, company and reporting relationship required to understand the structure.
-- Employee contact and employment details are held in a private one-to-one HR record, not in the organisation tree.
-- Only a database-controlled HR role may view or edit the HR Directory or export its employee CSV. Account-administrator permission, View-as mode and a browser-selected profile do not grant HR access.
+- Every authenticated employee may use the organisation tree. It shows the name, position, company and reporting relationship required to understand the structure, and may reveal only a selected person’s work email.
+- Employee contact and employment details are held in a private one-to-one HR record. The organisation tree never exposes phone numbers, personal email addresses, dates of birth or other private employee fields.
+- Only a database-controlled HR role may view the complete employee list, open or edit a private employee profile, access the Accounts view, or export the employee CSV. A browser-selected profile, client state or any former account-administrator permission does not grant HR access.
 - The HR Directory is the unified employee editor. Its committed name, title, company, reporting and start-date changes update the canonical directory and are distributed to authorised sessions through Realtime.
 - The HR CSV uses the agreed 12 employee columns and field order. It excludes portal logins, Auth aliases, existing passwords and any newly issued password.
 - MAM uses the orange accent and Equipsy uses blue; company remains visible as text.
 - Real roster names and positions are imported privately into the verified production project. They must not be committed to Git, copied into fixtures or used in screenshots.
 - A supplied HR workbook must be staged and reconciled with the live directory before import. It does not authorise automatic identity replacement, deactivation or portal-account relinking.
-- Every portal account must link to one active person in the real directory. There are no fake or synthetic selectable profiles.
-- The server verifies the signed-in account and its active status before opening the application. Client-side View-as state never grants permission or impersonates another authenticated account.
-- The authorised administrator may view account login names, status and last sign-in time; create a login; change a login name; set a new password; and disable or enable an account.
-- No administrator can view or recover an existing password. Supabase Auth stores password hashes, not reversible passwords. A newly generated or supplied password may be shown once after creation/reset and is not retained in application tables or logs.
+- Every portal account must link to one active person in the real directory. There are no fake or synthetic selectable profiles, demo roles or profile switchers.
+- The server verifies the signed-in account and its active status before opening the application. The signed-in session and database-controlled role are the only source of access; client-side state never grants permission or impersonates another account.
+- An authorised HR user may view account login names, status and last sign-in time; create a login; change a login name; set a new password; and disable or enable an account.
+- No HR user can view or recover an existing password. Supabase Auth stores password hashes, not reversible passwords. A newly generated or supplied password may be shown once after creation/reset and is not retained in application tables or logs.
 - Employee leave requests require their assigned manager's decision. A manager's own leave does not require self-approval.
 
 ## Decisions required before live workflow use
@@ -60,7 +60,7 @@
 ## Data minimisation
 
 - The team calendar shows only what is required for coverage.
-- Organisation cards show name and position only. Contact, payroll, leave-reason, medical and work-location data does not belong in the tree.
+- Organisation cards show only safe structural information. A selected person may expose their work email; phone number, personal email, date of birth, payroll, leave-reason, medical and work-location data never belongs in the employee-visible tree.
 - Detailed reasons and evidence do not appear in the shared calendar.
 - Login pages and account lists do not expose internal Auth email aliases.
 - Password values are never persisted in application tables, logs, screenshots or source. Existing passwords are never displayed.

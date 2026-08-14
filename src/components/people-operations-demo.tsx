@@ -20,6 +20,7 @@ import {
 import { ChangeEvent, FormEvent, type ReactNode, useMemo, useState } from "react";
 
 import { AboutMeDemo } from "@/components/about-me-demo";
+import { getOrganisationPersonWorkEmail } from "@/app/people/actions";
 import {
   OrganisationTree,
   type OrganisationPerson,
@@ -454,7 +455,7 @@ export function PeopleOperationsDemo({
 
     {section === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} manager={activeProfile.manager} company={activeProfile.company} /> : null}
     {section === "directory" ? renderEmployeeDirectory : null}
-    {section === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation && !renderEmployeeDirectory} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onOpenEmployeeRecord={renderEmployeeDirectory ? (personId) => {
+    {section === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation && !renderEmployeeDirectory} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={renderEmployeeDirectory ? (personId) => {
       onOpenEmployeeDirectoryRecord?.(personId);
       setSection("directory");
     } : undefined} /> : null}
