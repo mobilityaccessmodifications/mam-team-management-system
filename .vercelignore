@@ -11,7 +11,7 @@ AGENTS.md
 node_modules/
 output/
 .playwright-cli/
-.autoreview-tmp*/
+.autoreview-tmp*
 supabase/.temp/
 *.tsbuildinfo
 
