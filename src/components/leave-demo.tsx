@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Paperclip,
   Plus,
+  RotateCcw,
   Search,
   ShieldCheck,
   LogOut,
@@ -822,6 +823,42 @@ export function LeaveDemo({
             );
           })}
         </nav>
+        {canPreviewEmployeeAccess ? (
+          <section
+            aria-label="Employee access preview"
+            className={styles.viewSwitcher}
+            data-previewing={isPreviewingEmployeeAccess || undefined}
+          >
+            <label className={styles.viewSwitcherHeading} htmlFor="employee-access-view">
+              <Eye aria-hidden="true" size={17} />
+              <span>
+                <strong>Change view</strong>
+                <small role="status">{previewProfile ? `Previewing ${previewProfile.name}` : "My HR workspace"}</small>
+              </span>
+            </label>
+            <select
+              aria-describedby={isPreviewingEmployeeAccess ? "employee-access-preview-note" : undefined}
+              id="employee-access-view"
+              onChange={(event) => changeEmployeeAccessPreview(event.target.value)}
+              value={previewProfile?.id ?? ""}
+            >
+              <option value="">My HR view</option>
+              {directoryProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}{profile.roleLabel ? ` · ${profile.roleLabel}` : ""}
+                </option>
+              ))}
+            </select>
+            {isPreviewingEmployeeAccess ? (
+              <div className={styles.viewSwitcherActive} id="employee-access-preview-note">
+                <small>Preview only · signed in as {signedInProfile.name}</small>
+                <button type="button" onClick={() => changeEmployeeAccessPreview("")}>
+                  <RotateCcw aria-hidden="true" size={14} /> Return to HR view
+                </button>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
       </aside>
 
       <div className={styles.workspace}>
@@ -831,18 +868,7 @@ export function LeaveDemo({
             <span className={styles.demoStatus} data-state={organisationState} role="status"><i />{organisationState === "live" ? "Live directory" : organisationState === "connecting" ? "Connecting" : "Directory issue"}</span>
             {directorySupabase ? <form action={signOut}><button className={styles.signOutButton} type="submit" aria-label="Sign out"><LogOut size={15} /><span className={styles.actionLabel}>Sign out</span></button></form> : null}
             <SelfProfileMenu
-              accessPreview={canPreviewEmployeeAccess ? {
-                people: directoryProfiles.map((profile) => ({
-                  id: profile.id,
-                  name: profile.name,
-                  roleLabel: profile.roleLabel,
-                })),
-                previewedPersonName: previewProfile?.name,
-                selectedPersonId: previewProfile?.id ?? "",
-                onSelect: changeEmployeeAccessPreview,
-              } : undefined}
               disabled={!selfProfile || selfProfileLoading}
-              isAccessPreview={isPreviewingEmployeeAccess}
               onSave={saveMyProfile}
               profile={topbarSelfProfile}
             />

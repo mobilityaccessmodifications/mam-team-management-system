@@ -7,11 +7,9 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleUserRound,
-  Eye,
   LockKeyhole,
   Mail,
   Phone,
-  RotateCcw,
   ShieldCheck,
   UserRound,
   X,
@@ -57,24 +55,6 @@ export type SelfProfileSaveResult = void | {
   message?: string;
 };
 
-/** Safe organisation-tree data used only by an authorised HR access preview. */
-export type EmployeeAccessPreviewPerson = {
-  id: string;
-  name: string;
-  roleLabel: string;
-};
-
-/**
- * An HR-only, presentation-only employee-view selector. It must never contain
- * private fields and must never change the authenticated session.
- */
-export type EmployeeAccessPreview = {
-  people: readonly EmployeeAccessPreviewPerson[];
-  selectedPersonId: string;
-  previewedPersonName?: string;
-  onSelect: (personId: string) => void;
-};
-
 export type SelfProfileMenuProps = {
   /** The actual signed-in person's profile, rather than an access-preview profile. */
   profile: SelfProfileData;
@@ -85,10 +65,6 @@ export type SelfProfileMenuProps = {
   onSave: (changes: SelfProfileChanges) => Promise<SelfProfileSaveResult>;
   /** Use while the profile record is initially loading. */
   disabled?: boolean;
-  /** Present only for an authorised HR user; options contain safe work identity only. */
-  accessPreview?: EmployeeAccessPreview;
-  /** Presentation-only preview mode. Self-profile fields must not render or save while true. */
-  isAccessPreview?: boolean;
 };
 
 type Feedback =
@@ -125,12 +101,9 @@ export function SelfProfileMenu({
   profile,
   onSave,
   disabled = false,
-  accessPreview,
-  isAccessPreview = false,
 }: SelfProfileMenuProps) {
   const panelId = useId();
   const titleId = useId();
-  const previewSelectId = useId();
   const personalEmailId = useId();
   const phoneId = useId();
   const birthDateId = useId();
@@ -138,7 +111,6 @@ export function SelfProfileMenu({
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
-  const previewSelectRef = useRef<HTMLSelectElement>(null);
 
   const profileKey = [
     profile.name,
@@ -173,17 +145,7 @@ export function SelfProfileMenu({
   const displayTitle = profile.title.trim() || "Team member";
   const organisation = companyName(profile.company);
   const today = new Date().toISOString().slice(0, 10);
-  const hasAccessPreview = Boolean(accessPreview);
-  const selectedPreviewPerson = accessPreview?.people.find((person) => person.id === accessPreview.selectedPersonId);
-  const previewedPersonName = accessPreview?.previewedPersonName?.trim()
-    || selectedPreviewPerson?.name.trim()
-    || "this employee";
-  const isPreviewingEmployeeAccess = isAccessPreview;
-  const canEditSelfProfile = !disabled && !isPreviewingEmployeeAccess;
-  const canOpenMenu = !disabled || hasAccessPreview;
-  const triggerName = isPreviewingEmployeeAccess ? `Preview: ${previewedPersonName}` : displayName;
-  const triggerTitle = isPreviewingEmployeeAccess ? "Employee access preview" : displayTitle;
-  const triggerAvatarName = isPreviewingEmployeeAccess ? previewedPersonName : displayName;
+  const canEditSelfProfile = !disabled;
 
   const closeMenu = useCallback((restoreFocus = false) => {
     setIsOpen(false);
@@ -213,10 +175,6 @@ export function SelfProfileMenu({
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     requestAnimationFrame(() => {
-      if (isPreviewingEmployeeAccess && hasAccessPreview) {
-        previewSelectRef.current?.focus();
-        return;
-      }
       if (canEditSelfProfile) firstInputRef.current?.focus();
     });
 
@@ -224,14 +182,14 @@ export function SelfProfileMenu({
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [canEditSelfProfile, closeMenu, hasAccessPreview, isOpen, isPreviewingEmployeeAccess]);
+  }, [canEditSelfProfile, closeMenu, isOpen]);
 
   const isDirty = draft.personalEmail !== savedValues.personalEmail
     || draft.phone !== savedValues.phone
     || draft.dateOfBirth !== savedValues.dateOfBirth;
 
   function openMenu() {
-    if (!canOpenMenu) return;
+    if (!canEditSelfProfile) return;
     setDraftState({ profileKey, values: savedValues });
     setFeedback(idleFeedback);
     setIsOpen(true);
@@ -289,26 +247,23 @@ export function SelfProfileMenu({
     <div
       className={styles.root}
       data-company={profile.company.toLowerCase()}
-      data-previewing={isPreviewingEmployeeAccess || undefined}
       ref={rootRef}
     >
       <button
         aria-controls={panelId}
         aria-expanded={isOpen}
         aria-haspopup="dialog"
-        aria-label={isPreviewingEmployeeAccess
-          ? `Open employee access preview controls for ${previewedPersonName}`
-          : `Open ${displayName}'s profile`}
+        aria-label={`Open ${displayName}'s profile`}
         className={`${styles.trigger} ${isOpen ? styles.triggerOpen : ""}`}
-        disabled={!canOpenMenu}
+        disabled={!canEditSelfProfile}
         onClick={() => isOpen ? closeMenu() : openMenu()}
         ref={triggerRef}
         type="button"
       >
-        <span className={styles.avatar} aria-hidden="true">{initialsFor(triggerAvatarName)}</span>
+        <span className={styles.avatar} aria-hidden="true">{initialsFor(displayName)}</span>
         <span className={styles.triggerCopy}>
-          <strong>{triggerName}</strong>
-          <small>{triggerTitle}</small>
+          <strong>{displayName}</strong>
+          <small>{displayTitle}</small>
         </span>
         <ChevronDown className={styles.chevron} aria-hidden="true" size={16} />
       </button>
@@ -322,10 +277,10 @@ export function SelfProfileMenu({
         >
           <header className={styles.panelHeader}>
             <div className={styles.profileHeading}>
-              <span className={styles.avatarLarge} aria-hidden="true">{initialsFor(isPreviewingEmployeeAccess ? previewedPersonName : displayName)}</span>
+              <span className={styles.avatarLarge} aria-hidden="true">{initialsFor(displayName)}</span>
               <span>
-                <strong id={titleId}>{isPreviewingEmployeeAccess ? "Employee access preview" : displayName}</strong>
-                <small>{isPreviewingEmployeeAccess ? `Signed in as ${displayName}` : displayTitle}</small>
+                <strong id={titleId}>{displayName}</strong>
+                <small>{displayTitle}</small>
               </span>
             </div>
             <button className={styles.closeButton} type="button" onClick={() => closeMenu(true)} aria-label="Close profile">
@@ -333,36 +288,7 @@ export function SelfProfileMenu({
             </button>
           </header>
 
-          {accessPreview ? <section className={styles.accessPreview} data-previewing={isPreviewingEmployeeAccess || undefined} aria-labelledby={`${panelId}-preview`}>
-            <div className={styles.sectionHeading}>
-              <Eye aria-hidden="true" size={17} />
-              <span><strong id={`${panelId}-preview`}>Preview employee access</strong><small>View a real active employee&apos;s restricted interface without changing your sign-in.</small></span>
-            </div>
-            <label className={styles.previewField} htmlFor={previewSelectId}>
-              <span>View as</span>
-              <select
-                id={previewSelectId}
-                onChange={(event) => {
-                  const personId = event.target.value;
-                  if (!personId || accessPreview.people.some((person) => person.id === personId)) {
-                    accessPreview.onSelect(personId);
-                  }
-                }}
-                ref={previewSelectRef}
-                value={accessPreview.selectedPersonId}
-              >
-                <option value="">My HR view</option>
-                {accessPreview.people.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.roleLabel}</option>)}
-              </select>
-            </label>
-            {isPreviewingEmployeeAccess ? <div className={styles.previewActiveNotice} role="status">
-              <Eye aria-hidden="true" size={16} />
-              <span><strong>Previewing {previewedPersonName}&apos;s employee access</strong><small>This is read-only. HR records, private details, and profile editing are hidden.</small></span>
-              <button className={styles.returnToMyView} type="button" onClick={() => accessPreview.onSelect("")}><RotateCcw aria-hidden="true" size={15} /> Return to my HR view</button>
-            </div> : null}
-          </section> : null}
-
-          {isPreviewingEmployeeAccess ? null : !canEditSelfProfile ? <p className={styles.profilePending} role="status">Your private profile is loading. You can still use the HR preview control above.</p> : <>
+          {!canEditSelfProfile ? <p className={styles.profilePending} role="status">Your private profile is loading.</p> : <>
             <div className={styles.organisationSummary} aria-label="Your organisation details">
               <span><Building2 aria-hidden="true" size={15} /><b>Company</b><strong>{organisation || "Not listed"}</strong></span>
               <span><BriefcaseBusiness aria-hidden="true" size={15} /><b>Team</b><strong>{profile.team?.trim() || "Not listed"}</strong></span>
