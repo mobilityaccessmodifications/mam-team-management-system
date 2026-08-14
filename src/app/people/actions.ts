@@ -16,7 +16,10 @@ import type {
   UpdateEmployeeDirectoryInput,
 } from "@/lib/employee-directory-types";
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// PostgreSQL accepts UUIDs with any version/variant bits. Some imported
+// directory IDs are deterministic values, so do not reject valid IDs merely
+// because they are not RFC-versioned UUIDs.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENERIC_SAVE_ERROR = "Employee details could not be saved. Refresh and try again.";
 

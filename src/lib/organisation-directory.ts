@@ -2,7 +2,10 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// PostgreSQL's uuid type accepts all 128-bit UUID representations. The
+// directory's imported deterministic IDs are valid UUIDs but do not promise a
+// particular RFC version/variant nibble, so validation must not reject them.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENERIC_CONTACT_ERROR = "Work contact could not be loaded. Refresh and try again.";
 

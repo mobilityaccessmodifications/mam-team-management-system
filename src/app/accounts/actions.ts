@@ -72,7 +72,10 @@ function validatePassword(value: string) {
 }
 
 function validateIds(personId: string, userId?: string) {
-  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  // Imported directory records may use deterministic PostgreSQL UUID values
+  // without RFC version/variant markers. Validate the UUID shape, not bits
+  // which are irrelevant to identity and are checked by Postgres on use.
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidPattern.test(personId) || (userId && !uuidPattern.test(userId))) {
     throw new Error(GENERIC_ERROR);
   }
