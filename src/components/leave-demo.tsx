@@ -338,12 +338,20 @@ export function LeaveDemo({
   initialNavigation,
   isAdmin = false,
   currentPersonId,
+  isNonRosterSystemAdmin = false,
 }: {
   initialNavigation?: InitialNavigation;
   isAdmin?: boolean;
   currentPersonId?: string;
+  /**
+   * A narrowly authorised platform administrator may operate HR tools without
+   * becoming a synthetic employee in the authoritative roster. It has no
+   * self-service profile or own-leave workspace.
+   */
+  isNonRosterSystemAdmin?: boolean;
 }) {
   const directorySupabase = isSupabaseConfigured() ? createClient() : null;
+  const isNonRosterSystemAdminWorkspace = isNonRosterSystemAdmin && !currentPersonId;
   const [activeView, setActiveView] = useState<AppView>(initialNavigation?.view ?? "home");
   const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests);
   const [selectedRequestId, setSelectedRequestId] = useState(initialNavigation?.requestId ?? "");
@@ -551,7 +559,17 @@ export function LeaveDemo({
     };
   }, [employeeDirectoryRefreshKey, selectedPreviewPersonId]);
 
-  const signedInProfile = directoryProfiles.find((profile) => profile.id === currentPersonId);
+  const signedInProfile = directoryProfiles.find((profile) => profile.id === currentPersonId)
+    ?? (isNonRosterSystemAdminWorkspace ? {
+      id: "platform-system-administrator",
+      name: "System administrator",
+      initials: "SA",
+      accessRole: "hr" as const,
+      roleLabel: "Platform administrator",
+      team: "Platform administration",
+      manager: "",
+      company: "mam" as const,
+    } : undefined);
   if (!signedInProfile) {
     return <DirectoryLoading state={organisationState} />;
   }
@@ -596,7 +614,8 @@ export function LeaveDemo({
     : topbarSelfProfile;
   const topbarProfileLoading = isPreviewingEmployeeAccess
     ? !authorisedPreviewProfile
-    : !selfProfile || selfProfileLoading;
+    : !isNonRosterSystemAdminWorkspace && (!selfProfile || selfProfileLoading);
+  const isNonRosterAdminHrWorkspace = isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess;
 
   const viewTitles = getViewTitles(activeProfile);
   const visibleRequests = isPreviewingEmployeeAccess
@@ -745,7 +764,7 @@ export function LeaveDemo({
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isMutating || isPreviewingEmployeeAccess) return;
+    if (isMutating || isPreviewingEmployeeAccess || isNonRosterSystemAdminWorkspace) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     const leaveType = String(data.get("leaveType"));
@@ -849,7 +868,7 @@ export function LeaveDemo({
   }
 
   async function decideRequest(status: "Approved" | "Declined") {
-    if (!selectedRequest || isMutating || isPreviewingEmployeeAccess) return;
+    if (!selectedRequest || isMutating || isPreviewingEmployeeAccess || isNonRosterSystemAdminWorkspace) return;
     if (status === "Declined" && !managerNote.trim()) {
       announce("Add a manager comment before declining this request.");
       return;
@@ -935,24 +954,28 @@ export function LeaveDemo({
           <div className={styles.topActions}>
             <span className={styles.demoStatus} data-state={organisationState} role="status"><i />{organisationState === "live" ? "Live directory" : organisationState === "connecting" ? "Connecting" : "Directory issue"}</span>
             {directorySupabase ? <form action={signOut}><button className={styles.signOutButton} type="submit" aria-label="Sign out"><LogOut size={15} /><span className={styles.actionLabel}>Sign out</span></button></form> : null}
-            <SelfProfileMenu
-              disabled={topbarProfileLoading}
-              mode={isPreviewingEmployeeAccess ? "hr-preview" : "self"}
-              onSave={isPreviewingEmployeeAccess ? saveSelectedEmployeeProfile : saveMyProfile}
-              profile={topbarProfile}
-              viewerName={isPreviewingEmployeeAccess ? signedInProfile.name : undefined}
-            />
+            {isNonRosterAdminHrWorkspace ? (
+              <span className={styles.demoStatus} title="This platform administrator is not an employee profile.">
+                <ShieldCheck aria-hidden="true" size={15} /> Platform administrator
+              </span>
+            ) : <SelfProfileMenu
+                disabled={topbarProfileLoading}
+                mode={isPreviewingEmployeeAccess ? "hr-preview" : "self"}
+                onSave={isPreviewingEmployeeAccess ? saveSelectedEmployeeProfile : saveMyProfile}
+                profile={topbarProfile}
+                viewerName={isPreviewingEmployeeAccess ? signedInProfile.name : undefined}
+              />}
           </div>
         </header>
 
         <main className={styles.main} id="main-content">
           {activeView !== "people" ? <section className={styles.pageHeader}>
             <div><h1>{viewTitles[activeView].title}</h1>{viewTitles[activeView].helper ? <p>{viewTitles[activeView].helper}</p> : null}</div>
-            <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)} disabled={isMutating || isPreviewingEmployeeAccess}><Plus size={17} /> {activeProfile.accessRole === "employee" ? "New leave request" : "Add leave"}</button>
+            {!isNonRosterSystemAdminWorkspace ? <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)} disabled={isMutating || isPreviewingEmployeeAccess}><Plus size={17} /> {activeProfile.accessRole === "employee" ? "New leave request" : "Add leave"}</button> : null}
           </section> : null}
 
-          {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} onNavigate={navigate} onSelect={selectRequest} /> : null}
-          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} busy={isMutating} readOnly={isPreviewingEmployeeAccess} hidePrivateDetails={isPreviewingEmployeeAccess} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
+          {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
+          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} busy={isMutating} readOnly={isPreviewingEmployeeAccess || isNonRosterSystemAdminWorkspace} hidePrivateDetails={isPreviewingEmployeeAccess || isNonRosterSystemAdminWorkspace} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
           {activeView === "calendar" ? <CalendarView requests={calendarRequests} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
@@ -1037,7 +1060,21 @@ function StatusPill({ status }: { status: RequestStatus }) {
   return <span className={`${styles.status} ${styles[`status${status}`]}`}><i />{status}</span>;
 }
 
-function HomeView({ profile, requests, myRequests, pending, onNavigate, onSelect }: { profile: Profile; requests: LeaveRequest[]; myRequests: LeaveRequest[]; pending: LeaveRequest[]; onNavigate: (view: AppView, section?: LeaveSection) => void; onSelect: (id: string, section?: LeaveSection) => void }) {
+function HomeView({ profile, requests, myRequests, pending, onNavigate, onSelect, isNonRosterSystemAdmin = false }: { profile: Profile; requests: LeaveRequest[]; myRequests: LeaveRequest[]; pending: LeaveRequest[]; onNavigate: (view: AppView, section?: LeaveSection) => void; onSelect: (id: string, section?: LeaveSection) => void; isNonRosterSystemAdmin?: boolean }) {
+  if (isNonRosterSystemAdmin) {
+    return (
+      <div className={styles.dashboard}>
+        <section className={styles.panel}>
+          <div className={styles.emptyState}>
+            <ShieldCheck size={24} />
+            <strong>HR workspace</strong>
+            <span>This platform administrator has no employee profile or leave record. Use Change view to inspect an employee workspace, or open People to manage the directory.</span>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   const nextOwn = myRequests.find((request) => request.status === "Pending") ?? myRequests[0];
   const attentionRequests = profile.accessRole === "manager" ? pending : requests.filter((request) => request.status === "Pending" && request.employee !== profile.name);
   const attentionTitle = profile.accessRole === "manager" ? "Needs my review" : "Pending leave";
