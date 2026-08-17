@@ -363,7 +363,6 @@ export function LeaveDemo({
   const [toast, setToast] = useState("");
   const [isMutating, setIsMutating] = useState(false);
   const [organisationRows, setOrganisationRows] = useState<InternalOrgRow[]>([]);
-  const [canEditOrganisation, setCanEditOrganisation] = useState(false);
   const [canManageEmployeeDirectory, setCanManageEmployeeDirectory] = useState(false);
   const [employeeDirectoryRefreshKey, setEmployeeDirectoryRefreshKey] = useState(0);
   const [employeeDirectorySelectedPersonId, setEmployeeDirectorySelectedPersonId] = useState<string | null>(null);
@@ -401,13 +400,12 @@ export function LeaveDemo({
 
   const loadOrganisation = useCallback(async () => {
     if (!directorySupabase) return;
-    const [{ data: rows, error }, { data: canEdit }, { data: canManageEmployeeDirectory }] = await Promise.all([
+    const [{ data: rows, error }, { data: canManageEmployeeDirectory }] = await Promise.all([
       directorySupabase
         .from("internal_org_people")
         .select("id,node_kind,company_key,full_name,position_title,parent_id,sort_order,is_active,updated_at,version")
         .order("sort_order", { ascending: true })
         .order("position_title", { ascending: true }),
-      directorySupabase.rpc("can_edit_internal_org"),
       directorySupabase.rpc("can_manage_employee_directory"),
     ]);
 
@@ -416,7 +414,6 @@ export function LeaveDemo({
       return;
     }
     setOrganisationRows((rows ?? []) as InternalOrgRow[]);
-    setCanEditOrganisation(canEdit === true);
     setCanManageEmployeeDirectory(canManageEmployeeDirectory === true);
     setOrganisationState("live");
   }, [directorySupabase]);
@@ -984,7 +981,12 @@ export function LeaveDemo({
               activeProfile={activeProfile}
               organisationProfiles={organisationPeople}
               canEditOrganisation={false}
-              canArrangeOrganisation={canEditOrganisation && showHrWorkspace}
+              // Reparenting is confirmed through the HR employee-directory
+              // action, not the legacy public-tree RPC. A platform
+              // administrator who can manage employee records therefore gets
+              // the safe Arrange & link control even when that legacy RPC is
+              // deliberately unavailable.
+              canArrangeOrganisation={canManageEmployeeDirectory && showHrWorkspace}
               isAccessPreview={isPreviewingEmployeeAccess}
               onCreateOrganisationPerson={createOrganisationPerson}
               onUpdateOrganisationPerson={updateOrganisationPerson}
