@@ -8,6 +8,7 @@ import {
   LocateFixed,
   Mail,
   Maximize2,
+  Menu,
   Minimize2,
   Minus,
   Network,
@@ -77,7 +78,8 @@ type EditorState =
   | { mode: "create" }
   | { mode: "update"; id: string }
   | null;
-type LayoutMode = "leaf" | "standard" | "stack";
+type LayoutMode = "leaf" | "horizontal" | "vertical";
+type BranchLayout = Exclude<LayoutMode, "leaf">;
 type MeasuredNode = {
   node: TreeNode;
   children: MeasuredNode[];
@@ -94,6 +96,7 @@ type PositionedNode = {
   height: number;
   depth: number;
   hasChildren: boolean;
+  childrenLayout: BranchLayout | null;
   descendantCount: number;
 };
 type Connector = {
@@ -139,6 +142,11 @@ const MAX_ZOOM = 1.35;
 const DRAG_THRESHOLD = 5;
 const ARRANGE_DURATION = 260;
 
+// These four operational branches follow the approved chart: department
+// leads stay level, while their front-line contributors use a vertical bus.
+// Other departments keep their existing horizontal presentation.
+const compactBranchLeads = new Set(["sujant", "kieran", "sandro", "serene"]);
+
 const emptyDraft: OrganisationPersonDraft = {
   name: "",
   position: "",
@@ -153,6 +161,10 @@ function isPerson(profile: OrganisationPerson) {
 
 function normalise(value: string) {
   return value.trim().toLocaleLowerCase();
+}
+
+function isCompactBranchLead(node: TreeNode) {
+  return compactBranchLeads.has(normalise(node.name).split(/\s+/)[0] ?? "");
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -294,10 +306,20 @@ function measureNode(
   node: TreeNode,
   collapsedIds: Set<string>,
   depth: number,
+  branchLayouts: Readonly<Record<string, BranchLayout>>,
+  inCompactBranch = isCompactBranchLead(node),
 ): MeasuredNode {
   const children = collapsedIds.has(node.id)
     ? []
-    : node.children.map((child) => measureNode(child, collapsedIds, depth + 1));
+    : node.children.map((child) =>
+        measureNode(
+          child,
+          collapsedIds,
+          depth + 1,
+          branchLayouts,
+          inCompactBranch,
+        ),
+      );
 
   if (!children.length) {
     return {
@@ -310,19 +332,32 @@ function measureNode(
     };
   }
 
+  // Major, Minor and Warehouse leads share a level; their contributors stack
+  // by default. Each reporting line can then be changed independently.
   const allLeaves = children.every((child) => child.children.length === 0);
-  const stack = allLeaves && (children.length >= 3 || (depth >= 2 && children.length >= 2));
-  if (stack) {
+  const automaticVertical =
+    inCompactBranch &&
+    allLeaves &&
+    (children.length >= 3 || (depth >= 2 && children.length >= 2));
+  const requestedLayout = branchLayouts[node.id];
+  const vertical =
+    requestedLayout === "vertical" ||
+    (requestedLayout !== "horizontal" && automaticVertical);
+
+  if (vertical) {
     return {
       node,
       children,
-      width: CARD_WIDTH + STACK_BUS,
+      width: Math.max(
+        CARD_WIDTH + STACK_BUS,
+        ...children.map((child) => child.width),
+      ),
       height:
         CARD_HEIGHT +
         VERTICAL_GAP +
-        children.length * CARD_HEIGHT +
+        children.reduce((height, child) => height + child.height, 0) +
         (children.length - 1) * STACK_GAP,
-      mode: "stack",
+      mode: "vertical",
       depth,
     };
   }
@@ -339,7 +374,7 @@ function measureNode(
       CARD_HEIGHT +
       VERTICAL_GAP +
       Math.max(...children.map((child) => child.height)),
-    mode: "standard",
+    mode: "horizontal",
     depth,
   };
 }
@@ -347,8 +382,11 @@ function measureNode(
 function layoutForest(
   forest: TreeNode[],
   collapsedIds: Set<string>,
+  branchLayouts: Readonly<Record<string, BranchLayout>>,
 ): ChartLayout {
-  const boxes = forest.map((root) => measureNode(root, collapsedIds, 0));
+  const boxes = forest.map((root) =>
+    measureNode(root, collapsedIds, 0, branchLayouts),
+  );
   const contentWidth =
     boxes.reduce((width, box) => width + box.width, 0) +
     Math.max(0, boxes.length - 1) * ROOT_GAP;
@@ -371,6 +409,12 @@ function layoutForest(
       height: CARD_HEIGHT,
       depth: box.depth,
       hasChildren: box.node.children.length > 0,
+      childrenLayout:
+        box.mode === "leaf"
+          ? null
+          : box.mode === "vertical"
+            ? "vertical"
+            : "horizontal",
       descendantCount: countTreeDescendants(box.node),
     });
 
@@ -379,14 +423,13 @@ function layoutForest(
     const parentCenter = x + CARD_WIDTH / 2;
     const parentBottom = y + CARD_HEIGHT;
 
-    if (box.mode === "stack") {
+    if (box.mode === "vertical") {
       const childX = x;
       const busX = childX - STACK_BUS;
-      const firstTop = top + CARD_HEIGHT + VERTICAL_GAP;
+      let childTop = top + CARD_HEIGHT + VERTICAL_GAP;
       const busTop = parentBottom + VERTICAL_GAP / 2;
 
-      box.children.forEach((child, index) => {
-        const childTop = firstTop + index * (CARD_HEIGHT + STACK_GAP);
+      box.children.forEach((child) => {
         const childMiddle = childTop + CARD_HEIGHT / 2;
         place(child, childX - (child.width - CARD_WIDTH) / 2, childTop);
         connectors.push({
@@ -396,6 +439,7 @@ function layoutForest(
           company: child.node.company,
           path: `M ${parentCenter} ${parentBottom} V ${busTop} H ${busX} V ${childMiddle} H ${childX}`,
         });
+        childTop += child.height + STACK_GAP;
       });
       return;
     }
@@ -550,6 +594,9 @@ export function OrganisationTree({
   const [focusedRootId, setFocusedRootId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const [branchLayouts, setBranchLayouts] = useState<
+    Record<string, BranchLayout>
+  >({});
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [panning, setPanning] = useState(false);
   const [arrangeMode, setArrangeMode] = useState(false);
@@ -642,6 +689,7 @@ export function OrganisationTree({
       setArrangeMode(false);
       setDraggingNodeId(null);
       setInteractionMessage("");
+      setBranchLayouts({});
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -725,8 +773,8 @@ export function OrganisationTree({
   }, [collapsedIds, searchAncestorIds]);
 
   const layout = useMemo(
-    () => layoutForest(forest, effectiveCollapsedIds),
-    [effectiveCollapsedIds, forest],
+    () => layoutForest(forest, effectiveCollapsedIds, branchLayouts),
+    [branchLayouts, effectiveCollapsedIds, forest],
   );
   const layoutNodesById = useMemo(
     () => new Map(layout.nodes.map((item) => [item.node.id, item])),
@@ -956,6 +1004,18 @@ export function OrganisationTree({
       else next.add(id);
       return next;
     });
+  };
+
+  const toggleBranchLayout = (id: string, currentLayout: BranchLayout) => {
+    setBranchLayouts((current) => ({
+      ...current,
+      [id]: currentLayout === "vertical" ? "horizontal" : "vertical",
+    }));
+    setInteractionMessage(
+      currentLayout === "vertical"
+        ? "Reports are now arranged side by side."
+        : "Reports are now arranged vertically.",
+    );
   };
 
   const toggleAllBranches = () => {
@@ -1609,7 +1669,6 @@ export function OrganisationTree({
               </svg>
 
               {layout.nodes.map((item) => {
-                const collapsed = effectiveCollapsedIds.has(item.node.id);
                 const related = relatedIds.has(item.node.id);
                 const offset = manualOffsets[item.node.id] ?? { x: 0, y: 0 };
                 const muted = Boolean(selectedId) && !related;
@@ -1675,20 +1734,20 @@ export function OrganisationTree({
 
                     {item.hasChildren ? (
                       <button
-                        aria-expanded={!collapsed}
-                        aria-label={`${collapsed ? "Show" : "Hide"} ${item.descendantCount} people under ${item.node.name}`}
+                        aria-label={`Arrange people below ${item.node.name} ${item.childrenLayout === "vertical" ? "side by side" : "vertically"}`}
+                        aria-pressed={item.childrenLayout === "vertical"}
                         className={styles.branchToggle}
                         data-company={item.node.company}
-                        onClick={() => toggleBranch(item.node.id)}
-                        title={`${collapsed ? "Show" : "Hide"} ${item.descendantCount} people`}
+                        data-layout={item.childrenLayout}
+                        onClick={() => {
+                          if (item.childrenLayout) {
+                            toggleBranchLayout(item.node.id, item.childrenLayout);
+                          }
+                        }}
+                        title={`Arrange people below ${item.node.name} ${item.childrenLayout === "vertical" ? "side by side" : "vertically"}`}
                         type="button"
                       >
-                        {collapsed ? (
-                          <ChevronRight aria-hidden="true" size={13} />
-                        ) : (
-                          <ChevronDown aria-hidden="true" size={13} />
-                        )}
-                        <span>{item.descendantCount}</span>
+                        <Menu aria-hidden="true" size={16} />
                       </button>
                     ) : null}
                   </div>

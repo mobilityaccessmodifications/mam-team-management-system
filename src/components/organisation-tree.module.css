@@ -613,29 +613,31 @@
   --company: var(--mam);
   position: absolute;
   z-index: 5;
-  bottom: -20px;
+  bottom: -17px;
   left: 50%;
-  display: inline-flex;
-  min-width: 44px;
-  height: 44px;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
+  display: grid;
+  width: 34px;
+  height: 32px;
+  place-items: center;
   transform: translateX(-50%);
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--company) 24%, #d7e0dd);
+  border-radius: 7px;
+  background: #fffefb;
+  box-shadow: 0 1px 4px rgb(37 44 49 / 0.08);
   color: color-mix(in srgb, var(--company) 76%, #455258);
   cursor: pointer;
   font: inherit;
-  font-size: 8px;
-  font-weight: 900;
-  opacity: 0.68;
-  padding: 0 7px;
+  opacity: 0.88;
+  padding: 0;
 }
 
 .branchToggle[data-company="equipsy"] {
   --company: var(--equipsy);
+}
+
+.branchToggle[data-layout="vertical"] {
+  background: color-mix(in srgb, var(--company) 10%, #fffefb);
+  color: var(--company);
 }
 
 .nodeWrap:hover .branchToggle,
@@ -643,7 +645,7 @@
 .branchToggle:focus-visible,
 .nodeWrap[data-selected="true"] .branchToggle {
   background: #fff;
-  box-shadow: 0 2px 9px rgb(37 44 49 / 0.13);
+  box-shadow: 0 3px 10px rgb(37 44 49 / 0.16);
   opacity: 1;
 }
 
