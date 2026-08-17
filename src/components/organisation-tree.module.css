@@ -309,9 +309,22 @@
   padding: 5px;
 }
 
+.chartShell {
+  position: relative;
+  height: clamp(440px, calc(100dvh - 298px), 840px);
+  min-height: 0;
+}
+
+.chartShell:fullscreen {
+  width: 100vw;
+  height: 100dvh;
+  background: #fff;
+}
+
 .treeViewport {
   position: relative;
-  min-height: min(680px, calc(100dvh - 310px));
+  height: 100%;
+  min-height: 0;
   border: 1px solid #d8dfdd;
   border-radius: 7px;
   background: #fff;
@@ -327,8 +340,8 @@
   outline-offset: 2px;
 }
 
-.treeViewport:fullscreen {
-  min-height: 100dvh;
+.chartShell:fullscreen .treeViewport {
+  height: 100dvh;
   border: 0;
   border-radius: 0;
 }
@@ -342,16 +355,20 @@
   cursor: default;
 }
 
-.chartMeta,
-.chartControls {
-  position: sticky;
-  z-index: 12;
+.chartChrome {
+  position: absolute;
+  z-index: 80;
   top: 12px;
+  right: 12px;
+  left: 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
 }
 
 .chartMeta {
-  left: 12px;
-  float: left;
   display: inline-flex;
   min-height: 34px;
   align-items: center;
@@ -365,6 +382,7 @@
   font-weight: 700;
   padding: 7px 10px;
   backdrop-filter: blur(10px);
+  pointer-events: auto;
 }
 
 .chartMeta span + span::before {
@@ -374,8 +392,6 @@
 }
 
 .chartControls {
-  right: 12px;
-  float: right;
   display: inline-flex;
   min-height: 44px;
   align-items: center;
@@ -385,6 +401,7 @@
   box-shadow: 0 5px 16px rgb(30 43 44 / 0.08);
   overflow: hidden;
   backdrop-filter: blur(10px);
+  pointer-events: auto;
 }
 
 .chartControls button {
@@ -445,8 +462,17 @@
 
 .desktopChart {
   position: relative;
-  clear: both;
-  margin: 52px auto 30px;
+  margin: 76px auto 30px;
+}
+
+@media (max-width: 980px) and (min-width: 701px) {
+  .chartMeta {
+    display: none;
+  }
+
+  .chartChrome {
+    justify-content: flex-end;
+  }
 }
 
 .chartWorld {
@@ -1063,12 +1089,18 @@
   }
 
   .treeViewport {
+    height: auto;
     min-height: 430px;
     cursor: auto;
     overflow: visible;
     padding: 10px;
   }
 
+  .chartShell {
+    height: auto;
+  }
+
+  .chartChrome,
   .chartMeta,
   .chartControls,
   .desktopChart {

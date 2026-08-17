@@ -24,6 +24,7 @@ import {
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -100,7 +101,7 @@ type Connector = {
   id: string;
   fromId: string;
   toId: string;
-  company: OrganisationCompany;
+  sourceCompany: OrganisationCompany;
   path: string;
 };
 type NodeOffset = { x: number; y: number };
@@ -131,13 +132,16 @@ const HORIZONTAL_GAP = 30;
 const VERTICAL_GAP = 68;
 const STACK_GAP = 13;
 const STACK_BUS = 24;
-const ROOT_GAP = 88;
+const ROOT_GAP = 48;
+const LEADERSHIP_GAP = 82;
+const ROOT_COLUMNS = 4;
 const CANVAS_MARGIN = 54;
 const DEFAULT_ZOOM = 0.92;
-const MIN_ZOOM = 0.5;
+const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 1.35;
 const DRAG_THRESHOLD = 5;
 const ARRANGE_DURATION = 260;
+const CHART_TOP_INSET = 76;
 
 const emptyDraft: OrganisationPersonDraft = {
   name: "",
@@ -283,6 +287,71 @@ function buildForest(
   return forest;
 }
 
+function isExternalReportingGroup(node: TreeNode) {
+  return (
+    node.kind === "org_unit" &&
+    normalise(node.name) === "external reporting group"
+  );
+}
+
+function leadershipRank(node: TreeNode) {
+  const position = normalise(node.position);
+  if (position === "director") return 0;
+  if (position === "cfo") return 1;
+  if (position.includes("director")) return 2;
+  return 3;
+}
+
+function isLeadershipNode(node: TreeNode) {
+  return isPerson(node) && leadershipRank(node) < 3;
+}
+
+/**
+ * External reporting groups deliberately contain no manager identity. They are
+ * useful for access control, but they should not become the visual head of the
+ * organisation chart. This creates a presentation-only hierarchy: leadership
+ * is promoted for an at-a-glance overview while the stored reporting links and
+ * HR editor remain untouched.
+ */
+function buildPresentationForest(forest: TreeNode[]) {
+  const leadership: TreeNode[] = [];
+
+  const visit = (node: TreeNode, beneathExternalGroup = false): TreeNode[] => {
+    const externalGroup = isExternalReportingGroup(node);
+    const children = node.children.flatMap((child) =>
+      visit(child, beneathExternalGroup || externalGroup),
+    );
+    const nextNode = { ...node, children };
+
+    if (externalGroup) return children;
+
+    if (beneathExternalGroup && isLeadershipNode(nextNode)) {
+      leadership.push(nextNode);
+      return [];
+    }
+
+    return [nextNode];
+  };
+
+  const remaining = forest.flatMap((node) => visit(node));
+  const leadershipIds = new Set(leadership.map((node) => node.id));
+
+  const sortedLeadership = [...leadership].sort((left, right) => {
+    const rank = leadershipRank(left) - leadershipRank(right);
+    if (rank) return rank;
+    const order =
+      (left.sortOrder ?? Number.MAX_SAFE_INTEGER) -
+      (right.sortOrder ?? Number.MAX_SAFE_INTEGER);
+    if (order) return order;
+    return left.name.localeCompare(right.name);
+  });
+
+  return [
+    ...sortedLeadership,
+    ...sortPeople(remaining.filter((node) => !leadershipIds.has(node.id))),
+  ];
+}
+
 function countTreeDescendants(node: TreeNode): number {
   return node.children.reduce(
     (count, child) => count + 1 + countTreeDescendants(child),
@@ -311,17 +380,20 @@ function measureNode(
   }
 
   const allLeaves = children.every((child) => child.children.length === 0);
-  const stack = allLeaves && (children.length >= 3 || (depth >= 2 && children.length >= 2));
+  const stack =
+    allLeaves && (children.length >= 3 || (depth >= 2 && children.length >= 2));
   if (stack) {
+    const childHeight =
+      children.reduce((height, child) => height + child.height, 0) +
+      (children.length - 1) * STACK_GAP;
     return {
       node,
       children,
-      width: CARD_WIDTH + STACK_BUS,
-      height:
-        CARD_HEIGHT +
-        VERTICAL_GAP +
-        children.length * CARD_HEIGHT +
-        (children.length - 1) * STACK_GAP,
+      width: Math.max(
+        CARD_WIDTH + STACK_BUS,
+        ...children.map((child) => child.width),
+      ),
+      height: CARD_HEIGHT + VERTICAL_GAP + childHeight,
       mode: "stack",
       depth,
     };
@@ -349,10 +421,6 @@ function layoutForest(
   collapsedIds: Set<string>,
 ): ChartLayout {
   const boxes = forest.map((root) => measureNode(root, collapsedIds, 0));
-  const contentWidth =
-    boxes.reduce((width, box) => width + box.width, 0) +
-    Math.max(0, boxes.length - 1) * ROOT_GAP;
-  const contentHeight = Math.max(CARD_HEIGHT, ...boxes.map((box) => box.height));
   const positioned: PositionedNode[] = [];
   const connectors: Connector[] = [];
 
@@ -382,20 +450,20 @@ function layoutForest(
     if (box.mode === "stack") {
       const childX = x;
       const busX = childX - STACK_BUS;
-      const firstTop = top + CARD_HEIGHT + VERTICAL_GAP;
       const busTop = parentBottom + VERTICAL_GAP / 2;
+      let childTop = top + CARD_HEIGHT + VERTICAL_GAP;
 
-      box.children.forEach((child, index) => {
-        const childTop = firstTop + index * (CARD_HEIGHT + STACK_GAP);
+      box.children.forEach((child) => {
         const childMiddle = childTop + CARD_HEIGHT / 2;
         place(child, childX - (child.width - CARD_WIDTH) / 2, childTop);
         connectors.push({
           id: `${box.node.id}-${child.node.id}`,
           fromId: box.node.id,
           toId: child.node.id,
-          company: child.node.company,
+          sourceCompany: box.node.company,
           path: `M ${parentCenter} ${parentBottom} V ${busTop} H ${busX} V ${childMiddle} H ${childX}`,
         });
+        childTop += child.height + STACK_GAP;
       });
       return;
     }
@@ -415,7 +483,7 @@ function layoutForest(
         id: `${box.node.id}-${child.node.id}`,
         fromId: box.node.id,
         toId: child.node.id,
-        company: child.node.company,
+        sourceCompany: box.node.company,
         path:
           box.children.length === 1
             ? `M ${parentCenter} ${parentBottom} V ${childTop}`
@@ -425,11 +493,62 @@ function layoutForest(
     });
   };
 
-  let cursor = CANVAS_MARGIN;
-  for (const box of boxes) {
-    place(box, cursor, CANVAS_MARGIN);
-    cursor += box.width + ROOT_GAP;
+  const leadership = boxes.filter((box) => isLeadershipNode(box.node));
+  const operationalRoots = boxes.filter((box) => !isLeadershipNode(box.node));
+  const leadershipWidth = leadership.length
+    ? leadership.reduce((width, box) => width + box.width, 0) +
+      (leadership.length - 1) * ROOT_GAP
+    : 0;
+  const operationalColumnCount = Math.min(ROOT_COLUMNS, operationalRoots.length);
+  const operationalColumnWidth = operationalRoots.length
+    ? Math.max(...operationalRoots.map((box) => box.width))
+    : CARD_WIDTH;
+  const operationalWidth = operationalRoots.length
+    ? operationalColumnCount * operationalColumnWidth +
+      (operationalColumnCount - 1) * ROOT_GAP
+    : 0;
+  const contentWidth = Math.max(CARD_WIDTH, leadershipWidth, operationalWidth);
+  const leadershipHeight = leadership.length
+    ? Math.max(...leadership.map((box) => box.height))
+    : 0;
+
+  let leadershipCursor =
+    CANVAS_MARGIN + Math.max(0, (contentWidth - leadershipWidth) / 2);
+  for (const box of leadership) {
+    place(box, leadershipCursor, CANVAS_MARGIN);
+    leadershipCursor += box.width + ROOT_GAP;
   }
+
+  const operationalTop =
+    CANVAS_MARGIN + (leadership.length ? leadershipHeight + LEADERSHIP_GAP : 0);
+  const columnHeights = Array.from(
+    { length: operationalColumnCount },
+    () => 0,
+  );
+  for (const box of operationalRoots) {
+    const column = columnHeights.reduce(
+      (shortestColumn, height, index) =>
+        height < columnHeights[shortestColumn] ? index : shortestColumn,
+      0,
+    );
+    const left =
+      CANVAS_MARGIN +
+      Math.max(0, (contentWidth - operationalWidth) / 2) +
+      column * (operationalColumnWidth + ROOT_GAP) +
+      (operationalColumnWidth - box.width) / 2;
+    place(box, left, operationalTop + columnHeights[column]);
+    columnHeights[column] += box.height + ROOT_GAP;
+  }
+
+  const operationalHeight = operationalRoots.length
+    ? Math.max(...columnHeights) - ROOT_GAP
+    : 0;
+  const contentHeight = Math.max(
+    CARD_HEIGHT,
+    leadershipHeight,
+    (leadership.length ? leadershipHeight + LEADERSHIP_GAP : 0) +
+      operationalHeight,
+  );
 
   return {
     nodes: positioned,
@@ -551,6 +670,7 @@ export function OrganisationTree({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const [viewMode, setViewMode] = useState<"fit" | "manual">("fit");
   const [panning, setPanning] = useState(false);
   const [arrangeMode, setArrangeMode] = useState(false);
   const [manualOffsets, setManualOffsets] = useState<Record<string, NodeOffset>>({});
@@ -571,14 +691,15 @@ export function OrganisationTree({
   const descriptionId = useId();
   const searchResultsId = useId();
   const markerPrefix = useId().replaceAll(":", "");
+  const chartShellRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const initialViewportRef = useRef(false);
   const suppressCardClickRef = useRef(false);
   const nodeDragRef = useRef<NodeDragState | null>(null);
   const pendingOffsetRef = useRef<{ id: string; offset: NodeOffset } | null>(null);
   const dragFrameRef = useRef<number | null>(null);
   const arrangeTimerRef = useRef<number | null>(null);
   const workContactRequestRef = useRef(0);
+  const autoFitFrameRef = useRef<number | null>(null);
   const panRef = useRef<{
     pointerId: number;
     x: number;
@@ -614,7 +735,7 @@ export function OrganisationTree({
       }
     };
     const handleFullscreen = () => {
-      setFullscreen(document.fullscreenElement === viewportRef.current);
+      setFullscreen(document.fullscreenElement === chartShellRef.current);
     };
 
     window.addEventListener("keydown", handleKeydown);
@@ -632,6 +753,9 @@ export function OrganisationTree({
       }
       if (arrangeTimerRef.current !== null) {
         window.clearTimeout(arrangeTimerRef.current);
+      }
+      if (autoFitFrameRef.current !== null) {
+        window.cancelAnimationFrame(autoFitFrameRef.current);
       }
     };
   }, []);
@@ -709,6 +833,10 @@ export function OrganisationTree({
     () => buildForest(orderedProfiles, visibleIds),
     [orderedProfiles, visibleIds],
   );
+  const presentationForest = useMemo(
+    () => buildPresentationForest(forest),
+    [forest],
+  );
 
   const searchAncestorIds = useMemo(() => {
     if (!normalise(query)) return new Set<string>();
@@ -725,8 +853,8 @@ export function OrganisationTree({
   }, [collapsedIds, searchAncestorIds]);
 
   const layout = useMemo(
-    () => layoutForest(forest, effectiveCollapsedIds),
-    [effectiveCollapsedIds, forest],
+    () => layoutForest(presentationForest, effectiveCollapsedIds),
+    [effectiveCollapsedIds, presentationForest],
   );
   const layoutNodesById = useMemo(
     () => new Map(layout.nodes.map((item) => [item.node.id, item])),
@@ -756,14 +884,6 @@ export function OrganisationTree({
       profileById,
     );
   }, [orderedProfiles, profileById, selectedId]);
-  const primaryRootId = useMemo(
-    () =>
-      [...forest].sort(
-        (left, right) =>
-          countTreeDescendants(right) - countTreeDescendants(left),
-      )[0]?.id ?? null,
-    [forest],
-  );
 
   const requestWorkContact = (personId: string) => {
     const profile = profileById.get(personId);
@@ -823,17 +943,11 @@ export function OrganisationTree({
   const branchIds = useMemo(
     () =>
       new Set(
-        orderedProfiles
-          .filter((profile) =>
-            orderedProfiles.some(
-              (candidate) =>
-                visibleIds.has(candidate.id) &&
-                candidate.reportsTo === profile.id,
-            ),
-          )
-          .map((profile) => profile.id),
+        layout.nodes
+          .filter((node) => node.hasChildren)
+          .map((node) => node.node.id),
       ),
-    [orderedProfiles, visibleIds],
+    [layout.nodes],
   );
 
   const visiblePersonCount = orderedProfiles.filter(
@@ -868,31 +982,65 @@ export function OrganisationTree({
     }, delay);
   };
 
-  useEffect(() => {
-    if (initialViewportRef.current || !primaryRootId) return;
-    initialViewportRef.current = true;
-
-    const timer = window.setTimeout(() => {
+  const fitChart = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
       const viewport = viewportRef.current;
-      const node = viewport?.querySelector<HTMLElement>(
-        `[data-node-id="${primaryRootId}"]`,
-      );
-      if (!viewport || !node) return;
-      const viewportRect = viewport.getBoundingClientRect();
-      const nodeRect = node.getBoundingClientRect();
-      viewport.scrollTo({
-        behavior: "auto",
-        left:
-          viewport.scrollLeft +
-          nodeRect.left -
-          viewportRect.left -
-          (viewport.clientWidth - nodeRect.width) / 2,
-        top: 0,
-      });
-    }, 80);
+      if (!viewport) return;
 
-    return () => window.clearTimeout(timer);
-  }, [layout.height, layout.width, primaryRootId]);
+      const nextZoom = clamp(
+        Math.min(
+          1,
+          (viewport.clientWidth - 32) / layout.width,
+          (viewport.clientHeight - CHART_TOP_INSET - 28) / layout.height,
+        ),
+        MIN_ZOOM,
+        MAX_ZOOM,
+      );
+
+      setZoom(nextZoom);
+      window.requestAnimationFrame(() => {
+        const currentViewport = viewportRef.current;
+        if (!currentViewport) return;
+        currentViewport.scrollTo({
+          behavior,
+          left: Math.max(
+            0,
+            (layout.width * nextZoom - currentViewport.clientWidth) / 2,
+          ),
+          top: 0,
+        });
+      });
+    },
+    [layout.height, layout.width],
+  );
+
+  useEffect(() => {
+    if (viewMode !== "fit" || !presentationForest.length) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const scheduleFit = () => {
+      if (autoFitFrameRef.current !== null) {
+        window.cancelAnimationFrame(autoFitFrameRef.current);
+      }
+      autoFitFrameRef.current = window.requestAnimationFrame(() => {
+        autoFitFrameRef.current = null;
+        fitChart("auto");
+      });
+    };
+
+    const observer = new ResizeObserver(scheduleFit);
+    observer.observe(viewport);
+    scheduleFit();
+
+    return () => {
+      observer.disconnect();
+      if (autoFitFrameRef.current !== null) {
+        window.cancelAnimationFrame(autoFitFrameRef.current);
+        autoFitFrameRef.current = null;
+      }
+    };
+  }, [fitChart, presentationForest.length, viewMode]);
 
   const expandAncestorBranches = (id: string) => {
     setCollapsedIds((current) => {
@@ -931,6 +1079,7 @@ export function OrganisationTree({
   };
 
   const focusTeam = (id: string) => {
+    setViewMode("fit");
     setFocusedRootId(id);
     setCompanyFilter("all");
     setQuery("");
@@ -943,6 +1092,7 @@ export function OrganisationTree({
   };
 
   const showFullOrganisation = () => {
+    setViewMode("fit");
     setFocusedRootId(null);
     setCompanyFilter("all");
     setQuery("");
@@ -959,6 +1109,7 @@ export function OrganisationTree({
   };
 
   const toggleAllBranches = () => {
+    setViewMode("fit");
     const allCollapsed =
       branchIds.size > 0 &&
       [...branchIds].every((id) => effectiveCollapsedIds.has(id));
@@ -968,27 +1119,6 @@ export function OrganisationTree({
         ? "All reporting lines expanded."
         : "All reporting lines collapsed.",
     );
-  };
-
-  const fitChart = () => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    const nextZoom = Math.max(
-      MIN_ZOOM,
-      Math.min(
-        1,
-        (viewport.clientWidth - 48) / layout.width,
-        (viewport.clientHeight - 86) / layout.height,
-      ),
-    );
-    setZoom(nextZoom);
-    window.requestAnimationFrame(() => {
-      viewport.scrollTo({
-        behavior: getScrollBehavior(),
-        left: Math.max(0, (layout.width * nextZoom - viewport.clientWidth) / 2),
-        top: 0,
-      });
-    });
   };
 
   const cleanUpChart = () => {
@@ -1034,6 +1164,7 @@ export function OrganisationTree({
   };
 
   const resetView = () => {
+    setViewMode("fit");
     setFocusedRootId(null);
     setCompanyFilter("all");
     setQuery("");
@@ -1041,31 +1172,18 @@ export function OrganisationTree({
     workContactRequestRef.current += 1;
     setWorkContact(null);
     setCollapsedIds(new Set());
-    setZoom(DEFAULT_ZOOM);
     setArrangeMode(false);
     setManualOffsets({});
     setInteractionMessage("");
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    window.requestAnimationFrame(() => {
-      viewport.scrollTo({
-        behavior: getScrollBehavior(),
-        left: Math.max(
-          0,
-          (layout.width * DEFAULT_ZOOM - viewport.clientWidth) / 2,
-        ),
-        top: 0,
-      });
-    });
   };
 
   const toggleFullscreen = async () => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    if (document.fullscreenElement === viewport) {
+    const chartShell = chartShellRef.current;
+    if (!chartShell) return;
+    if (document.fullscreenElement === chartShell) {
       await document.exitFullscreen();
     } else {
-      await viewport.requestFullscreen();
+      await chartShell.requestFullscreen();
     }
   };
 
@@ -1075,6 +1193,7 @@ export function OrganisationTree({
     if (target.closest("button, input, select, label, aside")) return;
     const viewport = viewportRef.current;
     if (!viewport) return;
+    setViewMode("manual");
     panRef.current = {
       pointerId: event.pointerId,
       x: event.clientX,
@@ -1115,6 +1234,7 @@ export function OrganisationTree({
     if (!direction || !viewport) return;
 
     event.preventDefault();
+    setViewMode("manual");
     viewport.scrollBy({ ...direction, behavior: getScrollBehavior() });
   };
 
@@ -1425,6 +1545,7 @@ export function OrganisationTree({
                 setFocusedRootId(null);
                 setQuery("");
                 setSelectedId(null);
+                setViewMode("fit");
                 workContactRequestRef.current += 1;
                 setWorkContact(null);
               }}
@@ -1454,20 +1575,9 @@ export function OrganisationTree({
         {interactionMessage ? ` ${interactionMessage}` : ""}
       </span>
 
-      {forest.length ? (
-        <div
-          aria-label="Organisation chart. Select a person for details. Use arrow keys to pan the chart."
-          className={styles.treeViewport}
-          data-arrange={arrangeMode}
-          data-panning={panning}
-          onKeyDown={handleViewportKeyDown}
-          onPointerCancel={stopPan}
-          onPointerDown={startPan}
-          onPointerMove={movePan}
-          onPointerUp={stopPan}
-          ref={viewportRef}
-          tabIndex={0}
-        >
+      {presentationForest.length ? (
+        <div className={styles.chartShell} ref={chartShellRef}>
+          <div className={styles.chartChrome}>
           <div className={styles.chartMeta}>
             <span>{visiblePersonCount} people</span>
             <span>
@@ -1494,11 +1604,13 @@ export function OrganisationTree({
             <button
               aria-label="Zoom out"
               disabled={zoom <= MIN_ZOOM}
-              onClick={() =>
+              onClick={() => {
+                setViewMode("manual");
                 setZoom((current) =>
                   Math.max(MIN_ZOOM, Math.round((current - 0.1) * 100) / 100),
-                )
-              }
+                );
+              }}
+              title="Zoom out"
               type="button"
             >
               <Minus aria-hidden="true" size={15} />
@@ -1509,11 +1621,13 @@ export function OrganisationTree({
             <button
               aria-label="Zoom in"
               disabled={zoom >= MAX_ZOOM}
-              onClick={() =>
+              onClick={() => {
+                setViewMode("manual");
                 setZoom((current) =>
                   Math.min(MAX_ZOOM, Math.round((current + 0.1) * 100) / 100),
-                )
-              }
+                );
+              }}
+              title="Zoom in"
               type="button"
             >
               <Plus aria-hidden="true" size={15} />
@@ -1521,7 +1635,10 @@ export function OrganisationTree({
             <button
               aria-label="Fit chart to screen"
               className={styles.namedChartControl}
-              onClick={fitChart}
+              onClick={() => {
+                setViewMode("fit");
+                fitChart(getScrollBehavior());
+              }}
               title="Fit chart to screen"
               type="button"
             >
@@ -1531,17 +1648,24 @@ export function OrganisationTree({
             <button
               aria-label="Expand or collapse all reporting lines"
               onClick={toggleAllBranches}
+              title="Expand or collapse all reporting lines"
               type="button"
             >
               <UnfoldVertical aria-hidden="true" size={15} />
             </button>
-            <button aria-label="Reset chart view" onClick={resetView} type="button">
+            <button
+              aria-label="Reset chart view"
+              onClick={resetView}
+              title="Reset chart view"
+              type="button"
+            >
               <Focus aria-hidden="true" size={15} />
             </button>
             <button
               aria-label={fullscreen ? "Exit full screen" : "Open full screen"}
               aria-pressed={fullscreen}
               onClick={toggleFullscreen}
+              title={fullscreen ? "Exit full screen" : "Open full screen"}
               type="button"
             >
               {fullscreen ? (
@@ -1551,6 +1675,22 @@ export function OrganisationTree({
               )}
             </button>
           </div>
+          </div>
+
+          <div
+            aria-label="Organisation chart. Select a person for details. Use arrow keys to pan the chart."
+            className={styles.treeViewport}
+            data-arrange={arrangeMode}
+            data-panning={panning}
+            onKeyDown={handleViewportKeyDown}
+            onPointerCancel={stopPan}
+            onPointerDown={startPan}
+            onPointerMove={movePan}
+            onPointerUp={stopPan}
+            onWheel={() => setViewMode("manual")}
+            ref={viewportRef}
+            tabIndex={0}
+          >
 
           <div className={styles.desktopChart} style={frameStyle}>
             <div className={styles.chartWorld} style={worldStyle}>
@@ -1600,9 +1740,9 @@ export function OrganisationTree({
                       )}
                       data-active={active}
                       data-arranging={arranging}
-                      data-company={connector.company}
+                      data-company={connector.sourceCompany}
                       key={connector.id}
-                      markerEnd={`url(#${markerPrefix}-${connector.company})`}
+                      markerEnd={`url(#${markerPrefix}-${connector.sourceCompany})`}
                     />
                   );
                 })}
@@ -1698,7 +1838,7 @@ export function OrganisationTree({
           </div>
 
           <ul aria-label="Organisation reporting tree" className={styles.mobileTree}>
-            {forest.map((root) => (
+            {presentationForest.map((root) => (
               <MobileTreeBranch
                 collapsedIds={effectiveCollapsedIds}
                 highlightedIds={relatedIds}
@@ -1710,6 +1850,7 @@ export function OrganisationTree({
               />
             ))}
           </ul>
+        </div>
         </div>
       ) : (
         <div className={styles.emptyState}>
