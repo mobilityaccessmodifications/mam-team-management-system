@@ -78,13 +78,14 @@ type EditorState =
   | { mode: "create" }
   | { mode: "update"; id: string }
   | null;
-type LayoutMode = "leaf" | "standard" | "stack";
+type LayoutMode = "leaf" | "standard" | "stack" | "grid";
 type MeasuredNode = {
   node: TreeNode;
   children: MeasuredNode[];
   width: number;
   height: number;
   mode: LayoutMode;
+  gridColumns?: number;
   depth: number;
 };
 type PositionedNode = {
@@ -136,6 +137,7 @@ const ROOT_GAP = 48;
 const LEADERSHIP_GAP = 82;
 const ROOT_COLUMNS = 4;
 const CANVAS_MARGIN = 54;
+const MAX_ROW_WIDTH = CARD_WIDTH * 4 + HORIZONTAL_GAP * 3;
 const DEFAULT_ZOOM = 0.92;
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 1.35;
@@ -380,6 +382,42 @@ function measureNode(
   }
 
   const allLeaves = children.every((child) => child.children.length === 0);
+  const childrenWidth =
+    children.reduce((width, child) => width + child.width, 0) +
+    HORIZONTAL_GAP * (children.length - 1);
+  const gridColumns = Math.min(2, children.length);
+  const grid = children.length >= 3 && childrenWidth > MAX_ROW_WIDTH;
+
+  if (grid) {
+    const columnWidths = Array.from({ length: gridColumns }, () => CARD_WIDTH);
+    const columnHeights = Array.from({ length: gridColumns }, () => 0);
+
+    for (const child of children) {
+      const column = columnHeights.reduce(
+        (shortestColumn, height, index) =>
+          height < columnHeights[shortestColumn] ? index : shortestColumn,
+        0,
+      );
+      columnWidths[column] = Math.max(columnWidths[column], child.width);
+      columnHeights[column] += child.height + STACK_GAP;
+    }
+
+    return {
+      node,
+      children,
+      width:
+        Math.max(CARD_WIDTH, columnWidths.reduce((width, value) => width + value, 0) +
+          HORIZONTAL_GAP * (gridColumns - 1)),
+      height:
+        CARD_HEIGHT +
+        VERTICAL_GAP +
+        Math.max(...columnHeights.map((height) => Math.max(0, height - STACK_GAP))),
+      mode: "grid",
+      gridColumns,
+      depth,
+    };
+  }
+
   const stack =
     allLeaves && (children.length >= 3 || (depth >= 2 && children.length >= 2));
   if (stack) {
@@ -398,10 +436,6 @@ function measureNode(
       depth,
     };
   }
-
-  const childrenWidth =
-    children.reduce((width, child) => width + child.width, 0) +
-    HORIZONTAL_GAP * (children.length - 1);
 
   return {
     node,
@@ -446,6 +480,64 @@ function layoutForest(
 
     const parentCenter = x + CARD_WIDTH / 2;
     const parentBottom = y + CARD_HEIGHT;
+
+    if (box.mode === "grid") {
+      const gridColumns = box.gridColumns ?? 2;
+      const columnWidths = Array.from({ length: gridColumns }, () => CARD_WIDTH);
+      const columnHeights = Array.from({ length: gridColumns }, () => 0);
+
+      for (const child of box.children) {
+        const column = columnHeights.reduce(
+          (shortestColumn, height, index) =>
+            height < columnHeights[shortestColumn] ? index : shortestColumn,
+          0,
+        );
+        columnWidths[column] = Math.max(columnWidths[column], child.width);
+        columnHeights[column] += child.height + STACK_GAP;
+      }
+
+      const columnsWidth =
+        columnWidths.reduce((width, value) => width + value, 0) +
+        HORIZONTAL_GAP * (gridColumns - 1);
+      const firstColumnLeft = left + (box.width - columnsWidth) / 2;
+      const columnOffsets = columnWidths.reduce<number[]>((offsets, width, index) => {
+        offsets.push(
+          index === 0
+            ? 0
+            : offsets[index - 1] + columnWidths[index - 1] + HORIZONTAL_GAP,
+        );
+        return offsets;
+      }, []);
+      const placedColumnHeights = Array.from({ length: gridColumns }, () => 0);
+      const childRowTop = top + CARD_HEIGHT + VERTICAL_GAP;
+      const middleY = parentBottom + VERTICAL_GAP / 2;
+
+      for (const child of box.children) {
+        const column = placedColumnHeights.reduce(
+          (shortestColumn, height, index) =>
+            height < placedColumnHeights[shortestColumn]
+              ? index
+              : shortestColumn,
+          0,
+        );
+        const childTop = childRowTop + placedColumnHeights[column];
+        const childLeft =
+          firstColumnLeft +
+          columnOffsets[column] +
+          (columnWidths[column] - child.width) / 2;
+        const childCenter = childLeft + child.width / 2;
+        place(child, childLeft, childTop);
+        connectors.push({
+          id: `${box.node.id}-${child.node.id}`,
+          fromId: box.node.id,
+          toId: child.node.id,
+          sourceCompany: box.node.company,
+          path: `M ${parentCenter} ${parentBottom} V ${middleY} H ${childCenter} V ${childTop}`,
+        });
+        placedColumnHeights[column] += child.height + STACK_GAP;
+      }
+      return;
+    }
 
     if (box.mode === "stack") {
       const childX = x;
