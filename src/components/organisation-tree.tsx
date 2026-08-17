@@ -305,7 +305,13 @@ function leadershipRank(node: TreeNode) {
 }
 
 function isLeadershipNode(node: TreeNode) {
-  return isPerson(node) && leadershipRank(node) < 3;
+  // Keep the two MAM executive roots prominent. Other company directors are
+  // still shown in their actual branch rather than being promoted beside them.
+  return (
+    isPerson(node) &&
+    node.company === "mam" &&
+    leadershipRank(node) < 2
+  );
 }
 
 /**
