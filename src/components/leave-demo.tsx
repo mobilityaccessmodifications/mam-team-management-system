@@ -367,6 +367,7 @@ export function LeaveDemo({
   const [canManageEmployeeDirectory, setCanManageEmployeeDirectory] = useState(false);
   const [employeeDirectoryRefreshKey, setEmployeeDirectoryRefreshKey] = useState(0);
   const [employeeDirectorySelectedPersonId, setEmployeeDirectorySelectedPersonId] = useState<string | null>(null);
+  const [employeeDirectoryPendingManagerId, setEmployeeDirectoryPendingManagerId] = useState<string | null | undefined>(undefined);
   const [organisationState, setOrganisationState] = useState<DirectoryState>("connecting");
   const [accounts, setAccounts] = useState<AccountDto[]>([]);
   const [accountsError, setAccountsError] = useState("");
@@ -987,12 +988,19 @@ export function LeaveDemo({
               isAccessPreview={isPreviewingEmployeeAccess}
               onCreateOrganisationPerson={createOrganisationPerson}
               onUpdateOrganisationPerson={updateOrganisationPerson}
-              onOpenEmployeeDirectoryRecord={showHrWorkspace ? setEmployeeDirectorySelectedPersonId : undefined}
+              onOpenEmployeeDirectoryRecord={showHrWorkspace ? (personId, managerId) => {
+                setEmployeeDirectoryPendingManagerId(managerId);
+                setEmployeeDirectorySelectedPersonId(personId);
+              } : undefined}
               renderEmployeeDirectory={showHrWorkspace ? <EmployeeDirectory
                 onRecordsChanged={async () => {
                   await Promise.all([loadOrganisation(), loadAccounts()]);
                 }}
-                onSelectedPersonId={setEmployeeDirectorySelectedPersonId}
+                onSelectedPersonId={(personId) => {
+                  setEmployeeDirectoryPendingManagerId(undefined);
+                  setEmployeeDirectorySelectedPersonId(personId);
+                }}
+                pendingManagerId={employeeDirectoryPendingManagerId}
                 refreshKey={employeeDirectoryRefreshKey}
                 selectedPersonId={employeeDirectorySelectedPersonId}
               /> : undefined}

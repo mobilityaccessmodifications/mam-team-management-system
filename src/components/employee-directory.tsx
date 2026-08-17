@@ -45,6 +45,11 @@ export type EmployeeDirectoryProps = {
   initialRecords?: EmployeeDirectoryRecord[];
   /** Supports opening a record from the safe organisation tree without exposing its data there. */
   selectedPersonId?: string | null;
+  /**
+   * A reporting line proposed from the organisation tree. It only preselects
+   * the HR form; the HR user must still save the record to confirm it.
+   */
+  pendingManagerId?: string | null;
   onSelectedPersonId?: (personId: string | null) => void;
   /** Lets the parent refresh safe organisation-tree data after an HR change. */
   onRecordsChanged?: () => void | Promise<void>;
@@ -135,6 +140,7 @@ function updateDraft(
 export function EmployeeDirectory({
   initialRecords,
   selectedPersonId,
+  pendingManagerId,
   onSelectedPersonId,
   onRecordsChanged,
   refreshKey,
@@ -214,7 +220,14 @@ export function EmployeeDirectory({
   // the draft so typing is never overwritten by a parent render.
   const activeEditor = externallySelectedRecord
     && (editor?.mode !== "edit" || editor.personId !== externallySelectedRecord.personId)
-    ? { mode: "edit" as const, personId: externallySelectedRecord.personId, draft: toDraft(externallySelectedRecord) }
+    ? {
+        mode: "edit" as const,
+        personId: externallySelectedRecord.personId,
+        draft: {
+          ...toDraft(externallySelectedRecord),
+          ...(pendingManagerId !== undefined ? { managerId: pendingManagerId } : {}),
+        },
+      }
     : editor;
   const currentRecord = selectedRecord(records, activeEditor);
 
@@ -355,6 +368,7 @@ export function EmployeeDirectory({
         {activeEditor ? <EmployeeEditor
           editor={activeEditor}
           currentRecord={currentRecord}
+          reportingLinePending={pendingManagerId !== undefined}
           records={records}
           saving={saving}
           error={saveError}
@@ -379,6 +393,7 @@ function EmptyDetail({ onCreate }: { onCreate: () => void }) {
 function EmployeeEditor({
   editor,
   currentRecord,
+  reportingLinePending = false,
   records,
   saving,
   error,
@@ -388,6 +403,7 @@ function EmployeeEditor({
 }: {
   editor: EditorState;
   currentRecord: EmployeeDirectoryRecord | null;
+  reportingLinePending?: boolean;
   records: EmployeeDirectoryRecord[];
   saving: boolean;
   error: string;
@@ -405,7 +421,7 @@ function EmployeeEditor({
       <div>
         <span>{isCreate ? "New employee" : "Employee record"}</span>
         <h3>{isCreate ? "Add employee" : editor.draft.firstName || currentRecord?.fullName || "Employee"}</h3>
-        {!isCreate && currentRecord ? <p>{currentRecord.positionTitle} · {displayManager(currentRecord)}</p> : <p>Fields marked required are needed for the directory.</p>}
+        {!isCreate && currentRecord ? <p>{reportingLinePending ? "Reporting line selected from the organisation chart. Save changes to confirm." : `${currentRecord.positionTitle} · ${displayManager(currentRecord)}`}</p> : <p>Fields marked required are needed for the directory.</p>}
       </div>
       <button type="button" className={styles.closeButton} onClick={onClose} disabled={saving} aria-label="Close employee record"><X size={18} /></button>
     </header>

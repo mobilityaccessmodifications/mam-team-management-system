@@ -65,8 +65,15 @@ export type OrganisationTreeProps = {
     id: string,
     person: OrganisationPersonDraft,
   ) => Promise<void>;
-  /** Opens the HR-only record editor without exposing private fields in the tree. */
-  onOpenEmployeeRecord?: (personId: string) => void;
+  /**
+   * Opens the HR-only record editor without exposing private fields in the
+   * tree. A manager ID preselects a proposed reporting line; the HR editor
+   * still requires an explicit Save before the live hierarchy changes.
+   */
+  onOpenEmployeeRecord?: (
+    personId: string,
+    managerId?: string | null,
+  ) => void;
   /** Loads only the selected person's employee-visible work contact on demand. */
   onRequestWorkEmail?: (personId: string) => Promise<string | null>;
   className?: string;
@@ -773,6 +780,7 @@ export function OrganisationTree({
   const [arrangeMode, setArrangeMode] = useState(false);
   const [manualOffsets, setManualOffsets] = useState<Record<string, NodeOffset>>({});
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [arranging, setArranging] = useState(false);
   const [interactionMessage, setInteractionMessage] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
@@ -863,6 +871,7 @@ export function OrganisationTree({
       setManualOffsets({});
       setArrangeMode(false);
       setDraggingNodeId(null);
+      setDropTargetId(null);
       setInteractionMessage("");
     }, 0);
 
@@ -1007,6 +1016,17 @@ export function OrganisationTree({
         if (workContactRequestRef.current !== requestId) return;
         setWorkContact({ personId, state: "error", email: null });
       });
+  };
+
+  const dismissInspector = () => {
+    workContactRequestRef.current += 1;
+    setWorkContact(null);
+    setSelectedId(null);
+  };
+
+  const openEmployeeRecord = (personId: string, managerId?: string | null) => {
+    dismissInspector();
+    onOpenEmployeeRecord?.(personId, managerId);
   };
 
   const activeEditor =
@@ -1257,7 +1277,7 @@ export function OrganisationTree({
     setSelectedId(null);
     setArrangeMode(true);
     setInteractionMessage(
-      "Arrange mode on. Drag a person to compare positions. Clean up restores the reporting layout.",
+      "Arrange mode on. Drop a person on another person to propose a new manager, or drop on empty space to compare positions.",
     );
   };
 
@@ -1369,6 +1389,24 @@ export function OrganisationTree({
     setDraggingNodeId(node.node.id);
   };
 
+  const getDropTarget = (
+    sourceId: string,
+    clientX: number,
+    clientY: number,
+  ) => {
+    if (!onOpenEmployeeRecord) return null;
+    const element = document.elementFromPoint(clientX, clientY);
+    const targetId = element
+      ?.closest<HTMLElement>("[data-node-id]")
+      ?.dataset.nodeId;
+    if (!targetId || targetId === sourceId) return null;
+
+    const target = profileById.get(targetId);
+    if (!target || !isPerson(target) || target.isActive === false) return null;
+    if (getDescendantIds(sourceId, orderedProfiles).has(targetId)) return null;
+    return target;
+  };
+
   const moveNodeDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const drag = nodeDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
@@ -1380,6 +1418,8 @@ export function OrganisationTree({
     drag.moved = true;
     event.preventDefault();
     event.stopPropagation();
+    const target = getDropTarget(drag.id, event.clientX, event.clientY);
+    setDropTargetId((current) => (current === target?.id ? current : target?.id ?? null));
     scheduleOffset(drag.id, {
       x: clamp(
         drag.startOffset.x + deltaX,
@@ -1407,13 +1447,31 @@ export function OrganisationTree({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
 
+    const dropTarget = drag.moved && event.type !== "pointercancel"
+      ? getDropTarget(drag.id, event.clientX, event.clientY)
+      : null;
     nodeDragRef.current = null;
     setDraggingNodeId(null);
+    setDropTargetId(null);
     if (drag.moved) {
       suppressCardClickRef.current = true;
       window.setTimeout(() => {
         suppressCardClickRef.current = false;
       }, 0);
+
+      if (dropTarget) {
+        setManualOffsets((current) => {
+          const next = { ...current };
+          delete next[drag.id];
+          return next;
+        });
+        setInteractionMessage(
+          `${drag.node.node.name} will report to ${dropTarget.name} once you save the HR record.`,
+        );
+        openEmployeeRecord(drag.id, dropTarget.id);
+        return;
+      }
+
       setInteractionMessage(
         `${drag.node.node.name} moved locally. Clean up restores the reporting layout.`,
       );
@@ -1526,7 +1584,7 @@ export function OrganisationTree({
                 type="button"
               >
                 <GripVertical aria-hidden="true" size={16} />
-                {arrangeMode ? "Finish arranging" : "Arrange"}
+                {arrangeMode ? "Finish arranging" : "Arrange & link"}
               </button>
             ) : null}
             {canUseLegacyTreeEditor ? (
@@ -1855,7 +1913,9 @@ export function OrganisationTree({
                   <div
                     className={styles.nodeWrap}
                     data-arrange={arrangeMode}
+                    data-company={item.node.company}
                     data-dragging={draggingNodeId === item.node.id}
+                    data-drop-target={dropTargetId === item.node.id}
                     data-manual={Boolean(manualOffsets[item.node.id])}
                     data-muted={muted}
                     data-node-id={item.node.id}
@@ -1890,7 +1950,7 @@ export function OrganisationTree({
                       onPointerUp={finishNodeDrag}
                       title={
                         arrangeMode
-                          ? "Drag to compare positions. Clean up restores the reporting layout."
+                          ? "Drop on another person to change their reporting line, or on empty space to arrange locally."
                           : `${item.node.name}, ${item.node.position || companyLabels[item.node.company]}`
                       }
                       type="button"
@@ -1977,9 +2037,7 @@ export function OrganisationTree({
               <button
                 aria-label="Close person details"
                 onClick={() => {
-                  workContactRequestRef.current += 1;
-                  setWorkContact(null);
-                  setSelectedId(null);
+                  dismissInspector();
                 }}
                 type="button"
               >
@@ -2027,7 +2085,19 @@ export function OrganisationTree({
               ) : null}
 
               <section className={styles.relationships}>
-                <span>Reports to</span>
+                <div className={styles.relationshipHeader}>
+                  <span>Reports to</span>
+                  {onOpenEmployeeRecord && isPerson(selectedProfile) ? (
+                    <button
+                      aria-label={`Edit ${selectedProfile.name}'s reporting line`}
+                      className={styles.relationshipEdit}
+                      onClick={() => openEmployeeRecord(selectedProfile.id)}
+                      type="button"
+                    >
+                      <Pencil aria-hidden="true" size={13} /> Change
+                    </button>
+                  ) : null}
+                </div>
                 {selectedManager ? (
                   <button onClick={() => selectProfile(selectedManager.id)} type="button">
                     <strong>{selectedManager.name}</strong>
@@ -2072,11 +2142,11 @@ export function OrganisationTree({
               {onOpenEmployeeRecord && isPerson(selectedProfile) ? (
                 <button
                   className={styles.secondaryAction}
-                  onClick={() => onOpenEmployeeRecord(selectedProfile.id)}
+                  onClick={() => openEmployeeRecord(selectedProfile.id)}
                   type="button"
                 >
                   <Pencil aria-hidden="true" size={15} />
-                  Open HR record
+                  Edit HR profile
                 </button>
               ) : null}
               {canUseLegacyTreeEditor && isPerson(selectedProfile) ? (

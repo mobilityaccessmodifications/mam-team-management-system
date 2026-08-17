@@ -517,10 +517,15 @@
 }
 
 .nodeWrap {
+  --company: var(--mam);
   position: absolute;
   z-index: 2;
   transition: transform 240ms var(--ease-out), opacity 180ms var(--ease-out);
   will-change: transform;
+}
+
+.nodeWrap[data-company="equipsy"] {
+  --company: var(--equipsy);
 }
 
 .nodeWrap[data-muted="true"] {
@@ -530,6 +535,16 @@
 .nodeWrap[data-dragging="true"] {
   z-index: 9;
   transition: opacity 120ms var(--ease-out);
+}
+
+.nodeWrap[data-drop-target="true"] {
+  z-index: 8;
+}
+
+.nodeWrap[data-drop-target="true"] .personCard {
+  outline: 4px solid color-mix(in srgb, var(--company) 42%, transparent);
+  outline-offset: 5px;
+  box-shadow: 0 0 0 7px rgb(255 255 255 / 0.92), 0 10px 24px rgb(31 43 46 / 0.18);
 }
 
 .personCard,
@@ -799,7 +814,8 @@
 }
 
 .personFacts dt,
-.relationships > span {
+.relationships > span,
+.relationshipHeader > span {
   color: #7a868a;
   font-size: 9px;
   font-weight: 800;
@@ -819,6 +835,36 @@
   gap: 8px;
   border-bottom: 1px solid #e1e6e4;
   padding: 14px 16px;
+}
+
+.relationshipHeader {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.relationshipEdit {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: #ad4304;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 0 4px 8px;
+}
+
+.relationshipEdit:hover,
+.relationshipEdit:focus-visible {
+  color: #7f3100;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .relationships > button,

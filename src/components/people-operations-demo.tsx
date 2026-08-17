@@ -283,7 +283,10 @@ export function PeopleOperationsDemo({
   /** Rendered only after the real signed-in session has passed the HR directory check. */
   renderEmployeeDirectory?: ReactNode;
   /** Opens the selected safe tree node in the HR-only directory detail drawer. */
-  onOpenEmployeeDirectoryRecord?: (personId: string) => void;
+  onOpenEmployeeDirectoryRecord?: (
+    personId: string,
+    managerId?: string | null,
+  ) => void;
   renderAccounts?: ReactNode;
   /** Read-only UI preview for an administrator; it never changes the session. */
   isAccessPreview?: boolean;
@@ -469,9 +472,9 @@ export function PeopleOperationsDemo({
 
     {section === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} manager={activeProfile.manager} company={activeProfile.company} /> : null}
     {section === "directory" ? renderEmployeeDirectory : null}
-    {section === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation && !renderEmployeeDirectory} canArrange={canArrangeOrganisation && !isAccessPreview} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={renderEmployeeDirectory ? (personId) => {
-      onOpenEmployeeDirectoryRecord?.(personId);
+    {section === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation && !renderEmployeeDirectory} canArrange={canArrangeOrganisation && !isAccessPreview} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={renderEmployeeDirectory ? (personId, managerId) => {
       setSection("directory");
+      onOpenEmployeeDirectoryRecord?.(personId, managerId);
     } : undefined} /> : null}
     {section === "accounts" ? renderAccounts : null}
     {section === "tasks" ? <nav className={styles.taskSwitch} aria-label="Task type">
