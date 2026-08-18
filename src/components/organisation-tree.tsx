@@ -25,6 +25,7 @@ import {
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -891,6 +892,33 @@ export function OrganisationTree({
     ? profileById.get(focusedRootId)
     : undefined;
 
+  /**
+   * The organisation chart is a map, not a detail card. Its useful default is
+   * the whole reporting structure in view; users can always zoom in or pan
+   * afterwards. Keeping this in one helper also makes the visible Fit control
+   * and the first view behave identically.
+   */
+  const fitChart = useCallback((behavior = getScrollBehavior()) => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const nextZoom = Math.max(
+      MIN_ZOOM,
+      Math.min(
+        1,
+        (viewport.clientWidth - 48) / layout.width,
+        (viewport.clientHeight - 86) / layout.height,
+      ),
+    );
+    setZoom(nextZoom);
+    window.requestAnimationFrame(() => {
+      viewport.scrollTo({
+        behavior,
+        left: Math.max(0, (layout.width * nextZoom - viewport.clientWidth) / 2),
+        top: 0,
+      });
+    });
+  }, [layout.height, layout.width]);
+
   const centerNode = (id: string, delay = 40) => {
     window.setTimeout(() => {
       const viewport = viewportRef.current;
@@ -921,26 +949,11 @@ export function OrganisationTree({
     initialViewportRef.current = true;
 
     const timer = window.setTimeout(() => {
-      const viewport = viewportRef.current;
-      const node = viewport?.querySelector<HTMLElement>(
-        `[data-node-id="${primaryRootId}"]`,
-      );
-      if (!viewport || !node) return;
-      const viewportRect = viewport.getBoundingClientRect();
-      const nodeRect = node.getBoundingClientRect();
-      viewport.scrollTo({
-        behavior: "auto",
-        left:
-          viewport.scrollLeft +
-          nodeRect.left -
-          viewportRect.left -
-          (viewport.clientWidth - nodeRect.width) / 2,
-        top: 0,
-      });
+      fitChart("auto");
     }, 80);
 
     return () => window.clearTimeout(timer);
-  }, [layout.height, layout.width, primaryRootId]);
+  }, [fitChart, primaryRootId]);
 
   const expandAncestorBranches = (id: string) => {
     setCollapsedIds((current) => {
@@ -1028,27 +1041,6 @@ export function OrganisationTree({
         ? "All reporting lines expanded."
         : "All reporting lines collapsed.",
     );
-  };
-
-  const fitChart = () => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    const nextZoom = Math.max(
-      MIN_ZOOM,
-      Math.min(
-        1,
-        (viewport.clientWidth - 48) / layout.width,
-        (viewport.clientHeight - 86) / layout.height,
-      ),
-    );
-    setZoom(nextZoom);
-    window.requestAnimationFrame(() => {
-      viewport.scrollTo({
-        behavior: getScrollBehavior(),
-        left: Math.max(0, (layout.width * nextZoom - viewport.clientWidth) / 2),
-        top: 0,
-      });
-    });
   };
 
   const cleanUpChart = () => {
@@ -1581,7 +1573,7 @@ export function OrganisationTree({
             <button
               aria-label="Fit chart to screen"
               className={styles.namedChartControl}
-              onClick={fitChart}
+              onClick={() => fitChart()}
               title="Fit chart to screen"
               type="button"
             >
