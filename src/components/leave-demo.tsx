@@ -3,37 +3,79 @@
 import {
   ArrowUpRight,
   CalendarDays,
-  Check,
   CheckCircle2,
-  ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ClipboardList,
   Clock3,
   Eye,
-  FileImage,
-  FileText,
   LayoutDashboard,
-  MoreHorizontal,
-  Paperclip,
   Plus,
   RotateCcw,
   Search,
   ShieldCheck,
-  Sparkles,
+  LogOut,
+  UsersRound,
   X,
   XCircle,
 } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
+import {
+  getCurrentEmployeeSelfProfile,
+  getSelectedEmployeeProfile,
+  updateCurrentEmployeeSelfProfile,
+  updateSelectedEmployeeProfile,
+  type CurrentEmployeeSelfProfile,
+  type SelectedEmployeeProfile,
+} from "@/app/profile/actions";
+import {
+  createPortalAccount,
+  listPortalAccounts,
+  resetPortalPassword,
+  togglePortalAccount,
+  updatePortalLogin,
+} from "@/app/accounts/actions";
+import {
+  cancelMyApprovedLeaveRequest,
+  decideLeaveRequest,
+  getLeaveWorkspaceData,
+  submitLeaveRequest,
+  type BirthdayCalendarEntry,
+  type CheckInCalendarEntry,
+  type LeaveCalendarEntry,
+  type LeaveWorkspaceRequest,
+} from "@/app/leave/actions";
+import { signOut } from "@/app/login/actions";
+import {
+  AccountManagement,
+  type AccountDto,
+} from "@/components/account-management";
+import { CheckInRegister } from "@/components/check-in-register";
+import { CheckInWorkspace } from "@/components/check-in-workspace";
+import { CheckInTasks } from "@/components/check-in-tasks";
+import { EmployeeDirectory } from "@/components/employee-directory";
+import {
+  SelfProfileMenu,
+  type SelfProfileChanges,
+  type SelfProfileData,
+} from "@/components/self-profile-menu";
 import styles from "@/components/leave-demo.module.css";
+import { PeopleOperationsDemo } from "@/components/people-operations-demo";
+import type {
+  OrganisationCompany,
+  OrganisationPerson,
+  OrganisationPersonDraft,
+} from "@/components/organisation-tree";
 import { createClient } from "@/lib/supabase/client";
-import { isSharedDemoConfigured } from "@/lib/supabase/config";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 
-type AppView = "home" | "leave" | "calendar";
+type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals";
-type RequestStatus = "Pending" | "Approved" | "Declined";
+type RequestStatus = "Pending" | "Approved" | "Declined" | "Cancelled";
 type AccessRole = "hr" | "manager" | "employee";
+type PreviewAccessRole = Exclude<AccessRole, "hr">;
 
 type LeaveRequest = {
   id: string;
@@ -51,18 +93,12 @@ type LeaveRequest = {
   approvalRequired: boolean;
   status: RequestStatus;
   submittedAt: string;
-  manager: string;
-  employeeNote: string;
+  assignedReviewerLabel?: string;
+  canDecide: boolean;
+  /** Server-derived only. A missing capability intentionally fails closed. */
+  canCancel: boolean;
+  employeeNote?: string;
   managerNote?: string;
-  attachments?: LeaveAttachment[];
-};
-
-type LeaveAttachment = {
-  id: string;
-  name: string;
-  mimeType: string;
-  sizeBytes: number;
-  previewUrl: string;
 };
 
 type Profile = {
@@ -73,208 +109,29 @@ type Profile = {
   roleLabel: string;
   team: string;
   manager: string;
+  company: OrganisationCompany;
 };
 
-type CalendarHoliday = {
-  date: string;
-  label: string;
-  isDemo?: boolean;
-};
-
-type SharedDataState = "local" | "connecting" | "live" | "error";
-
-type DemoLeaveRequestRow = {
+type InternalOrgRow = {
   id: string;
-  employee_profile_id: string;
-  manager_profile_id: string;
-  leave_type: string;
-  start_date: string;
-  end_date: string;
-  start_time: string | null;
-  end_time: string | null;
-  days: number | string;
-  hours: number | string | null;
-  approval_required: boolean;
-  status: RequestStatus;
-  submitted_at: string;
-  employee_note: string;
-  manager_note: string | null;
+  node_kind: "person" | "org_unit" | "vacancy";
+  company_key: OrganisationCompany;
+  full_name: string | null;
+  position_title: string;
+  parent_id: string | null;
+  sort_order: number;
+  is_active: boolean;
+  updated_at: string;
+  version: number;
 };
 
-const demoCalendarHolidays: CalendarHoliday[] = [
-  { date: "2026-08-31", label: "Public holiday", isDemo: true },
-];
+type DirectoryState = "connecting" | "live" | "error";
 
-const initialRequests: LeaveRequest[] = [
-  {
-    id: "MAM-2403",
-    employee: "Jordan Patel",
-    initials: "JP",
-    team: "Major Modifications",
-    leaveType: "Annual leave",
-    startDate: "2026-08-17",
-    endDate: "2026-08-19",
-    dateLabel: "17–19 Aug 2026",
-    days: 3,
-    approvalRequired: true,
-    status: "Pending",
-    submittedAt: "Today, 8:42 am",
-    manager: "Taylor Morgan",
-    employeeNote: "Family trip booked interstate.",
-  },
-  {
-    id: "MAM-2402",
-    employee: "Mia Chen",
-    initials: "MC",
-    team: "Minor Modifications",
-    leaveType: "Sick leave",
-    startDate: "2026-08-18",
-    endDate: "2026-08-18",
-    dateLabel: "18 Aug 2026",
-    days: 1,
-    hours: 4,
-    startTime: "09:00",
-    endTime: "13:00",
-    approvalRequired: true,
-    status: "Pending",
-    submittedAt: "Yesterday, 3:24 pm",
-    manager: "Riley Brooks",
-    employeeNote: "Personal appointment.",
-  },
-  {
-    id: "MAM-2401",
-    employee: "Noah Williams",
-    initials: "NW",
-    team: "Major Modifications",
-    leaveType: "Annual leave",
-    startDate: "2026-08-18",
-    endDate: "2026-08-20",
-    dateLabel: "18–20 Aug 2026",
-    days: 3,
-    approvalRequired: true,
-    status: "Approved",
-    submittedAt: "29 Jul, 10:08 am",
-    manager: "Taylor Morgan",
-    employeeNote: "Planned annual leave.",
-    managerNote: "Project handover is complete.",
-  },
-  {
-    id: "MAM-2398",
-    employee: "Taylor Morgan",
-    initials: "TM",
-    team: "Major Modifications",
-    leaveType: "Annual leave",
-    startDate: "2026-09-07",
-    endDate: "2026-09-11",
-    dateLabel: "7–11 Sep 2026",
-    days: 5,
-    approvalRequired: false,
-    status: "Approved",
-    submittedAt: "30 Jul, 2:16 pm",
-    manager: "Priya Singh",
-    employeeNote: "School holiday break.",
-  },
-  {
-    id: "MAM-2396",
-    employee: "Taylor Morgan",
-    initials: "TM",
-    team: "Major Modifications",
-    leaveType: "Annual leave",
-    startDate: "2026-07-06",
-    endDate: "2026-07-10",
-    dateLabel: "6–10 Jul 2026",
-    days: 5,
-    approvalRequired: false,
-    status: "Approved",
-    submittedAt: "22 Jun, 4:16 pm",
-    manager: "Priya Singh",
-    employeeNote: "Planned leave.",
-  },
-  {
-    id: "MAM-2397",
-    employee: "Riley Brooks",
-    initials: "RB",
-    team: "Minor Modifications",
-    leaveType: "Annual leave",
-    startDate: "2026-09-14",
-    endDate: "2026-09-18",
-    dateLabel: "14–18 Sep 2026",
-    days: 5,
-    approvalRequired: false,
-    status: "Approved",
-    submittedAt: "30 Jul, 9:35 am",
-    manager: "Priya Singh",
-    employeeNote: "Planned annual leave.",
-  },
-  {
-    id: "MAM-2395",
-    employee: "Ava Thompson",
-    initials: "AT",
-    team: "Accounts",
-    leaveType: "Unpaid leave",
-    startDate: "2026-07-31",
-    endDate: "2026-07-31",
-    dateLabel: "31 Jul 2026",
-    days: 1,
-    approvalRequired: true,
-    status: "Declined",
-    submittedAt: "28 Jul, 1:14 pm",
-    manager: "Priya Singh",
-    employeeNote: "Personal commitment.",
-    managerNote: "Please choose another date due to payroll close.",
-  },
-];
-
-const profiles: Profile[] = [
-  { id: "priya", name: "Priya Singh", initials: "PS", accessRole: "hr", roleLabel: "HR & People", team: "People & Culture", manager: "Executive Team" },
-  { id: "taylor", name: "Taylor Morgan", initials: "TM", accessRole: "manager", roleLabel: "Major Mod manager", team: "Major Modifications", manager: "Priya Singh" },
-  { id: "riley", name: "Riley Brooks", initials: "RB", accessRole: "manager", roleLabel: "Minor Mod manager", team: "Minor Modifications", manager: "Priya Singh" },
-  { id: "jordan", name: "Jordan Patel", initials: "JP", accessRole: "employee", roleLabel: "Accessibility technician", team: "Major Modifications", manager: "Taylor Morgan" },
-  { id: "noah", name: "Noah Williams", initials: "NW", accessRole: "employee", roleLabel: "Project coordinator", team: "Major Modifications", manager: "Taylor Morgan" },
-  { id: "alex", name: "Alex King", initials: "AK", accessRole: "employee", roleLabel: "Accessibility carpenter", team: "Major Modifications", manager: "Taylor Morgan" },
-  { id: "mia", name: "Mia Chen", initials: "MC", accessRole: "employee", roleLabel: "Modifications coordinator", team: "Minor Modifications", manager: "Riley Brooks" },
-  { id: "sam", name: "Sam Rivera", initials: "SR", accessRole: "employee", roleLabel: "Modifications tradesperson", team: "Minor Modifications", manager: "Riley Brooks" },
-  { id: "ava", name: "Ava Thompson", initials: "AT", accessRole: "employee", roleLabel: "Accounts officer", team: "Accounts", manager: "Priya Singh" },
-];
-
-function formatSubmittedAt(value: string) {
-  return new Intl.DateTimeFormat("en-AU", {
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function mapDemoLeaveRequest(row: DemoLeaveRequestRow): LeaveRequest {
-  const employee = profiles.find((profile) => profile.id === row.employee_profile_id);
-  const manager = profiles.find((profile) => profile.id === row.manager_profile_id);
-
-  if (!employee || !manager) {
-    throw new Error(`Synthetic profile mapping is missing for ${row.id}.`);
-  }
-
-  return {
-    id: row.id,
-    employee: employee.name,
-    initials: employee.initials,
-    team: employee.team,
-    leaveType: row.leave_type,
-    startDate: row.start_date,
-    endDate: row.end_date,
-    dateLabel: formatDateRange(row.start_date, row.end_date),
-    days: Number(row.days),
-    hours: row.hours === null ? undefined : Number(row.hours),
-    startTime: row.start_time?.slice(0, 5),
-    endTime: row.end_time?.slice(0, 5),
-    approvalRequired: row.approval_required,
-    status: row.status,
-    submittedAt: formatSubmittedAt(row.submitted_at),
-    manager: manager.name,
-    employeeNote: row.employee_note,
-    managerNote: row.manager_note ?? undefined,
-  };
-}
+type InitialNavigation = {
+  view: AppView;
+  section: LeaveSection;
+  requestId?: string;
+};
 
 function businessDaysBetween(start: string, end: string) {
   const first = new Date(`${start}T12:00:00`);
@@ -348,27 +205,6 @@ const TIME_OPTIONS = Array.from({ length: 49 }, (_, index) => {
 const START_TIME_OPTIONS = TIME_OPTIONS.slice(0, -1);
 const END_TIME_OPTIONS = TIME_OPTIONS.slice(1);
 const TIME_VALUES = new Set(TIME_OPTIONS.map((option) => option.value));
-const MAX_ATTACHMENT_COUNT = 3;
-const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
-const ALLOWED_ATTACHMENT_TYPES = new Set([
-  "application/pdf",
-  "image/heic",
-  "image/heif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function releaseAttachmentUrls(requests: LeaveRequest[]) {
-  requests.forEach((request) => {
-    request.attachments?.forEach((attachment) => URL.revokeObjectURL(attachment.previewUrl));
-  });
-}
 
 function formatDateRange(start: string, end: string) {
   const date = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" });
@@ -380,15 +216,12 @@ function formatDateRange(start: string, end: string) {
   return `${date.format(first)}–${date.format(last)} ${year.format(last)}`;
 }
 
-function formatMonthCode(date: string) {
-  return ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"][Number(date.slice(5, 7)) - 1];
-}
-
 function toIsoDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function getApprovalCalendarDays(request: LeaveRequest) {
+  const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const first = new Date(`${request.startDate}T12:00:00`);
   const last = new Date(`${request.endDate}T12:00:00`);
   first.setDate(first.getDate() - 21);
@@ -406,7 +239,7 @@ function getApprovalCalendarDays(request: LeaveRequest) {
     return {
       iso: toIsoDate(current),
       day: current.getDate(),
-      month: current.toLocaleDateString("en-AU", { month: "short" }),
+      month: shortMonths[current.getMonth()],
       isWeekend: current.getDay() === 0 || current.getDay() === 6,
     };
   });
@@ -426,137 +259,682 @@ function requestsOverlap(first: LeaveRequest, second: LeaveRequest) {
   return first.startTime! < second.endTime! && second.startTime! < first.endTime!;
 }
 
-function getCalendarDays() {
-  const first = new Date("2026-07-27T12:00:00");
+function startOfCalendarMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1, 12);
+}
+
+function getCalendarMonthLabel(month: Date) {
+  return new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric" }).format(month);
+}
+
+function getCalendarDays(month: Date) {
+  const first = startOfCalendarMonth(month);
+  const firstWeekday = (first.getDay() + 6) % 7;
+  first.setDate(first.getDate() - firstWeekday);
   return Array.from({ length: 42 }, (_, index) => {
     const current = new Date(first);
     current.setDate(first.getDate() + index);
     return {
       iso: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`,
       day: current.getDate(),
-      inMonth: current.getMonth() === 7,
+      inMonth: current.getMonth() === month.getMonth() && current.getFullYear() === month.getFullYear(),
     };
   });
 }
 
-function getViewTitles(profile: Profile, leaveSection: LeaveSection): Record<AppView, { title: string; eyebrow: string }> {
+function isLeapYear(year: number) {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+function birthdayOccursOnCalendarDate(birthday: BirthdayCalendarEntry, date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  if (birthday.month !== month) return false;
+  if (birthday.day === day) return true;
+
+  // A recurring 29 February birthday remains visible every year. The system
+  // observes it on 28 February where the selected calendar year has no 29th.
+  return birthday.month === 2
+    && birthday.day === 29
+    && day === 28
+    && !isLeapYear(year);
+}
+
+function checkInMilestoneLabel(milestone: CheckInCalendarEntry["milestone"]) {
+  if (milestone === "2_week") return "2-week check-in";
+  if (milestone === "1_month") return "1-month check-in";
+  if (milestone === "3_month") return "3-month check-in";
+  return "5-month check-in";
+}
+
+function getViewTitles(profile: Profile, calendarMonth: Date, canReviewLeave: boolean): Record<Exclude<AppView, "people">, { title: string; helper?: string }> {
   return {
-    home: { title: `Good morning, ${profile.name.split(" ")[0]}`, eyebrow: "Tuesday · 4 August" },
-    leave: {
-      title: profile.accessRole === "employee" ? "My leave" : "Leave",
-      eyebrow: leaveSection === "approvals" ? `${profile.team} decision queue` : profile.roleLabel,
-    },
-    calendar: { title: "Team calendar", eyebrow: "August 2026" },
+    home: { title: "Home" },
+    leave: { title: canReviewLeave ? "Leave" : "My leave" },
+    calendar: { title: "Team calendar", helper: getCalendarMonthLabel(calendarMonth) },
   };
 }
 
-function getVisibleRequests(requests: LeaveRequest[], profile: Profile) {
-  if (profile.accessRole === "hr") return requests;
-  if (profile.accessRole === "manager") {
-    return requests.filter((request) => request.team === profile.team || request.employee === profile.name);
-  }
+function getEmployeePreviewRequests(requests: LeaveRequest[], profile: Profile) {
+  // Change view is a read-only employee presentation. It must not infer a
+  // reviewer queue from a mutable reporting line or a display name; real
+  // reviewer access is evaluated only for the signed-in account by the server.
   return requests.filter((request) => request.employee === profile.name);
 }
 
-function getCalendarRequests(requests: LeaveRequest[], profile: Profile) {
-  if (profile.accessRole === "hr") return requests;
-  return requests.filter((request) => request.team === profile.team);
+function initialsForName(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
 }
 
-export function LeaveDemo() {
-  const supabase = isSharedDemoConfigured() ? createClient() : null;
-  const [activeView, setActiveView] = useState<AppView>("home");
-  const [activeProfileId, setActiveProfileId] = useState("taylor");
-  const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests);
-  const [selectedRequestId, setSelectedRequestId] = useState("MAM-2403");
-  const [leaveSection, setLeaveSection] = useState<LeaveSection>("requests");
+function toLeaveRequest(record: LeaveWorkspaceRequest): LeaveRequest {
+  return {
+    id: record.id,
+    employee: record.employee,
+    initials: initialsForName(record.employee),
+    team: record.company === "mam" ? "MAM" : "Equipsy",
+    leaveType: record.leaveType,
+    startDate: record.startDate,
+    endDate: record.endDate,
+    dateLabel: formatDateRange(record.startDate, record.endDate),
+    days: record.days,
+    hours: record.hours,
+    startTime: record.startTime,
+    endTime: record.endTime,
+    approvalRequired: record.approvalRequired,
+    status: record.status,
+    submittedAt: record.submittedAt,
+    assignedReviewerLabel: record.assignedReviewerLabel,
+    canDecide: record.canDecide,
+    canCancel: record.canCancel === true,
+    employeeNote: record.employeeNote,
+    managerNote: record.managerNote,
+  };
+}
+
+function toCalendarLeaveRequest(record: LeaveCalendarEntry): LeaveRequest {
+  return {
+    id: record.id,
+    employee: record.employee,
+    initials: initialsForName(record.employee),
+    team: record.company === "mam" ? "MAM" : "Equipsy",
+    leaveType: record.leaveType,
+    startDate: record.startDate,
+    endDate: record.endDate,
+    dateLabel: formatDateRange(record.startDate, record.endDate),
+    days: record.days,
+    hours: record.hours,
+    startTime: record.startTime,
+    endTime: record.endTime,
+    approvalRequired: true,
+    status: record.status,
+    submittedAt: "",
+    canDecide: false,
+    canCancel: false,
+  };
+}
+
+function accessRoleForOrgPerson(row: InternalOrgRow, managerIds: Set<string>): AccessRole {
+  if (/\bHR\b|PEOPLE\s*&\s*CULTURE/i.test(row.position_title)) return "hr";
+  return managerIds.has(row.id) ? "manager" : "employee";
+}
+
+function previewAccessRoleForOrgPerson(personId: string, rows: InternalOrgRow[]): PreviewAccessRole {
+  return rows.some((row) => row.is_active && row.parent_id === personId)
+    ? "manager"
+    : "employee";
+}
+
+export function LeaveDemo({
+  initialNavigation,
+  isAdmin = false,
+  currentPersonId,
+  isNonRosterSystemAdmin = false,
+  canViewCheckIns = false,
+  canChangeEmployeeView = false,
+  canViewCheckInTasks = false,
+}: {
+  initialNavigation?: InitialNavigation;
+  isAdmin?: boolean;
+  currentPersonId?: string;
+  /**
+   * A narrowly authorised platform administrator may operate HR tools without
+   * becoming a synthetic employee in the authoritative roster. It has no
+   * self-service profile or own-leave workspace.
+   */
+  isNonRosterSystemAdmin?: boolean;
+  /** Server-issued capability; row scope is independently enforced by each RPC. */
+  canViewCheckIns?: boolean;
+  canChangeEmployeeView?: boolean;
+  canViewCheckInTasks?: boolean;
+}) {
+  const directorySupabase = isSupabaseConfigured() ? createClient() : null;
+  const isNonRosterSystemAdminWorkspace = isNonRosterSystemAdmin && !currentPersonId;
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [activeView, setActiveView] = useState<AppView>(initialNavigation?.view ?? "home");
+  const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [calendarEntries, setCalendarEntries] = useState<LeaveRequest[]>([]);
+  const [calendarBirthdays, setCalendarBirthdays] = useState<BirthdayCalendarEntry[]>([]);
+  const [checkInCalendarEntries, setCheckInCalendarEntries] = useState<CheckInCalendarEntry[]>([]);
+  const [canReviewLeaveWorkspace, setCanReviewLeaveWorkspace] = useState(false);
+  const [leaveDataLoading, setLeaveDataLoading] = useState(true);
+  const [leaveDataError, setLeaveDataError] = useState("");
+  const [calendarMonth, setCalendarMonth] = useState(() => startOfCalendarMonth(new Date()));
+  const [selectedRequestId, setSelectedRequestId] = useState(initialNavigation?.requestId ?? "");
+  const [leaveSection, setLeaveSection] = useState<LeaveSection>(initialNavigation?.section ?? "requests");
   const [statusFilter, setStatusFilter] = useState<"All" | RequestStatus>("All");
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [managerNote, setManagerNote] = useState("");
   const [formError, setFormError] = useState("");
+  const [cancellationRequestId, setCancellationRequestId] = useState<string | null>(null);
+  const [cancellationError, setCancellationError] = useState("");
+  const [cancelledRequestId, setCancelledRequestId] = useState<string | null>(null);
   const [toast, setToast] = useState("");
-  const [showProfiles, setShowProfiles] = useState(false);
-  const [sharedDataState, setSharedDataState] = useState<SharedDataState>(supabase ? "connecting" : "local");
+  const [isMutating, setIsMutating] = useState(false);
+  const [organisationRows, setOrganisationRows] = useState<InternalOrgRow[]>([]);
+  const [canEditOrganisation, setCanEditOrganisation] = useState(false);
+  const [canManageEmployeeDirectory, setCanManageEmployeeDirectory] = useState(false);
+  const [employeeDirectoryRefreshKey, setEmployeeDirectoryRefreshKey] = useState(0);
+  const [employeeDirectorySelectedPersonId, setEmployeeDirectorySelectedPersonId] = useState<string | null>(null);
+  const [organisationState, setOrganisationState] = useState<DirectoryState>("connecting");
+  const [accounts, setAccounts] = useState<AccountDto[]>([]);
+  const [accountsError, setAccountsError] = useState("");
+  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [selfProfile, setSelfProfile] = useState<CurrentEmployeeSelfProfile | null>(null);
+  const [selfProfileLoading, setSelfProfileLoading] = useState(Boolean(currentPersonId));
+  // Private selected-employee details are never derived from the organisation
+  // tree. This state is populated only by the HR-authorised server action.
+  const [selectedEmployeeProfile, setSelectedEmployeeProfile] = useState<SelectedEmployeeProfile | null>(null);
+  // This is intentionally UI-only. It never changes the authenticated user or
+  // the capability checks that protect HR records and organisation writes.
+  const [previewPersonId, setPreviewPersonId] = useState("");
+  const leaveRefreshSequence = useRef(0);
 
-  useEffect(() => {
-    if (!supabase) return;
+  const handleSignOut = useCallback(async () => {
+    if (isSigningOut) return;
 
-    let mounted = true;
-    let refreshTimer: number | undefined;
+    setIsSigningOut(true);
+    try {
+      await Promise.allSettled([
+        signOut(),
+        directorySupabase?.auth.signOut({ scope: "local" }) ?? Promise.resolve(),
+      ]);
+    } finally {
+      // Use a document navigation instead of relying on the current React tree
+      // to render the Server Action redirect. This guarantees a fresh unauthenticated
+      // request after the Supabase cookies have been cleared.
+      window.setTimeout(() => window.location.replace("/login"), 150);
+    }
+  }, [directorySupabase, isSigningOut]);
 
-    async function loadSharedRequests() {
-      const { data, error } = await supabase
-        .from("demo_leave_requests")
-        .select("*")
-        .order("submitted_at", { ascending: false })
-        .order("id", { ascending: false });
+  const refreshLeaveWorkspace = useCallback(async () => {
+    const requestSequence = leaveRefreshSequence.current + 1;
+    leaveRefreshSequence.current = requestSequence;
+    setLeaveDataLoading(true);
+    try {
+      const data = await getLeaveWorkspaceData();
+      // A save, a safe Realtime invalidation and an initial load can overlap.
+      // Only the newest role-scoped response may update calendar data.
+      if (requestSequence !== leaveRefreshSequence.current) return;
+      setRequests(data.requests.map(toLeaveRequest));
+      setCalendarEntries(data.calendarEntries.map(toCalendarLeaveRequest));
+      setCalendarBirthdays(data.birthdayEntries);
+      setCheckInCalendarEntries(data.checkInEntries);
+      setCanReviewLeaveWorkspace(data.canReviewLeave);
+      setLeaveDataError("");
+    } catch {
+      if (requestSequence !== leaveRefreshSequence.current) return;
+      // Do not leave a previously authorised calendar visible after a session,
+      // access, or projection failure. The next successful role-scoped load
+      // repopulates it.
+      setRequests([]);
+      setCalendarEntries([]);
+      setCalendarBirthdays([]);
+      setCheckInCalendarEntries([]);
+      setSelectedRequestId("");
+      setCanReviewLeaveWorkspace(false);
+      setLeaveDataError("Leave records could not be loaded. Refresh and try again.");
+    } finally {
+      if (requestSequence === leaveRefreshSequence.current) setLeaveDataLoading(false);
+    }
+  }, []);
 
-      if (!mounted) return;
+  const loadAccounts = useCallback(async () => {
+    if (!isAdmin || !canManageEmployeeDirectory) {
+      setAccounts([]);
+      setAccountsError("");
+      setAccountsLoading(false);
+      return;
+    }
+    setAccountsLoading(true);
+    try {
+      setAccounts(await listPortalAccounts());
+      setAccountsError("");
+    } catch (error) {
+      setAccountsError(error instanceof Error ? error.message : "Accounts could not be loaded.");
+    } finally {
+      setAccountsLoading(false);
+    }
+  }, [canManageEmployeeDirectory, isAdmin]);
 
-      if (error) {
-        setSharedDataState("error");
-        return;
-      }
+  const loadOrganisation = useCallback(async () => {
+    if (!directorySupabase) return;
+    const [{ data: rows, error }, { data: canEdit }, { data: canManageEmployeeDirectory }] = await Promise.all([
+      directorySupabase
+        .from("internal_org_people")
+        .select("id,node_kind,company_key,full_name,position_title,parent_id,sort_order,is_active,updated_at,version")
+        .order("sort_order", { ascending: true })
+        .order("position_title", { ascending: true }),
+      directorySupabase.rpc("can_edit_internal_org"),
+      directorySupabase.rpc("can_manage_employee_directory"),
+    ]);
 
-      try {
-        const nextRequests = (data as DemoLeaveRequestRow[]).map(mapDemoLeaveRequest);
-        setRequests((current) => nextRequests.map((request) => {
-          const localAttachments = current.find((item) => item.id === request.id)?.attachments;
-          return localAttachments?.length ? { ...request, attachments: localAttachments } : request;
-        }));
-        setSelectedRequestId((current) => nextRequests.some((request) => request.id === current) ? current : nextRequests[0]?.id ?? current);
-        setSharedDataState("live");
-      } catch {
-        setSharedDataState("error");
-      }
+    if (error) {
+      setOrganisationState("error");
+      return;
+    }
+    setOrganisationRows((rows ?? []) as InternalOrgRow[]);
+    setCanEditOrganisation(canEdit === true);
+    setCanManageEmployeeDirectory(canManageEmployeeDirectory === true);
+    setOrganisationState("live");
+  }, [directorySupabase]);
+
+  const loadSelfProfile = useCallback(async () => {
+    if (!currentPersonId) {
+      setSelfProfile(null);
+      setSelfProfileLoading(false);
+      return;
     }
 
-    void loadSharedRequests();
+    setSelfProfileLoading(true);
+    try {
+      setSelfProfile(await getCurrentEmployeeSelfProfile());
+    } catch {
+      // Do not substitute organisation-tree fields for the private profile
+      // DTO. A failed self-only lookup must not accidentally display or save
+      // another person's contact data.
+      setSelfProfile(null);
+    } finally {
+      setSelfProfileLoading(false);
+    }
+  }, [currentPersonId]);
 
-    const channel = supabase
-      .channel("demo:leave_requests")
+  useEffect(() => {
+    if (!directorySupabase) return;
+    let mounted = true;
+    let refreshTimer: number | undefined;
+    refreshTimer = window.setTimeout(() => void loadOrganisation(), 0);
+    const channel = directorySupabase
+      .channel("internal:organisation")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "demo_leave_requests" },
+        {
+          event: "*",
+          schema: "public",
+          table: "internal_org_people",
+          select: ["id", "version"],
+        },
         () => {
+          if (!mounted) return;
+          setEmployeeDirectoryRefreshKey((current) => current + 1);
+          // HR contact edits deliberately touch only the person's safe public
+          // org row. Refresh the authenticated person's self-only DTO too so
+          // their top-right card stays current without publishing any private
+          // fields through Realtime.
+          void loadSelfProfile();
+          // Date-of-birth updates also touch this safe public organisation row.
+          // Treat that event only as an invalidation signal: the calendar
+          // re-reads its narrow birthday DTO and never receives private values
+          // from the Realtime payload.
+          void refreshLeaveWorkspace();
           window.clearTimeout(refreshTimer);
-          refreshTimer = window.setTimeout(() => void loadSharedRequests(), 120);
+          refreshTimer = window.setTimeout(() => void loadOrganisation(), 120);
         },
       )
-      .subscribe((status: string) => {
-        if (!mounted) return;
-        if (status === "SUBSCRIBED") setSharedDataState("live");
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setSharedDataState("error");
-      });
+      .subscribe();
 
     return () => {
       mounted = false;
       window.clearTimeout(refreshTimer);
-      void supabase.removeChannel(channel);
+      void directorySupabase.removeChannel(channel);
     };
-  }, [supabase]);
+  }, [directorySupabase, loadOrganisation, loadSelfProfile, refreshLeaveWorkspace]);
 
-  const activeProfile = profiles.find((profile) => profile.id === activeProfileId) ?? profiles[1];
-  const viewTitles = getViewTitles(activeProfile, leaveSection);
-  const visibleRequests = getVisibleRequests(requests, activeProfile);
-  const calendarRequests = getCalendarRequests(requests, activeProfile);
-  const approvalQueue = activeProfile.accessRole === "manager"
-    ? requests.filter((request) => request.approvalRequired && request.status === "Pending" && request.manager === activeProfile.name)
+  useEffect(() => {
+    if (!isAdmin || !canManageEmployeeDirectory) return;
+    const timer = window.setTimeout(() => void loadAccounts(), 0);
+    return () => window.clearTimeout(timer);
+  }, [canManageEmployeeDirectory, isAdmin, loadAccounts]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadSelfProfile(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadSelfProfile]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void refreshLeaveWorkspace(), 0);
+    return () => window.clearTimeout(timer);
+  }, [refreshLeaveWorkspace]);
+
+  useEffect(() => {
+    if (!directorySupabase) return;
+    let refreshTimer: number | undefined;
+    const channel = directorySupabase
+      .channel("internal:leave-refresh")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "leave_requests",
+        },
+        () => {
+          // Never use a Realtime payload as UI data: it may contain private
+          // leave notes. Treat the event only as a signal to reload the
+          // role-scoped server DTOs.
+          window.clearTimeout(refreshTimer);
+          refreshTimer = window.setTimeout(() => void refreshLeaveWorkspace(), 160);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      window.clearTimeout(refreshTimer);
+      void directorySupabase.removeChannel(channel);
+    };
+  }, [directorySupabase, refreshLeaveWorkspace]);
+
+  const organisationPeople = useMemo<OrganisationPerson[]>(() => organisationRows
+    .filter((row) => row.node_kind !== "vacancy")
+    .map((row) => ({
+      id: row.id,
+      name: row.node_kind === "org_unit" ? row.position_title : row.full_name ?? "Unnamed person",
+      position: row.node_kind === "org_unit" ? "" : row.position_title,
+      company: row.company_key,
+      reportsTo: row.parent_id,
+      kind: row.node_kind === "org_unit" ? "org_unit" : "person",
+      sortOrder: row.sort_order,
+      isActive: row.is_active,
+    })), [organisationRows]);
+  const directoryProfiles = useMemo<Profile[]>(() => {
+    const rowsById = new Map(organisationRows.map((row) => [row.id, row]));
+    const managerIds = new Set(organisationRows
+      .filter((row) => row.is_active)
+      .map((row) => row.parent_id)
+      .filter((id): id is string => Boolean(id)));
+    const managerFor = (row: InternalOrgRow) => {
+      const visited = new Set<string>();
+      let parentId = row.parent_id;
+      while (parentId && !visited.has(parentId)) {
+        visited.add(parentId);
+        const parent = rowsById.get(parentId);
+        if (!parent) return "";
+        if (parent.node_kind === "person" && parent.is_active) return parent.full_name ?? "";
+        parentId = parent.parent_id;
+      }
+      return "";
+    };
+    return organisationRows
+      .filter((row) => row.node_kind === "person" && row.is_active && row.full_name)
+      .map((row) => {
+        return {
+          id: row.id,
+          name: row.full_name ?? "Unnamed person",
+          initials: initialsForName(row.full_name ?? ""),
+          accessRole: accessRoleForOrgPerson(row, managerIds),
+          roleLabel: row.position_title,
+          team: row.company_key === "mam" ? "MAM" : "Equipsy",
+          manager: managerFor(row),
+          company: row.company_key,
+        };
+      });
+  }, [organisationRows]);
+  const canPreviewEmployeeAccess = canChangeEmployeeView && canManageEmployeeDirectory;
+  const selectedPreviewCandidate = canPreviewEmployeeAccess && previewPersonId
+    ? directoryProfiles.find((profile) => profile.id === previewPersonId)
+    : undefined;
+  const selectedPreviewPersonId = selectedPreviewCandidate?.id ?? "";
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedPreviewPersonId) return;
+
+    void getSelectedEmployeeProfile(selectedPreviewPersonId)
+      .then((profile) => {
+        if (!cancelled && profile.personId === selectedPreviewPersonId) {
+          setSelectedEmployeeProfile(profile);
+        }
+      })
+      .catch(() => {
+        // The org-tree fallback below has no private contact fields and stays
+        // disabled. The server action independently re-checks HR authority.
+        if (!cancelled) setSelectedEmployeeProfile(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeDirectoryRefreshKey, selectedPreviewPersonId]);
+
+  const signedInProfile = directoryProfiles.find((profile) => profile.id === currentPersonId)
+    ?? (isNonRosterSystemAdminWorkspace ? {
+      id: "platform-system-administrator",
+      name: "System administrator",
+      initials: "SA",
+      accessRole: "hr" as const,
+      roleLabel: "Platform administrator",
+      team: "Platform administration",
+      manager: "",
+      company: "mam" as const,
+    } : undefined);
+  if (!signedInProfile) {
+    return <DirectoryLoading state={organisationState} />;
+  }
+  const adminProfile: Profile = canManageEmployeeDirectory
+    ? { ...signedInProfile, accessRole: "hr" }
+    : signedInProfile;
+  // A preview is never an HR presentation. HR is an actual database capability,
+  // while manager presentation is derived only from active direct reports.
+  const previewProfile: Profile | undefined = selectedPreviewCandidate
+    ? {
+        ...selectedPreviewCandidate,
+        accessRole: previewAccessRoleForOrgPerson(selectedPreviewCandidate.id, organisationRows),
+      }
+    : undefined;
+  const isPreviewingEmployeeAccess = Boolean(previewProfile);
+  const activeProfile = previewProfile ?? adminProfile;
+  const showHrWorkspace = canManageEmployeeDirectory && !isPreviewingEmployeeAccess;
+  const topbarSelfProfile: SelfProfileData = selfProfile ?? {
+    name: signedInProfile.name,
+    title: signedInProfile.roleLabel,
+    company: signedInProfile.company,
+    team: signedInProfile.team,
+    manager: signedInProfile.manager,
+  };
+  const topbarPreviewFallback: SelfProfileData | null = previewProfile ? {
+    name: previewProfile.name,
+    title: previewProfile.roleLabel,
+    company: previewProfile.company,
+    team: previewProfile.team,
+    manager: previewProfile.manager,
+  } : null;
+  const authorisedPreviewProfile = selectedEmployeeProfile && selectedEmployeeProfile.personId === previewProfile?.id
+    ? selectedEmployeeProfile
+    : null;
+  // The top-right card changes with the employee view. Until the dedicated
+  // HR-only profile request completes, it shows only public organisation data
+  // and remains non-editable rather than exposing stale private contact data.
+  const topbarProfile: SelfProfileData = isPreviewingEmployeeAccess
+    ? authorisedPreviewProfile
+      ? authorisedPreviewProfile
+      : topbarPreviewFallback ?? topbarSelfProfile
+    : topbarSelfProfile;
+  const topbarProfileLoading = isPreviewingEmployeeAccess
+    ? !authorisedPreviewProfile
+    : !isNonRosterSystemAdminWorkspace && (!selfProfile || selfProfileLoading);
+  const isNonRosterAdminHrWorkspace = isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess;
+
+  // The capability is issued by the same server-side leave policy that scopes
+  // the queue and decision buttons. It is intentionally not derived from an
+  // org title, direct reports, or a browser-selected Change view profile.
+  const canReviewLeave = !isPreviewingEmployeeAccess && canReviewLeaveWorkspace;
+  // This is an employee-facing entry point only. Submission remains authorised
+  // by the durable server action; this guard prevents a read-only Change view
+  // or a non-roster platform administrator from opening a misleading form.
+  const canApplyForLeave = !isPreviewingEmployeeAccess && !isNonRosterSystemAdminWorkspace;
+  // The server-projected per-request capability remains the source of truth.
+  // This only prevents a Change view or non-roster platform workspace from
+  // presenting an impossible cancellation control.
+  const canCancelOwnApprovedLeave = !isPreviewingEmployeeAccess
+    && !isNonRosterSystemAdminWorkspace;
+  const viewTitles = getViewTitles(activeProfile, calendarMonth, canReviewLeave);
+  // The durable workspace/calendar RPCs have already applied the current
+  // session's server-side scope. Do not re-derive access in the browser from a
+  // mutable name or hierarchy snapshot; that could hide a valid immutable
+  // assignment after an organisation edit.
+  const visibleRequests = isPreviewingEmployeeAccess
+    ? getEmployeePreviewRequests(requests, activeProfile)
+    : requests;
+  const calendarRequests = isPreviewingEmployeeAccess
+    ? getEmployeePreviewRequests(calendarEntries, activeProfile)
+    : calendarEntries;
+  // A Change view does not impersonate the selected employee. Keep the real
+  // viewer's scoped check-in tasks out of that read-only preview.
+  const calendarCheckIns = isPreviewingEmployeeAccess ? [] : checkInCalendarEntries;
+  const approvalQueue = canReviewLeave
+    ? visibleRequests.filter((request) => request.canDecide)
     : [];
   const myRequests = requests.filter((request) => request.employee === activeProfile.name);
-  const selectedRequest = visibleRequests.find((request) => request.id === selectedRequestId) ?? approvalQueue[0] ?? visibleRequests[0] ?? requests[0];
   const filteredRequests = visibleRequests.filter((request) => {
     return statusFilter === "All" || request.status === statusFilter;
   });
+  const selectedRegisterRequest = filteredRequests.find((request) => request.id === selectedRequestId) ?? filteredRequests[0];
+  const selectedApprovalRequest = approvalQueue.find((request) => request.id === selectedRequestId) ?? approvalQueue[0];
+  const selectedRequest = leaveSection === "approvals" ? selectedApprovalRequest : selectedRegisterRequest;
+
+  async function createOrganisationPerson(person: OrganisationPersonDraft) {
+    if (!directorySupabase) throw new Error("The directory is not connected.");
+    const { error } = await directorySupabase.rpc("create_internal_org_node", {
+      p_company_key: person.company,
+      p_node_kind: "person",
+      p_position_title: person.position,
+      p_full_name: person.name,
+      p_parent_id: person.reportsTo,
+      p_started_date: null,
+      p_sort_order: organisationRows.length + 1,
+    });
+    if (error) throw new Error(error.message);
+    await Promise.all([loadOrganisation(), loadAccounts()]);
+    announce(`${person.name} added to the organisation.`);
+  }
+
+  async function updateOrganisationPerson(id: string, person: OrganisationPersonDraft) {
+    if (!directorySupabase) throw new Error("The directory is not connected.");
+    const current = organisationRows.find((row) => row.id === id);
+    if (!current) throw new Error("This person is no longer in the directory.");
+    const { error } = await directorySupabase.rpc("update_internal_org_node", {
+      p_node_id: id,
+      p_company_key: person.company,
+      p_node_kind: "person",
+      p_position_title: person.position,
+      p_full_name: person.name,
+      p_parent_id: person.reportsTo,
+      // Start date is HR-only and is deliberately absent from the public org
+      // projection. A null value tells the hardened RPC to preserve it.
+      p_started_date: null,
+      p_sort_order: current.sort_order,
+      p_is_active: true,
+      p_expected_version: current.version,
+    });
+    if (error) throw new Error(error.message);
+    await Promise.all([loadOrganisation(), loadAccounts()]);
+    announce(`${person.name}'s profile was updated.`);
+  }
+
+  function updateAccountRecord(account: AccountDto) {
+    setAccounts((current) => {
+      const existingIndex = current.findIndex((candidate) => candidate.personId === account.personId);
+      if (existingIndex < 0) return [...current, account];
+      return current.map((candidate) => candidate.personId === account.personId ? account : candidate);
+    });
+  }
+
+  async function saveMyProfile(changes: SelfProfileChanges) {
+    if (!selfProfile) throw new Error("Your profile is still loading.");
+    const updated = await updateCurrentEmployeeSelfProfile({
+      ...changes,
+      detailVersion: selfProfile.detailVersion,
+    });
+    setSelfProfile(updated);
+    // A self-service edit deliberately triggers the same public-row realtime
+    // refresh used by HR. Update the local HR directory immediately too.
+    setEmployeeDirectoryRefreshKey((current) => current + 1);
+    // Update the current browser's recurring birthday marker without waiting
+    // for its own Realtime invalidation event.
+    void refreshLeaveWorkspace();
+    return { message: "Your contact details are saved." };
+  }
+
+  async function saveSelectedEmployeeProfile(changes: SelfProfileChanges) {
+    if (!canPreviewEmployeeAccess || !previewProfile || !selectedEmployeeProfile || selectedEmployeeProfile.personId !== previewProfile.id) {
+      throw new Error("The selected employee profile is still loading.");
+    }
+    const updated = await updateSelectedEmployeeProfile({
+      ...changes,
+      personId: selectedEmployeeProfile.personId,
+      detailVersion: selectedEmployeeProfile.detailVersion,
+    });
+    setSelectedEmployeeProfile(updated);
+    if (updated.personId === currentPersonId) setSelfProfile(updated);
+    // Keep the HR directory and the public organisation tree in step with the
+    // selected profile change, without publishing private contact fields.
+    setEmployeeDirectoryRefreshKey((current) => current + 1);
+    void refreshLeaveWorkspace();
+    return { message: `${updated.name}'s contact details are saved.` };
+  }
 
   function announce(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 3200);
   }
 
-  function chooseLeaveSection(section: LeaveSection) {
-    if (section === "approvals" && activeProfile.accessRole !== "manager") return;
-    if (section === "approvals" && approvalQueue[0]) setSelectedRequestId(approvalQueue[0].id);
+  function changeEmployeeAccessPreview(personId: string) {
+    if (!canPreviewEmployeeAccess) return;
+    const nextProfile = directoryProfiles.find((profile) => profile.id === personId);
+    if (personId && !nextProfile) return;
+
+    setPreviewPersonId(nextProfile?.id ?? "");
+    setSelectedEmployeeProfile(null);
+    setShowRequestForm(false);
+    setFormError("");
+    setManagerNote("");
+    setCancellationRequestId(null);
+    setCancellationError("");
+    setCancelledRequestId(null);
+    setSelectedRequestId("");
+    setLeaveSection("requests");
+
+    if (nextProfile) {
+      announce(`Previewing ${nextProfile.name}'s employee access. HR tools and private records are hidden.`);
+    } else {
+      announce("Returned to Super Admin.");
+    }
+  }
+
+  function chooseLeaveSection(section: LeaveSection, requestedId?: string) {
+    if (section === "approvals" && !canReviewLeave) return;
+    if (section === "approvals" && approvalQueue[0]) {
+      const nextId = requestedId && approvalQueue.some((request) => request.id === requestedId)
+        ? requestedId
+        : approvalQueue.some((request) => request.id === selectedRequestId)
+          ? selectedRequestId
+          : approvalQueue[0].id;
+      setSelectedRequestId(nextId);
+    }
     setLeaveSection(section);
   }
 
@@ -566,60 +944,26 @@ export function LeaveDemo() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function openLeaveRequestForm() {
+    if (!canApplyForLeave || isMutating) return;
+    setFormError("");
+    setShowRequestForm(true);
+  }
+
   function selectRequest(id: string, section: LeaveSection = "requests") {
     setSelectedRequestId(id);
     setManagerNote("");
-    chooseLeaveSection(section);
+    setCancellationRequestId(null);
+    setCancellationError("");
+    setCancelledRequestId(null);
+    chooseLeaveSection(section, id);
     setActiveView("leave");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function resetDemo() {
-    if (supabase) {
-      setSharedDataState("connecting");
-      const { data, error } = await supabase.rpc("reset_demo_leave_requests", {
-        p_confirm_synthetic: true,
-      });
-      if (error) {
-        setSharedDataState("error");
-        announce("The shared demo could not be reset. Try again in a moment.");
-        return;
-      }
-      const nextRequests = (data as DemoLeaveRequestRow[]).map(mapDemoLeaveRequest);
-      setRequests((current) => {
-        releaseAttachmentUrls(current);
-        return nextRequests;
-      });
-      setSharedDataState("live");
-    } else {
-      setRequests((current) => {
-        releaseAttachmentUrls(current);
-        return initialRequests;
-      });
-    }
-    setSelectedRequestId("MAM-2403");
-    setActiveView("home");
-    setLeaveSection("requests");
-    setStatusFilter("All");
-    setShowRequestForm(false);
-    setManagerNote("");
-    setShowProfiles(false);
-    announce(supabase ? "Shared fake data reset for every open demo." : "Demo reset to its starting point.");
-  }
-
-  function switchProfile(profile: Profile) {
-    setActiveProfileId(profile.id);
-    setActiveView("home");
-    setLeaveSection("requests");
-    setSelectedRequestId(initialRequests.find((request) => request.employee === profile.name)?.id ?? initialRequests[0].id);
-    setStatusFilter("All");
-    setManagerNote("");
-    setShowProfiles(false);
-    announce(`Now viewing the demo as ${profile.name} · ${profile.roleLabel}.`);
-  }
-
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isMutating || isPreviewingEmployeeAccess || isNonRosterSystemAdminWorkspace) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     const leaveType = String(data.get("leaveType"));
@@ -628,21 +972,6 @@ export function LeaveDemo() {
     const startTime = String(data.get("startTime") ?? "").trim();
     const endTime = String(data.get("endTime") ?? "").trim();
     const employeeNote = String(data.get("employeeNote"));
-    const attachmentFiles = data.getAll("attachments").filter((entry): entry is File => entry instanceof File && entry.size > 0);
-    if (attachmentFiles.length > MAX_ATTACHMENT_COUNT) {
-      setFormError(`Choose no more than ${MAX_ATTACHMENT_COUNT} supporting files.`);
-      return;
-    }
-    const unsupportedAttachment = attachmentFiles.find((file) => !ALLOWED_ATTACHMENT_TYPES.has(file.type));
-    if (unsupportedAttachment) {
-      setFormError(`${unsupportedAttachment.name} is not a supported PDF or image file.`);
-      return;
-    }
-    const oversizedAttachment = attachmentFiles.find((file) => file.size > MAX_ATTACHMENT_BYTES);
-    if (oversizedAttachment) {
-      setFormError(`${oversizedAttachment.name} is larger than 5 MB.`);
-      return;
-    }
     if (endDate < startDate) {
       setFormError("End date must be on or after the start date.");
       return;
@@ -673,184 +1002,264 @@ export function LeaveDemo() {
     }
     const days = businessDaysBetween(startDate, endDate);
     if (days < 1) {
-      setFormError("Choose at least one weekday for this demo request.");
+      setFormError("Choose at least one weekday for this request.");
       return;
     }
-    const nextNumber = Math.max(...requests.map((request) => Number(request.id.split("-")[1]))) + 1;
-    const approvalRequired = activeProfile.accessRole !== "manager";
-    const attachments = attachmentFiles.map((file) => ({
-      id: crypto.randomUUID(),
-      name: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      previewUrl: URL.createObjectURL(file),
-    }));
-    const next: LeaveRequest = {
-      id: `MAM-${nextNumber}`,
-      employee: activeProfile.name,
-      initials: activeProfile.initials,
-      team: activeProfile.team,
-      leaveType,
-      startDate,
-      endDate,
-      dateLabel: formatDateRange(startDate, endDate),
-      days,
-      hours,
-      startTime: startTime || undefined,
-      endTime: endTime || undefined,
-      approvalRequired,
-      status: approvalRequired ? "Pending" : "Approved",
-      submittedAt: "Just now",
-      manager: activeProfile.manager,
-      employeeNote: employeeNote || "No note added.",
-      attachments,
-    };
 
-    let savedRequest = next;
-    if (supabase) {
-      const { data: saved, error } = await supabase.rpc("submit_demo_leave_request", {
-        p_employee_profile_id: activeProfile.id,
-        p_leave_type: leaveType,
-        p_start_date: startDate,
-        p_end_date: endDate,
-        p_start_time: startTime || null,
-        p_end_time: endTime || null,
-        p_employee_note: employeeNote || null,
+    setIsMutating(true);
+    try {
+      const next = await submitLeaveRequest({
+        leaveType,
+        startDate,
+        endDate,
+        startTime: startTime || undefined,
+        endTime: endTime || undefined,
+        employeeNote,
       });
-
-      if (error || !saved) {
-        attachments.forEach((attachment) => URL.revokeObjectURL(attachment.previewUrl));
-        setFormError(error?.message ?? "The shared request could not be saved.");
-        setSharedDataState("error");
-        return;
-      }
-
-      savedRequest = { ...mapDemoLeaveRequest(saved as DemoLeaveRequestRow), attachments };
-      setSharedDataState("live");
+      await refreshLeaveWorkspace();
+      setSelectedRequestId(next.id);
+      setShowRequestForm(false);
+      setFormError("");
+      form.reset();
+      navigate("leave");
+      announce(next.assignedReviewerLabel
+        ? `Your leave request is pending review by ${next.assignedReviewerLabel}.`
+        : "Your leave request is pending review by an authorised reviewer.");
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "The leave request could not be saved. Refresh and try again.");
+    } finally {
+      setIsMutating(false);
     }
-
-    setRequests((current) => [savedRequest, ...current.filter((request) => request.id !== savedRequest.id)]);
-    setSelectedRequestId(savedRequest.id);
-    setShowRequestForm(false);
-    setFormError("");
-    form.reset();
-    navigate("leave");
-    announce(savedRequest.approvalRequired
-      ? `${savedRequest.id} sent to ${activeProfile.manager} for review${supabase ? " and synced live" : ""}.`
-      : `${savedRequest.id} added to the team calendar${supabase ? " and synced live" : ""}. No approval is needed.`);
   }
 
   async function decideRequest(status: "Approved" | "Declined") {
+    if (!selectedRequest || isMutating || isPreviewingEmployeeAccess || isNonRosterSystemAdminWorkspace) return;
     if (status === "Declined" && !managerNote.trim()) {
-      announce("Add a manager comment before declining this request.");
+      announce("Add a decision note before declining this request.");
       return;
     }
-    let decidedRequest: LeaveRequest = {
-      ...selectedRequest,
-      status,
-      managerNote: managerNote.trim() || "Coverage checked and confirmed.",
-    };
-
-    if (supabase) {
-      const { data: decided, error } = await supabase.rpc("decide_demo_leave_request", {
-        p_request_id: selectedRequest.id,
-        p_actor_profile_id: activeProfile.id,
-        p_status: status,
-        p_manager_note: managerNote.trim() || null,
+    setIsMutating(true);
+    try {
+      const decided = await decideLeaveRequest({
+        requestId: selectedRequest.id,
+        status,
+        managerNote,
       });
-
-      if (error || !decided) {
-        announce(error?.message ?? "The shared decision could not be saved.");
-        setSharedDataState("error");
-        return;
-      }
-
-      decidedRequest = { ...mapDemoLeaveRequest(decided as DemoLeaveRequestRow), attachments: selectedRequest.attachments };
-      setSharedDataState("live");
+      await refreshLeaveWorkspace();
+      const nextApproval = approvalQueue.find((request) => request.id !== selectedRequest.id);
+      setSelectedRequestId(nextApproval?.id ?? decided.id);
+      setManagerNote("");
+      announce(`Leave request was ${status.toLowerCase()}.`);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : "The leave decision could not be saved. Refresh and try again.");
+    } finally {
+      setIsMutating(false);
     }
-
-    setRequests((current) => current.map((request) => request.id === selectedRequest.id ? decidedRequest : request));
-    setManagerNote("");
-    announce(`${selectedRequest.id} ${status.toLowerCase()}. The employee record and register are updated.`);
   }
 
-  const navGroups = [
-    { label: "Leave", items: [
-      { id: "home" as AppView, label: "Home", icon: LayoutDashboard },
-      { id: "leave" as AppView, label: "Leave", icon: ClipboardList, badge: activeProfile.accessRole === "manager" ? approvalQueue.length : undefined },
-      { id: "calendar" as AppView, label: "Team calendar", icon: CalendarDays },
-    ] },
+  function startLeaveCancellation(requestId: string) {
+    if (
+      !selectedRequest
+      || selectedRequest.id !== requestId
+      || selectedRequest.status !== "Approved"
+      || selectedRequest.canCancel !== true
+      || !canCancelOwnApprovedLeave
+      || isMutating
+    ) return;
+
+    setCancellationError("");
+    setCancellationRequestId(requestId);
+  }
+
+  function dismissLeaveCancellation() {
+    if (isMutating) return;
+    setCancellationRequestId(null);
+    setCancellationError("");
+  }
+
+  async function confirmLeaveCancellation(requestId: string) {
+    if (
+      !selectedRequest
+      || selectedRequest.id !== requestId
+      || selectedRequest.status !== "Approved"
+      || selectedRequest.canCancel !== true
+      || !canCancelOwnApprovedLeave
+      || cancellationRequestId !== requestId
+      || isMutating
+    ) return;
+
+    setIsMutating(true);
+    setCancellationError("");
+    try {
+      const cancelled = await cancelMyApprovedLeaveRequest({ requestId });
+      setCancellationRequestId(null);
+      setCancelledRequestId(cancelled.id);
+      await refreshLeaveWorkspace();
+      setSelectedRequestId(requestId);
+      announce("Your future leave was cancelled. It has been removed from the team calendar; the approval history is kept.");
+    } catch (error) {
+      setCancellationError(error instanceof Error ? error.message : "The leave could not be cancelled. Refresh and try again.");
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  const navItems = [
+    { id: "home" as AppView, label: "Home", icon: LayoutDashboard },
+    { id: "leave" as AppView, label: "Leave", icon: ClipboardList, badge: canReviewLeave ? approvalQueue.length : undefined },
+    { id: "calendar" as AppView, label: "Calendar", icon: CalendarDays },
+    { id: "people" as AppView, label: "People", icon: UsersRound },
   ];
 
   return (
-    <div className={styles.shell}>
+    <div className={styles.shell} data-company={activeProfile.company}>
       <a className={styles.skipLink} href="#main-content">Skip to workspace</a>
-      <aside className={styles.sidebar} aria-label="MAM workspace navigation">
-        <div className={styles.brandRow}><BrandMark /><button type="button" aria-label="Workspace options"><MoreHorizontal size={17} /></button></div>
-        <div className={styles.demoBadge} data-state={sharedDataState} role="status">
-          <Sparkles size={13} />
-          {sharedDataState === "live" ? "Live demo · shared fake data" : null}
-          {sharedDataState === "connecting" ? "Connecting shared fake data…" : null}
-          {sharedDataState === "error" ? "Shared data connection issue" : null}
-          {sharedDataState === "local" ? "Safe demo · browser-only data" : null}
-        </div>
+      <aside className={styles.sidebar} aria-label="Safer People System navigation">
+        <div className={styles.brandRow}><BrandMark /></div>
         <nav className={styles.nav}>
-          {navGroups.map((group) => (
-            <div className={styles.navGroup} key={group.label}>
-              <span>{group.label}</span>
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button className={`${styles.navItem} ${activeView === item.id ? styles.navItemActive : ""}`} type="button" onClick={() => navigate(item.id)} key={item.id}>
-                    <Icon size={17} strokeWidth={1.8} /><b>{item.label}</b>{item.badge ? <i>{item.badge}</i> : null}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button className={`${styles.navItem} ${activeView === item.id ? styles.navItemActive : ""}`} type="button" onClick={() => navigate(item.id)} key={item.id}>
+                <Icon size={17} strokeWidth={1.8} /><b>{item.label}</b>{item.badge ? <i>{item.badge}</i> : null}
+              </button>
+            );
+          })}
         </nav>
-        <div className={styles.sidebarFooter}>
-          <span className={styles.avatarDark}>{activeProfile.initials}</span>
-          <span><strong>{activeProfile.name}</strong><small>{activeProfile.roleLabel}</small></span>
-          <MoreHorizontal size={16} />
-        </div>
+        {canPreviewEmployeeAccess ? (
+          <section
+            aria-label="Employee access preview"
+            className={styles.viewSwitcher}
+            data-previewing={isPreviewingEmployeeAccess || undefined}
+          >
+            <label className={styles.viewSwitcherHeading} htmlFor="employee-access-view">
+              <Eye aria-hidden="true" size={17} />
+              <span>
+                <strong>Change view</strong>
+                <small role="status">{previewProfile ? !authorisedPreviewProfile ? `Loading ${previewProfile.name}'s profile` : `Viewing ${previewProfile.name}` : "Super Admin"}</small>
+              </span>
+            </label>
+            <select
+              aria-describedby={isPreviewingEmployeeAccess ? "employee-access-preview-note" : undefined}
+              id="employee-access-view"
+              onChange={(event) => changeEmployeeAccessPreview(event.target.value)}
+              value={previewProfile?.id ?? ""}
+            >
+              <option value="">Super Admin</option>
+              {directoryProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}{profile.roleLabel ? ` · ${profile.roleLabel}` : ""}
+                </option>
+              ))}
+            </select>
+            {isPreviewingEmployeeAccess ? (
+              <div className={styles.viewSwitcherActive} id="employee-access-preview-note">
+                <small>Employee workspace preview · signed in as {signedInProfile.name}</small>
+                <button type="button" onClick={() => changeEmployeeAccessPreview("")}>
+                  <RotateCcw aria-hidden="true" size={14} /> Return to Super Admin
+                </button>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
       </aside>
 
       <div className={styles.workspace}>
         <header className={styles.topbar}>
           <div className={styles.mobileBrand}><BrandMark compact /></div>
           <div className={styles.topActions}>
-            <button className={styles.resetButton} type="button" onClick={resetDemo}><RotateCcw size={14} /> Reset demo</button>
-            <ProfileSwitcher activeProfile={activeProfile} open={showProfiles} onToggle={() => setShowProfiles((current) => !current)} onSelect={switchProfile} />
+            {organisationState !== "live" ? (
+              <span className={styles.demoStatus} data-state={organisationState} role="status">
+                <i />
+                {organisationState === "connecting" ? "Connecting" : "Directory issue"}
+              </span>
+            ) : null}
+            {directorySupabase ? <button className={styles.signOutButton} type="button" onClick={() => void handleSignOut()} disabled={isSigningOut} aria-label="Sign out"><LogOut size={15} /><span className={styles.actionLabel}>{isSigningOut ? "Signing out…" : "Sign out"}</span></button> : null}
+            {isNonRosterAdminHrWorkspace ? (
+              <span className={styles.demoStatus} title="This platform administrator is not an employee profile.">
+                <ShieldCheck aria-hidden="true" size={15} /> Platform administrator
+              </span>
+            ) : <SelfProfileMenu
+                disabled={topbarProfileLoading}
+                mode={isPreviewingEmployeeAccess ? "hr-preview" : "self"}
+                onSave={isPreviewingEmployeeAccess ? saveSelectedEmployeeProfile : saveMyProfile}
+                profile={topbarProfile}
+                viewerName={isPreviewingEmployeeAccess ? signedInProfile.name : undefined}
+              />}
           </div>
         </header>
 
         <main className={styles.main} id="main-content">
-          <section className={styles.pageHeader}>
-            <div><p>{viewTitles[activeView].eyebrow}</p><h1>{viewTitles[activeView].title}</h1></div>
-            <button className={styles.primaryButton} type="button" onClick={() => setShowRequestForm(true)}><Plus size={17} /> {activeProfile.accessRole === "manager" ? "Add leave" : "New leave request"}</button>
-          </section>
+          {activeView !== "people" ? <section className={styles.pageHeader}>
+            <div><h1>{viewTitles[activeView].title}</h1>{viewTitles[activeView].helper ? <p>{viewTitles[activeView].helper}</p> : null}</div>
+            {canApplyForLeave ? <button className={`${styles.primaryButton} ${styles.applyForLeaveButton}`} type="button" onClick={openLeaveRequestForm} disabled={isMutating} aria-haspopup="dialog"><Plus aria-hidden="true" size={17} /><span>Apply for leave</span></button> : null}
+          </section> : null}
 
-          {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} onNavigate={navigate} onSelect={selectRequest} /> : null}
-          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} /> : null}
-          {activeView === "calendar" ? <CalendarView requests={calendarRequests} /> : null}
+          {leaveDataError && activeView !== "people" ? <p className={styles.leaveLoadError} role="alert">{leaveDataError}</p> : null}
+          {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} canReview={canReviewLeave} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
+          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} busy={isMutating} readOnly={isPreviewingEmployeeAccess || isNonRosterSystemAdminWorkspace} hidePrivateDetails={isPreviewingEmployeeAccess || isNonRosterSystemAdminWorkspace} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
+          {activeView === "calendar" ? <CalendarView birthdays={calendarBirthdays} checkIns={calendarCheckIns} requests={calendarRequests} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
+          <div hidden={activeView !== "people"}>
+            <PeopleOperationsDemo
+              key={showHrWorkspace ? "hr-directory" : isPreviewingEmployeeAccess ? `employee-preview:${activeProfile.id}` : "standard-people"}
+              activeProfile={activeProfile}
+              organisationProfiles={organisationPeople}
+              canEditOrganisation={false}
+              canArrangeOrganisation={canEditOrganisation && showHrWorkspace}
+              isAccessPreview={isPreviewingEmployeeAccess}
+              onCreateOrganisationPerson={createOrganisationPerson}
+              onUpdateOrganisationPerson={updateOrganisationPerson}
+              onOpenEmployeeDirectoryRecord={showHrWorkspace ? setEmployeeDirectorySelectedPersonId : undefined}
+              renderEmployeeDirectory={showHrWorkspace ? <EmployeeDirectory
+                onRecordsChanged={async () => {
+                  // The directory save may have added or changed a birthday.
+                  // Reload through the narrow calendar RPC, not from directory
+                  // records or a Realtime payload containing private fields.
+                  void refreshLeaveWorkspace();
+                  await Promise.all([loadOrganisation(), loadAccounts()]);
+                }}
+                onSelectedPersonId={setEmployeeDirectorySelectedPersonId}
+                refreshKey={employeeDirectoryRefreshKey}
+                selectedPersonId={employeeDirectorySelectedPersonId}
+              /> : undefined}
+              renderCheckInRegister={showHrWorkspace
+                ? <CheckInRegister onRecordsChanged={() => void refreshLeaveWorkspace()} />
+                : canViewCheckIns && !isPreviewingEmployeeAccess
+                  ? <CheckInWorkspace onRecordsChanged={() => void refreshLeaveWorkspace()} />
+                  : undefined}
+              renderCheckInTasks={canViewCheckInTasks && !isPreviewingEmployeeAccess ? <CheckInTasks /> : undefined}
+              renderAccounts={isAdmin && showHrWorkspace ? accountsLoading
+                ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
+                : accountsError
+                ? <div className={styles.emptyState}><ShieldCheck size={24} /><strong>Accounts could not be loaded</strong><span>{accountsError}</span></div>
+                : <AccountManagement
+                    accounts={accounts}
+                    onAccountChanged={updateAccountRecord}
+                    onCreateAccount={createPortalAccount}
+                    onUpdateLogin={updatePortalLogin}
+                    onResetPassword={resetPortalPassword}
+                    onToggleEnabled={togglePortalAccount}
+                  />
+                : undefined}
+            />
+          </div>
         </main>
       </div>
 
       {showRequestForm ? (
         <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowRequestForm(false)}>
           <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="new-request-title">
-            <header><div><span>{activeProfile.accessRole === "manager" ? "New calendar entry" : "New request"}</span><h2 id="new-request-title">{activeProfile.accessRole === "manager" ? "Add your leave" : "Request leave"}</h2></div><button type="button" onClick={() => setShowRequestForm(false)} aria-label="Close request form"><X size={19} /></button></header>
-            <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{activeProfile.name}</strong><small>{activeProfile.accessRole === "manager" ? `${activeProfile.team} · Added directly, no approval needed` : `${activeProfile.team} · Approver: ${activeProfile.manager}`}</small></span></div>
+            <header><div><span>New request</span><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={() => setShowRequestForm(false)} aria-label="Close request form"><X size={19} /></button></header>
+            <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{activeProfile.name}</strong><small>{activeProfile.team} · Your request will be routed to an authorised reviewer</small></span></div>
             <form className={styles.form} onSubmit={submitRequest}>
               <label><span>Leave type</span><select name="leaveType" defaultValue="Annual leave" required><option>Annual leave</option><option>Sick leave</option><option>Carer&apos;s leave</option><option>Unpaid leave</option></select></label>
               <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" defaultValue="2026-09-21" required /></label><label><span>End date</span><input name="endDate" type="date" defaultValue="2026-09-21" required /></label></div>
               <fieldset className={styles.timeRange}><legend>Start and end times <small>Optional</small></legend><div className={styles.formRow}><label><span>From · first day</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>To · last day</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>6:00 am–6:00 pm in 15-minute intervals. For multiple dates, these apply to the first and last day. Leave both blank for full working days.</p></fieldset>
-              <label><span>{activeProfile.accessRole === "manager" ? "Private note" : "Note for your manager"} <small>Optional</small></span><textarea name="employeeNote" rows={3} placeholder={activeProfile.accessRole === "manager" ? "Add optional details for your own record." : "Add only what your manager needs to decide."} /></label>
-              <label className={styles.attachmentField}><span>Supporting files <small>Optional</small></span><input className={styles.fileInput} name="attachments" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" multiple /><small>PDF or images · up to 3 files, 5 MB each. Demo files stay in this open session.</small></label>
-              <div className={styles.privacyNote}><ShieldCheck size={17} /><span>{activeProfile.accessRole === "manager" ? "Your note is private to you and HR." : "Your note is private to you, your approver and HR."} Coworkers only see that you are unavailable.</span></div>
+              <label><span>Note for your reviewer <small>Optional</small></span><textarea name="employeeNote" rows={3} placeholder="Add only what your reviewer needs to decide." /></label>
+              <div className={styles.attachmentField} role="note"><span>Supporting files</span><small>Supporting-file uploads are not stored with live leave requests yet. Contact HR if evidence is required.</small></div>
+              <div className={styles.privacyNote}><ShieldCheck size={17} /><span>Your note is private to you, your approver and HR. Coworkers only see that you are unavailable.</span></div>
               {formError ? <p className={styles.formError} role="alert">{formError}</p> : null}
-              <footer><button className={styles.secondaryButton} type="button" onClick={() => setShowRequestForm(false)}>Cancel</button><button className={styles.primaryButton} type="submit">{activeProfile.accessRole === "manager" ? "Add leave" : "Send request"} <ArrowUpRight size={16} /></button></footer>
+              <footer><button className={styles.secondaryButton} type="button" onClick={() => setShowRequestForm(false)} disabled={isMutating}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : "Send request"} <ArrowUpRight size={16} /></button></footer>
             </form>
           </section>
         </div>
@@ -861,135 +1270,153 @@ export function LeaveDemo() {
   );
 }
 
-function ProfileSwitcher({ activeProfile, open, onToggle, onSelect }: { activeProfile: Profile; open: boolean; onToggle: () => void; onSelect: (profile: Profile) => void }) {
-  const groups: { label: string; roles: AccessRole[] }[] = [
-    { label: "People & Culture", roles: ["hr"] },
-    { label: "Management", roles: ["manager"] },
-    { label: "Employees", roles: ["employee"] },
-  ];
-
-  return (
-    <div className={styles.profileSwitcher}>
-      <button className={styles.profileTrigger} type="button" onClick={onToggle} aria-expanded={open} aria-haspopup="menu">
-        <span className={`${styles.profileAvatar} ${styles[`profile${activeProfile.accessRole}`]}`}>{activeProfile.initials}</span>
-        <span><strong>{activeProfile.name}</strong><small>{activeProfile.roleLabel}</small></span>
-        <ChevronDown className={open ? styles.profileChevronOpen : ""} size={15} />
-      </button>
-      {open ? (
-        <div className={styles.profileMenu} role="menu" aria-label="Select demo profile">
-          <header><span>View demo as</span><small>Permissions and records change with each role</small></header>
-          {groups.map((group) => (
-            <section key={group.label}>
-              <span>{group.label}</span>
-              {profiles.filter((profile) => group.roles.includes(profile.accessRole)).map((profile) => (
-                <button type="button" role="menuitem" onClick={() => onSelect(profile)} key={profile.id}>
-                  <span className={`${styles.profileAvatar} ${styles[`profile${profile.accessRole}`]}`}>{profile.initials}</span>
-                  <span><strong>{profile.name}</strong><small>{profile.roleLabel} · {profile.team}</small></span>
-                  {profile.id === activeProfile.id ? <Check size={15} /> : null}
-                </button>
-              ))}
-            </section>
-          ))}
-          <footer><ShieldCheck size={14} /> Synthetic demo profiles only</footer>
+function DirectoryLoading({ state }: { state: DirectoryState }) {
+  return <div className={styles.shell} data-company="mam">
+    <aside className={styles.sidebar} aria-label="Safer People System navigation">
+      <div className={styles.brandRow}><BrandMark /></div>
+    </aside>
+    <div className={styles.workspace}>
+      <header className={styles.topbar} />
+      <main className={styles.main} id="main-content">
+        <div className={styles.emptyState}>
+          <UsersRound size={25} />
+          <strong>{state === "error" ? "The directory could not be loaded" : "Loading your profile"}</strong>
+          <span>{state === "error" ? "Refresh the page or ask the system administrator to check your account link." : "Connecting to the live organisation directory…"}</span>
         </div>
-      ) : null}
+      </main>
     </div>
-  );
+  </div>;
 }
 
 function StatusPill({ status }: { status: RequestStatus }) {
   return <span className={`${styles.status} ${styles[`status${status}`]}`}><i />{status}</span>;
 }
 
-function HomeView({ profile, requests, myRequests, pending, onNavigate, onSelect }: { profile: Profile; requests: LeaveRequest[]; myRequests: LeaveRequest[]; pending: LeaveRequest[]; onNavigate: (view: AppView, section?: LeaveSection) => void; onSelect: (id: string, section?: LeaveSection) => void }) {
-  const nextOwn = myRequests.find((request) => request.status === "Pending") ?? myRequests[0];
-  const attentionRequests = profile.accessRole === "manager" ? pending : profile.accessRole === "hr" ? requests.filter((request) => request.status === "Pending") : myRequests;
-  const attentionTitle = profile.accessRole === "manager" ? "Your approval queue" : profile.accessRole === "hr" ? "Pending leave" : "My recent requests";
-  const recordSection: LeaveSection = profile.accessRole === "manager" ? "approvals" : "requests";
+function HomeView({ profile, requests, myRequests, pending, canReview, onNavigate, onSelect, isNonRosterSystemAdmin = false }: { profile: Profile; requests: LeaveRequest[]; myRequests: LeaveRequest[]; pending: LeaveRequest[]; canReview: boolean; onNavigate: (view: AppView, section?: LeaveSection) => void; onSelect: (id: string, section?: LeaveSection) => void; isNonRosterSystemAdmin?: boolean }) {
+  if (isNonRosterSystemAdmin) {
+    return (
+      <div className={styles.dashboard}>
+        <section className={styles.panel}>
+          <div className={styles.emptyState}>
+            <ShieldCheck size={24} />
+            <strong>Super Admin</strong>
+            <span>This account has no employee profile or leave record. Use Change view to inspect an employee workspace, or open People to manage the directory.</span>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  const activeOwnRequests = myRequests.filter((request) => request.status !== "Cancelled");
+  const nextOwn = activeOwnRequests.find((request) => request.status === "Pending") ?? activeOwnRequests[0];
+  const attentionRequests = canReview ? pending : requests.filter((request) => request.status === "Pending" && request.employee !== profile.name);
+  const attentionTitle = canReview ? "Needs review" : "Pending leave";
+  const recordSection: LeaveSection = canReview ? "approvals" : "requests";
+
+  if (!canReview) {
+    return (
+      <div className={styles.dashboard}>
+        <section className={`${styles.panel} ${styles.myLeavePanel} ${styles.personalLeavePanel}`}>
+          <PanelHeader title="My leave" action="View requests" onAction={() => onNavigate("leave")} />
+          {nextOwn ? (
+            <button className={styles.nextLeaveSimple} type="button" onClick={() => onSelect(nextOwn.id, "requests")}>
+              <span><StatusPill status={nextOwn.status} /><strong>{nextOwn.leaveType}</strong><small>{nextOwn.dateLabel} · {formatDurationWithTime(nextOwn)}</small></span>
+              <ChevronRight size={17} />
+            </button>
+          ) : <div className={styles.emptyState}><CalendarDays size={24} /><strong>No leave requests yet</strong><span>Use “New leave request” when you need time away.</span></div>}
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.dashboard}>
       <div className={styles.homeGrid}>
         <section className={`${styles.panel} ${styles.attentionPanel}`}>
-          <PanelHeader kicker={profile.accessRole === "employee" ? "Personal" : "Needs attention"} title={attentionTitle} action="View all" onAction={() => onNavigate("leave", recordSection)} />
+          <PanelHeader title={attentionTitle} action={canReview ? "Open queue" : "View requests"} onAction={() => onNavigate("leave", recordSection)} />
           <div className={styles.recordList}>
             {attentionRequests.slice(0, 3).map((request) => <button type="button" onClick={() => onSelect(request.id, recordSection)} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><span className={styles.dayCount}>{request.hours ?? request.days}<small>{request.hours ? (request.hours === 1 ? "hour" : "hours") : request.days === 1 ? "day" : "days"}</small></span><ChevronRight size={16} /></button>)}
-            {!attentionRequests.length ? <div className={styles.emptyState}><CheckCircle2 size={24} /><strong>Nothing waiting</strong><span>This profile has no pending records.</span></div> : null}
+            {!attentionRequests.length ? <div className={styles.emptyState}><CheckCircle2 size={24} /><strong>Nothing needs action</strong></div> : null}
           </div>
         </section>
 
         <section className={`${styles.panel} ${styles.myLeavePanel}`}>
-          <PanelHeader kicker="Personal" title="My leave" action="All requests" onAction={() => onNavigate("leave")} />
-          {nextOwn ? <div className={styles.nextLeave}><span className={styles.dateBlock}><strong>{nextOwn.startDate.slice(8)}</strong><small>{formatMonthCode(nextOwn.startDate)}</small></span><span><StatusPill status={nextOwn.status} /><h3>{nextOwn.leaveType}</h3><p>{nextOwn.dateLabel} · {formatDurationWithTime(nextOwn)}</p></span></div> : <div className={styles.emptyState}><CalendarDays size={24} /><strong>No leave requests yet</strong><span>Use “New leave request” to try the employee flow.</span></div>}
+          <PanelHeader title="My leave" action="View requests" onAction={() => onNavigate("leave")} />
+          {nextOwn ? <button className={styles.nextLeaveSimple} type="button" onClick={() => onSelect(nextOwn.id, "requests")}><span><StatusPill status={nextOwn.status} /><strong>{nextOwn.leaveType}</strong><small>{nextOwn.dateLabel} · {formatDurationWithTime(nextOwn)}</small></span><ChevronRight size={17} /></button> : <div className={styles.emptyState}><CalendarDays size={24} /><strong>No leave requests yet</strong></div>}
         </section>
       </div>
     </div>
   );
 }
 
-function PanelHeader({ kicker, title, action, onAction }: { kicker: string; title: string; action?: string; onAction?: () => void }) {
-  return <header className={styles.panelHeader}><div><span>{kicker}</span><h2>{title}</h2></div>{action && onAction ? <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button> : null}</header>;
+function PanelHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+  return <header className={styles.panelHeader}><h2>{title}</h2>{action && onAction ? <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button> : null}</header>;
 }
 
-function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, selectedId, note, calendarRequests, onFilter, onSection, onNote, onSelect, onDecision }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; selectedId: string; note: string; calendarRequests: LeaveRequest[]; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void }) {
-  const canApprove = profile.accessRole === "manager";
+function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, busy, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancelledRequestId, onFilter, onSection, onNote, onSelect, onDecision, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   return (
     <section className={styles.leaveDesk}>
-      {canApprove ? (
+      {canReview ? (
         <div className={styles.leaveSwitch} aria-label="Leave workspace">
           <button className={section === "requests" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "requests"} onClick={() => onSection("requests")}>
-            <span><strong>Requests</strong><small>Team leave records</small></span><i>{allRequests.length}</i>
+            <strong>Leave register</strong><i>{allRequests.length}</i>
           </button>
           <button className={section === "approvals" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "approvals"} onClick={() => onSection("approvals")}>
-            <span><strong>To approve</strong><small>Needs your decision</small></span><i>{pending.length}</i>
+            <strong>Approvals</strong><i>{pending.length}</i>
           </button>
         </div>
       ) : null}
-      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} /> : null}
-      {section === "approvals" && canApprove ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} requests={calendarRequests} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
+      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
+      {section === "approvals" && canReview ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} requests={calendarRequests} busy={busy} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
     </section>
   );
 }
 
-function RequestsView({ profile, requests, allRequests, selected, filter, onFilter, onSelect }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected: LeaveRequest; filter: "All" | RequestStatus; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void }) {
-  const filters: ("All" | RequestStatus)[] = ["All", "Pending", "Approved", "Declined"];
+function RequestsView({ profile, requests, allRequests, selected, filter, canReview, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+  const filters: ("All" | RequestStatus)[] = ["All", "Pending", "Approved", "Declined", "Cancelled"];
+  const isEmployee = !canReview;
   return (
     <section className={styles.recordsWorkspace}>
       <div className={styles.viewToolbar}>
         <div className={styles.filterTabs}>{filters.map((item) => <button className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => request.status === item).length}</span></button>)}</div>
       </div>
-      <div className={styles.recordsGrid}>
+      <div className={`${styles.recordsGrid} ${isEmployee ? styles.employeeRecordsGrid : ""} ${!selected ? styles.recordsGridNoDetail : ""}`}>
         <div className={styles.recordsTable} role="table" aria-label="Leave requests">
-          <div className={styles.tableHead} role="row"><span>Employee</span><span>Leave type</span><span>Dates</span><span>Duration</span><span>Status</span><span /></div>
-          {requests.map((request) => <button className={`${styles.tableRow} ${selected.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} role="row" key={request.id}><span><i>{request.initials}</i><b>{request.employee}<small>{request.team} · {request.id}</small></b></span><span>{request.leaveType}</span><span>{request.dateLabel}</span><span>{formatDuration(request)}{formatTimeRange(request) ? <small>{formatTimeRange(request)}</small> : null}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} /></button>)}
-          {!requests.length ? <div className={styles.emptyState}><Search size={23} /><strong>No requests here</strong><span>Choose another status.</span></div> : null}
+          <div className={`${styles.tableHead} ${isEmployee ? styles.employeeTableRow : ""}`} role="row">{!isEmployee ? <span>Employee</span> : null}<span>Leave</span><span>Dates</span><span>Duration</span><span>Status</span><span /></div>
+          {requests.map((request) => <button className={`${styles.tableRow} ${isEmployee ? styles.employeeTableRow : ""} ${selected?.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} role="row" key={request.id}>{!isEmployee ? <span><i>{request.initials}</i><b>{request.employee === profile.name ? "You" : request.employee}<small>{request.team}</small></b></span> : null}<span><b>{request.leaveType}</b><small>{request.id}</small></span><span>{request.dateLabel}</span><span>{formatDuration(request)}{formatTimeRange(request) ? <small>{formatTimeRange(request)}</small> : null}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} /></button>)}
+          {!requests.length ? <div className={styles.emptyState}><Search size={23} /><strong>{allRequests.length ? "No requests match this status" : "No leave requests yet"}</strong><span>{allRequests.length ? "Choose another status." : isEmployee ? "Use “New leave request” when you need time away." : "Employee leave requests appear here once they are submitted."}</span></div> : null}
         </div>
-        <RequestDetail profile={profile} request={selected} />
+        {selected ? <RequestDetail profile={profile} request={selected} canReview={canReview} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancellationSucceeded={cancelledRequestId === selected.id} busy={busy} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
       </div>
     </section>
   );
 }
 
-function RequestDetail({ profile, request }: { profile: Profile; request: LeaveRequest }) {
-  const canViewAttachments = profile.accessRole === "manager" || profile.accessRole === "hr";
-  return <aside className={styles.detailPanel} aria-label={`${request.id} details`}><header><span className={styles.avatarOrange}>{request.initials}</span><span><small>{request.id}</small><h2>{request.employee}</h2><p>{request.team}</p></span><button type="button" aria-label="More record actions"><MoreHorizontal size={18} /></button></header><StatusPill status={request.status} /><dl><div><dt>Leave type</dt><dd>{request.leaveType}</dd></div><div><dt>When</dt><dd>{request.dateLabel}</dd></div><div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div><div><dt>Approval</dt><dd>{request.approvalRequired ? request.manager : "Not required"}</dd></div></dl>{request.employeeNote !== "No note added." ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}{canViewAttachments ? <AttachmentList attachments={request.attachments} /> : null}{request.managerNote ? <section><span>Manager decision note</span><p>{request.managerNote}</p></section> : null}</aside>;
+function RequestDetail({ profile, request, canReview, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancellationSucceeded, busy, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; request: LeaveRequest; canReview: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancellationSucceeded: boolean; busy: boolean; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+  const showEmployee = canReview && request.employee !== profile.name;
+  const isApprovedLeave = request.status === "Approved";
+  const isConfirmingCancellation = cancellationRequestId === request.id;
+  const isCancelled = request.status === "Cancelled" || cancellationSucceeded;
+  const canCancel = !readOnly
+    && !isCancelled
+    && canCancelOwnApprovedLeave
+    && isApprovedLeave
+    && request.canCancel === true;
+
+  return <aside className={styles.detailPanel} aria-label={`${request.id} details`}><header className={!showEmployee ? styles.personalDetailHeader : undefined}>{showEmployee ? <span className={styles.avatarOrange}>{request.initials}</span> : null}<span><small>{request.id}</small>{showEmployee ? <><h2>{request.employee}</h2><p>{request.team}</p></> : <h2>{request.leaveType}</h2>}</span></header><StatusPill status={request.status} /><dl>{showEmployee ? <div><dt>Leave type</dt><dd>{request.leaveType}</dd></div> : null}<div><dt>When</dt><dd>{request.dateLabel}</dd></div><div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div><div><dt>Assigned reviewer</dt><dd>{request.approvalRequired ? request.assignedReviewerLabel ?? "Authorised reviewer" : "Not required"}</dd></div></dl>{isCancelled ? <section className={styles.cancelLeaveRecorded} role="status"><CheckCircle2 aria-hidden="true" size={17} /><span><strong>Leave cancelled</strong><small>This leave is no longer on the team calendar. Its approval history is kept.</small></span></section> : null}{canCancel ? <section className={styles.cancelLeaveAction}>{!isConfirmingCancellation ? <><span>Approved leave</span><p>Need to cancel this future approved leave?</p><button className={styles.cancelLeaveButton} type="button" onClick={() => onStartCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> Cancel leave</button></> : <><span>Cancel approved leave</span><p>This removes the future leave from the team calendar. The approval history is kept.</p><p>Past, same-day, and partly used leave cannot be cancelled here.</p>{cancellationError ? <p className={styles.cancelLeaveError} role="alert">{cancellationError}</p> : null}<div className={styles.cancelLeaveControls}><button className={styles.cancelLeaveKeepButton} type="button" onClick={onDismissCancellation} disabled={busy}>Keep leave</button><button className={styles.cancelLeaveConfirmButton} type="button" onClick={() => onConfirmCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> {busy ? "Cancelling…" : "Yes, cancel leave"}</button></div></>}</section> : null}{!hidePrivateDetails && request.employeeNote ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}{!hidePrivateDetails && request.managerNote ? <section><span>Reviewer decision note</span><p>{request.managerNote}</p></section> : null}</aside>;
 }
 
-function AttachmentList({ attachments }: { attachments?: LeaveAttachment[] }) {
-  if (!attachments?.length) return null;
-  return <section className={styles.attachmentList}><span><Paperclip size={14} /> Supporting files · private</span>{attachments.map((attachment) => { const Icon = attachment.mimeType === "application/pdf" ? FileText : FileImage; return <a href={attachment.previewUrl} target="_blank" rel="noreferrer" key={attachment.id}><Icon size={17} /><span><strong>{attachment.name}</strong><small>{formatFileSize(attachment.sizeBytes)}</small></span><Eye size={15} /></a>; })}<small><ShieldCheck size={13} /> Only managers and HR can open these files.</small></section>;
-}
-
-function ApprovalsView({ pending, selected, selectedId, note, requests, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected: LeaveRequest; selectedId: string; note: string; requests: LeaveRequest[]; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
-  return <div className={styles.approvalGrid}>
-    <section className={`${styles.panel} ${styles.queue}`}><PanelHeader kicker={`${pending.length} waiting`} title="Decision queue" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small><i>Submitted {request.submittedAt.toLowerCase()}</i></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Queue cleared</strong><span>Every request has a decision.</span></div>}</section>
-    <section className={`${styles.panel} ${styles.approvalRecord}`}>
+function ApprovalsView({ pending, selected, selectedId, note, requests, busy, readOnly, hidePrivateDetails, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; requests: LeaveRequest[]; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
+  const showQueue = pending.length > 1 || !selected;
+  return <div className={`${styles.approvalGrid} ${!selected ? styles.approvalGridEmpty : ""} ${!showQueue ? styles.approvalGridSingle : ""}`}>
+    {showQueue ? <section className={`${styles.panel} ${styles.queue}`}><PanelHeader title="Requests" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} disabled={busy} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Nothing needs review</strong></div>}</section> : null}
+    {selected ? <section className={`${styles.panel} ${styles.approvalRecord}`}>
       <header className={styles.approvalHeader}><span className={styles.avatarOrange}>{selected.initials}</span><span><small>{selected.id}</small><h2>{selected.employee}</h2><p>{selected.team}</p></span><StatusPill status={selected.status} /></header>
       <div className={styles.factGrid}><article><CalendarDays size={17} /><span><small>When</small><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><small>Duration</small><strong>{formatDurationWithTime(selected)}</strong></span></article><article><ClipboardList size={17} /><span><small>Leave type</small><strong>{selected.leaveType}</strong></span></article></div>
-      <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div>
-      <AttachmentList attachments={selected.attachments} />
+      {!hidePrivateDetails && selected.employeeNote ? <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div> : null}
       <ApprovalCalendar selected={selected} requests={requests} />
-      {selected.status === "Pending" ? <div className={styles.decisionBox}><label><span>Decision note <small>Required when declining</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} placeholder="Add context that will remain with this record." /></label><div><button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")}><XCircle size={16} /> Decline</button><button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")}><CheckCircle2 size={16} /> Approve leave</button></div></div> : <div className={styles.decisionRecorded}><CheckCircle2 size={19} /><span><strong>Decision recorded</strong><small>The employee view and leave register show {selected.status.toLowerCase()}.</small></span></div>}
-    </section>
+      {selected.status === "Pending" ? <div className={styles.decisionBox}><label><span>Decision note <small>Required when declining</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} placeholder="Add context that will remain with this record." disabled={busy || readOnly} /></label><div><button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")} disabled={busy || readOnly}><XCircle size={16} /> {busy ? "Sending…" : readOnly ? "Preview only" : "Decline"}</button><button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")} disabled={busy || readOnly}><CheckCircle2 size={16} /> {busy ? "Sending…" : readOnly ? "Preview only" : "Approve leave"}</button></div></div> : <div className={styles.decisionRecorded}><CheckCircle2 size={19} /><span><strong>Decision recorded</strong><small>The employee view and leave register show {selected.status.toLowerCase()}.</small></span></div>}
+    </section> : null}
   </div>;
 }
 
@@ -997,9 +1424,8 @@ function ApprovalCalendar({ selected, requests }: { selected: LeaveRequest; requ
   const days = getApprovalCalendarDays(selected);
   const rangeStart = days[0].iso;
   const rangeEnd = days[days.length - 1].iso;
-  const teamLeave = requests.filter((request) => request.id !== selected.id && request.employee !== selected.employee && request.team === selected.team && request.status !== "Declined" && request.endDate >= rangeStart && request.startDate <= rangeEnd);
+  const teamLeave = requests.filter((request) => request.id !== selected.id && request.employee !== selected.employee && request.team === selected.team && request.status !== "Declined" && request.status !== "Cancelled" && request.endDate >= rangeStart && request.startDate <= rangeEnd);
   const overlaps = teamLeave.filter((request) => requestsOverlap(selected, request));
-  const visibleHolidays = demoCalendarHolidays.filter((holiday) => holiday.date >= rangeStart && holiday.date <= rangeEnd);
 
   return (
     <section className={styles.calendarImpact} aria-labelledby="calendar-impact-title">
@@ -1011,7 +1437,6 @@ function ApprovalCalendar({ selected, requests }: { selected: LeaveRequest; requ
         <span><i className={styles.legendApplicant} />This request</span>
         <span><i className={styles.legendApproved} />Approved leave</span>
         <span><i className={styles.legendPending} />Pending leave</span>
-        <span><i className={styles.legendHoliday} />Public holiday</span>
       </div>
       <div className={styles.reviewCalendarViewport} tabIndex={0} aria-label="Scrollable coverage calendar">
         <div className={styles.reviewCalendar} role="grid" aria-label={`Team leave from ${formatDateRange(rangeStart, rangeEnd)}`}>
@@ -1021,12 +1446,10 @@ function ApprovalCalendar({ selected, requests }: { selected: LeaveRequest; requ
           <div className={styles.reviewCalendarGrid}>
             {days.map((day, index) => {
               const isRequestedDay = day.iso >= selected.startDate && day.iso <= selected.endDate;
-              const holiday = visibleHolidays.find((item) => item.date === day.iso);
               const otherLeave = teamLeave.filter((request) => day.iso >= request.startDate && day.iso <= request.endDate);
               return (
                 <div className={`${styles.reviewCalendarDay} ${day.isWeekend ? styles.reviewCalendarWeekend : ""} ${isRequestedDay ? styles.reviewCalendarRequestedDay : ""}`} role="gridcell" key={day.iso}>
                   <time dateTime={day.iso}><b>{day.day}</b>{day.day === 1 || index === 0 ? <span>{day.month}</span> : null}</time>
-                  {holiday ? <div className={styles.reviewHoliday}><CalendarDays size={13} /><span>{holiday.label}{holiday.isDemo ? <small>Demo</small> : null}</span></div> : null}
                   {isRequestedDay ? <article className={styles.reviewEventApplicant}><i>{selected.initials}</i><span><strong>{selected.employee}</strong><small>{formatTimeRange(selected) || "This request"}</small></span></article> : null}
                   {otherLeave.slice(0, 2).map((request) => <article className={request.status === "Approved" ? styles.reviewEventApproved : styles.reviewEventPending} key={request.id}><i>{request.initials}</i><span><strong>{request.employee}</strong><small>{formatTimeRange(request) || `${request.status} leave`}</small></span></article>)}
                   {otherLeave.length > 2 ? <span className={styles.reviewMoreLeave}>+{otherLeave.length - 2} more</span> : null}
@@ -1041,8 +1464,99 @@ function ApprovalCalendar({ selected, requests }: { selected: LeaveRequest; requ
   );
 }
 
-function CalendarView({ requests }: { requests: LeaveRequest[] }) {
-  const days = getCalendarDays();
-  const visible = requests.filter((request) => request.status !== "Declined");
-  return <section className={`${styles.panel} ${styles.calendarPanel}`}><div className={styles.calendarToolbar}><div><button type="button" aria-label="Previous month">‹</button><button type="button">Today</button><button type="button" aria-label="Next month">›</button></div><div className={styles.legend}><span><i className={styles.legendApproved} />Approved</span><span><i className={styles.legendPending} />Pending</span></div></div><div className={styles.calendarWeek}>{["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => <span key={day}>{day}</span>)}</div><div className={styles.calendarGrid}>{days.map((day) => { const events = visible.filter((request) => day.iso >= request.startDate && day.iso <= request.endDate); return <div className={`${styles.calendarDay} ${day.inMonth ? "" : styles.calendarMuted}`} key={day.iso}><span>{day.day}</span>{events.slice(0, 3).map((request) => <article className={request.status === "Approved" ? styles.eventApproved : styles.eventPending} key={request.id}><i>{request.initials}</i><b>{request.employee}<small>Unavailable</small></b></article>)}</div>; })}</div><footer className={styles.calendarPrivacy}><ShieldCheck size={16} /><span><strong>Coverage without oversharing.</strong> Coworkers see availability dates, not personal leave notes.</span></footer></section>;
+function CalendarView({
+  birthdays,
+  checkIns,
+  requests,
+  month,
+  loading,
+  onPreviousMonth,
+  onNextMonth,
+  onToday,
+}: {
+  birthdays: BirthdayCalendarEntry[];
+  checkIns: CheckInCalendarEntry[];
+  requests: LeaveRequest[];
+  month: Date;
+  loading: boolean;
+  onPreviousMonth: () => void;
+  onNextMonth: () => void;
+  onToday: () => void;
+}) {
+  const days = getCalendarDays(month);
+  const visible = requests.filter((request) => request.status !== "Declined" && request.status !== "Cancelled");
+  const monthLabel = getCalendarMonthLabel(month);
+
+  return (
+    <section className={`${styles.panel} ${styles.calendarPanel}`}>
+      <div className={styles.calendarToolbar}>
+        <div className={styles.calendarMonthControls}>
+          <button type="button" onClick={onPreviousMonth} aria-label="Previous month" title="Previous month"><ChevronLeft size={17} /></button>
+          <strong aria-live="polite">{monthLabel}</strong>
+          <button type="button" onClick={onNextMonth} aria-label="Next month" title="Next month"><ChevronRight size={17} /></button>
+          <button type="button" onClick={onToday}>Today</button>
+        </div>
+        <div className={styles.legend} aria-label="Calendar legend">
+          <span><i className={styles.legendApproved} />Approved</span>
+          <span><i className={styles.legendPending} />Pending</span>
+          <span><i className={styles.legendBirthday} />Birthday</span>
+          <span><i className={styles.legendCheckIn} />Check-in</span>
+        </div>
+      </div>
+      <div className={styles.calendarWeek}>
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}
+      </div>
+      <div className={styles.calendarGrid}>
+        {days.map((day) => {
+          const birthdayEvents = birthdays
+            .filter((birthday) => birthdayOccursOnCalendarDate(birthday, day.iso))
+            .map((birthday, index) => ({
+              kind: "birthday" as const,
+              id: `birthday:${birthday.employee}:${birthday.month}:${birthday.day}:${index}`,
+              birthday,
+            }));
+          const leaveEvents = visible
+            .filter((request) => day.iso >= request.startDate && day.iso <= request.endDate)
+            .map((request) => ({ kind: "leave" as const, id: request.id, request }));
+          const checkInEvents = Array.from(new Map(checkIns
+            .filter((entry) => entry.status !== "completed" && entry.dueDate === day.iso)
+            .map((entry) => [`${entry.personId}:${entry.milestone}:${entry.dueDate}`, entry])).values());
+          // Birthdays and open check-ins are never hidden. Leave entries use
+          // any remaining compact slots and keep their existing overflow row.
+          const shownLeaveEvents = leaveEvents.slice(0, Math.max(0, 3 - birthdayEvents.length - checkInEvents.length));
+
+          return (
+            <div className={`${styles.calendarDay} ${day.inMonth ? "" : styles.calendarMuted}`} key={day.iso}>
+              <span>{day.day}</span>
+              {birthdayEvents.map((event) => (
+                <article className={styles.eventBirthday} key={event.id}>
+                  <i aria-hidden="true">BD</i>
+                  <b>{event.birthday.employee}<small>Birthday</small></b>
+                </article>
+              ))}
+              {checkInEvents.map((entry) => (
+                <article className={styles.eventCheckIn} key={`checkin:${entry.reminderId}`}>
+                  <i aria-hidden="true">CI</i>
+                  <b>{entry.employee}<small>{checkInMilestoneLabel(entry.milestone)}</small></b>
+                </article>
+              ))}
+              {shownLeaveEvents.map((event) => (
+                <article className={event.request.status === "Approved" ? styles.eventApproved : styles.eventPending} key={event.id}>
+                  <i>{event.request.initials}</i>
+                  <b>{event.request.employee}<small>{event.request.leaveType === "Away" ? "Away" : `${event.request.status} · ${event.request.leaveType}`}</small></b>
+                </article>
+              ))}
+              {leaveEvents.length > shownLeaveEvents.length ? <small className={styles.calendarMore}>+{leaveEvents.length - shownLeaveEvents.length} more leave</small> : null}
+            </div>
+          );
+        })}
+      </div>
+      <footer className={styles.calendarPrivacy}>
+        <ShieldCheck size={15} />
+        {loading
+          ? "Refreshing calendar…"
+          : "Leave reasons and medical leave types are private. Birthdays show only a name and recurring day/month."}
+      </footer>
+    </section>
+  );
 }

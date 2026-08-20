@@ -2,22 +2,48 @@
 
 import { useActionState } from "react";
 
-import { requestSignInLink, type LoginState } from "@/app/login/actions";
+import { signIn, type LoginState } from "@/app/login/actions";
 
 const initialState: LoginState = { status: "idle", message: "" };
 
 export function LoginForm() {
-  const [state, action, pending] = useActionState(requestSignInLink, initialState);
+  const [state, action, pending] = useActionState(signIn, initialState);
 
   return (
     <form className="auth-form" action={action}>
-      <label htmlFor="email">Work email</label>
-      <input id="email" name="email" type="email" autoComplete="email" required placeholder="name@mobilityaccess.com.au" />
+      <label htmlFor="username">Username</label>
+      <input
+        id="username"
+        name="username"
+        type="text"
+        autoComplete="username"
+        autoCapitalize="none"
+        spellCheck={false}
+        maxLength={64}
+        required
+        autoFocus
+        aria-describedby={state.message ? "login-message" : undefined}
+      />
+      <label htmlFor="password">Password</label>
+      <input
+        id="password"
+        name="password"
+        type="password"
+        autoComplete="current-password"
+        minLength={8}
+        maxLength={128}
+        required
+        aria-describedby={state.message ? "login-message" : undefined}
+      />
       <button type="submit" disabled={pending}>
-        {pending ? "Sending link…" : "Email me a sign-in link"}
+        {pending ? "Signing in…" : "Sign in"}
       </button>
       {state.message ? (
-        <p className={`form-message${state.status === "error" ? " form-message-error" : ""}`} aria-live="polite">
+        <p
+          id="login-message"
+          className="form-message form-message-error"
+          aria-live="polite"
+        >
           {state.message}
         </p>
       ) : null}

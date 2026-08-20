@@ -1,0 +1,42 @@
+.workspace {
+  max-width: 760px;
+  color: #273136;
+}
+
+.profileCard {
+  overflow: hidden;
+  border: 1px solid #dce2e1;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.profileSummary {
+  display: grid;
+  grid-template-columns: minmax(120px, .45fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  min-height: 58px;
+  border-top: 1px solid #edf0ef;
+  padding: 12px 16px;
+}
+
+.profileSummary:first-child { border-top: 0; }
+
+.profileSummary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #6c797d;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.profileSummary > strong {
+  color: #2f3b3f;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+@media (max-width: 520px) {
+  .profileSummary { grid-template-columns: 1fr; gap: 5px; }
+}

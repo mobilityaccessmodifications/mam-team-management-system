@@ -19,8 +19,8 @@ const barlowCondensed = Barlow_Condensed({
 });
 
 export const metadata: Metadata = {
-  title: "MAM Leave Workflow Demo",
-  description: "Interactive leave request, approval and register demo for Mobility Access Modifications.",
+  title: "Safer People System",
+  description: "Private people, leave and organisation workspace for MAM and Equipsy.",
 };
 
 export default function RootLayout({

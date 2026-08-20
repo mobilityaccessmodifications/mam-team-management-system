@@ -1,13 +1,8 @@
 export const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 export const supabasePublishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-export const sharedDemoEnabled = process.env.NEXT_PUBLIC_SHARED_DEMO === "true";
 
 export function isSupabaseConfigured() {
   return Boolean(supabaseUrl && supabasePublishableKey);
-}
-
-export function isSharedDemoConfigured() {
-  return sharedDemoEnabled && isSupabaseConfigured();
 }
 
 export function requireSupabaseConfig() {

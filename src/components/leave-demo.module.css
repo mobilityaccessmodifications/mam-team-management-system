@@ -1,7 +1,10 @@
 .shell {
-  --orange: #e86f2e;
-  --orange-deep: #a84416;
-  --orange-soft: #fff0e7;
+  --accent: #e86f2e;
+  --accent-deep: #a84416;
+  --accent-soft: #fff0e7;
+  --orange: var(--accent);
+  --orange-deep: var(--accent-deep);
+  --orange-soft: var(--accent-soft);
   --ink: #252d2f;
   --muted: #697477;
   --canvas: #f3f5f4;
@@ -17,6 +20,12 @@
   min-height: 100vh;
   background: var(--canvas);
   color: var(--ink);
+}
+
+.shell[data-company="equipsy"] {
+  --accent: #2677b8;
+  --accent-deep: #175e95;
+  --accent-soft: #edf6fd;
 }
 
 .shell button,
@@ -201,6 +210,111 @@
   box-shadow: inset 2px 0 var(--orange);
 }
 
+.viewSwitcher {
+  display: grid;
+  gap: 9px;
+  margin-top: auto;
+  padding: 13px 10px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.viewSwitcher[data-previewing] {
+  border-color: color-mix(in srgb, var(--accent) 56%, rgba(255, 255, 255, 0.09));
+  background: color-mix(in srgb, var(--accent) 12%, #20282a);
+  box-shadow: inset 2px 0 var(--accent);
+}
+
+.viewSwitcherHeading {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  color: #dce3e0;
+}
+
+.viewSwitcherHeading > svg {
+  margin-top: 1px;
+  color: #a8b4b0;
+}
+
+.viewSwitcherHeading strong,
+.viewSwitcherHeading small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewSwitcherHeading strong {
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.viewSwitcherHeading small {
+  margin-top: 2px;
+  color: #8f9b97;
+  font-size: 11px;
+  font-weight: 590;
+}
+
+.viewSwitcher select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 28px 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 6px;
+  outline: 0;
+  background: #2a3436;
+  color: #f4f7f5;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.viewSwitcher select:hover {
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+.viewSwitcher select:focus-visible,
+.viewSwitcherActive button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 46%, transparent);
+  outline-offset: 2px;
+}
+
+.viewSwitcherActive {
+  display: grid;
+  gap: 7px;
+}
+
+.viewSwitcherActive > small {
+  color: #a8b4b0;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.viewSwitcherActive button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 52%, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffd3bc;
+  font-size: 11px;
+  font-weight: 730;
+}
+
+.viewSwitcherActive button:hover {
+  background: rgba(255, 255, 255, 0.11);
+  color: #fff;
+}
+
 .sidebarFooter {
   min-height: 72px;
   display: grid;
@@ -356,186 +470,9 @@
   margin-left: auto;
 }
 
-.profileSwitcher {
-  position: relative;
-}
-
-.profileTrigger {
-  min-width: 232px;
-  min-height: 46px;
-  display: grid;
-  grid-template-columns: 34px 1fr 16px;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px 4px 5px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: white;
-  color: var(--ink);
-  text-align: left;
-}
-
-.profileTrigger:hover,
-.profileTrigger[aria-expanded="true"] {
-  border-color: var(--line-dark);
-  background: #fafbf9;
-}
-
-.profileTrigger > span:nth-child(2),
-.profileMenu button > span:nth-child(2) {
-  min-width: 0;
-}
-
-.profileTrigger strong,
-.profileTrigger small,
-.profileMenu button strong,
-.profileMenu button small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.profileTrigger strong,
-.profileMenu button strong {
-  font-size: 13px;
-  font-weight: 720;
-}
-
-.profileTrigger small,
-.profileMenu button small {
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.profileTrigger > svg {
-  color: #8a9492;
-  transition: transform 140ms ease;
-}
-
-.profileChevronOpen {
-  transform: rotate(180deg);
-}
-
-.profileAvatar {
-  width: 34px;
-  height: 34px;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 6px 2px 6px 6px;
-  font-family: var(--font-geist-mono), monospace;
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.profilehr {
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.profilemanager {
-  background: var(--orange-soft);
-  color: var(--orange-deep);
-}
-
-.profileemployee {
-  background: var(--blue-soft);
-  color: var(--blue);
-}
-
-.profileMenu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 90;
-  width: 410px;
-  max-height: min(650px, calc(100vh - 86px));
-  overflow-y: auto;
-  border: 1px solid var(--line-dark);
-  border-radius: 10px;
-  background: white;
-  box-shadow: 0 20px 55px rgba(28, 36, 37, 0.17);
-  animation: riseIn 140ms ease-out;
-}
-
-.profileMenu > header {
-  padding: 17px 18px 15px;
-  border-bottom: 1px solid var(--line);
-}
-
-.profileMenu > header span,
-.profileMenu > header small {
-  display: block;
-}
-
-.profileMenu > header span {
-  font-size: 15px;
-  font-weight: 750;
-}
-
-.profileMenu > header small {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.profileMenu > section {
-  display: grid;
-  gap: 2px;
-  padding: 11px;
-  border-bottom: 1px solid var(--line);
-}
-
-.profileMenu > section > span {
-  padding: 2px 6px 5px;
-  color: #8a9492;
-  font-family: var(--font-geist-mono), monospace;
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.profileMenu section button {
-  width: 100%;
-  min-height: 58px;
-  display: grid;
-  grid-template-columns: 34px 1fr 18px;
-  align-items: center;
-  gap: 11px;
-  padding: 8px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--ink);
-  text-align: left;
-}
-
-.profileMenu section button:hover {
-  background: #f5f7f6;
-}
-
-.profileMenu section button > svg {
-  color: var(--orange);
-}
-
-.profileMenu > footer {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 14px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.profileMenu > footer svg {
-  color: var(--green);
-}
-
 .iconButton,
 .resetButton,
+.signOutButton,
 .secondaryButton,
 .viewActions > button,
 .calendarToolbar button,
@@ -566,7 +503,9 @@
 }
 
 .resetButton,
-.secondaryButton {
+.signOutButton,
+.secondaryButton,
+.emailActivityButton {
   min-height: 42px;
   display: inline-flex;
   align-items: center;
@@ -576,6 +515,19 @@
   border-radius: 7px;
   font-size: 14px;
   font-weight: 680;
+}
+
+.emailActivityButton i {
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--orange-soft);
+  color: var(--orange-deep);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .main {
@@ -632,6 +584,11 @@
 .primaryButton:hover {
   background: #d86025;
   transform: translateY(-1px);
+}
+
+.applyForLeaveButton {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .panel {
@@ -1071,6 +1028,11 @@
   color: var(--red);
 }
 
+.statusCancelled {
+  background: #edf0ef;
+  color: #63706e;
+}
+
 .recordsWorkspace {
   min-width: 0;
 }
@@ -1452,6 +1414,126 @@
   gap: 5px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.detailPanel > .cancelLeaveRecorded {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border-color: #cedbd7;
+  background: #f3f7f5;
+  color: #3e6c5c;
+}
+
+.cancelLeaveRecorded > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.cancelLeaveRecorded strong,
+.cancelLeaveRecorded small {
+  display: block;
+}
+
+.cancelLeaveRecorded strong {
+  color: #315c4e;
+  font-size: 13px;
+}
+
+.detailPanel > .cancelLeaveRecorded small {
+  margin-top: 3px;
+  color: #56766b;
+  line-height: 1.45;
+}
+
+.detailPanel > .cancelLeaveAction {
+  border-color: #e3c7ba;
+  background: #fff9f5;
+}
+
+.detailPanel > .cancelLeaveAction > span {
+  color: #93411d;
+}
+
+.detailPanel > .cancelLeaveAction > p {
+  color: #694d40;
+}
+
+.cancelLeaveButton,
+.cancelLeaveKeepButton,
+.cancelLeaveConfirmButton {
+  min-height: 37px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.cancelLeaveButton {
+  border: 1px solid #dbb4a5;
+  background: white;
+  color: #9b3d1a;
+}
+
+.cancelLeaveButton:hover:not(:disabled),
+.cancelLeaveButton:focus-visible {
+  border-color: #b9552c;
+  background: #fff3ed;
+}
+
+.cancelLeaveControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cancelLeaveKeepButton {
+  border: 1px solid var(--line-dark);
+  background: white;
+  color: #536062;
+}
+
+.cancelLeaveConfirmButton {
+  border: 1px solid #b6542e;
+  background: #b6542e;
+  color: white;
+}
+
+.cancelLeaveKeepButton:hover:not(:disabled),
+.cancelLeaveKeepButton:focus-visible {
+  border-color: #9aa5a3;
+  background: #f8faf9;
+}
+
+.cancelLeaveConfirmButton:hover:not(:disabled),
+.cancelLeaveConfirmButton:focus-visible {
+  border-color: #91401f;
+  background: #91401f;
+}
+
+.cancelLeaveButton:focus-visible,
+.cancelLeaveKeepButton:focus-visible,
+.cancelLeaveConfirmButton:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--orange) 32%, transparent);
+  outline-offset: 2px;
+}
+
+.cancelLeaveButton:disabled,
+.cancelLeaveKeepButton:disabled,
+.cancelLeaveConfirmButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.detailPanel > .cancelLeaveAction .cancelLeaveError {
+  margin-top: 10px;
+  color: var(--red);
+  font-weight: 700;
 }
 
 .attachmentList > span,
@@ -2237,6 +2319,28 @@
   gap: 5px;
 }
 
+.calendarMonthControls strong {
+  min-width: 150px;
+  color: var(--ink);
+  font-size: 15px;
+  text-align: center;
+}
+
+.calendarMonthControls button:last-child {
+  margin-left: 4px;
+}
+
+.leaveLoadError {
+  margin: 0 0 16px;
+  padding: 11px 13px;
+  border: 1px solid #e6b8ab;
+  border-radius: 7px;
+  background: #fff5f2;
+  color: #91391f;
+  font-size: 13px;
+  font-weight: 650;
+}
+
 .calendarToolbar button {
   min-width: 38px;
   height: 38px;
@@ -2270,6 +2374,14 @@
 
 .legendPending {
   background: var(--orange);
+}
+
+.legendBirthday {
+  background: var(--blue);
+}
+
+.legendCheckIn {
+  background: #805aa6;
 }
 
 .calendarWeek,
@@ -2376,6 +2488,18 @@
   border-color: var(--orange);
   background: var(--orange-soft);
   color: var(--orange-deep);
+}
+
+.eventBirthday {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.eventCheckIn {
+  border-color: #9a75bc;
+  background: #f4eff9;
+  color: #654183;
 }
 
 .calendarPrivacy {
@@ -2670,6 +2794,174 @@
   color: var(--muted);
 }
 
+.emailModal {
+  width: min(100%, 650px);
+}
+
+.emailIntro {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 18px 20px 0;
+  padding: 12px;
+  border-radius: 7px;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.emailIntro strong,
+.emailIntro small {
+  display: block;
+}
+
+.emailIntro strong {
+  font-size: 13px;
+}
+
+.emailIntro small {
+  margin-top: 3px;
+  color: #596d7a;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.emailLog {
+  display: grid;
+  gap: 10px;
+  padding: 18px 20px 20px;
+}
+
+.emailCard {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafbf9;
+}
+
+.emailCard header {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.emailCard header small,
+.emailCard header strong,
+.emailCard time {
+  display: block;
+}
+
+.emailCard header small {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.emailCard header strong {
+  margin-top: 3px;
+  font-size: 13px;
+}
+
+.emailCard time {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.emailDelivery {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.emailDeliverysending,
+.emailDeliverypreview {
+  background: var(--orange-soft);
+  color: var(--orange-deep);
+}
+
+.emailDeliverysent {
+  background: #e9f2ed;
+  color: #356653;
+}
+
+.emailDeliveryfailed {
+  background: #fbeceb;
+  color: #a5433d;
+}
+
+.emailCard h3 {
+  margin: 13px 0 9px;
+  font-size: 14px;
+}
+
+.emailCard ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.emailCard li {
+  color: #596466;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.emailDeliveryMessage {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.emailReviewLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 12px;
+  color: var(--orange-deep);
+  font-size: 12px;
+  font-weight: 720;
+  text-decoration: none;
+}
+
+.emailReviewLink:hover {
+  text-decoration: underline;
+}
+
+.emailEmpty {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  padding: 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.emailEmpty > svg {
+  color: var(--orange);
+}
+
+.emailEmpty strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.emailEmpty span {
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .formPerson {
   display: flex;
   align-items: center;
@@ -2839,6 +3131,209 @@
   transform: translateY(0);
 }
 
+/* Minimal workspace pass: one identity, one page title, one primary action. */
+.sidebar {
+  width: 228px;
+  padding: 20px 12px;
+}
+
+.brandRow {
+  min-height: 42px;
+  padding: 0 6px;
+}
+
+.nav {
+  gap: 4px;
+  margin-top: 34px;
+}
+
+.navItem {
+  min-height: 46px;
+  padding: 8px 11px;
+}
+
+.workspace {
+  margin-left: 228px;
+}
+
+.topbar {
+  min-height: 64px;
+  padding: 0 24px;
+}
+
+.demoStatus {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: #f1f4f2;
+  color: #64706d;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.demoStatus > i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #83908c;
+}
+
+.demoStatus[data-state="live"] > i { background: #47806c; }
+.demoStatus[data-state="connecting"] > i { background: #bc7a36; }
+.demoStatus[data-state="error"] > i { background: #b3544b; }
+
+.emailActivityButton,
+.resetButton {
+  position: relative;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  background: white;
+  color: #596466;
+  font-size: 13px;
+}
+
+.main {
+  width: min(100%, 1180px);
+  padding: 25px 26px 44px;
+}
+
+.pageHeader {
+  min-height: 44px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.pageHeader h1 {
+  font-size: clamp(30px, 3.2vw, 38px);
+  line-height: 1;
+}
+
+.pageHeader p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.primaryButton {
+  min-height: 42px;
+  border-radius: 7px;
+  box-shadow: none;
+  font-size: 14px;
+}
+
+.panelHeader {
+  min-height: 56px;
+  padding: 0 16px;
+}
+
+.panelHeader h2 {
+  font-size: 15px;
+}
+
+.personalLeavePanel {
+  max-width: 760px;
+}
+
+.nextLeaveSimple {
+  width: 100%;
+  min-height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 17px;
+  border: 0;
+  background: white;
+  color: var(--ink);
+  text-align: left;
+}
+
+.nextLeaveSimple:hover { background: #fafbf9; }
+.nextLeaveSimple > span { display: grid; gap: 6px; }
+.nextLeaveSimple strong { font-size: 14px; }
+.nextLeaveSimple small { color: var(--muted); font-size: 12px; }
+.nextLeaveSimple > svg { color: #7a8583; }
+
+.leaveSwitch button {
+  min-height: 50px;
+  padding: 8px 14px;
+  border-top-width: 2px;
+}
+
+.viewToolbar { min-height: 52px; }
+
+.recordsGridNoDetail,
+.approvalGridEmpty,
+.approvalGridSingle {
+  grid-template-columns: 1fr;
+}
+
+.employeeRecordsGrid {
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+
+.tableHead.employeeTableRow,
+.tableRow.employeeTableRow {
+  grid-template-columns: minmax(120px, .9fr) minmax(150px, 1.15fr) minmax(100px, .72fr) 96px 16px;
+}
+
+.personalDetailHeader {
+  grid-template-columns: 1fr;
+}
+
+.approvalGridEmpty .queue {
+  max-width: 760px;
+}
+
+.calendarToolbar {
+  min-height: 52px;
+  justify-content: space-between;
+  padding: 0 14px;
+}
+
+.calendarToolbar > strong {
+  font-size: 14px;
+}
+
+.calendarMore {
+  display: block;
+  margin: 5px 0 0 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.calendarPrivacy {
+  min-height: 42px;
+  gap: 7px;
+  font-size: 11px;
+}
+
+.navItem:focus-visible,
+.emailActivityButton:focus-visible,
+.signOutButton:focus-visible,
+.resetButton:focus-visible,
+.primaryButton:focus-visible,
+.panelHeader > button:focus-visible,
+.recordList > button:focus-visible,
+.queue > button:focus-visible,
+.nextLeaveSimple:focus-visible,
+.filterTabs button:focus-visible,
+.tableRow:focus-visible {
+  position: relative;
+  z-index: 2;
+  outline: 3px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  outline-offset: -3px;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -2855,7 +3350,7 @@
   }
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 1350px) {
   .recordsGrid {
     grid-template-columns: 1fr;
   }
@@ -2900,7 +3395,23 @@
   }
 
   .nav {
+    margin-top: 0;
     overflow-x: auto;
+  }
+
+  .viewSwitcher {
+    grid-template-columns: minmax(130px, 0.55fr) minmax(180px, 1fr) auto;
+    align-items: center;
+    margin-top: 10px;
+    padding: 9px 10px;
+  }
+
+  .viewSwitcherActive {
+    min-width: 150px;
+  }
+
+  .viewSwitcherActive > small {
+    display: none;
   }
 
   .navItem {
@@ -2924,6 +3435,11 @@
 
   .searchBox {
     width: min(420px, 55vw);
+  }
+
+  .topActions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .homeGrid,
@@ -2959,6 +3475,46 @@
 }
 
 @media (max-width: 680px) {
+  .sidebar {
+    padding: 0 8px 8px;
+  }
+
+  .viewSwitcher {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .viewSwitcherActive {
+    min-width: 0;
+  }
+
+  .viewSwitcherActive > small {
+    display: block;
+  }
+
+  .nav {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 3px;
+    overflow: visible;
+  }
+
+  .navItem {
+    position: relative;
+    min-width: 0;
+    grid-template-columns: 16px auto;
+    justify-content: center;
+    gap: 5px;
+    padding: 7px 4px;
+    font-size: 12px;
+  }
+
+  .navItem i {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+  }
+
   .topbar {
     min-height: 64px;
     padding: 0 14px;
@@ -2977,20 +3533,46 @@
     display: none;
   }
 
-  .profileTrigger {
-    width: 46px;
-    min-width: 46px;
-    grid-template-columns: 34px;
-    padding: 5px;
+  .demoStatus {
+    min-height: 36px;
+    padding: 0 8px;
+    font-size: 11px;
   }
 
-  .profileTrigger > span:nth-child(2),
-  .profileTrigger > svg {
+  .topbar {
+    align-items: flex-start;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .topActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .emailActivityButton {
+    width: 42px;
+    padding: 0;
+  }
+
+  .signOutButton {
+    width: 42px;
+    padding: 0;
+  }
+
+  .signOutButton .actionLabel {
     display: none;
   }
 
-  .profileMenu {
-    width: min(410px, calc(100vw - 28px));
+  .emailActivityButton .actionLabel {
+    display: none;
+  }
+
+  .emailActivityButton i {
+    position: absolute;
+    top: 5px;
+    right: 4px;
+    font-size: 10px;
   }
 
   .main {
@@ -3009,6 +3591,15 @@
     width: 39px;
     padding: 0;
     font-size: 0;
+  }
+
+  /* The leave action is an important employee task, not an icon-only control.
+     Keep its wording visible on small screens so it is discoverable without
+     relying on the plus icon or a tooltip. */
+  .pageHeader .applyForLeaveButton {
+    width: auto;
+    padding: 0 12px;
+    font-size: 13px;
   }
 
   .metrics {
@@ -3038,12 +3629,23 @@
   .filterTabs,
   .peopleToolbar > div {
     min-height: 50px;
-    overflow-x: auto;
   }
 
-  .filterTabs button,
   .peopleToolbar > div button {
     min-width: max-content;
+  }
+
+  .filterTabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    overflow: visible;
+  }
+
+  .filterTabs button {
+    min-width: 0;
+    padding: 0 6px;
+    font-size: 11px;
   }
 
   .viewActions,
@@ -3056,15 +3658,42 @@
   }
 
   .recordsTable {
-    overflow-x: auto;
+    overflow: visible;
   }
 
-  .tableHead,
-  .tableRow {
-    min-width: 900px;
+  .tableHead {
+    display: none;
+  }
+
+  .tableRow,
+  .tableRow.employeeTableRow {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px 10px;
+    padding: 13px 12px;
+  }
+
+  .tableRow:not(.employeeTableRow) > :nth-child(1) { grid-column: 1; grid-row: 1; }
+  .tableRow:not(.employeeTableRow) > :nth-child(2) { grid-column: 1; grid-row: 2; }
+  .tableRow:not(.employeeTableRow) > :nth-child(3) { grid-column: 1; grid-row: 3; }
+  .tableRow:not(.employeeTableRow) > :nth-child(4) { grid-column: 1; grid-row: 4; }
+  .tableRow:not(.employeeTableRow) > :nth-child(5) { grid-column: 2; grid-row: 1; align-self: start; }
+
+  .tableRow.employeeTableRow > :nth-child(1) { grid-column: 1; grid-row: 1; }
+  .tableRow.employeeTableRow > :nth-child(2) { grid-column: 1; grid-row: 2; }
+  .tableRow.employeeTableRow > :nth-child(3) { grid-column: 1; grid-row: 3; }
+  .tableRow.employeeTableRow > :nth-child(4) { grid-column: 2; grid-row: 1; align-self: start; }
+
+  .tableRow > svg {
+    display: none;
   }
 
   .detailPanel {
+    padding: 16px 14px;
+  }
+
+  .detailPanel > header,
+  .detailPanel > .statusPill {
     display: none;
   }
 

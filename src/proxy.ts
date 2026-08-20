@@ -1,10 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { isSharedDemoConfigured, isSupabaseConfigured, requireSupabaseConfig } from "@/lib/supabase/config";
+import { isSupabaseConfigured, requireSupabaseConfig } from "@/lib/supabase/config";
 
 export async function proxy(request: NextRequest) {
-  if (!isSupabaseConfigured() || isSharedDemoConfigured()) {
+  if (!isSupabaseConfigured()) {
     return NextResponse.next({ request });
   }
 
@@ -29,19 +29,15 @@ export async function proxy(request: NextRequest) {
 
   const { data } = await supabase.auth.getClaims();
   const claims = data?.claims;
-  const isPublicRoute =
-    request.nextUrl.pathname.startsWith("/login") ||
-    request.nextUrl.pathname.startsWith("/auth");
+  // This route performs its own constant-time CRON_SECRET check before any
+  // database action. It must reach the route handler unauthenticated because
+  // the MAM scheduler does not have a browser session.
+  const isPublicRoute = request.nextUrl.pathname.startsWith("/login")
+    || request.nextUrl.pathname === "/api/cron/check-in-reminders";
 
   if (!claims && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
-
-  if (claims && request.nextUrl.pathname === "/login") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
