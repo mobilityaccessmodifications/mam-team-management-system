@@ -12,11 +12,14 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   completeMyEmployeeCheckInTask,
-  getEmployeeCheckInTasksForPreview,
-  getMyEmployeeCheckInTasks,
 } from "@/app/check-in-tasks/actions";
 import styles from "@/components/check-in-tasks.module.css";
+import {
+  CHECK_IN_TASK_LOAD_ERROR,
+  parseCheckInTasks,
+} from "@/lib/check-in-tasks-data";
 import type { CheckInTask, CheckInTasksData } from "@/lib/check-in-tasks-types";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 function formatDate(value: string) {
   const parsed = new Date(`${value}T12:00:00`);
@@ -67,10 +70,19 @@ export function CheckInTasks({ previewPersonId, readOnly = false }: { previewPer
     setLoading(true);
     setError("");
     try {
-      const next = previewPersonId
-        ? await getEmployeeCheckInTasksForPreview(previewPersonId)
-        : await getMyEmployeeCheckInTasks();
-      setData(next);
+      // These RPCs already enforce the active caller's database scope. Calling
+      // them from the authenticated browser removes an otherwise unnecessary
+      // browser → Vercel Action → Supabase round trip on every tab open.
+      const supabase = createSupabaseClient();
+      const { data: raw, error: rpcError } = previewPersonId
+        ? await supabase.rpc("list_employee_check_in_tasks_for_preview", { p_person_id: previewPersonId })
+        : await supabase.rpc("list_my_employee_check_in_tasks");
+      if (rpcError) {
+        throw new Error(rpcError.code === "42501"
+          ? "You do not have permission to view check-in tasks."
+          : CHECK_IN_TASK_LOAD_ERROR);
+      }
+      setData(parseCheckInTasks(raw));
     } catch (loadError) {
       // Do not retain an earlier scoped result when an active session, grant,
       // or hierarchy check is no longer valid.

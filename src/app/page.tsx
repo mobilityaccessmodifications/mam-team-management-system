@@ -1,4 +1,5 @@
 import { LeaveDemo } from "@/components/leave-demo";
+import { getCheckInResourceLinks } from "@/lib/check-in-register";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -16,6 +17,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   let canViewCheckIns = false;
   let canChangeEmployeeView = false;
   let canViewCheckInTasks = false;
+  let checkInResources: ReturnType<typeof getCheckInResourceLinks> | undefined;
   if (isSupabaseConfigured()) {
     const supabase = await createClient();
     const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -39,6 +41,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     currentPersonId = current?.person_id ?? undefined;
     isNonRosterSystemAdmin = canAccessNonRosterSystemAdminWorkspace === true;
     canViewCheckIns = canViewCheckInWorkspace === true;
+    checkInResources = canViewCheckIns ? getCheckInResourceLinks() : undefined;
     canChangeEmployeeView = canChangeEmployeeViewCapability === true;
     // The task and safe Check-in workspaces share the same database scope
     // predicate. Reuse this capability instead of making a duplicate RPC
@@ -72,6 +75,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     canViewCheckIns={canViewCheckIns}
     canChangeEmployeeView={canChangeEmployeeView}
     canViewCheckInTasks={canViewCheckInTasks}
+    checkInResources={checkInResources}
     initialNavigation={{
     view: resolvedView,
     section: section === "approvals" ? "approvals" : "requests",

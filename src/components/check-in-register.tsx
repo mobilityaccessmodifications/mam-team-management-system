@@ -15,16 +15,29 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   completeCheckInReminder,
-  getCheckInRegister,
 } from "@/app/check-ins/actions";
 import styles from "@/components/check-in-register.module.css";
+import {
+  CHECK_IN_REGISTER_LOAD_ERROR,
+  parseCheckInRegisterRecords,
+} from "@/lib/check-in-register-data";
 import type {
+  CheckInResourceLinks,
   CheckInRegisterData,
   CheckInRegisterRecord,
   CheckInReminder,
 } from "@/lib/check-in-register-types";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 const employeesPerPage = 8;
+
+const emptyResources: CheckInRegisterData["resources"] = {
+  managerGuideUrl: null,
+  checkInFormUrl: null,
+  probationTemplatesUrl: null,
+  legacyFormsFolderUrl: null,
+  deliveryConfigured: false,
+};
 
 type EmployeeSort = "due" | "start" | "name";
 
@@ -112,7 +125,13 @@ function listMeta(record: CheckInRegisterRecord) {
   return `${record.role || "Role not recorded"} · ${record.company === "mam" ? "MAM" : "Equipsy"}`;
 }
 
-export function CheckInRegister({ onRecordsChanged }: { onRecordsChanged?: () => void } = {}) {
+export function CheckInRegister({
+  onRecordsChanged,
+  resources = emptyResources,
+}: {
+  onRecordsChanged?: () => void;
+  resources?: CheckInResourceLinks;
+} = {}) {
   const [data, setData] = useState<CheckInRegisterData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -127,7 +146,20 @@ export function CheckInRegister({ onRecordsChanged }: { onRecordsChanged?: () =>
     setLoading(true);
     setError("");
     try {
-      const next = await getCheckInRegister();
+      // The HR-only database RPC is its own security boundary. Reading this
+      // projection directly from the authenticated browser removes a second
+      // Vercel round trip without broadening HR data access.
+      const supabase = createSupabaseClient();
+      const { data: raw, error: rpcError } = await supabase.rpc("list_employee_check_in_register");
+      if (rpcError) {
+        throw new Error(rpcError.code === "42501"
+          ? "You do not have permission to view employee check-ins."
+          : CHECK_IN_REGISTER_LOAD_ERROR);
+      }
+      const next: CheckInRegisterData = {
+        records: parseCheckInRegisterRecords(raw),
+        resources,
+      };
       const sortedNextRecords = sortRecords(next.records, sortRef.current);
       const preservedPersonId = selectedPersonIdRef.current;
       const nextSelectedPersonId = preservedPersonId && next.records.some((record) => record.personId === preservedPersonId)
@@ -148,7 +180,7 @@ export function CheckInRegister({ onRecordsChanged }: { onRecordsChanged?: () =>
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [resources]);
 
   useEffect(() => {
     // Defer the first stateful request beyond effect setup. It also keeps this

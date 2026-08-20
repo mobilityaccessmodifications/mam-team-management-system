@@ -70,6 +70,7 @@ import type {
 } from "@/components/organisation-tree";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import type { CheckInResourceLinks } from "@/lib/check-in-register-types";
 
 type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals";
@@ -397,6 +398,7 @@ export function LeaveDemo({
   canViewCheckIns = false,
   canChangeEmployeeView = false,
   canViewCheckInTasks = false,
+  checkInResources,
 }: {
   initialNavigation?: InitialNavigation;
   isAdmin?: boolean;
@@ -411,6 +413,7 @@ export function LeaveDemo({
   canViewCheckIns?: boolean;
   canChangeEmployeeView?: boolean;
   canViewCheckInTasks?: boolean;
+  checkInResources?: CheckInResourceLinks;
 }) {
   const directorySupabase = isSupabaseConfigured() ? createClient() : null;
   const isNonRosterSystemAdminWorkspace = isNonRosterSystemAdmin && !currentPersonId;
@@ -1224,12 +1227,16 @@ export function LeaveDemo({
                 selectedPersonId={employeeDirectorySelectedPersonId}
               /> : undefined}
               renderCheckInRegister={showHrWorkspace
-                ? <CheckInRegister onRecordsChanged={() => void refreshLeaveWorkspace()} />
+                ? <CheckInRegister
+                    onRecordsChanged={() => void refreshLeaveWorkspace()}
+                    resources={checkInResources}
+                  />
                 : (canViewCheckIns || canRenderPreviewCheckIns)
                   ? <CheckInWorkspace
                       previewPersonId={canRenderPreviewCheckIns ? previewProfile?.id : undefined}
                       readOnly={isPreviewingEmployeeAccess}
                       onRecordsChanged={() => void refreshLeaveWorkspace()}
+                      resources={checkInResources}
                     />
                   : undefined}
               renderCheckInTasks={(canViewCheckInTasks || canRenderPreviewCheckIns)

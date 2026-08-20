@@ -1,6 +1,7 @@
 import "server-only";
 
 import { requireEmployeeDirectoryManager } from "@/lib/employee-directory";
+import { parseCheckInWorkspaceRecords } from "@/lib/check-in-workspace-data";
 import { createClient } from "@/lib/supabase/server";
 import type {
   CheckInEnrolmentMode,
@@ -10,8 +11,6 @@ import type {
   CheckInReminderStatus,
   CheckInResourceLinks,
   CheckInWorkspaceData,
-  CheckInWorkspaceRecord,
-  CheckInWorkspaceReminder,
 } from "@/lib/check-in-register-types";
 
 type CheckInReminderRpcRow = {
@@ -43,15 +42,6 @@ type CheckInRegisterRpcRow = {
   recipient_email: unknown;
   recipient_source: unknown;
   enrolment_mode: unknown;
-  reminders: unknown;
-};
-
-type CheckInWorkspaceRpcRow = {
-  person_id: unknown;
-  full_name: unknown;
-  position_title: unknown;
-  company_key: unknown;
-  start_date: unknown;
   reminders: unknown;
 };
 
@@ -117,24 +107,6 @@ function reminders(value: unknown) {
   });
 }
 
-function workspaceReminders(value: unknown): CheckInWorkspaceReminder[] {
-  if (!Array.isArray(value)) throw new Error(LOAD_ERROR);
-  return value.map((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(LOAD_ERROR);
-    const row = item as CheckInReminderRpcRow;
-    const milestone = row.milestone;
-    if (!["2_week", "1_month", "3_month", "5_month"].includes(String(milestone))) throw new Error(LOAD_ERROR);
-    if (row.sequence !== "initial" && row.sequence !== "final") throw new Error(LOAD_ERROR);
-    return {
-      id: requiredText(row.id),
-      milestone: milestone as CheckInWorkspaceReminder["milestone"],
-      sequence: row.sequence,
-      dueDate: requiredText(row.dueDate),
-      status: reminderStatus(row.status),
-    };
-  });
-}
-
 function toRecord(row: CheckInRegisterRpcRow): CheckInRegisterRecord {
   const recipientSource = row.recipient_source;
   if (recipientSource !== "manager_work_email" && recipientSource !== "missing") throw new Error(LOAD_ERROR);
@@ -155,17 +127,6 @@ function toRecord(row: CheckInRegisterRpcRow): CheckInRegisterRecord {
     recipientSource,
     enrolmentMode: enrolmentMode(row.enrolment_mode),
     reminders: reminders(row.reminders),
-  };
-}
-
-function toWorkspaceRecord(row: CheckInWorkspaceRpcRow): CheckInWorkspaceRecord {
-  return {
-    personId: requiredText(row.person_id),
-    fullName: requiredText(row.full_name),
-    positionTitle: text(row.position_title),
-    company: company(row.company_key),
-    startDate: text(row.start_date),
-    reminders: workspaceReminders(row.reminders),
   };
 }
 
@@ -276,9 +237,7 @@ export async function getVisibleCheckInWorkspace(): Promise<CheckInWorkspaceData
 
   const resources = getCheckInResourceLinks();
   return {
-    records: (data as CheckInWorkspaceRpcRow[])
-      .map(toWorkspaceRecord)
-      .sort((first, second) => first.fullName.localeCompare(second.fullName)),
+    records: parseCheckInWorkspaceRecords(data),
     resources: {
       managerGuideUrl: resources.managerGuideUrl,
       checkInFormUrl: resources.checkInFormUrl,
@@ -300,9 +259,7 @@ export async function getVisibleCheckInWorkspaceForPreview(personId: string): Pr
 
   const resources = getCheckInResourceLinks();
   return {
-    records: (data as CheckInWorkspaceRpcRow[])
-      .map(toWorkspaceRecord)
-      .sort((first, second) => first.fullName.localeCompare(second.fullName)),
+    records: parseCheckInWorkspaceRecords(data),
     resources: {
       managerGuideUrl: resources.managerGuideUrl,
       checkInFormUrl: resources.checkInFormUrl,

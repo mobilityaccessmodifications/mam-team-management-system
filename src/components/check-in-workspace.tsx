@@ -14,17 +14,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   completeVisibleCheckInReminder,
-  getCheckInWorkspace,
-  getCheckInWorkspaceForPreview,
 } from "@/app/check-ins/actions";
 import styles from "@/components/check-in-register.module.css";
+import { parseCheckInWorkspaceRecords } from "@/lib/check-in-workspace-data";
 import type {
+  CheckInResourceLinks,
   CheckInWorkspaceData,
   CheckInWorkspaceRecord,
   CheckInWorkspaceReminder,
 } from "@/lib/check-in-register-types";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 const employeesPerPage = 8;
+
+const emptyResources: CheckInWorkspaceData["resources"] = {
+  managerGuideUrl: null,
+  checkInFormUrl: null,
+  probationTemplatesUrl: null,
+};
 
 type EmployeeSort = "due" | "start" | "name";
 
@@ -109,10 +116,12 @@ export function CheckInWorkspace({
   onRecordsChanged,
   previewPersonId,
   readOnly = false,
+  resources = emptyResources,
 }: {
   onRecordsChanged?: () => void;
   previewPersonId?: string;
   readOnly?: boolean;
+  resources?: Pick<CheckInResourceLinks, "managerGuideUrl" | "checkInFormUrl" | "probationTemplatesUrl">;
 } = {}) {
   const [data, setData] = useState<CheckInWorkspaceData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -129,9 +138,22 @@ export function CheckInWorkspace({
     setLoading(true);
     setError("");
     try {
-      const next = previewPersonId
-        ? await getCheckInWorkspaceForPreview(previewPersonId)
-        : await getCheckInWorkspace();
+      // This projection is deliberately manager-safe. Its database RPCs
+      // enforce the active caller's scope, so direct browser reads remove the
+      // otherwise redundant browser → Vercel action → Supabase hop.
+      const supabase = createSupabaseClient();
+      const { data: raw, error: rpcError } = previewPersonId
+        ? await supabase.rpc("list_employee_check_in_workspace_for_preview", { p_person_id: previewPersonId })
+        : await supabase.rpc("list_employee_check_in_workspace");
+      if (rpcError) {
+        throw new Error(rpcError.code === "42501"
+          ? "You do not have permission to view check-ins."
+          : "Check-ins could not be loaded. Refresh and try again.");
+      }
+      const next: CheckInWorkspaceData = {
+        records: parseCheckInWorkspaceRecords(raw),
+        resources,
+      };
       const sortedNextRecords = sortRecords(next.records, sortRef.current);
       const preservedPersonId = selectedPersonIdRef.current;
       const nextSelectedPersonId = preservedPersonId && next.records.some((record) => record.personId === preservedPersonId)
@@ -150,7 +172,7 @@ export function CheckInWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [previewPersonId]);
+  }, [previewPersonId, resources]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
