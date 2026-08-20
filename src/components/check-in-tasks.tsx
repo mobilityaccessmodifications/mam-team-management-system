@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   completeMyEmployeeCheckInTask,
+  getEmployeeCheckInTasksForPreview,
   getMyEmployeeCheckInTasks,
 } from "@/app/check-in-tasks/actions";
 import styles from "@/components/check-in-tasks.module.css";
@@ -55,7 +56,7 @@ function taskActionHint(task: CheckInTask) {
  * Current-user-scoped manager task list. It has no HR register fields and the
  * Server Actions/database RPCs independently re-check each caller’s scope.
  */
-export function CheckInTasks() {
+export function CheckInTasks({ previewPersonId, readOnly = false }: { previewPersonId?: string; readOnly?: boolean } = {}) {
   const [data, setData] = useState<CheckInTasksData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -66,7 +67,9 @@ export function CheckInTasks() {
     setLoading(true);
     setError("");
     try {
-      const next = await getMyEmployeeCheckInTasks();
+      const next = previewPersonId
+        ? await getEmployeeCheckInTasksForPreview(previewPersonId)
+        : await getMyEmployeeCheckInTasks();
       setData(next);
     } catch (loadError) {
       // Do not retain an earlier scoped result when an active session, grant,
@@ -76,7 +79,7 @@ export function CheckInTasks() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [previewPersonId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -84,7 +87,7 @@ export function CheckInTasks() {
   }, [load]);
 
   async function completeTask(task: CheckInTask) {
-    if (pendingReminderId || !task.canComplete) return;
+    if (readOnly || pendingReminderId || !task.canComplete) return;
     setPendingReminderId(task.reminderId);
     setError("");
     setNotice("");
@@ -140,7 +143,7 @@ export function CheckInTasks() {
           <button
             className={styles.complete}
             type="button"
-            disabled={Boolean(pendingReminderId) || !task.canComplete}
+            disabled={readOnly || Boolean(pendingReminderId) || !task.canComplete}
             onClick={() => void completeTask(task)}
             title={taskActionHint(task)}
           >

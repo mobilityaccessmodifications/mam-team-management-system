@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   completeVisibleCheckInReminder,
   getCheckInWorkspace,
+  getCheckInWorkspaceForPreview,
 } from "@/app/check-ins/actions";
 import styles from "@/components/check-in-register.module.css";
 import type {
@@ -104,7 +105,15 @@ function listMeta(record: CheckInWorkspaceRecord) {
   return `${record.positionTitle || "Role not recorded"} · ${record.company === "mam" ? "MAM" : "Equipsy"}`;
 }
 
-export function CheckInWorkspace({ onRecordsChanged }: { onRecordsChanged?: () => void } = {}) {
+export function CheckInWorkspace({
+  onRecordsChanged,
+  previewPersonId,
+  readOnly = false,
+}: {
+  onRecordsChanged?: () => void;
+  previewPersonId?: string;
+  readOnly?: boolean;
+} = {}) {
   const [data, setData] = useState<CheckInWorkspaceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -120,7 +129,9 @@ export function CheckInWorkspace({ onRecordsChanged }: { onRecordsChanged?: () =
     setLoading(true);
     setError("");
     try {
-      const next = await getCheckInWorkspace();
+      const next = previewPersonId
+        ? await getCheckInWorkspaceForPreview(previewPersonId)
+        : await getCheckInWorkspace();
       const sortedNextRecords = sortRecords(next.records, sortRef.current);
       const preservedPersonId = selectedPersonIdRef.current;
       const nextSelectedPersonId = preservedPersonId && next.records.some((record) => record.personId === preservedPersonId)
@@ -139,7 +150,7 @@ export function CheckInWorkspace({ onRecordsChanged }: { onRecordsChanged?: () =
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [previewPersonId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -177,7 +188,7 @@ export function CheckInWorkspace({ onRecordsChanged }: { onRecordsChanged?: () =
   }
 
   async function markComplete(reminderId: string) {
-    if (pendingReminderId) return;
+    if (readOnly || pendingReminderId) return;
     setPendingReminderId(reminderId);
     setError("");
     setNotice("");
@@ -262,7 +273,7 @@ export function CheckInWorkspace({ onRecordsChanged }: { onRecordsChanged?: () =
                 <p>Due {formatDate(reminder.dueDate)}</p>
               </div>
               <span className={styles.status}>{reminder.status.replaceAll("_", " ")}</span>
-              {canCompleteReminder(reminder) ? <div className={styles.reminderActions}>
+              {!readOnly && canCompleteReminder(reminder) ? <div className={styles.reminderActions}>
                 <button type="button" disabled={Boolean(pendingReminderId)} onClick={() => void markComplete(reminder.id)}>
                   {pendingReminderId === reminder.id ? "Saving…" : "Mark complete"}
                 </button>

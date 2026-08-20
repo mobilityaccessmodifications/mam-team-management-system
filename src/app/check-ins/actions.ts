@@ -7,6 +7,7 @@ import {
   completeVisibleCheckInReminder as completeVisibleCheckInReminderForWorkspace,
   getCheckInRegisterForHr,
   getVisibleCheckInWorkspace,
+  getVisibleCheckInWorkspaceForPreview,
 } from "@/lib/check-in-register";
 import type {
   CheckInRegisterData,
@@ -39,6 +40,10 @@ export async function completeCheckInReminder(reminderId: string) {
  */
 export async function getCheckInWorkspace(): Promise<CheckInWorkspaceData> {
   return getVisibleCheckInWorkspace();
+}
+
+export async function getCheckInWorkspaceForPreview(personId: string): Promise<CheckInWorkspaceData> {
+  return getVisibleCheckInWorkspaceForPreview(checkedId(personId));
 }
 
 export async function completeVisibleCheckInReminder(reminderId: string) {

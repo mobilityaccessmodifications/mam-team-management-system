@@ -139,6 +139,20 @@ function tasksForRow(row: CheckInTaskRpcRow): CheckInTask[] {
   });
 }
 
+function taskData(data: unknown): CheckInTasksData {
+  if (!Array.isArray(data)) throw new Error(LOAD_ERROR);
+  return {
+    tasks: (data as CheckInTaskRpcRow[])
+      .flatMap(tasksForRow)
+      .sort((first, second) => {
+        const due = first.dueDate.localeCompare(second.dueDate);
+        if (due) return due;
+        const employee = first.employeeName.localeCompare(second.employeeName);
+        return employee || first.milestone.localeCompare(second.milestone);
+      }),
+  };
+}
+
 async function requireCheckInTasksAccess() {
   const supabase = await createClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -158,18 +172,18 @@ async function requireCheckInTasksAccess() {
 export async function getMyEmployeeCheckInTasks(): Promise<CheckInTasksData> {
   const supabase = await requireCheckInTasksAccess();
   const { data, error } = await supabase.rpc("list_my_employee_check_in_tasks");
-  if (error || !Array.isArray(data)) throw new Error(LOAD_ERROR);
+  if (error) throw new Error(LOAD_ERROR);
+  return taskData(data);
+}
 
-  return {
-    tasks: (data as CheckInTaskRpcRow[])
-      .flatMap(tasksForRow)
-      .sort((first, second) => {
-        const due = first.dueDate.localeCompare(second.dueDate);
-        if (due) return due;
-        const employee = first.employeeName.localeCompare(second.employeeName);
-        return employee || first.milestone.localeCompare(second.milestone);
-      }),
-  };
+/** Read-only Change view projection; the RPC is Super Admin-only. */
+export async function getEmployeeCheckInTasksForPreview(personId: string): Promise<CheckInTasksData> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("list_employee_check_in_tasks_for_preview", {
+    p_person_id: personId,
+  });
+  if (error) throw new Error(LOAD_ERROR);
+  return taskData(data);
 }
 
 /** Completes one task after both application and database scope checks. */

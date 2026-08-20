@@ -294,6 +294,30 @@ export async function getVisibleCheckInWorkspace(): Promise<CheckInWorkspaceData
   };
 }
 
+/**
+ * Read-only Change view projection. The database requires the caller to be a
+ * Super Admin and evaluates the selected person's live manager/global scope.
+ */
+export async function getVisibleCheckInWorkspaceForPreview(personId: string): Promise<CheckInWorkspaceData> {
+  const supabase = await requireCheckInWorkspaceSession();
+  const { data, error } = await supabase.rpc("list_employee_check_in_workspace_for_preview", {
+    p_person_id: personId,
+  });
+  if (error || !Array.isArray(data)) throw new Error(LOAD_ERROR);
+
+  const resources = getCheckInResourceLinks();
+  return {
+    records: (data as CheckInWorkspaceRpcRow[])
+      .map(toWorkspaceRecord)
+      .sort((first, second) => first.fullName.localeCompare(second.fullName)),
+    resources: {
+      managerGuideUrl: resources.managerGuideUrl,
+      checkInFormUrl: resources.checkInFormUrl,
+      probationTemplatesUrl: resources.probationTemplatesUrl,
+    },
+  };
+}
+
 export async function completeVisibleCheckInReminder(reminderId: string) {
   const supabase = await requireCheckInWorkspaceSession();
   const { error } = await supabase.rpc("complete_visible_employee_check_in_reminder", {

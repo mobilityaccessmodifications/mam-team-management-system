@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import {
   completeMyEmployeeCheckInTask as completeTask,
+  getEmployeeCheckInTasksForPreview as getPreviewTasks,
   getMyEmployeeCheckInTasks as getTasks,
 } from "@/lib/check-in-tasks";
 import type { CheckInTasksData } from "@/lib/check-in-tasks-types";
@@ -23,6 +24,10 @@ function checkedReminderId(value: unknown) {
  */
 export async function getMyEmployeeCheckInTasks(): Promise<CheckInTasksData> {
   return getTasks();
+}
+
+export async function getEmployeeCheckInTasksForPreview(personId: string): Promise<CheckInTasksData> {
+  return getPreviewTasks(checkedReminderId(personId));
 }
 
 export async function completeMyEmployeeCheckInTask(reminderId: string) {

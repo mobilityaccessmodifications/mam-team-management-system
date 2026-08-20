@@ -746,6 +746,7 @@ export function LeaveDemo({
       }
     : undefined;
   const isPreviewingEmployeeAccess = Boolean(previewProfile);
+  const canRenderPreviewCheckIns = isPreviewingEmployeeAccess && canChangeEmployeeView && Boolean(previewProfile?.id);
   const activeProfile = previewProfile ?? adminProfile;
   const showHrWorkspace = canManageEmployeeDirectory && !isPreviewingEmployeeAccess;
   const topbarSelfProfile: SelfProfileData = selfProfile ?? {
@@ -1224,10 +1225,19 @@ export function LeaveDemo({
               /> : undefined}
               renderCheckInRegister={showHrWorkspace
                 ? <CheckInRegister onRecordsChanged={() => void refreshLeaveWorkspace()} />
-                : canViewCheckIns && !isPreviewingEmployeeAccess
-                  ? <CheckInWorkspace onRecordsChanged={() => void refreshLeaveWorkspace()} />
+                : (canViewCheckIns || canRenderPreviewCheckIns)
+                  ? <CheckInWorkspace
+                      previewPersonId={canRenderPreviewCheckIns ? previewProfile?.id : undefined}
+                      readOnly={isPreviewingEmployeeAccess}
+                      onRecordsChanged={() => void refreshLeaveWorkspace()}
+                    />
                   : undefined}
-              renderCheckInTasks={canViewCheckInTasks && !isPreviewingEmployeeAccess ? <CheckInTasks /> : undefined}
+              renderCheckInTasks={(canViewCheckInTasks || canRenderPreviewCheckIns)
+                ? <CheckInTasks
+                    previewPersonId={canRenderPreviewCheckIns ? previewProfile?.id : undefined}
+                    readOnly={isPreviewingEmployeeAccess}
+                  />
+                : undefined}
               renderAccounts={isAdmin && showHrWorkspace ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
                 : accountsError
