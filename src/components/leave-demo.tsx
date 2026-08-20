@@ -982,7 +982,7 @@ export function LeaveDemo({
               key={showHrWorkspace ? "hr-directory" : isPreviewingEmployeeAccess ? `employee-preview:${activeProfile.id}` : "standard-people"}
               activeProfile={activeProfile}
               organisationProfiles={organisationPeople}
-              canEditOrganisation={false}
+              canEditOrganisation={canEditOrganisation && showHrWorkspace}
               canArrangeOrganisation={canEditOrganisation && showHrWorkspace}
               isAccessPreview={isPreviewingEmployeeAccess}
               onCreateOrganisationPerson={createOrganisationPerson}
