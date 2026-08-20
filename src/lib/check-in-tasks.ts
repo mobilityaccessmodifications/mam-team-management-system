@@ -153,26 +153,14 @@ function taskData(data: unknown): CheckInTasksData {
   };
 }
 
-async function requireCheckInTasksAccess() {
-  const supabase = await createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData.user) throw new Error("Your session has expired. Sign in again.");
-
-  // This is only a fast, server-side application gate. Both task RPCs enforce
-  // the same current user/scope checks inside the database before data or a
-  // mutation can be returned.
-  const { data: allowed, error: permissionError } = await supabase
-    .rpc("can_view_employee_check_in_tasks");
-  if (permissionError || allowed !== true) throw new Error(ACCESS_ERROR);
-
-  return supabase;
-}
-
 /** Returns the minimal, current-user-scoped check-in task list. */
 export async function getMyEmployeeCheckInTasks(): Promise<CheckInTasksData> {
-  const supabase = await requireCheckInTasksAccess();
+  const supabase = await createClient();
   const { data, error } = await supabase.rpc("list_my_employee_check_in_tasks");
-  if (error) throw new Error(LOAD_ERROR);
+  if (error) {
+    if (error.code === "42501") throw new Error(ACCESS_ERROR);
+    throw new Error(LOAD_ERROR);
+  }
   return taskData(data);
 }
 
@@ -190,9 +178,12 @@ export async function getEmployeeCheckInTasksForPreview(personId: string): Promi
 export async function completeMyEmployeeCheckInTask(reminderId: string) {
   if (!UUID_PATTERN.test(reminderId)) throw new Error("This check-in task is invalid. Refresh and try again.");
 
-  const supabase = await requireCheckInTasksAccess();
+  const supabase = await createClient();
   const { error } = await supabase.rpc("complete_my_employee_check_in_task", {
     p_reminder_id: reminderId,
   });
-  if (error) throw new Error("The check-in task could not be marked complete. Refresh and try again.");
+  if (error) {
+    if (error.code === "42501") throw new Error(ACCESS_ERROR);
+    throw new Error("The check-in task could not be marked complete. Refresh and try again.");
+  }
 }

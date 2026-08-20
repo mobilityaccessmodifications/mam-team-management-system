@@ -27,14 +27,12 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       { data: canAccessNonRosterSystemAdminWorkspace },
       { data: canViewCheckInWorkspace },
       { data: canChangeEmployeeViewCapability },
-      { data: canViewEmployeeCheckInTasks },
     ] = await Promise.all([
       supabase.rpc("can_manage_portal_accounts"),
       supabase.rpc("current_portal_account"),
       supabase.rpc("can_access_non_roster_system_admin_workspace"),
       supabase.rpc("can_view_employee_check_in_workspace"),
       supabase.rpc("can_change_employee_view"),
-      supabase.rpc("can_view_employee_check_in_tasks"),
     ]);
     const current = Array.isArray(account) ? account[0] : null;
     isAdmin = canManageAccounts === true;
@@ -42,7 +40,10 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     isNonRosterSystemAdmin = canAccessNonRosterSystemAdminWorkspace === true;
     canViewCheckIns = canViewCheckInWorkspace === true;
     canChangeEmployeeView = canChangeEmployeeViewCapability === true;
-    canViewCheckInTasks = canViewEmployeeCheckInTasks === true;
+    // The task and safe Check-in workspaces share the same database scope
+    // predicate. Reuse this capability instead of making a duplicate RPC
+    // round-trip during every page request.
+    canViewCheckInTasks = canViewCheckIns;
     if (
       accountError
       || (

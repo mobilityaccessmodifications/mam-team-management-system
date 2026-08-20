@@ -269,15 +269,8 @@ export async function completeCheckInReminderForHr(reminderId: string) {
   if (error) throw new Error("The check-in could not be marked complete. Refresh and try again.");
 }
 
-async function requireCheckInWorkspaceSession() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) throw new Error("Your session has expired. Sign in again.");
-  return supabase;
-}
-
 export async function getVisibleCheckInWorkspace(): Promise<CheckInWorkspaceData> {
-  const supabase = await requireCheckInWorkspaceSession();
+  const supabase = await createClient();
   const { data, error } = await supabase.rpc("list_employee_check_in_workspace");
   if (error || !Array.isArray(data)) throw new Error(LOAD_ERROR);
 
@@ -299,7 +292,7 @@ export async function getVisibleCheckInWorkspace(): Promise<CheckInWorkspaceData
  * Super Admin and evaluates the selected person's live manager/global scope.
  */
 export async function getVisibleCheckInWorkspaceForPreview(personId: string): Promise<CheckInWorkspaceData> {
-  const supabase = await requireCheckInWorkspaceSession();
+  const supabase = await createClient();
   const { data, error } = await supabase.rpc("list_employee_check_in_workspace_for_preview", {
     p_person_id: personId,
   });
@@ -319,7 +312,7 @@ export async function getVisibleCheckInWorkspaceForPreview(personId: string): Pr
 }
 
 export async function completeVisibleCheckInReminder(reminderId: string) {
-  const supabase = await requireCheckInWorkspaceSession();
+  const supabase = await createClient();
   const { error } = await supabase.rpc("complete_visible_employee_check_in_reminder", {
     p_reminder_id: reminderId,
   });
