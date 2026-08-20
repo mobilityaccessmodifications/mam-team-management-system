@@ -140,16 +140,16 @@ export function CheckInTasks({ previewPersonId, readOnly = false }: { previewPer
             {task.status === "needs_review" ? <CircleAlert size={14} aria-hidden="true" /> : null}
             {statusLabel(task.status)}
           </span>
-          <button
-            className={styles.complete}
-            type="button"
-            disabled={readOnly || Boolean(pendingReminderId) || !task.canComplete}
-            onClick={() => void completeTask(task)}
-            title={taskActionHint(task)}
-          >
-            <CheckCircle2 size={16} aria-hidden="true" />
-            {pending ? "Saving…" : "Mark complete"}
-          </button>
+          {!readOnly ? <button
+              className={styles.complete}
+              type="button"
+              disabled={Boolean(pendingReminderId) || !task.canComplete}
+              onClick={() => void completeTask(task)}
+              title={taskActionHint(task)}
+            >
+              <CheckCircle2 size={16} aria-hidden="true" />
+              {pending ? "Saving…" : "Mark complete"}
+            </button> : null}
         </article>;
       })}
     </div> : null}
