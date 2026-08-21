@@ -1,5 +1,7 @@
 "use server";
 
+import { createHash } from "node:crypto";
+
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
@@ -140,6 +142,19 @@ type CheckInCalendarRpcRow = {
   sequence: unknown;
   due_date: unknown;
   status: unknown;
+};
+
+type LeaveNotificationEvent = "leave-submitted" | "leave-approved" | "leave-declined" | "leave-cancelled";
+
+type LeaveNotificationFallback = {
+  leaveType?: string;
+  startDate?: string;
+  endDate?: string;
+  startTime?: string;
+  endTime?: string;
+  employeeNote?: string;
+  managerNote?: string;
+  status?: LeaveStatus;
 };
 
 type SubmitRpcRow = {
@@ -388,6 +403,89 @@ function toSubmitResult(value: unknown) {
   };
 }
 
+/**
+ * The HR test receiver is fixed server-side. The browser never supplies a
+ * recipient, and a delivery failure cannot roll back a leave decision that
+ * has already been durably recorded in Supabase.
+ */
+async function deliverLeaveNotification(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  event: LeaveNotificationEvent,
+  requestId: string,
+  fallback: LeaveNotificationFallback = {},
+) {
+  const webhookUrl = process.env.MAM_N8N_LEAVE_WEBHOOK_URL?.trim();
+  const webhookSecret = process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET?.trim();
+  if (!webhookUrl || !webhookSecret) return;
+
+  let url: URL;
+  try {
+    url = new URL(webhookUrl);
+  } catch {
+    return;
+  }
+  if (url.protocol !== "https:" || url.hostname !== "n8n.srv1866578.hstgr.cloud" || url.pathname !== "/webhook/mam-people-system-leave-hr-v1") return;
+
+  let request: LeaveWorkspaceRequest | undefined;
+  try {
+    const { data } = await supabase.rpc("list_leave_workspace_requests");
+    if (Array.isArray(data)) {
+      const row = data.find((candidate) => typeof candidate === "object" && candidate !== null && "id" in candidate && (candidate as { id?: unknown }).id === requestId);
+      if (row) request = toWorkspaceRequest(row);
+    }
+  } catch {
+    // The durable leave mutation already succeeded; fallback fields below are
+    // still sufficient for the HR test message.
+  }
+
+  const payload = {
+    version: 1,
+    event,
+    eventKey: `leave:${requestId}:${event}:${createHash("sha256").update(JSON.stringify({
+      event,
+      requestId,
+      status: request?.status ?? fallback.status ?? "Pending",
+      startDate: request?.startDate ?? fallback.startDate ?? "",
+      endDate: request?.endDate ?? fallback.endDate ?? "",
+      managerNote: request?.managerNote ?? fallback.managerNote ?? "",
+    })).digest("hex").slice(0, 24)}`,
+    requestId,
+    employeeName: request?.employee ?? "Employee",
+    company: request?.company ?? "mam",
+    leaveType: request?.leaveType ?? fallback.leaveType ?? "Leave",
+    startDate: request?.startDate ?? fallback.startDate ?? "",
+    endDate: request?.endDate ?? fallback.endDate ?? "",
+    startTime: request?.startTime ?? fallback.startTime ?? null,
+    endTime: request?.endTime ?? fallback.endTime ?? null,
+    days: request?.days ?? null,
+    hours: request?.hours ?? null,
+    status: request?.status ?? fallback.status ?? "Pending",
+    employeeNote: request?.employeeNote ?? fallback.employeeNote ?? null,
+    managerNote: request?.managerNote ?? fallback.managerNote ?? null,
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-MAM-Notification-Secret": webhookSecret },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    const result = text.length <= 4096 ? JSON.parse(text) as { ok?: boolean; sent?: boolean; alreadySent?: boolean; actualRecipient?: string } : {};
+    if (!response.ok || result.ok !== true || (result.sent !== true && result.alreadySent !== true) || result.actualRecipient !== "hr@mobilityaccess.com.au") {
+      console.warn("Leave notification delivery was not confirmed.", { event, requestId, status: response.status });
+    }
+  } catch {
+    console.warn("Leave notification delivery failed after the leave mutation.", { event, requestId });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function toDecisionResult(value: unknown) {
   return toRequestStatusResult(value, DECISION_ERROR);
 }
@@ -494,6 +592,7 @@ export async function submitLeaveRequest(input: SubmitLeaveInput) {
 
   if (error) throw new Error(userFacingSubmitError(error));
   const result = toSubmitResult(data);
+  await deliverLeaveNotification(supabase, "leave-submitted", result.id, checked);
   revalidatePath("/");
   return result;
 }
@@ -525,6 +624,7 @@ export async function submitLeaveRequestForSelectedEmployee(
 
   if (error) throw new Error(userFacingSubmitError(error));
   const result = toSubmitResult(data);
+  await deliverLeaveNotification(supabase, "leave-submitted", result.id, checked);
   revalidatePath("/");
   return result;
 }
@@ -540,6 +640,10 @@ export async function decideLeaveRequest(input: DecideLeaveInput) {
 
   if (error) throw new Error(userFacingDecisionError(error));
   const result = toDecisionResult(data);
+  await deliverLeaveNotification(supabase, checked.status === "Approved" ? "leave-approved" : "leave-declined", result.id, {
+    status: checked.status,
+    managerNote: checked.managerNote,
+  });
   revalidatePath("/");
   return result;
 }
@@ -559,6 +663,7 @@ export async function cancelMyApprovedLeaveRequest(input: CancelLeaveInput) {
   if (error) throw new Error(CANCEL_ERROR);
   const result = toCancellationResult(data);
   if (result.status !== "Cancelled") throw new Error(CANCEL_ERROR);
+  await deliverLeaveNotification(supabase, "leave-cancelled", result.id, { status: "Cancelled" });
   revalidatePath("/");
   return result;
 }
