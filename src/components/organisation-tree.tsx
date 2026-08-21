@@ -814,6 +814,7 @@ export function OrganisationTree({
   const linkPointerRef = useRef<LinkPointer | null>(null);
   const arrangeTimerRef = useRef<number | null>(null);
   const workContactRequestRef = useRef(0);
+  const relationshipMutationRef = useRef(false);
   const panRef = useRef<{
     pointerId: number;
     x: number;
@@ -865,6 +866,12 @@ export function OrganisationTree({
       setOpenNodeActionsId(null);
       setPendingDisconnectId(null);
       setDraggingNodeId(null);
+      nodeDragRef.current = null;
+      pendingOffsetRef.current = null;
+      if (dragFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
       setLinkingSourceId(null);
       setLinkTarget(null);
       setLinkCursor(null);
@@ -1063,10 +1070,13 @@ export function OrganisationTree({
     if (!linkingSource || !linkingSourceNode || !linkCursor) return null;
     const offset = manualOffsets[linkingSource.id] ?? { x: 0, y: 0 };
     const startX = linkingSourceNode.x + offset.x + linkingSourceNode.width / 2;
-    const startY = linkingSourceNode.y + offset.y + linkingSourceNode.height;
+    const startY =
+      linkTarget?.intent === "report-to-target"
+        ? linkingSourceNode.y + offset.y
+        : linkingSourceNode.y + offset.y + linkingSourceNode.height;
     const controlY = startY + Math.max(30, (linkCursor.y - startY) / 2);
     return `M ${startX} ${startY} C ${startX} ${controlY}, ${linkCursor.x} ${controlY}, ${linkCursor.x} ${linkCursor.y}`;
-  }, [linkCursor, linkingSource, linkingSourceNode, manualOffsets]);
+  }, [linkCursor, linkTarget, linkingSource, linkingSourceNode, manualOffsets]);
 
   const selectedProfile = selectedId ? profileById.get(selectedId) : undefined;
   const pendingDisconnect = pendingDisconnectId
@@ -1487,6 +1497,10 @@ export function OrganisationTree({
       setInteractionMessage("Open full screen to add a reporting line.");
       return;
     }
+    if (relationshipMutationRef.current) {
+      setInteractionMessage("Saving the previous reporting change…");
+      return;
+    }
     const sourceNode = layoutNodesById.get(profile.id);
     if (!sourceNode) return;
 
@@ -1502,7 +1516,7 @@ export function OrganisationTree({
     });
     setLinkingSourceId(profile.id);
     setInteractionMessage(
-      `Move over a card to choose its top, middle or bottom connection. Click empty space or press Escape to cancel.`,
+      `Use the upper point to make ${profile.name} the manager, the middle point to group them, or the lower point to make ${profile.name} report to that person. Click empty space or press Escape to cancel.`,
     );
   };
 
@@ -1549,9 +1563,9 @@ export function OrganisationTree({
       const relativeY = (point.y - top) / item.height;
       const cardIntent: DropIntent =
         relativeY < 1 / 3
-          ? "report-to-target"
+          ? "target-reports-to-dragged"
           : relativeY > 2 / 3
-            ? "target-reports-to-dragged"
+            ? "report-to-target"
             : "sibling";
       consider(
         { id: targetId, intent: cardIntent },
@@ -1559,7 +1573,7 @@ export function OrganisationTree({
       );
 
       consider(
-        { id: targetId, intent: "report-to-target" },
+        { id: targetId, intent: "target-reports-to-dragged" },
         Math.hypot(point.x - (left + item.width / 2), point.y - (top - 18)),
         true,
       );
@@ -1569,7 +1583,7 @@ export function OrganisationTree({
         true,
       );
       consider(
-        { id: targetId, intent: "target-reports-to-dragged" },
+        { id: targetId, intent: "report-to-target" },
         Math.hypot(
           point.x - (left + item.width / 2),
           point.y - (bottom + 18),
@@ -1614,7 +1628,7 @@ export function OrganisationTree({
             x: targetNode.x + offset.x - 18,
             y: targetNode.y + offset.y + targetNode.height / 2,
           }
-        : target.intent === "report-to-target"
+        : target.intent === "target-reports-to-dragged"
           ? {
               x: targetNode.x + offset.x + targetNode.width / 2,
               y: targetNode.y + offset.y - 18,
@@ -1749,8 +1763,8 @@ export function OrganisationTree({
       relativeX < 0.25 || relativeX > 0.75
         ? "sibling"
         : relativeY < 0.5
-          ? "report-to-target"
-          : "target-reports-to-dragged";
+          ? "target-reports-to-dragged"
+          : "report-to-target";
 
     return { id: targetId, intent };
   };
@@ -1777,6 +1791,12 @@ export function OrganisationTree({
       return false;
     }
 
+    if (relationshipMutationRef.current) {
+      setInteractionMessage("Saving the previous reporting change…");
+      return false;
+    }
+
+    relationshipMutationRef.current = true;
     setSaving(true);
     setError("");
     try {
@@ -1806,6 +1826,7 @@ export function OrganisationTree({
       );
       return false;
     } finally {
+      relationshipMutationRef.current = false;
       setSaving(false);
     }
   };
@@ -1847,7 +1868,14 @@ export function OrganisationTree({
 
   const undoLastRelationshipChange = async () => {
     const lastChange = relationshipHistory.at(-1);
-    if (!lastChange || !onUpdate || !canUseFullscreenRelationshipEditor) return;
+    if (
+      !lastChange ||
+      !onUpdate ||
+      !canUseFullscreenRelationshipEditor ||
+      relationshipMutationRef.current
+    ) {
+      return;
+    }
     const current = profileById.get(lastChange.personId);
     if (!current || !isPerson(current)) {
       setInteractionMessage("That person is no longer available to reconnect.");
@@ -1860,6 +1888,7 @@ export function OrganisationTree({
       return;
     }
 
+    relationshipMutationRef.current = true;
     setSaving(true);
     setError("");
     try {
@@ -1879,6 +1908,7 @@ export function OrganisationTree({
           : "The reporting line could not be restored.",
       );
     } finally {
+      relationshipMutationRef.current = false;
       setSaving(false);
     }
   };
@@ -1889,6 +1919,7 @@ export function OrganisationTree({
   ) => {
     if (
       saving ||
+      relationshipMutationRef.current ||
       Boolean(linkingSourceId) ||
       !canArrangeInFullscreen ||
       !arrangeMode ||
@@ -1937,20 +1968,40 @@ export function OrganisationTree({
     });
   };
 
+  const cancelNodeDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = nodeDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (dragFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    pendingOffsetRef.current = null;
+    nodeDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setDraggingNodeId(null);
+    setCurrentDropTarget(null);
+  };
+
   const finishNodeDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const drag = nodeDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
+
+    if (event.type === "pointercancel") {
+      cancelNodeDrag(event);
+      return;
+    }
 
     if (dragFrameRef.current !== null) {
       window.cancelAnimationFrame(dragFrameRef.current);
       dragFrameRef.current = null;
       flushPendingOffset();
     }
+    nodeDragRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-
-    nodeDragRef.current = null;
     setDraggingNodeId(null);
     const nextDropTarget = dropTargetRef.current;
     setCurrentDropTarget(null);
@@ -1960,12 +2011,11 @@ export function OrganisationTree({
         suppressCardClickRef.current = false;
       }, 0);
       if (
-        event.type !== "pointercancel" &&
         nextDropTarget &&
         canUseFullscreenRelationshipEditor
       ) {
         void persistDropRelationship(drag.node.node, nextDropTarget);
-      } else if (event.type !== "pointercancel") {
+      } else {
         setInteractionMessage(
           `${drag.node.node.name} moved on the grid. Clean up restores the reporting layout.`,
         );
@@ -1973,13 +2023,11 @@ export function OrganisationTree({
       return;
     }
 
-    if (event.type !== "pointercancel") {
-      suppressCardClickRef.current = true;
-      selectProfile(drag.id);
-      window.setTimeout(() => {
-        suppressCardClickRef.current = false;
-      }, 0);
-    }
+    suppressCardClickRef.current = true;
+    selectProfile(drag.id);
+    window.setTimeout(() => {
+      suppressCardClickRef.current = false;
+    }, 0);
   };
 
   const openCreate = (
@@ -2559,7 +2607,8 @@ export function OrganisationTree({
                         }
                         selectProfile(item.node.id);
                       }}
-                      onPointerCancel={finishNodeDrag}
+                      onLostPointerCapture={cancelNodeDrag}
+                      onPointerCancel={cancelNodeDrag}
                       onPointerDown={(event) => {
                         if (linkingSourceId) {
                           const bounds = event.currentTarget.getBoundingClientRect();
@@ -2567,9 +2616,9 @@ export function OrganisationTree({
                             (event.clientY - bounds.top) / bounds.height;
                           const intent: DropIntent =
                             relativeY < 1 / 3
-                              ? "report-to-target"
+                              ? "target-reports-to-dragged"
                               : relativeY > 2 / 3
-                                ? "target-reports-to-dragged"
+                                ? "report-to-target"
                                 : "sibling";
                           if (
                             isValidRelationshipTarget(
@@ -2590,7 +2639,7 @@ export function OrganisationTree({
                       title={
                         arrangeMode && fullscreen
                           ? canUseRelationshipEditor
-                            ? "Drag on the grid. Drop left or right to group as a peer; drop above or below to create a reporting line."
+                            ? "Drop above a card to make this person its manager, beside it to group them, or below it to make this person report to them."
                             : "Drag to compare positions. Clean up restores the reporting layout."
                           : `${item.node.name}, ${item.node.position || companyLabels[item.node.company]}`
                       }
@@ -2615,25 +2664,27 @@ export function OrganisationTree({
                     {isLinkTarget ? (
                       <>
                         <button
-                          aria-label={`Make ${linkingSource?.name} report to ${item.node.name}`}
+                          aria-label={`Make ${item.node.name} report to ${linkingSource?.name}`}
                           className={styles.linkAnchor}
-                          data-active={linkTarget?.intent === "report-to-target"}
+                          data-active={
+                            linkTarget?.intent === "target-reports-to-dragged"
+                          }
                           data-placement="top"
                           onPointerDown={(event) => {
                             event.stopPropagation();
                             setLinkTarget({
                               id: item.node.id,
-                              intent: "report-to-target",
+                              intent: "target-reports-to-dragged",
                             });
                           }}
                           onClick={(event) => {
                             event.stopPropagation();
                             void completeRelationshipLink(
                               item.node.id,
-                              "report-to-target",
+                              "target-reports-to-dragged",
                             );
                           }}
-                          title={`${linkingSource?.name} reports to ${item.node.name}`}
+                          title={`${item.node.name} reports to ${linkingSource?.name}`}
                           type="button"
                         >
                           <Plus aria-hidden="true" size={15} />
@@ -2657,27 +2708,27 @@ export function OrganisationTree({
                           <Plus aria-hidden="true" size={15} />
                         </button>
                         <button
-                          aria-label={`Make ${item.node.name} report to ${linkingSource?.name}`}
+                          aria-label={`Make ${linkingSource?.name} report to ${item.node.name}`}
                           className={styles.linkAnchor}
                           data-active={
-                            linkTarget?.intent === "target-reports-to-dragged"
+                            linkTarget?.intent === "report-to-target"
                           }
                           data-placement="bottom"
                           onPointerDown={(event) => {
                             event.stopPropagation();
                             setLinkTarget({
                               id: item.node.id,
-                              intent: "target-reports-to-dragged",
+                              intent: "report-to-target",
                             });
                           }}
                           onClick={(event) => {
                             event.stopPropagation();
                             void completeRelationshipLink(
                               item.node.id,
-                              "target-reports-to-dragged",
+                              "report-to-target",
                             );
                           }}
-                          title={`${item.node.name} reports to ${linkingSource?.name}`}
+                          title={`${linkingSource?.name} reports to ${item.node.name}`}
                           type="button"
                         >
                           <Plus aria-hidden="true" size={15} />
