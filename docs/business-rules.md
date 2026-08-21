@@ -57,7 +57,7 @@
 - Every submitted request starts Pending and must be decided by an authorised reviewer. No request is automatically approved or self-approved. The database resolves only the approved private grants—Major Modifications to Sujant, Minor Modifications to Serene, Warehouse to Kieran, plus global HR, Penny and Steven—and snapshots that reviewer set at submission. Later organisational changes cannot silently reroute an existing request.
 - The calendar can browse months and is limited to availability for leave. An ordinary employee peer sees company availability as **Away**, not another person's leave type, reason, notes or evidence. Managers and HR see only the additional detail their authorised review role requires. The approved birthday exception is shown to every signed-in internal employee across MAM and Equipsy as an active employee's name and recurring day/month only; birth year and all other private profile fields remain hidden.
 - Supporting PDF or image files are not durable in this rollout. They are not stored with a durable leave request; evidence storage needs separate retention, deletion and malware-scanning approval.
-- Authorised leave records and decisions persist and refresh across accounts. No notification email is sent by this rollout.
+- Authorised leave records and decisions persist and refresh across accounts. During the HR test phase, submit, approve, decline and cancellation events send one deduplicated HTML notification to `hr@mobilityaccess.com.au` through the MAM n8n receiver. No leave notification is sent to managers, employees, CC or BCC recipients.
 
 ## People workflow boundaries
 
