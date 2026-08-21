@@ -453,8 +453,19 @@
   position: absolute;
   top: 0;
   left: 0;
-  background: #fff;
+  background-color: #fff;
+  background-image: radial-gradient(circle, rgb(112 128 132 / 0.18) 1px, transparent 1px);
+  background-position: 0 0;
+  background-size: 24px 24px;
   transform-origin: top left;
+}
+
+.chartWorld[data-arrange="true"] {
+  background-image:
+    linear-gradient(rgb(112 128 132 / 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(112 128 132 / 0.07) 1px, transparent 1px),
+    radial-gradient(circle, rgb(255 117 31 / 0.32) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px, 24px 24px;
 }
 
 .connectors {
@@ -490,6 +501,17 @@
   opacity: 0.32;
 }
 
+.connectors[data-editable="true"] .connector[data-editable="true"] {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.connectors[data-editable="true"] .connector[data-editable="true"]:hover,
+.connectors[data-editable="true"] .connector[data-editable="true"]:focus {
+  stroke-width: 4;
+  filter: drop-shadow(0 2px 3px rgb(37 44 49 / 0.18));
+}
+
 .nodeWrap {
   position: absolute;
   z-index: 2;
@@ -504,6 +526,35 @@
 .nodeWrap[data-dragging="true"] {
   z-index: 9;
   transition: opacity 120ms var(--ease-out);
+}
+
+.nodeWrap[data-drop-target="true"] {
+  z-index: 8;
+}
+
+.nodeWrap[data-drop-target="true"]::after {
+  position: absolute;
+  z-index: -1;
+  border: 2px solid var(--mam);
+  border-radius: 6px;
+  background: rgb(255 117 31 / 0.08);
+  content: "";
+  pointer-events: none;
+}
+
+.nodeWrap[data-drop-intent="sibling"]::after {
+  inset: -10px -18px;
+  border-style: dashed;
+}
+
+.nodeWrap[data-drop-intent="report-to-target"]::after {
+  inset: -18px -10px 22px;
+  border-top-width: 4px;
+}
+
+.nodeWrap[data-drop-intent="target-reports-to-dragged"]::after {
+  inset: 22px -10px -18px;
+  border-bottom-width: 4px;
 }
 
 .personCard,
@@ -609,44 +660,153 @@
   opacity: 0.78;
 }
 
-.branchToggle {
+.nodeActionTrigger,
+.nodeActionMenu {
   --company: var(--mam);
   position: absolute;
-  z-index: 5;
-  bottom: -17px;
-  left: 50%;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out),
+    visibility 0s linear 150ms;
+}
+
+.nodeActionTrigger {
+  z-index: 7;
+  top: -18px;
+  right: -17px;
   display: grid;
-  width: 34px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   place-items: center;
-  transform: translateX(-50%);
-  border: 1px solid color-mix(in srgb, var(--company) 24%, #d7e0dd);
-  border-radius: 7px;
+  transform: translateY(4px) scale(0.9);
+  border: 1px solid color-mix(in srgb, var(--company) 30%, #d7e0dd);
+  border-radius: 999px;
   background: #fffefb;
-  box-shadow: 0 1px 4px rgb(37 44 49 / 0.08);
-  color: color-mix(in srgb, var(--company) 76%, #455258);
+  box-shadow: 0 3px 10px rgb(37 44 49 / 0.14);
+  color: color-mix(in srgb, var(--company) 82%, #455258);
   cursor: pointer;
-  font: inherit;
-  opacity: 0.88;
   padding: 0;
 }
 
-.branchToggle[data-company="equipsy"] {
+.nodeActionMenu {
+  z-index: 6;
+  top: -16px;
+  right: 23px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transform: translateY(4px) scale(0.94);
+  transform-origin: right center;
+}
+
+.nodeActionTrigger[data-company="equipsy"],
+.nodeActionOption[data-company="equipsy"] {
   --company: var(--equipsy);
 }
 
-.branchToggle[data-layout="vertical"] {
-  background: color-mix(in srgb, var(--company) 10%, #fffefb);
+.nodeWrap:hover .nodeActionTrigger,
+.nodeWrap:focus-within .nodeActionTrigger,
+.nodeWrap[data-actions-open="true"] .nodeActionTrigger,
+.nodeWrap[data-actions-open="true"] .nodeActionMenu {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+  transition-delay: 0s;
+}
+
+.nodeActionTrigger:hover,
+.nodeActionTrigger:focus-visible {
+  border-color: var(--company);
+  background: color-mix(in srgb, var(--company) 9%, #fffefb);
   color: var(--company);
 }
 
-.nodeWrap:hover .branchToggle,
-.branchToggle:hover,
-.branchToggle:focus-visible,
-.nodeWrap[data-selected="true"] .branchToggle {
-  background: #fff;
-  box-shadow: 0 3px 10px rgb(37 44 49 / 0.16);
+.nodeActionTrigger[aria-expanded="true"] {
+  border-color: var(--company);
+  background: var(--company);
+  color: #fff;
+}
+
+.nodeActionOptionWrap {
+  position: relative;
+  display: block;
+}
+
+.nodeActionOption {
+  --company: var(--mam);
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--company) 26%, #d7e0dd);
+  border-radius: 999px;
+  background: #fffefb;
+  box-shadow: 0 2px 7px rgb(37 44 49 / 0.12);
+  color: color-mix(in srgb, var(--company) 82%, #455258);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background 140ms var(--ease-out),
+    border-color 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+
+.nodeActionOption:hover:not(:disabled),
+.nodeActionOption:focus-visible:not(:disabled) {
+  border-color: var(--company);
+  background: color-mix(in srgb, var(--company) 10%, #fffefb);
+  color: var(--company);
+  outline: 0;
+  transform: translateY(-1px);
+}
+
+.nodeActionOption:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.nodeActionOption:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.nodeActionOptionWrap[data-tooltip]::after {
+  position: absolute;
+  z-index: 10;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  width: max-content;
+  max-width: 178px;
+  content: attr(data-tooltip);
+  visibility: hidden;
+  border-radius: 4px;
+  background: #273237;
+  box-shadow: 0 5px 16px rgb(24 35 37 / 0.2);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.25;
+  opacity: 0;
+  padding: 6px 7px;
+  pointer-events: none;
+  text-align: center;
+  transform: translate(-50%, 3px);
+  transition:
+    opacity 120ms var(--ease-out),
+    transform 120ms var(--ease-out),
+    visibility 0s linear 120ms;
+}
+
+.nodeActionOptionWrap:hover::after,
+.nodeActionOptionWrap:focus-within::after {
+  visibility: visible;
   opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 0s;
 }
 
 .mobileTree {
@@ -954,6 +1114,16 @@
   padding: 9px 10px;
 }
 
+.relationshipEditorNote {
+  margin: 0;
+  border-left: 3px solid var(--mam);
+  background: #fff7f1;
+  color: #5f5048;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 10px 11px;
+}
+
 .formActions {
   display: flex;
   justify-content: flex-end;
@@ -1012,7 +1182,8 @@
 .primaryAction:focus-visible,
 .arrangeAction:focus-visible,
 .secondaryAction:focus-visible,
-.branchToggle:focus-visible,
+.nodeActionTrigger:focus-visible,
+.nodeActionOption:focus-visible,
 .chartControls button:focus-visible,
 .filters button:focus-visible,
 .cancelAction:focus-visible,
