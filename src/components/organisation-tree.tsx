@@ -19,6 +19,7 @@ import {
   Plus,
   Rows3,
   Search,
+  Undo2,
   UnfoldVertical,
   UserPlus,
   WandSparkles,
@@ -116,6 +117,12 @@ type DropIntent =
   | "report-to-target"
   | "target-reports-to-dragged";
 type DropTarget = { id: string; intent: DropIntent };
+type RelationshipHistoryEntry = {
+  personId: string;
+  personName: string;
+  previousReportsTo: string | null;
+  nextReportsTo: string | null;
+};
 type NodeDragState = {
   id: string;
   pointerId: number;
@@ -756,6 +763,9 @@ export function OrganisationTree({
   const [arranging, setArranging] = useState(false);
   const [interactionMessage, setInteractionMessage] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
+  const [relationshipHistory, setRelationshipHistory] = useState<
+    RelationshipHistoryEntry[]
+  >([]);
   const [pendingDisconnectId, setPendingDisconnectId] = useState<string | null>(
     null,
   );
@@ -795,6 +805,9 @@ export function OrganisationTree({
   const canArrange = canArrangeProp ?? canEdit;
   const canUseLegacyTreeEditor = canEdit && !onOpenEmployeeRecord;
   const canUseRelationshipEditor = canEdit && Boolean(onUpdate);
+  const canArrangeInFullscreen = canArrange && fullscreen;
+  const canUseFullscreenRelationshipEditor =
+    canUseRelationshipEditor && fullscreen;
   const profileIds = useMemo(
     () => new Set(profiles.map((profile) => profile.id)),
     [profiles],
@@ -813,7 +826,19 @@ export function OrganisationTree({
       }
     };
     const handleFullscreen = () => {
-      setFullscreen(document.fullscreenElement === viewportRef.current);
+      const isFullscreen = document.fullscreenElement === viewportRef.current;
+      setFullscreen(isFullscreen);
+      setOpenNodeActionsId(null);
+      setPendingDisconnectId(null);
+      setDraggingNodeId(null);
+      dropTargetRef.current = null;
+      setDropTarget(null);
+      setArrangeMode(isFullscreen && canArrange);
+      if (isFullscreen && canArrange) {
+        setInteractionMessage(
+          "Edit mode is on. Drag a card onto another card to update the reporting line.",
+        );
+      }
     };
 
     window.addEventListener("keydown", handleKeydown);
@@ -822,7 +847,7 @@ export function OrganisationTree({
       window.removeEventListener("keydown", handleKeydown);
       document.removeEventListener("fullscreenchange", handleFullscreen);
     };
-  }, [editor, openNodeActionsId, pendingDisconnectId, saving, selectedId]);
+  }, [canArrange, editor, openNodeActionsId, pendingDisconnectId, saving, selectedId]);
 
   useEffect(() => {
     return () => {
@@ -869,6 +894,9 @@ export function OrganisationTree({
       );
       setPendingDisconnectId((current) =>
         current && !profileIds.has(current) ? null : current,
+      );
+      setRelationshipHistory((current) =>
+        current.filter((entry) => profileIds.has(entry.personId)),
       );
     }, 0);
 
@@ -1301,7 +1329,7 @@ export function OrganisationTree({
   };
 
   const cleanUpChart = () => {
-    if (!canArrange) return;
+    if (!canArrangeInFullscreen) return;
     const hasManualPositions = Object.keys(manualOffsets).length > 0;
     setArrangeMode(false);
     setDraggingNodeId(null);
@@ -1321,27 +1349,6 @@ export function OrganisationTree({
       arrangeTimerRef.current = null;
       setArranging(false);
     }, ARRANGE_DURATION);
-  };
-
-  const toggleArrangeMode = () => {
-    if (!canArrange) return;
-    if (arrangeMode) {
-      setArrangeMode(false);
-      setInteractionMessage(
-        "Arrange mode off. Canvas positions remain until you clean up the chart or refresh.",
-      );
-      return;
-    }
-
-    workContactRequestRef.current += 1;
-    setWorkContact(null);
-    setSelectedId(null);
-    setArrangeMode(true);
-    setInteractionMessage(
-      canUseRelationshipEditor
-        ? "Arrange mode on. Drag on the grid: left/right groups peers; top makes the person report to the target; bottom makes the target report to the person."
-        : "Arrange mode on. Drag a person on the grid. Clean up restores the reporting layout.",
-    );
   };
 
   const resetView = () => {
@@ -1374,10 +1381,14 @@ export function OrganisationTree({
   const toggleFullscreen = async () => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-    if (document.fullscreenElement === viewport) {
-      await document.exitFullscreen();
-    } else {
-      await viewport.requestFullscreen();
+    try {
+      if (document.fullscreenElement === viewport) {
+        await document.exitFullscreen();
+      } else {
+        await viewport.requestFullscreen();
+      }
+    } catch {
+      setInteractionMessage("Full-screen editing could not be opened in this browser.");
     }
   };
 
@@ -1455,7 +1466,7 @@ export function OrganisationTree({
     event: ReactPointerEvent<HTMLButtonElement>,
     draggedId: string,
   ): DropTarget | null => {
-    if (!canUseRelationshipEditor) return null;
+    if (!canUseFullscreenRelationshipEditor) return null;
     const element = document.elementFromPoint(event.clientX, event.clientY);
     const targetWrap = element?.closest<HTMLElement>("[data-node-id]");
     const targetId = targetWrap?.dataset.nodeId;
@@ -1485,7 +1496,10 @@ export function OrganisationTree({
     nextReportsTo: string | null,
     message: string,
   ) => {
-    if (!canUseRelationshipEditor || !onUpdate || !isPerson(dragged)) return;
+    if (!canUseFullscreenRelationshipEditor || !onUpdate || !isPerson(dragged)) {
+      setInteractionMessage("Open full screen to edit reporting lines.");
+      return;
+    }
     const descendants = getDescendantIds(dragged.id, orderedProfiles);
     if (
       nextReportsTo === dragged.id ||
@@ -1509,6 +1523,15 @@ export function OrganisationTree({
         reportsTo: nextReportsTo,
         kind: "person",
       });
+      setRelationshipHistory((current) => [
+        ...current.slice(-19),
+        {
+          personId: dragged.id,
+          personName: dragged.name,
+          previousReportsTo: dragged.reportsTo,
+          nextReportsTo,
+        },
+      ]);
       setInteractionMessage(message);
     } catch (caught) {
       setInteractionMessage(
@@ -1544,11 +1567,57 @@ export function OrganisationTree({
     await persistReportsTo(dragged, nextReportsTo, message);
   };
 
+  const undoLastRelationshipChange = async () => {
+    const lastChange = relationshipHistory.at(-1);
+    if (!lastChange || !onUpdate || !canUseFullscreenRelationshipEditor) return;
+    const current = profileById.get(lastChange.personId);
+    if (!current || !isPerson(current)) {
+      setInteractionMessage("That person is no longer available to reconnect.");
+      return;
+    }
+    if (current.reportsTo !== lastChange.nextReportsTo) {
+      setInteractionMessage(
+        "The reporting line changed again, so this action cannot be undone safely.",
+      );
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      await onUpdate(current.id, {
+        name: current.name,
+        position: current.position,
+        company: current.company,
+        reportsTo: lastChange.previousReportsTo,
+        kind: "person",
+      });
+      setRelationshipHistory((history) => history.slice(0, -1));
+      setInteractionMessage(`${lastChange.personName}'s reporting line was restored.`);
+    } catch (caught) {
+      setInteractionMessage(
+        caught instanceof Error
+          ? caught.message
+          : "The reporting line could not be restored.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const startNodeDrag = (
     event: ReactPointerEvent<HTMLButtonElement>,
     node: PositionedNode,
   ) => {
-    if (saving || !canArrange || !arrangeMode || event.button !== 0 || !isPerson(node.node)) return;
+    if (
+      saving ||
+      !canArrangeInFullscreen ||
+      !arrangeMode ||
+      event.button !== 0 ||
+      !isPerson(node.node)
+    ) {
+      return;
+    }
 
     event.currentTarget.setPointerCapture(event.pointerId);
     nodeDragRef.current = {
@@ -1611,7 +1680,11 @@ export function OrganisationTree({
       window.setTimeout(() => {
         suppressCardClickRef.current = false;
       }, 0);
-      if (event.type !== "pointercancel" && nextDropTarget && canUseRelationshipEditor) {
+      if (
+        event.type !== "pointercancel" &&
+        nextDropTarget &&
+        canUseFullscreenRelationshipEditor
+      ) {
         void persistDropRelationship(drag.node.node, nextDropTarget);
       } else if (event.type !== "pointercancel") {
         setInteractionMessage(
@@ -1665,7 +1738,12 @@ export function OrganisationTree({
       return;
     }
 
-    if (canUseRelationshipEditor) {
+    if (canUseRelationshipEditor && !fullscreen) {
+      setInteractionMessage("Open full screen to edit reporting links.");
+      return;
+    }
+
+    if (canUseFullscreenRelationshipEditor) {
       openUpdate(profile);
       return;
     }
@@ -1680,9 +1758,13 @@ export function OrganisationTree({
 
   const disconnectReportingLine = (profile: OrganisationPerson) => {
     setOpenNodeActionsId(null);
-    if (!canUseRelationshipEditor || !profile.reportsTo) {
+    if (!canUseRelationshipEditor || !fullscreen || !profile.reportsTo) {
       setInteractionMessage(
-        profile.reportsTo ? "Only HR can edit reporting links." : `${profile.name} is already top level.`,
+        !profile.reportsTo
+          ? `${profile.name} is already top level.`
+          : canUseRelationshipEditor
+            ? "Open full screen to edit reporting links."
+            : "Only HR can edit reporting links.",
       );
       return;
     }
@@ -1729,7 +1811,23 @@ export function OrganisationTree({
         await onCreate(cleanDraft);
       } else {
         if (!onUpdate) throw new Error("Editing people is not connected yet.");
+        const previous = profileById.get(activeEditor.id);
         await onUpdate(activeEditor.id, cleanDraft);
+        if (
+          canUseFullscreenRelationshipEditor &&
+          previous &&
+          previous.reportsTo !== cleanDraft.reportsTo
+        ) {
+          setRelationshipHistory((current) => [
+            ...current.slice(-19),
+            {
+              personId: previous.id,
+              personName: previous.name,
+              previousReportsTo: previous.reportsTo,
+              nextReportsTo: cleanDraft.reportsTo,
+            },
+          ]);
+        }
       }
       setEditor(null);
     } catch (caught) {
@@ -1774,14 +1872,13 @@ export function OrganisationTree({
           </button>
             {canArrange ? (
               <button
-                aria-pressed={arrangeMode}
+                aria-label="Open full screen editor"
                 className={styles.arrangeAction}
-                data-active={arrangeMode}
-                onClick={toggleArrangeMode}
+                onClick={toggleFullscreen}
                 type="button"
               >
-                <GripVertical aria-hidden="true" size={16} />
-                {arrangeMode ? "Finish arranging" : "Arrange"}
+                <Maximize2 aria-hidden="true" size={16} />
+                Edit full screen
               </button>
             ) : null}
             {canUseLegacyTreeEditor ? (
@@ -1946,7 +2043,7 @@ export function OrganisationTree({
             </div>
 
             <div aria-label="Chart view controls" className={styles.chartControls}>
-            {canArrange ? (
+            {canArrangeInFullscreen ? (
               <button
                 aria-label="Clean up chart and restore the reporting layout"
                 className={styles.cleanUpControl}
@@ -1957,6 +2054,19 @@ export function OrganisationTree({
               >
                 <WandSparkles aria-hidden="true" size={15} />
                 <span>Clean up</span>
+              </button>
+            ) : null}
+            {canUseFullscreenRelationshipEditor ? (
+              <button
+                aria-label="Undo last reporting line change"
+                className={styles.namedChartControl}
+                disabled={!relationshipHistory.length || saving}
+                onClick={() => void undoLastRelationshipChange()}
+                title="Undo last reporting line change"
+                type="button"
+              >
+                <Undo2 aria-hidden="true" size={15} />
+                <span>Undo</span>
               </button>
             ) : null}
             <button
@@ -2076,22 +2186,22 @@ export function OrganisationTree({
                       data-active={active}
                       data-arranging={arranging}
                       data-company={connector.company}
-                      data-editable={canUseRelationshipEditor ? "true" : "false"}
+                      data-editable={canUseFullscreenRelationshipEditor ? "true" : "false"}
                       key={connector.id}
                       markerEnd={`url(#${markerPrefix}-${connector.company})`}
                       onClick={() => {
-                        if (!canUseRelationshipEditor) return;
+                        if (!canUseFullscreenRelationshipEditor) return;
                         const child = profileById.get(connector.toId);
                         if (child) openReportingLinkEditor(child);
                       }}
                       onKeyDown={(event) => {
-                        if (!canUseRelationshipEditor || (event.key !== "Enter" && event.key !== " ")) return;
+                        if (!canUseFullscreenRelationshipEditor || (event.key !== "Enter" && event.key !== " ")) return;
                         event.preventDefault();
                         const child = profileById.get(connector.toId);
                         if (child) openReportingLinkEditor(child);
                       }}
-                      role={canUseRelationshipEditor ? "button" : undefined}
-                      tabIndex={canUseRelationshipEditor ? 0 : -1}
+                      role={canUseFullscreenRelationshipEditor ? "button" : undefined}
+                      tabIndex={canUseFullscreenRelationshipEditor ? 0 : -1}
                     />
                   );
                 })}
@@ -2105,7 +2215,7 @@ export function OrganisationTree({
                 const actionsOpen = openNodeActionsId === item.node.id;
                 const canEditReportingLink =
                   isPerson(item.node) &&
-                  canUseRelationshipEditor;
+                  canUseFullscreenRelationshipEditor;
                 const nextLayout =
                   item.childrenLayout === "vertical" ? "horizontal" : "vertical";
                 const orientationTooltip = item.hasChildren
@@ -2116,7 +2226,9 @@ export function OrganisationTree({
                   : `${item.node.name} has no direct reports to ${collapsed ? "expand" : "collapse"}`;
                 const linkTooltip = canEditReportingLink
                   ? `Add or edit ${item.node.name}'s reporting line`
-                  : "Only HR can edit reporting links";
+                  : canUseRelationshipEditor
+                    ? "Open full screen to edit reporting links"
+                    : "Only HR can edit reporting links";
                 const disconnectTooltip = item.node.reportsTo
                   ? `Disconnect ${item.node.name} from its manager`
                   : `${item.node.name} is already top level`;
@@ -2166,7 +2278,7 @@ export function OrganisationTree({
                       onPointerMove={moveNodeDrag}
                       onPointerUp={finishNodeDrag}
                       title={
-                        arrangeMode
+                        arrangeMode && fullscreen
                           ? canUseRelationshipEditor
                             ? "Drag on the grid. Drop left or right to group as a peer; drop above or below to create a reporting line."
                             : "Drag to compare positions. Clean up restores the reporting layout."
@@ -2176,7 +2288,7 @@ export function OrganisationTree({
                     >
                       <span className={styles.positionBand}>
                         {item.node.position || companyLabels[item.node.company]}
-                        {canArrange && arrangeMode ? (
+                        {canArrangeInFullscreen && arrangeMode ? (
                           <GripVertical
                             aria-hidden="true"
                             className={styles.dragGrip}
