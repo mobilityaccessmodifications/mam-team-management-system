@@ -655,6 +655,10 @@ export function LeaveDemo({
     if (!directorySupabase) throw new Error("The directory is not connected.");
     const current = organisationRows.find((row) => row.id === id);
     if (!current) throw new Error("This person is no longer in the directory.");
+    const accountPresentationChanged =
+      current.company_key !== person.company ||
+      current.full_name !== person.name ||
+      current.position_title !== person.position;
     const { error } = await directorySupabase.rpc("update_internal_org_node", {
       p_node_id: id,
       p_company_key: person.company,
@@ -668,7 +672,11 @@ export function LeaveDemo({
       p_expected_version: current.version,
     });
     if (error) throw new Error(error.message);
-    await Promise.all([loadOrganisation(), loadAccounts()]);
+    // A reporting-line change only needs the lightweight organisation refresh.
+    // Account-list loading is substantially slower and must not keep the
+    // fullscreen relationship editor locked after the visible chart updates.
+    await loadOrganisation();
+    if (accountPresentationChanged) void loadAccounts();
     announce(`${person.name}'s profile was updated.`);
   }
 

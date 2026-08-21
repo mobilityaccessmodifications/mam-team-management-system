@@ -1434,6 +1434,36 @@ export function OrganisationTree({
     }, ARRANGE_DURATION);
   };
 
+  const restoreReportingLayout = (message: string) => {
+    if (!canArrangeInFullscreen) {
+      setInteractionMessage(message);
+      return;
+    }
+
+    if (dragFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    pendingOffsetRef.current = null;
+    nodeDragRef.current = null;
+    setDraggingNodeId(null);
+    setCurrentDropTarget(null);
+
+    if (arrangeTimerRef.current !== null) {
+      window.clearTimeout(arrangeTimerRef.current);
+    }
+    // A saved reporting line recalculates the tree from its new hierarchy.
+    // Keep full-screen Arrange mode active so another link can be made right
+    // away, but discard any manual placement from the old hierarchy.
+    setManualOffsets({});
+    setArranging(true);
+    setInteractionMessage(message);
+    arrangeTimerRef.current = window.setTimeout(() => {
+      arrangeTimerRef.current = null;
+      setArranging(false);
+    }, ARRANGE_DURATION);
+  };
+
   const resetView = () => {
     setFocusedRootId(null);
     setCompanyFilter("all");
@@ -1816,7 +1846,7 @@ export function OrganisationTree({
           nextReportsTo,
         },
       ]);
-      setInteractionMessage(message);
+      restoreReportingLayout(message);
       return true;
     } catch (caught) {
       setInteractionMessage(
@@ -1862,8 +1892,10 @@ export function OrganisationTree({
       cancelRelationshipLink("That connection is no longer available.");
       return;
     }
-    const saved = await persistDropRelationship(source, { id: targetId, intent });
-    if (saved) cancelRelationshipLink("Reporting line saved.");
+    // Clear link mode before the network save starts. A slow reload or a
+    // failed save must never leave the fullscreen canvas stuck in link mode.
+    cancelRelationshipLink("Saving reporting line…");
+    await persistDropRelationship(source, { id: targetId, intent });
   };
 
   const undoLastRelationshipChange = async () => {
@@ -1900,7 +1932,9 @@ export function OrganisationTree({
         kind: "person",
       });
       setRelationshipHistory((history) => history.slice(0, -1));
-      setInteractionMessage(`${lastChange.personName}'s reporting line was restored.`);
+      restoreReportingLayout(
+        `${lastChange.personName}'s reporting line was restored.`,
+      );
     } catch (caught) {
       setInteractionMessage(
         caught instanceof Error
