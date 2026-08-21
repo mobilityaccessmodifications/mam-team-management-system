@@ -30,12 +30,14 @@ import {
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
+  type ReactNode,
   useEffect,
   useId,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 import styles from "@/components/organisation-tree.module.css";
 
@@ -124,6 +126,7 @@ type RelationshipHistoryEntry = {
   nextReportsTo: string | null;
 };
 type LinkCursor = { x: number; y: number };
+type LinkPointer = { x: number; y: number };
 type NodeDragState = {
   id: string;
   pointerId: number;
@@ -298,6 +301,7 @@ const DEFAULT_ZOOM = 0.92;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 1.35;
 const DRAG_THRESHOLD = 5;
+const LINK_SNAP_DISTANCE = 54;
 const GRID_SIZE = 24;
 const ARRANGE_DURATION = 260;
 // Operational teams stay narrow by default: their direct reports are a work
@@ -732,6 +736,16 @@ function MobileTreeBranch({
   );
 }
 
+function FullscreenPortal({
+  children,
+  target,
+}: {
+  children: ReactNode;
+  target: Element | null;
+}) {
+  return target ? createPortal(children, target) : children;
+}
+
 export function OrganisationTree({
   profiles,
   canArrange: canArrangeProp,
@@ -764,6 +778,8 @@ export function OrganisationTree({
   const [arranging, setArranging] = useState(false);
   const [interactionMessage, setInteractionMessage] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
+  const [fullscreenPortalTarget, setFullscreenPortalTarget] =
+    useState<Element | null>(null);
   const [relationshipHistory, setRelationshipHistory] = useState<
     RelationshipHistoryEntry[]
   >([]);
@@ -794,6 +810,8 @@ export function OrganisationTree({
   const dropTargetRef = useRef<DropTarget | null>(null);
   const pendingOffsetRef = useRef<{ id: string; offset: NodeOffset } | null>(null);
   const dragFrameRef = useRef<number | null>(null);
+  const linkFrameRef = useRef<number | null>(null);
+  const linkPointerRef = useRef<LinkPointer | null>(null);
   const arrangeTimerRef = useRef<number | null>(null);
   const workContactRequestRef = useRef(0);
   const panRef = useRef<{
@@ -825,6 +843,11 @@ export function OrganisationTree({
         setLinkingSourceId(null);
         setLinkTarget(null);
         setLinkCursor(null);
+        linkPointerRef.current = null;
+        if (linkFrameRef.current !== null) {
+          window.cancelAnimationFrame(linkFrameRef.current);
+          linkFrameRef.current = null;
+        }
         setInteractionMessage("Connection cancelled.");
       } else if (pendingDisconnectId) setPendingDisconnectId(null);
       else if (openNodeActionsId) setOpenNodeActionsId(null);
@@ -838,12 +861,18 @@ export function OrganisationTree({
     const handleFullscreen = () => {
       const isFullscreen = document.fullscreenElement === viewportRef.current;
       setFullscreen(isFullscreen);
+      setFullscreenPortalTarget(isFullscreen ? viewportRef.current : null);
       setOpenNodeActionsId(null);
       setPendingDisconnectId(null);
       setDraggingNodeId(null);
       setLinkingSourceId(null);
       setLinkTarget(null);
       setLinkCursor(null);
+      linkPointerRef.current = null;
+      if (linkFrameRef.current !== null) {
+        window.cancelAnimationFrame(linkFrameRef.current);
+        linkFrameRef.current = null;
+      }
       dropTargetRef.current = null;
       setDropTarget(null);
       setArrangeMode(isFullscreen && canArrange);
@@ -874,6 +903,9 @@ export function OrganisationTree({
     return () => {
       if (dragFrameRef.current !== null) {
         window.cancelAnimationFrame(dragFrameRef.current);
+      }
+      if (linkFrameRef.current !== null) {
+        window.cancelAnimationFrame(linkFrameRef.current);
       }
       if (arrangeTimerRef.current !== null) {
         window.clearTimeout(arrangeTimerRef.current);
@@ -1439,6 +1471,11 @@ export function OrganisationTree({
   };
 
   const cancelRelationshipLink = (message = "Connection cancelled.") => {
+    if (linkFrameRef.current !== null) {
+      window.cancelAnimationFrame(linkFrameRef.current);
+      linkFrameRef.current = null;
+    }
+    linkPointerRef.current = null;
     setLinkingSourceId(null);
     setLinkTarget(null);
     setLinkCursor(null);
@@ -1469,51 +1506,115 @@ export function OrganisationTree({
     );
   };
 
-  const updateRelationshipLinkCursor = (
-    event: ReactPointerEvent<HTMLDivElement>,
-  ) => {
+  const findRelationshipLinkTarget = (
+    sourceId: string,
+    clientX: number,
+    clientY: number,
+  ): DropTarget | null => {
+    const chartWorld = chartWorldRef.current;
+    if (!chartWorld) return null;
+    const bounds = chartWorld.getBoundingClientRect();
+    const point = {
+      x: (clientX - bounds.left) / zoom,
+      y: (clientY - bounds.top) / zoom,
+    };
+    const baseRadius = LINK_SNAP_DISTANCE / zoom;
+    let closestTarget: DropTarget | null = null;
+    let closestScore = Number.POSITIVE_INFINITY;
+    const consider = (target: DropTarget, distance: number, anchor = false) => {
+      const isCurrentTarget =
+        linkTarget?.id === target.id && linkTarget.intent === target.intent;
+      const radius = baseRadius + (isCurrentTarget ? 16 / zoom : 0);
+      if (distance > radius) return;
+      // Prefer a deliberately shown plus-point when it overlaps its card zone.
+      const score = distance + (anchor ? -6 : 3);
+      if (score < closestScore) {
+        closestTarget = target;
+        closestScore = score;
+      }
+    };
+
+    for (const item of layout.nodes) {
+      const targetId = item.node.id;
+      if (!isPerson(item.node) || !isValidRelationshipTarget(sourceId, targetId)) {
+        continue;
+      }
+      const offset = manualOffsets[targetId] ?? { x: 0, y: 0 };
+      const left = item.x + offset.x;
+      const top = item.y + offset.y;
+      const right = left + item.width;
+      const bottom = top + item.height;
+      const nearestX = clamp(point.x, left, right);
+      const nearestY = clamp(point.y, top, bottom);
+      const relativeY = (point.y - top) / item.height;
+      const cardIntent: DropIntent =
+        relativeY < 1 / 3
+          ? "report-to-target"
+          : relativeY > 2 / 3
+            ? "target-reports-to-dragged"
+            : "sibling";
+      consider(
+        { id: targetId, intent: cardIntent },
+        Math.hypot(point.x - nearestX, point.y - nearestY),
+      );
+
+      consider(
+        { id: targetId, intent: "report-to-target" },
+        Math.hypot(point.x - (left + item.width / 2), point.y - (top - 18)),
+        true,
+      );
+      consider(
+        { id: targetId, intent: "sibling" },
+        Math.hypot(point.x - (left - 18), point.y - (top + item.height / 2)),
+        true,
+      );
+      consider(
+        { id: targetId, intent: "target-reports-to-dragged" },
+        Math.hypot(
+          point.x - (left + item.width / 2),
+          point.y - (bottom + 18),
+        ),
+        true,
+      );
+    }
+
+    return closestTarget;
+  };
+
+  const updateRelationshipLinkCursor = (pointer: LinkPointer) => {
     if (!linkingSourceId) return;
     const chartWorld = chartWorldRef.current;
     if (!chartWorld) return;
     const bounds = chartWorld.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return;
     const rawCursor = {
-      x: clamp((event.clientX - bounds.left) / zoom, 0, layout.width),
-      y: clamp((event.clientY - bounds.top) / zoom, 0, layout.height),
+      x: clamp((pointer.x - bounds.left) / zoom, 0, layout.width),
+      y: clamp((pointer.y - bounds.top) / zoom, 0, layout.height),
     };
-    const targetElement = document
-      .elementFromPoint(event.clientX, event.clientY)
-      ?.closest<HTMLElement>("[data-node-id]");
-    const targetId = targetElement?.dataset.nodeId;
-    if (!targetId || !isValidRelationshipTarget(linkingSourceId, targetId)) {
+    const target = findRelationshipLinkTarget(
+      linkingSourceId,
+      pointer.x,
+      pointer.y,
+    );
+    if (!target) {
       setLinkTarget(null);
       setLinkCursor(rawCursor);
       return;
     }
-
-    const targetBounds = targetElement.getBoundingClientRect();
-    const relativeY = (event.clientY - targetBounds.top) / targetBounds.height;
-    const intent: DropIntent =
-      relativeY < 1 / 3
-        ? "report-to-target"
-        : relativeY > 2 / 3
-          ? "target-reports-to-dragged"
-          : "sibling";
-    const target = { id: targetId, intent } satisfies DropTarget;
-    const targetNode = layoutNodesById.get(targetId);
+    const targetNode = layoutNodesById.get(target.id);
     if (!targetNode) {
       setLinkTarget(null);
       setLinkCursor(rawCursor);
       return;
     }
-    const offset = manualOffsets[targetId] ?? { x: 0, y: 0 };
+    const offset = manualOffsets[target.id] ?? { x: 0, y: 0 };
     const snappedCursor =
-      intent === "sibling"
+      target.intent === "sibling"
         ? {
             x: targetNode.x + offset.x - 18,
             y: targetNode.y + offset.y + targetNode.height / 2,
           }
-        : intent === "report-to-target"
+        : target.intent === "report-to-target"
           ? {
               x: targetNode.x + offset.x + targetNode.width / 2,
               y: targetNode.y + offset.y - 18,
@@ -1526,14 +1627,30 @@ export function OrganisationTree({
     setLinkCursor(snappedCursor);
   };
 
+  const queueRelationshipLinkCursor = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    if (!linkingSourceId) return;
+    linkPointerRef.current = { x: event.clientX, y: event.clientY };
+    if (linkFrameRef.current !== null) return;
+    linkFrameRef.current = window.requestAnimationFrame(() => {
+      linkFrameRef.current = null;
+      const pointer = linkPointerRef.current;
+      if (pointer) updateRelationshipLinkCursor(pointer);
+    });
+  };
+
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (linkingSourceId) {
-      const targetElement = (event.target as HTMLElement).closest<HTMLElement>(
-        "[data-node-id]",
+      const target = findRelationshipLinkTarget(
+        linkingSourceId,
+        event.clientX,
+        event.clientY,
       );
-      const targetId = targetElement?.dataset.nodeId;
-      if (!targetId || !isValidRelationshipTarget(linkingSourceId, targetId)) {
-        cancelRelationshipLink();
+      if (!target) cancelRelationshipLink();
+      else {
+        event.preventDefault();
+        void completeRelationshipLink(target.id, target.intent);
       }
       return;
     }
@@ -1555,7 +1672,7 @@ export function OrganisationTree({
 
   const movePan = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (linkingSourceId) {
-      updateRelationshipLinkCursor(event);
+      queueRelationshipLinkCursor(event);
       return;
     }
     const pan = panRef.current;
@@ -2418,16 +2535,6 @@ export function OrganisationTree({
                         current === item.node.id ? null : current,
                       );
                     }}
-                    onPointerEnter={() => {
-                      if (canReceiveRelationshipLink) {
-                        setLinkTarget({ id: item.node.id, intent: "sibling" });
-                      }
-                    }}
-                    onPointerLeave={() => {
-                      setLinkTarget((current) =>
-                        current?.id === item.node.id ? null : current,
-                      );
-                    }}
                     style={{
                       left: item.x,
                       top: item.y,
@@ -2762,7 +2869,8 @@ export function OrganisationTree({
       )}
 
       {selectedProfile ? (
-        <div className={styles.inspectorLayer}>
+        <FullscreenPortal target={fullscreenPortalTarget}>
+          <div className={styles.inspectorLayer}>
           <aside aria-label={`${selectedProfile.name} details`} className={styles.inspector}>
             <header className={styles.inspectorHeader} data-company={selectedProfile.company}>
               <div>
@@ -2898,7 +3006,8 @@ export function OrganisationTree({
               ) : null}
             </footer>
           </aside>
-        </div>
+          </div>
+        </FullscreenPortal>
       ) : null}
 
       {activeEditor ? (
