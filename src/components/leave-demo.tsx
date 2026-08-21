@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ClipboardList,
   Clock3,
   Eye,
@@ -456,6 +457,8 @@ export function LeaveDemo({
   // This is intentionally UI-only. It never changes the authenticated user or
   // the capability checks that protect HR records and organisation writes.
   const [previewPersonId, setPreviewPersonId] = useState("");
+  const [profilePickerOpen, setProfilePickerOpen] = useState(false);
+  const [profilePickerQuery, setProfilePickerQuery] = useState("");
   const leaveRefreshSequence = useRef(0);
 
   const handleSignOut = useCallback(async () => {
@@ -702,6 +705,13 @@ export function LeaveDemo({
     ? directoryProfiles.find((profile) => profile.id === previewPersonId)
     : undefined;
   const selectedPreviewPersonId = selectedPreviewCandidate?.id ?? "";
+  const profilePickerResults = useMemo(() => {
+    const search = profilePickerQuery.trim().toLocaleLowerCase();
+    const candidates = search
+      ? directoryProfiles.filter((profile) => [profile.name, profile.roleLabel, profile.team, profile.manager].join(" ").toLocaleLowerCase().includes(search))
+      : directoryProfiles;
+    return candidates.slice(0, 80);
+  }, [directoryProfiles, profilePickerQuery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -913,6 +923,8 @@ export function LeaveDemo({
     if (personId && !nextProfile) return;
 
     setPreviewPersonId(nextProfile?.id ?? "");
+    setProfilePickerOpen(false);
+    setProfilePickerQuery("");
     setSelectedEmployeeProfile(null);
     setShowRequestForm(false);
     setFormError("");
@@ -1147,19 +1159,19 @@ export function LeaveDemo({
                 <small role="status">{previewProfile ? !authorisedPreviewProfile ? `Loading ${previewProfile.name}'s profile` : `Viewing ${previewProfile.name}` : "Super Admin"}</small>
               </span>
             </label>
-            <select
-              aria-describedby={isPreviewingEmployeeAccess ? "employee-access-preview-note" : undefined}
-              id="employee-access-view"
-              onChange={(event) => changeEmployeeAccessPreview(event.target.value)}
-              value={previewProfile?.id ?? ""}
+            <button
+              type="button"
+              className={styles.viewPickerTrigger}
+              onClick={() => {
+                setProfilePickerQuery("");
+                setProfilePickerOpen(true);
+              }}
+              aria-haspopup="dialog"
+              aria-expanded={profilePickerOpen}
             >
-              <option value="">Super Admin</option>
-              {directoryProfiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}{profile.roleLabel ? ` · ${profile.roleLabel}` : ""}
-                </option>
-              ))}
-            </select>
+              <span>{previewProfile?.name ?? "Super Admin"}</span>
+              <ChevronDown aria-hidden="true" size={15} />
+            </button>
             {isPreviewingEmployeeAccess ? (
               <div className={styles.viewSwitcherActive} id="employee-access-preview-note">
                 <small>Employee workspace preview · signed in as {signedInProfile.name}</small>
@@ -1170,6 +1182,28 @@ export function LeaveDemo({
             ) : null}
           </section>
         ) : null}
+        {profilePickerOpen ? <div className={styles.profilePickerBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProfilePickerOpen(false); }}>
+          <section className={styles.profilePicker} role="dialog" aria-modal="true" aria-labelledby="profile-picker-title">
+            <header className={styles.profilePickerHeader}>
+              <div><span>Super Admin</span><h2 id="profile-picker-title">Change profile</h2></div>
+              <button type="button" className={styles.profilePickerClose} onClick={() => setProfilePickerOpen(false)} aria-label="Close profile picker"><X size={17} /></button>
+            </header>
+            <label className={styles.profilePickerSearch}>
+              <Search aria-hidden="true" size={16} />
+              <span className={styles.srOnly}>Search profiles</span>
+              <input autoFocus value={profilePickerQuery} onChange={(event) => setProfilePickerQuery(event.target.value)} placeholder="Search name, role or team" type="search" />
+            </label>
+            <div className={styles.profilePickerList}>
+              <button type="button" className={`${styles.profilePickerOption} ${!previewProfile ? styles.profilePickerOptionActive : ""}`} onClick={() => changeEmployeeAccessPreview("")}>
+                <span className={styles.profilePickerAvatar}>SA</span><span><strong>Super Admin</strong><small>Full system access</small></span>
+              </button>
+              {profilePickerResults.map((profile) => <button type="button" key={profile.id} className={`${styles.profilePickerOption} ${previewProfile?.id === profile.id ? styles.profilePickerOptionActive : ""}`} onClick={() => changeEmployeeAccessPreview(profile.id)}>
+                <span className={styles.profilePickerAvatar}>{profile.initials}</span><span><strong>{profile.name}</strong><small>{profile.roleLabel}{profile.team ? ` · ${profile.team}` : ""}</small></span>
+              </button>)}
+              {!profilePickerResults.length ? <p className={styles.profilePickerEmpty}>No profiles match that search.</p> : null}
+            </div>
+          </section>
+        </div> : null}
       </aside>
 
       <div className={styles.workspace}>
