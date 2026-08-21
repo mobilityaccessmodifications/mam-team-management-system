@@ -342,16 +342,20 @@
   cursor: default;
 }
 
-.chartMeta,
-.chartControls {
+.chartHud {
   position: sticky;
   z-index: 12;
-  top: 12px;
+  top: 0;
+  left: 0;
+  display: flex;
+  min-width: max-content;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: 12px;
 }
 
 .chartMeta {
-  left: 12px;
-  float: left;
   display: inline-flex;
   min-height: 34px;
   align-items: center;
@@ -367,15 +371,7 @@
   backdrop-filter: blur(10px);
 }
 
-.chartMeta span + span::before {
-  margin-right: 8px;
-  color: #bdc6c3;
-  content: "·";
-}
-
 .chartControls {
-  right: 12px;
-  float: right;
   display: inline-flex;
   min-height: 44px;
   align-items: center;
@@ -445,8 +441,7 @@
 
 .desktopChart {
   position: relative;
-  clear: both;
-  margin: 52px auto 30px;
+  margin: 0 auto 30px;
 }
 
 .chartWorld {
@@ -1036,6 +1031,61 @@
   justify-items: end;
 }
 
+.confirmationLayer {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.confirmationBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  background: rgb(25 37 39 / 0.48);
+  cursor: pointer;
+}
+
+.confirmationCard {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(390px, 100%);
+  gap: 12px;
+  border: 1px solid #d5dfdc;
+  border-top: 5px solid var(--mam);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 18px 54px rgb(16 27 29 / 0.24);
+  color: var(--ink);
+  padding: 20px;
+}
+
+.confirmationCard h3 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.12;
+}
+
+.confirmationCard p {
+  margin: 0;
+  color: #647277;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.confirmationCard > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid #e3e9e6;
+  margin-top: 4px;
+  padding-top: 15px;
+}
+
 .backdrop {
   position: absolute;
   inset: 0;
@@ -1191,7 +1241,8 @@
 .inspectorHeader button:focus-visible,
 .drawerHeader > button:focus-visible,
 .focusBar button:focus-visible,
-.workEmail:focus-visible {
+.workEmail:focus-visible,
+.confirmationCard button:focus-visible {
   outline: 3px solid rgb(255 117 31 / 0.3);
   outline-offset: 2px;
 }
@@ -1242,6 +1293,7 @@
     padding: 10px;
   }
 
+  .chartHud,
   .chartMeta,
   .chartControls,
   .desktopChart {

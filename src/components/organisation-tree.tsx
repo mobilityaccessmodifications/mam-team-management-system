@@ -292,6 +292,15 @@ const MAX_ZOOM = 1.35;
 const DRAG_THRESHOLD = 5;
 const GRID_SIZE = 24;
 const ARRANGE_DURATION = 260;
+// Operational teams stay narrow by default: their direct reports are a work
+// queue rather than a comparison row. Any team can still switch orientation
+// from its own chart menu.
+const DEFAULT_VERTICAL_BRANCH_NAMES = new Set([
+  "europe karki",
+  "kieran kose",
+  "sujant chettri",
+  "serene sharma",
+]);
 
 const emptyDraft: OrganisationPersonDraft = {
   name: "",
@@ -472,10 +481,11 @@ function measureNode(
     };
   }
 
-  // Keep peers in one visual row by default. This makes the reporting level
-  // obvious and gives the canvas a stable “same-level group” to work with;
-  // the branch menu can still switch any one group to a vertical stack.
-  const automaticVertical = false;
+  // These operational teams work best as compact vertical queues. The branch
+  // menu remains the explicit per-team override.
+  const automaticVertical = DEFAULT_VERTICAL_BRANCH_NAMES.has(
+    normalise(node.name),
+  );
   const requestedLayout = branchLayouts[node.id];
   const vertical =
     requestedLayout === "vertical" ||
@@ -746,6 +756,9 @@ export function OrganisationTree({
   const [arranging, setArranging] = useState(false);
   const [interactionMessage, setInteractionMessage] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
+  const [pendingDisconnectId, setPendingDisconnectId] = useState<string | null>(
+    null,
+  );
   const [editor, setEditor] = useState<EditorState>(null);
   const [draft, setDraft] = useState<OrganisationPersonDraft>(emptyDraft);
   const [saving, setSaving] = useState(false);
@@ -782,21 +795,16 @@ export function OrganisationTree({
   const canArrange = canArrangeProp ?? canEdit;
   const canUseLegacyTreeEditor = canEdit && !onOpenEmployeeRecord;
   const canUseRelationshipEditor = canEdit && Boolean(onUpdate);
-  const profileLayoutKey = useMemo(
-    () =>
-      profiles
-        .map(
-          (profile) =>
-            `${profile.id}\u0000${profile.name}\u0000${profile.position}\u0000${profile.company}\u0000${profile.reportsTo ?? ""}\u0000${profile.sortOrder ?? ""}\u0000${profile.isActive ?? ""}`,
-        )
-        .join("\u0001"),
+  const profileIds = useMemo(
+    () => new Set(profiles.map((profile) => profile.id)),
     [profiles],
   );
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (openNodeActionsId) setOpenNodeActionsId(null);
+      if (pendingDisconnectId) setPendingDisconnectId(null);
+      else if (openNodeActionsId) setOpenNodeActionsId(null);
       else if (editor && !saving) setEditor(null);
       else if (selectedId) {
         workContactRequestRef.current += 1;
@@ -814,7 +822,7 @@ export function OrganisationTree({
       window.removeEventListener("keydown", handleKeydown);
       document.removeEventListener("fullscreenchange", handleFullscreen);
     };
-  }, [editor, openNodeActionsId, saving, selectedId]);
+  }, [editor, openNodeActionsId, pendingDisconnectId, saving, selectedId]);
 
   useEffect(() => {
     return () => {
@@ -829,18 +837,43 @@ export function OrganisationTree({
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setManualOffsets({});
-      setArrangeMode(false);
-      setDraggingNodeId(null);
-      dropTargetRef.current = null;
-      setDropTarget(null);
-      setInteractionMessage("");
-      setOpenNodeActionsId(null);
-      setBranchLayouts({});
+      // A reporting-line save refreshes the parent list. Keep fullscreen,
+      // Arrange mode and the current drag offsets intact so a disconnected
+      // person can immediately be positioned or re-linked. Only drop state
+      // for people who were actually removed from the directory.
+      setManualOffsets((current) => {
+        const next = Object.fromEntries(
+          Object.entries(current).filter(([id]) => profileIds.has(id)),
+        );
+        return Object.keys(next).length === Object.keys(current).length
+          ? current
+          : next;
+      });
+      setBranchLayouts((current) => {
+        const next = Object.fromEntries(
+          Object.entries(current).filter(([id]) => profileIds.has(id)),
+        ) as Record<string, BranchLayout>;
+        return Object.keys(next).length === Object.keys(current).length
+          ? current
+          : next;
+      });
+      setCollapsedIds((current) => {
+        const next = new Set([...current].filter((id) => profileIds.has(id)));
+        return next.size === current.size ? current : next;
+      });
+      setSelectedId((current) =>
+        current && !profileIds.has(current) ? null : current,
+      );
+      setOpenNodeActionsId((current) =>
+        current && !profileIds.has(current) ? null : current,
+      );
+      setPendingDisconnectId((current) =>
+        current && !profileIds.has(current) ? null : current,
+      );
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [profileLayoutKey]);
+  }, [profileIds]);
 
   const orderedProfiles = useMemo(() => sortPeople(profiles), [profiles]);
   const profileById = useMemo(
@@ -935,6 +968,9 @@ export function OrganisationTree({
   );
 
   const selectedProfile = selectedId ? profileById.get(selectedId) : undefined;
+  const pendingDisconnect = pendingDisconnectId
+    ? profileById.get(pendingDisconnectId)
+    : undefined;
   const selectedManager = selectedProfile?.reportsTo
     ? profileById.get(selectedProfile.reportsTo)
     : undefined;
@@ -1650,7 +1686,18 @@ export function OrganisationTree({
       );
       return;
     }
-    if (!window.confirm(`Disconnect ${profile.name} from their current manager?`)) return;
+    // Native confirm dialogs deliberately leave browser fullscreen. Keep the
+    // confirmation inside the chart so Arrange mode and fullscreen persist.
+    setPendingDisconnectId(profile.id);
+  };
+
+  const confirmDisconnectReportingLine = () => {
+    const profile = pendingDisconnect;
+    setPendingDisconnectId(null);
+    if (!profile || !profile.reportsTo) {
+      setInteractionMessage("That reporting line has already changed.");
+      return;
+    }
     void persistReportsTo(profile, null, `${profile.name} is now top level.`);
   };
 
@@ -1893,18 +1940,12 @@ export function OrganisationTree({
           ref={viewportRef}
           tabIndex={0}
         >
-          <div className={styles.chartMeta}>
-            <span>{visiblePersonCount} people</span>
-            <span>
-              {arrangeMode
-                ? canUseRelationshipEditor
-                  ? "Arrange mode · drop left/right for peers, top/bottom for reporting"
-                  : "Arrange mode · drag a person"
-                : "Drag empty space to pan"}
-            </span>
-          </div>
+          <div className={styles.chartHud}>
+            <div className={styles.chartMeta}>
+              <span>{visiblePersonCount} people</span>
+            </div>
 
-          <div aria-label="Chart view controls" className={styles.chartControls}>
+            <div aria-label="Chart view controls" className={styles.chartControls}>
             {canArrange ? (
               <button
                 aria-label="Clean up chart and restore the reporting layout"
@@ -1977,6 +2018,7 @@ export function OrganisationTree({
                 <Maximize2 aria-hidden="true" size={15} />
               )}
             </button>
+            </div>
           </div>
 
           <div className={styles.desktopChart} style={frameStyle}>
@@ -2271,6 +2313,49 @@ export function OrganisationTree({
               />
             ))}
           </ul>
+
+          {pendingDisconnect ? (
+            <div
+              className={styles.confirmationLayer}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <button
+                aria-label="Keep reporting link"
+                className={styles.confirmationBackdrop}
+                onClick={() => setPendingDisconnectId(null)}
+                type="button"
+              />
+              <section
+                aria-describedby={`${titleId}-disconnect-description`}
+                aria-labelledby={`${titleId}-disconnect-title`}
+                aria-modal="true"
+                className={styles.confirmationCard}
+                role="dialog"
+              >
+                <h3 id={`${titleId}-disconnect-title`}>Disconnect reporting line?</h3>
+                <p id={`${titleId}-disconnect-description`}>
+                  {pendingDisconnect.name} will become a top-level card. You can drag them onto another person to reconnect them.
+                </p>
+                <div>
+                  <button
+                    autoFocus
+                    className={styles.cancelAction}
+                    onClick={() => setPendingDisconnectId(null)}
+                    type="button"
+                  >
+                    Keep linked
+                  </button>
+                  <button
+                    className={styles.saveAction}
+                    onClick={confirmDisconnectReportingLine}
+                    type="button"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              </section>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className={styles.emptyState}>
