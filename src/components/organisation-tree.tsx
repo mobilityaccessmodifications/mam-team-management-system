@@ -1874,13 +1874,56 @@ export function OrganisationTree({
         `${targetProfile.name} now reports to ${dragged.name}.`,
       );
     }
-    const nextReportsTo =
-      target.intent === "sibling" ? targetProfile.reportsTo : targetProfile.id;
-    const message =
-      target.intent === "sibling"
-        ? `${dragged.name} is now grouped with ${targetProfile.name}.`
-        : `${dragged.name} now reports to ${targetProfile.name}.`;
-    return persistReportsTo(dragged, nextReportsTo, message);
+    if (target.intent === "sibling") {
+      // A peer relationship means both cards share one manager. Keep the
+      // selected card's valid manager where possible, so linking a connected
+      // card to an unlinked card brings the latter into the existing team
+      // instead of disconnecting the former.
+      const sourceManagerId =
+        dragged.reportsTo && dragged.reportsTo !== targetProfile.id
+          ? dragged.reportsTo
+          : null;
+      const targetManagerId =
+        targetProfile.reportsTo && targetProfile.reportsTo !== dragged.id
+          ? targetProfile.reportsTo
+          : null;
+      const sharedManagerId = sourceManagerId ?? targetManagerId;
+
+      if (!sharedManagerId) {
+        setInteractionMessage(
+          `${dragged.name} and ${targetProfile.name} need a manager before they can be grouped. Use the upper or lower connection point first.`,
+        );
+        return false;
+      }
+
+      if (sourceManagerId === targetManagerId) {
+        setInteractionMessage(
+          `${dragged.name} and ${targetProfile.name} are already in the same team.`,
+        );
+        return true;
+      }
+
+      const sharedManagerName = profileById.get(sharedManagerId)?.name ?? "the same manager";
+      if (sourceManagerId) {
+        return persistReportsTo(
+          targetProfile,
+          sourceManagerId,
+          `${targetProfile.name} is now grouped with ${dragged.name} under ${sharedManagerName}.`,
+        );
+      }
+
+      return persistReportsTo(
+        dragged,
+        targetManagerId,
+        `${dragged.name} is now grouped with ${targetProfile.name} under ${sharedManagerName}.`,
+      );
+    }
+
+    return persistReportsTo(
+      dragged,
+      targetProfile.id,
+      `${dragged.name} now reports to ${targetProfile.name}.`,
+    );
   };
 
   const completeRelationshipLink = async (
