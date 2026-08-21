@@ -316,7 +316,7 @@ function getViewTitles(profile: Profile, calendarMonth: Date, canReviewLeave: bo
 }
 
 function getEmployeePreviewRequests(requests: LeaveRequest[], profile: Profile) {
-  // Change view is a read-only employee presentation. It must not infer a
+  // Change profile is a read-only employee presentation. It must not infer a
   // reviewer queue from a mutable reporting line or a display name; real
   // reviewer access is evaluated only for the signed-in account by the server.
   return requests.filter((request) => request.employee === profile.name);
@@ -784,14 +784,14 @@ export function LeaveDemo({
 
   // The capability is issued by the same server-side leave policy that scopes
   // the queue and decision buttons. It is intentionally not derived from an
-  // org title, direct reports, or a browser-selected Change view profile.
+  // org title, direct reports, or a browser-selected Change profile.
   const canReviewLeave = !isPreviewingEmployeeAccess && canReviewLeaveWorkspace;
   // This is an employee-facing entry point only. Submission remains authorised
-  // by the durable server action; this guard prevents a read-only Change view
+  // by the durable server action; this guard prevents a read-only Change profile
   // or a non-roster platform administrator from opening a misleading form.
   const canApplyForLeave = !isPreviewingEmployeeAccess && !isNonRosterSystemAdminWorkspace;
   // The server-projected per-request capability remains the source of truth.
-  // This only prevents a Change view or non-roster platform workspace from
+  // This only prevents a Change profile or non-roster platform workspace from
   // presenting an impossible cancellation control.
   const canCancelOwnApprovedLeave = !isPreviewingEmployeeAccess
     && !isNonRosterSystemAdminWorkspace;
@@ -806,7 +806,7 @@ export function LeaveDemo({
   const calendarRequests = isPreviewingEmployeeAccess
     ? getEmployeePreviewRequests(calendarEntries, activeProfile)
     : calendarEntries;
-  // A Change view does not impersonate the selected employee. Keep the real
+  // A Change profile does not impersonate the selected employee. Keep the real
   // viewer's scoped check-in tasks out of that read-only preview.
   const calendarCheckIns = isPreviewingEmployeeAccess ? [] : checkInCalendarEntries;
   const approvalQueue = canReviewLeave
@@ -1139,7 +1139,7 @@ export function LeaveDemo({
             <label className={styles.viewSwitcherHeading} htmlFor="employee-access-view">
               <Eye aria-hidden="true" size={17} />
               <span>
-                <strong>Change view</strong>
+                <strong>Change profile</strong>
                 <small role="status">{previewProfile ? !authorisedPreviewProfile ? `Loading ${previewProfile.name}'s profile` : `Viewing ${previewProfile.name}` : "Super Admin"}</small>
               </span>
             </label>
@@ -1317,7 +1317,7 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
           <div className={styles.emptyState}>
             <ShieldCheck size={24} />
             <strong>Super Admin</strong>
-            <span>This account has no employee profile or leave record. Use Change view to inspect an employee workspace, or open People to manage the directory.</span>
+            <span>This account has no employee profile or leave record. Use Change profile to inspect an employee workspace, or open People to manage the directory.</span>
           </div>
         </section>
       </div>

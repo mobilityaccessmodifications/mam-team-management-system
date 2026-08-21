@@ -27,7 +27,7 @@ export type CurrentEmployeeSelfProfile = SelfProfileData & {
 };
 
 /**
- * An HR-authorised, selected employee profile for the Change view control.
+ * An HR-authorised, selected employee profile for the Change profile control.
  * This is never returned by the self-service profile actions.
  */
 export type SelectedEmployeeProfile = SelfProfileData & {
@@ -232,7 +232,7 @@ export async function updateCurrentEmployeeSelfProfile(
 
 /**
  * Returns one selected active employee's profile only when the authenticated
- * actor has the Super Admin Change view capability. The person ID is
+ * actor has the Super Admin Change profile capability. The person ID is
  * validated in this server action and re-authorised in the database RPC.
  */
 export async function getSelectedEmployeeProfile(
@@ -249,7 +249,7 @@ export async function getSelectedEmployeeProfile(
 }
 
 /**
- * Super Admin-only Change view save path. It can correct only the selected employee's
+ * Super Admin-only Change profile save path. It can correct only the selected employee's
  * personal email, phone and date of birth; work email and work identity are
  * intentionally absent from the RPC input and remain read-only here.
  */
