@@ -162,6 +162,7 @@ const LEAVE_TYPES = new Set([
 const LOAD_ERROR = "Leave records could not be loaded. Refresh and try again.";
 const SAVE_ERROR = "The leave request could not be saved. Refresh and try again.";
 const DECISION_ERROR = "The leave decision could not be saved. Refresh and try again.";
+const SELECTED_PROFILE_SUBMIT_ERROR = "The selected employee leave request could not be saved. Refresh and try again.";
 const CANCEL_ERROR = "The leave request could not be cancelled. Refresh and try again.";
 
 function requireText(value: unknown, errorMessage: string) {
@@ -322,6 +323,13 @@ async function requireLeaveSession() {
   return supabase;
 }
 
+function selectedPersonId(value: unknown) {
+  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
+    throw new Error(SELECTED_PROFILE_SUBMIT_ERROR);
+  }
+  return value;
+}
+
 function normaliseLeaveInput(input: SubmitLeaveInput) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error(SAVE_ERROR);
 
@@ -476,6 +484,37 @@ export async function submitLeaveRequest(input: SubmitLeaveInput) {
   const checked = normaliseLeaveInput(input);
   const supabase = await requireLeaveSession();
   const { data, error } = await supabase.rpc("submit_my_leave_request", {
+    p_request_type_label: checked.leaveType,
+    p_start_date: checked.startDate,
+    p_end_date: checked.endDate,
+    p_start_time: checked.startTime ?? null,
+    p_end_time: checked.endTime ?? null,
+    p_employee_note: checked.employeeNote ?? null,
+  });
+
+  if (error) throw new Error(userFacingSubmitError(error));
+  const result = toSubmitResult(data);
+  revalidatePath("/");
+  return result;
+}
+
+/**
+ * Super Admin Change Profile submission. The database resolves the selected
+ * person to its active linked account and keeps the real Super Admin as the
+ * audit actor; the browser never supplies a user_id.
+ */
+export async function submitLeaveRequestForSelectedEmployee(
+  personId: string,
+  input: SubmitLeaveInput,
+) {
+  const checkedPersonId = selectedPersonId(personId);
+  const checked = normaliseLeaveInput(input);
+  const supabase = await requireLeaveSession();
+  const { data: allowed, error: permissionError } = await supabase.rpc("can_change_employee_view");
+  if (permissionError || allowed !== true) throw new Error(SELECTED_PROFILE_SUBMIT_ERROR);
+
+  const { data, error } = await supabase.rpc("submit_selected_employee_leave_request", {
+    p_person_id: checkedPersonId,
     p_request_type_label: checked.leaveType,
     p_start_date: checked.startDate,
     p_end_date: checked.endDate,

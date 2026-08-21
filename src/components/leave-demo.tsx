@@ -42,6 +42,7 @@ import {
   decideLeaveRequest,
   getLeaveWorkspaceData,
   submitLeaveRequest,
+  submitLeaveRequestForSelectedEmployee,
   type BirthdayCalendarEntry,
   type CheckInCalendarEntry,
   type LeaveCalendarEntry,
@@ -316,9 +317,9 @@ function getViewTitles(profile: Profile, calendarMonth: Date, canReviewLeave: bo
 }
 
 function getEmployeePreviewRequests(requests: LeaveRequest[], profile: Profile) {
-  // Change profile is a read-only employee presentation. It must not infer a
-  // reviewer queue from a mutable reporting line or a display name; real
-  // reviewer access is evaluated only for the signed-in account by the server.
+  // Change profile scopes the view to the selected employee for the Super
+  // Admin, while all reviewer/capability decisions still come from the
+  // signed-in account's server-projected request fields.
   return requests.filter((request) => request.employee === profile.name);
 }
 
@@ -782,14 +783,14 @@ export function LeaveDemo({
     : !isNonRosterSystemAdminWorkspace && (!selfProfile || selfProfileLoading);
   const isNonRosterAdminHrWorkspace = isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess;
 
-  // The capability is issued by the same server-side leave policy that scopes
-  // the queue and decision buttons. It is intentionally not derived from an
-  // org title, direct reports, or a browser-selected Change profile.
-  const canReviewLeave = !isPreviewingEmployeeAccess && canReviewLeaveWorkspace;
-  // This is an employee-facing entry point only. Submission remains authorised
-  // by the durable server action; this guard prevents a read-only Change profile
-  // or a non-roster platform administrator from opening a misleading form.
-  const canApplyForLeave = !isPreviewingEmployeeAccess && !isNonRosterSystemAdminWorkspace;
+  // The capability is issued by the server-side leave policy. Change profile
+  // only narrows the displayed employee; it never changes the Super Admin's
+  // reviewer authority.
+  const canReviewLeave = canReviewLeaveWorkspace;
+  // Super Admin keeps full operational access while Change Profile is active.
+  // The selected target is passed only to the guarded Server Action; auth and
+  // audit authority remain with the real Super Admin account.
+  const canApplyForLeave = !isNonRosterSystemAdminWorkspace || isPreviewingEmployeeAccess;
   // The server-projected per-request capability remains the source of truth.
   // This only prevents a Change profile or non-roster platform workspace from
   // presenting an impossible cancellation control.
@@ -967,7 +968,7 @@ export function LeaveDemo({
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isMutating || isPreviewingEmployeeAccess || isNonRosterSystemAdminWorkspace) return;
+    if (isMutating || (!isPreviewingEmployeeAccess && isNonRosterSystemAdminWorkspace)) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     const leaveType = String(data.get("leaveType"));
@@ -1012,14 +1013,17 @@ export function LeaveDemo({
 
     setIsMutating(true);
     try {
-      const next = await submitLeaveRequest({
+      const requestInput = {
         leaveType,
         startDate,
         endDate,
         startTime: startTime || undefined,
         endTime: endTime || undefined,
         employeeNote,
-      });
+      };
+      const next = isPreviewingEmployeeAccess && previewProfile
+        ? await submitLeaveRequestForSelectedEmployee(previewProfile.id, requestInput)
+        : await submitLeaveRequest(requestInput);
       await refreshLeaveWorkspace();
       setSelectedRequestId(next.id);
       setShowRequestForm(false);
@@ -1037,7 +1041,7 @@ export function LeaveDemo({
   }
 
   async function decideRequest(status: "Approved" | "Declined") {
-    if (!selectedRequest || isMutating || isPreviewingEmployeeAccess || isNonRosterSystemAdminWorkspace) return;
+    if (!selectedRequest || isMutating || !canReviewLeave || isNonRosterSystemAdminWorkspace) return;
     if (status === "Declined" && !managerNote.trim()) {
       announce("Add a decision note before declining this request.");
       return;
@@ -1201,7 +1205,7 @@ export function LeaveDemo({
 
           {leaveDataError && activeView !== "people" ? <p className={styles.leaveLoadError} role="alert">{leaveDataError}</p> : null}
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} canReview={canReviewLeave} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
-          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} busy={isMutating} readOnly={isPreviewingEmployeeAccess || isNonRosterSystemAdminWorkspace} hidePrivateDetails={isPreviewingEmployeeAccess || isNonRosterSystemAdminWorkspace} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
+          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} busy={isMutating} readOnly={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} hidePrivateDetails={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
           {activeView === "calendar" ? <CalendarView birthdays={calendarBirthdays} checkIns={calendarCheckIns} requests={calendarRequests} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
