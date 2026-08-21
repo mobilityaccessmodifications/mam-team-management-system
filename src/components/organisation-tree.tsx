@@ -768,7 +768,7 @@ export function OrganisationTree({
     RelationshipHistoryEntry[]
   >([]);
   const [linkingSourceId, setLinkingSourceId] = useState<string | null>(null);
-  const [linkTargetId, setLinkTargetId] = useState<string | null>(null);
+  const [linkTarget, setLinkTarget] = useState<DropTarget | null>(null);
   const [linkCursor, setLinkCursor] = useState<LinkCursor | null>(null);
   const [pendingDisconnectId, setPendingDisconnectId] = useState<string | null>(
     null,
@@ -823,7 +823,7 @@ export function OrganisationTree({
       if (event.key !== "Escape") return;
       if (linkingSourceId) {
         setLinkingSourceId(null);
-        setLinkTargetId(null);
+        setLinkTarget(null);
         setLinkCursor(null);
         setInteractionMessage("Connection cancelled.");
       } else if (pendingDisconnectId) setPendingDisconnectId(null);
@@ -842,7 +842,7 @@ export function OrganisationTree({
       setPendingDisconnectId(null);
       setDraggingNodeId(null);
       setLinkingSourceId(null);
-      setLinkTargetId(null);
+      setLinkTarget(null);
       setLinkCursor(null);
       dropTargetRef.current = null;
       setDropTarget(null);
@@ -922,8 +922,8 @@ export function OrganisationTree({
       setLinkingSourceId((current) =>
         current && !profileIds.has(current) ? null : current,
       );
-      setLinkTargetId((current) =>
-        current && !profileIds.has(current) ? null : current,
+      setLinkTarget((current) =>
+        current && !profileIds.has(current.id) ? null : current,
       );
     }, 0);
 
@@ -1440,7 +1440,7 @@ export function OrganisationTree({
 
   const cancelRelationshipLink = (message = "Connection cancelled.") => {
     setLinkingSourceId(null);
-    setLinkTargetId(null);
+    setLinkTarget(null);
     setLinkCursor(null);
     setInteractionMessage(message);
   };
@@ -1458,14 +1458,14 @@ export function OrganisationTree({
     setWorkContact(null);
     setSelectedId(null);
     setOpenNodeActionsId(null);
-    setLinkTargetId(null);
+    setLinkTarget(null);
     setLinkCursor({
       x: sourceNode.x + sourceOffset.x + sourceNode.width / 2,
       y: sourceNode.y + sourceOffset.y + sourceNode.height,
     });
     setLinkingSourceId(profile.id);
     setInteractionMessage(
-      `Choose a + on another card to connect ${profile.name}. Press Escape to cancel.`,
+      `Move over a card to choose its top, middle or bottom connection. Click empty space or press Escape to cancel.`,
     );
   };
 
@@ -1477,14 +1477,66 @@ export function OrganisationTree({
     if (!chartWorld) return;
     const bounds = chartWorld.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return;
-    setLinkCursor({
+    const rawCursor = {
       x: clamp((event.clientX - bounds.left) / zoom, 0, layout.width),
       y: clamp((event.clientY - bounds.top) / zoom, 0, layout.height),
-    });
+    };
+    const targetElement = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>("[data-node-id]");
+    const targetId = targetElement?.dataset.nodeId;
+    if (!targetId || !isValidRelationshipTarget(linkingSourceId, targetId)) {
+      setLinkTarget(null);
+      setLinkCursor(rawCursor);
+      return;
+    }
+
+    const targetBounds = targetElement.getBoundingClientRect();
+    const relativeY = (event.clientY - targetBounds.top) / targetBounds.height;
+    const intent: DropIntent =
+      relativeY < 1 / 3
+        ? "report-to-target"
+        : relativeY > 2 / 3
+          ? "target-reports-to-dragged"
+          : "sibling";
+    const target = { id: targetId, intent } satisfies DropTarget;
+    const targetNode = layoutNodesById.get(targetId);
+    if (!targetNode) {
+      setLinkTarget(null);
+      setLinkCursor(rawCursor);
+      return;
+    }
+    const offset = manualOffsets[targetId] ?? { x: 0, y: 0 };
+    const snappedCursor =
+      intent === "sibling"
+        ? {
+            x: targetNode.x + offset.x - 18,
+            y: targetNode.y + offset.y + targetNode.height / 2,
+          }
+        : intent === "report-to-target"
+          ? {
+              x: targetNode.x + offset.x + targetNode.width / 2,
+              y: targetNode.y + offset.y - 18,
+            }
+          : {
+              x: targetNode.x + offset.x + targetNode.width / 2,
+              y: targetNode.y + offset.y + targetNode.height + 18,
+            };
+    setLinkTarget(target);
+    setLinkCursor(snappedCursor);
   };
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (linkingSourceId) return;
+    if (linkingSourceId) {
+      const targetElement = (event.target as HTMLElement).closest<HTMLElement>(
+        "[data-node-id]",
+      );
+      const targetId = targetElement?.dataset.nodeId;
+      if (!targetId || !isValidRelationshipTarget(linkingSourceId, targetId)) {
+        cancelRelationshipLink();
+      }
+      return;
+    }
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
     if (target.closest("button, input, select, label, aside")) return;
@@ -2325,7 +2377,7 @@ export function OrganisationTree({
                     isValidRelationshipTarget(linkingSourceId, item.node.id),
                 );
                 const isLinkTarget =
-                  canReceiveRelationshipLink && linkTargetId === item.node.id;
+                  canReceiveRelationshipLink && linkTarget?.id === item.node.id;
                 const canEditReportingLink =
                   isPerson(item.node) &&
                   canUseFullscreenRelationshipEditor;
@@ -2368,12 +2420,12 @@ export function OrganisationTree({
                     }}
                     onPointerEnter={() => {
                       if (canReceiveRelationshipLink) {
-                        setLinkTargetId(item.node.id);
+                        setLinkTarget({ id: item.node.id, intent: "sibling" });
                       }
                     }}
                     onPointerLeave={() => {
-                      setLinkTargetId((current) =>
-                        current === item.node.id ? null : current,
+                      setLinkTarget((current) =>
+                        current?.id === item.node.id ? null : current,
                       );
                     }}
                     style={{
@@ -2401,7 +2453,31 @@ export function OrganisationTree({
                         selectProfile(item.node.id);
                       }}
                       onPointerCancel={finishNodeDrag}
-                      onPointerDown={(event) => startNodeDrag(event, item)}
+                      onPointerDown={(event) => {
+                        if (linkingSourceId) {
+                          const bounds = event.currentTarget.getBoundingClientRect();
+                          const relativeY =
+                            (event.clientY - bounds.top) / bounds.height;
+                          const intent: DropIntent =
+                            relativeY < 1 / 3
+                              ? "report-to-target"
+                              : relativeY > 2 / 3
+                                ? "target-reports-to-dragged"
+                                : "sibling";
+                          if (
+                            isValidRelationshipTarget(
+                              linkingSourceId,
+                              item.node.id,
+                            )
+                          ) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            void completeRelationshipLink(item.node.id, intent);
+                          }
+                          return;
+                        }
+                        startNodeDrag(event, item);
+                      }}
                       onPointerMove={moveNodeDrag}
                       onPointerUp={finishNodeDrag}
                       title={
@@ -2434,8 +2510,15 @@ export function OrganisationTree({
                         <button
                           aria-label={`Make ${linkingSource?.name} report to ${item.node.name}`}
                           className={styles.linkAnchor}
+                          data-active={linkTarget?.intent === "report-to-target"}
                           data-placement="top"
-                          onPointerDown={(event) => event.stopPropagation()}
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                            setLinkTarget({
+                              id: item.node.id,
+                              intent: "report-to-target",
+                            });
+                          }}
                           onClick={(event) => {
                             event.stopPropagation();
                             void completeRelationshipLink(
@@ -2451,8 +2534,12 @@ export function OrganisationTree({
                         <button
                           aria-label={`Group ${linkingSource?.name} with ${item.node.name}`}
                           className={styles.linkAnchor}
+                          data-active={linkTarget?.intent === "sibling"}
                           data-placement="left"
-                          onPointerDown={(event) => event.stopPropagation()}
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                            setLinkTarget({ id: item.node.id, intent: "sibling" });
+                          }}
                           onClick={(event) => {
                             event.stopPropagation();
                             void completeRelationshipLink(item.node.id, "sibling");
@@ -2465,8 +2552,17 @@ export function OrganisationTree({
                         <button
                           aria-label={`Make ${item.node.name} report to ${linkingSource?.name}`}
                           className={styles.linkAnchor}
+                          data-active={
+                            linkTarget?.intent === "target-reports-to-dragged"
+                          }
                           data-placement="bottom"
-                          onPointerDown={(event) => event.stopPropagation()}
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                            setLinkTarget({
+                              id: item.node.id,
+                              intent: "target-reports-to-dragged",
+                            });
+                          }}
                           onClick={(event) => {
                             event.stopPropagation();
                             void completeRelationshipLink(

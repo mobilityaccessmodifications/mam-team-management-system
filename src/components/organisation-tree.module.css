@@ -726,7 +726,8 @@
 }
 
 .linkAnchor:hover,
-.linkAnchor:focus-visible {
+.linkAnchor:focus-visible,
+.linkAnchor[data-active="true"] {
   background: var(--anchor-company);
   color: #fff;
   opacity: 1;
@@ -736,13 +737,16 @@
 
 .linkAnchor[data-placement="top"]:hover,
 .linkAnchor[data-placement="top"]:focus-visible,
+.linkAnchor[data-placement="top"][data-active="true"],
 .linkAnchor[data-placement="bottom"]:hover,
-.linkAnchor[data-placement="bottom"]:focus-visible {
+.linkAnchor[data-placement="bottom"]:focus-visible,
+.linkAnchor[data-placement="bottom"][data-active="true"] {
   transform: translateX(-50%) scale(1);
 }
 
 .linkAnchor[data-placement="left"]:hover,
-.linkAnchor[data-placement="left"]:focus-visible {
+.linkAnchor[data-placement="left"]:focus-visible,
+.linkAnchor[data-placement="left"][data-active="true"] {
   transform: translateY(-50%) scale(1);
 }
 
