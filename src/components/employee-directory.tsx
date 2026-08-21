@@ -9,6 +9,7 @@ import {
   Mail,
   Plus,
   Search,
+  Trash2,
   UserPlus,
   UsersRound,
   X,
@@ -23,6 +24,7 @@ import {
 
 import {
   createEmployeeDirectoryRecord,
+  deleteEmployeeDirectoryRecord,
   listEmployeeDirectoryRecords,
   updateEmployeeDirectoryRecord,
 } from "@/app/people/actions";
@@ -119,6 +121,14 @@ function normalise(value: string) {
   return value.trim().toLocaleLowerCase();
 }
 
+function todayIso() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function companyLabel(company: EmployeeDirectoryRecord["company"]) {
   return company === "mam" ? "MAM" : "Equipsy";
 }
@@ -208,6 +218,9 @@ export function EmployeeDirectory({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [notice, setNotice] = useState("");
+  const [endDatePrompt, setEndDatePrompt] = useState<{ date: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<EmployeeDirectoryRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (initialRecords) return;
@@ -311,6 +324,54 @@ export function EmployeeDirectory({
     setSaveError("");
     setNotice("");
     onSelectedPersonId?.(null);
+  }
+
+  function handleDraftChange(
+    key: keyof EmployeeDirectoryDraft,
+    value: string | string[] | boolean | null,
+  ) {
+    const base = editor ?? activeEditor;
+    if (!base) return;
+    if (key === "isActive" && value === false && base.draft.isActive) {
+      setEndDatePrompt({ date: base.draft.scheduledEmploymentEndDate || todayIso() });
+      return;
+    }
+    setEditor(updateDraft(base, key, value));
+  }
+
+  function confirmEndDate() {
+    const base = editor ?? activeEditor;
+    if (!base || !endDatePrompt?.date) return;
+    if (base.draft.startedDate && endDatePrompt.date < base.draft.startedDate) {
+      setSaveError("The end date cannot be before the start date.");
+      return;
+    }
+    const withDate = updateDraft(base, "scheduledEmploymentEndDate", endDatePrompt.date);
+    setEditor(updateDraft(withDate, "isActive", false));
+    setEndDatePrompt(null);
+    setSaveError("");
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setSaveError("");
+    try {
+      await deleteEmployeeDirectoryRecord({
+        personId: deleteTarget.personId,
+        personVersion: deleteTarget.personVersion,
+      });
+      setRecords((current) => current.filter((record) => record.personId !== deleteTarget.personId));
+      setDeleteTarget(null);
+      setEditor(null);
+      onSelectedPersonId?.(null);
+      setNotice("Profile deleted.");
+      await onRecordsChanged?.();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "The employee profile could not be deleted.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function saveRecord(event: FormEvent<HTMLFormElement>) {
@@ -423,11 +484,38 @@ export function EmployeeDirectory({
           records={records}
           saving={saving}
           error={saveError}
-          onChange={(key, value) => setEditor((current) => updateDraft(current ?? activeEditor, key, value))}
+          onChange={handleDraftChange}
           onClose={closeEditor}
           onSubmit={saveRecord}
+          onRequestDelete={!activeEditor || activeEditor.mode === "create" || !currentRecord ? undefined : () => setDeleteTarget(currentRecord)}
         /> : <EmptyDetail onCreate={openCreate} />}
       </div>
+
+      {endDatePrompt ? <div className={styles.modalBackdrop} role="presentation">
+        <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="end-date-title">
+          <header className={styles.modalHeader}>
+            <div><span>Employee status</span><h3 id="end-date-title">Set employment end date</h3></div>
+            <button type="button" className={styles.modalClose} onClick={() => setEndDatePrompt(null)} aria-label="Close"><X size={17} /></button>
+          </header>
+          <div className={styles.modalBody}>
+            <p>Confirm the employee is no longer active. The date defaults to today.</p>
+            <label className={styles.modalField}><span>End date</span><input type="date" value={endDatePrompt.date} onChange={(event) => setEndDatePrompt({ date: event.target.value })} /></label>
+            {saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}
+          </div>
+          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={() => setEndDatePrompt(null)}>Cancel</button><button type="button" className={styles.primaryAction} onClick={confirmEndDate}>Set end date</button></footer>
+        </section>
+      </div> : null}
+
+      {deleteTarget ? <div className={styles.modalBackdrop} role="presentation">
+        <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="delete-profile-title">
+          <header className={styles.modalHeader}>
+            <div><span>Permanent action</span><h3 id="delete-profile-title">Delete {deleteTarget.fullName}?</h3></div>
+            <button type="button" className={styles.modalClose} onClick={() => { if (!deleting) { setDeleteTarget(null); setSaveError(""); } }} disabled={deleting} aria-label="Close"><X size={17} /></button>
+          </header>
+          <div className={styles.modalBody}><p>This removes the profile only when it is inactive, unlinked and has no reporting, roster or check-in history. Otherwise, deactivate it instead.</p>{saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}</div>
+          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={() => { setDeleteTarget(null); setSaveError(""); }} disabled={deleting}>Cancel</button><button type="button" className={styles.dangerAction} onClick={() => void confirmDelete()} disabled={deleting}><Trash2 size={15} />{deleting ? "Deleting…" : "Delete profile"}</button></footer>
+        </section>
+      </div> : null}
     </section>
   );
 }
@@ -535,6 +623,7 @@ function EmployeeEditor({
   onChange,
   onClose,
   onSubmit,
+  onRequestDelete,
 }: {
   editor: EditorState;
   currentRecord: EmployeeDirectoryRecord | null;
@@ -544,6 +633,7 @@ function EmployeeEditor({
   onChange: (key: keyof EmployeeDirectoryDraft, value: string | string[] | boolean | null) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onRequestDelete?: () => void;
 }) {
   const managerOptions = records
     .filter((record) => record.isActive && record.personId !== currentRecord?.personId)
@@ -665,8 +755,11 @@ function EmployeeEditor({
       </fieldset>
 
       <footer className={styles.formFooter}>
-        <p><Mail size={14} /> The CSV keeps the HR workbook columns, then adds the private equipment audit fields.</p>
+        <div className={styles.formFooterLeft}>
+          <p><Mail size={14} /> The CSV keeps the HR workbook columns, then adds the private equipment audit fields.</p>
+        </div>
         <div>
+          {onRequestDelete ? <button type="button" className={styles.dangerAction} onClick={onRequestDelete} disabled={saving}><Trash2 size={14} /> Delete profile</button> : null}
           <button type="button" className={styles.secondaryAction} onClick={onClose} disabled={saving}>Cancel</button>
           <button type="submit" className={styles.primaryAction} disabled={saving}>{saving ? "Saving…" : isCreate ? "Create employee" : "Save changes"}</button>
         </div>

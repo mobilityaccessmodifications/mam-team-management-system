@@ -237,3 +237,43 @@ export async function updateEmployeeDirectoryRecord(
   revalidatePath("/");
   return { record };
 }
+
+export async function deleteEmployeeDirectoryRecord(input: {
+  personId: string;
+  personVersion: number;
+}): Promise<{ personId: string }> {
+  const inputValue = inputObject(input);
+  if (typeof inputValue.personId !== "string" || !UUID_PATTERN.test(inputValue.personId)) {
+    throw new Error("The employee record is invalid.");
+  }
+
+  const { supabase } = await requireEmployeeDirectoryManager();
+  const { data, error } = await supabase.rpc("delete_employee_directory_record", {
+    p_person_id: inputValue.personId,
+    p_expected_person_version: version(inputValue.personVersion),
+  });
+
+  if (error) {
+    const message = error.message?.toLocaleLowerCase() ?? "";
+    if (message.includes("deactivate") || message.includes("unlink") || message.includes("reporting line") || message.includes("check-in history") || message.includes("authoritative roster") || message.includes("referenced")) {
+      throw new Error(error.message);
+    }
+    if (message.includes("changed") || message.includes("version")) {
+      throw new Error("This record has changed. Refresh it, then try again.");
+    }
+    throw new Error("The employee profile could not be deleted. Refresh and try again.");
+  }
+
+  const returned = Array.isArray(data) ? data[0] : data;
+  const returnedId = typeof returned === "string"
+    ? returned
+    : returned && typeof returned === "object" && "delete_employee_directory_record" in returned
+      ? (returned as { delete_employee_directory_record?: unknown }).delete_employee_directory_record
+      : undefined;
+  if (typeof returnedId !== "string" || !UUID_PATTERN.test(returnedId)) {
+    throw new Error("The employee profile could not be deleted. Refresh and try again.");
+  }
+
+  revalidatePath("/");
+  return { personId: returnedId };
+}
