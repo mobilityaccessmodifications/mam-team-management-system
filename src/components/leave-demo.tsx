@@ -1200,7 +1200,7 @@ export function LeaveDemo({
         <main className={styles.main} id="main-content">
           {activeView !== "people" ? <section className={styles.pageHeader}>
             <div><h1>{viewTitles[activeView].title}</h1>{viewTitles[activeView].helper ? <p>{viewTitles[activeView].helper}</p> : null}</div>
-            {canApplyForLeave ? <button className={`${styles.primaryButton} ${styles.applyForLeaveButton}`} type="button" onClick={openLeaveRequestForm} disabled={isMutating} aria-haspopup="dialog"><Plus aria-hidden="true" size={17} /><span>Apply for leave</span></button> : null}
+            {activeView === "leave" && canApplyForLeave ? <button className={`${styles.primaryButton} ${styles.applyForLeaveButton}`} type="button" onClick={openLeaveRequestForm} disabled={isMutating} aria-haspopup="dialog"><Plus aria-hidden="true" size={17} /><span>Apply for leave</span></button> : null}
           </section> : null}
 
           {leaveDataError && activeView !== "people" ? <p className={styles.leaveLoadError} role="alert">{leaveDataError}</p> : null}
