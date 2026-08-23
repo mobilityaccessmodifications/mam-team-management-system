@@ -1,0 +1,19 @@
+.loader {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.loader i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mam-orange);
+}
+
+.loader span {
+  margin-left: 5px;
+}

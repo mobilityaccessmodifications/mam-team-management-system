@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Barlow_Condensed, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -21,6 +21,11 @@ const barlowCondensed = Barlow_Condensed({
 export const metadata: Metadata = {
   title: "Safer People System",
   description: "Private people, leave and organisation workspace for MAM and Equipsy.",
+};
+
+export const viewport: Viewport = {
+  colorScheme: "light",
+  themeColor: "#182421",
 };
 
 export default function RootLayout({

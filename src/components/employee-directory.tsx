@@ -29,6 +29,7 @@ import {
   updateEmployeeDirectoryRecord,
 } from "@/app/people/actions";
 import styles from "@/components/employee-directory.module.css";
+import { MotionLoader } from "@/components/ui/motion-loader";
 import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryDraft,
@@ -466,7 +467,7 @@ export function EmployeeDirectory({
             <span className={styles.recordCount}><UsersRound size={15} /> {activeCount} active</span>
           </div>
 
-          {loading ? <div className={styles.listState}>Loading employee records…</div> : null}
+          {loading ? <div className={styles.listState}><MotionLoader label="Loading employee records" /></div> : null}
           {!loading && loadError ? <div className={styles.listState} data-error="true"><AlertCircle size={17} /><span>{loadError}</span></div> : null}
           {!loading && !loadError && !sortedRecords.length ? <div className={styles.listState}>No employee records match that search.</div> : null}
 

@@ -17,6 +17,8 @@ import {
   completeCheckInReminder,
 } from "@/app/check-ins/actions";
 import styles from "@/components/check-in-register.module.css";
+import { AnimatedStatusBadge } from "@/components/ui/animated-status-badge";
+import { MotionLoader } from "@/components/ui/motion-loader";
 import {
   CHECK_IN_REGISTER_LOAD_ERROR,
   parseCheckInRegisterRecords,
@@ -65,6 +67,12 @@ function canCompleteReminder(reminder: CheckInReminder) {
   const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
   const today = `${value("year")}-${value("month")}-${value("day")}`;
   return reminder.status !== "completed" && /^\d{4}-\d{2}-\d{2}$/.test(reminder.dueDate) && reminder.dueDate <= today;
+}
+
+function reminderTone(status: CheckInReminder["status"]): "success" | "warning" | "info" {
+  if (status === "completed" || status === "delivered") return "success";
+  if (status === "needs_review") return "warning";
+  return "info";
 }
 
 function reasonLabel(value: string | null) {
@@ -248,7 +256,7 @@ export function CheckInRegister({
     {error ? <div className={styles.error} role="alert"><AlertTriangle size={17} /><span>{error}</span></div> : null}
     {notice ? <div className={styles.notice} role="status"><CheckCircle2 size={17} /><span>{notice}</span></div> : null}
 
-    {loading ? <div className={styles.loading}><CalendarClock size={23} /><strong>Loading check-ins…</strong></div> : null}
+    {loading ? <div className={styles.loading}><CalendarClock size={23} /><MotionLoader label="Loading check-ins" /></div> : null}
     {!loading && data && !data.records.length ? <div className={styles.loading}><UsersRound size={23} /><strong>No check-ins</strong></div> : null}
 
     {!loading && selected && data ? <div className={styles.desk}>
@@ -270,6 +278,7 @@ export function CheckInRegister({
               key={record.personId}
               className={styles.employeeRow}
               data-selected={record.personId === selected.personId}
+              data-company={record.company}
               aria-pressed={record.personId === selected.personId}
               onClick={() => selectPerson(record.personId)}
             >
@@ -286,7 +295,7 @@ export function CheckInRegister({
         </nav>
       </aside>
 
-      <article className={styles.detail}>
+      <article className={styles.detail} data-company={selected.company}>
         <header className={styles.personHeader}>
           <div><span className={styles.avatar}>{initials(selected)}</span><span><h3>{nameFor(selected)}</h3><p>{selected.role || "Role not recorded"}{selected.department ? ` · ${selected.department}` : ""}</p></span></div>
           {selected.enrolmentMode === "needs_review" ? <span className={styles.enrolment} data-mode="needs_review">Review required</span> : null}
@@ -344,7 +353,7 @@ function ReminderRow({ reminder, pending, onComplete }: {
   return <div className={styles.reminder} data-status={reminder.status}>
     <span className={styles.statusDot} />
     <div className={styles.reminderCopy}><strong>{milestoneLabel(reminder.milestone)}{reminder.sequence === "final" ? " · final reminder" : ""}</strong><p>Due {formatDate(reminder.dueDate)} · scheduled email {formatDate(reminder.notifyDate)}</p>{reminder.status === "needs_review" ? <small>{reasonLabel(reminder.needsReviewReason)}</small> : null}</div>
-    <span className={styles.status}>{reminder.status.replaceAll("_", " ")}</span>
+    <AnimatedStatusBadge className={styles.status} tone={reminderTone(reminder.status)}>{reminder.status.replaceAll("_", " ")}</AnimatedStatusBadge>
     <div className={styles.reminderActions}>
       {canCompleteReminder(reminder) ? <button type="button" disabled={isPending} onClick={onComplete}>{pending === `complete:${reminder.id}` ? "Saving…" : "Mark complete"}</button> : null}
     </div>

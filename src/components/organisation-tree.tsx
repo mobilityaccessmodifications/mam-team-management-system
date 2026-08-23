@@ -1765,11 +1765,7 @@ export function OrganisationTree({
         >
           <div className={styles.chartMeta}>
             <span>{visiblePersonCount} people</span>
-            <span>
-              {arrangeMode
-                ? "Arrange mode · drag a person"
-                : "Drag empty space to pan"}
-            </span>
+            {arrangeMode ? <span>Arrange mode · drag a person</span> : null}
           </div>
 
           <div aria-label="Chart view controls" className={styles.chartControls}>
