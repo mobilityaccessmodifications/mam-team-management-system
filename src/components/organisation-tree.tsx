@@ -174,7 +174,7 @@ function wrapExportText(value: string, maxCharacters: number) {
   if (currentLine) lines.push(currentLine);
 
   if (lines.length <= 2) return lines;
-  return [lines[0], `${lines.slice(1).join(" ").slice(0, maxCharacters - 3)}...`];
+  return [lines[0], `${lines.slice(1).join(" ").slice(0, maxCharacters - 1)}…`];
 }
 
 function exportSvgText(
@@ -784,6 +784,7 @@ export function OrganisationTree({
   const viewportRef = useRef<HTMLDivElement>(null);
   const chartWorldRef = useRef<HTMLDivElement>(null);
   const initialViewportRef = useRef(false);
+  const arrangeModeRef = useRef(arrangeMode);
   const suppressCardClickRef = useRef(false);
   const nodeDragRef = useRef<NodeDragState | null>(null);
   const dropTargetRef = useRef<DropTarget | null>(null);
@@ -831,6 +832,10 @@ export function OrganisationTree({
   );
 
   useEffect(() => {
+    arrangeModeRef.current = arrangeMode;
+  }, [arrangeMode]);
+
+  useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (linkGuideActive) {
@@ -855,6 +860,7 @@ export function OrganisationTree({
       const active = document.fullscreenElement === rootRef.current;
       setFullscreen(active);
       if (!active) {
+        if (linkGuideActive) setInteractionMessage("Add line cancelled.");
         const activeDrag = nodeDragRef.current;
         if (activeDrag) {
           setManualOffsets((current) => {
@@ -910,7 +916,10 @@ export function OrganisationTree({
   useEffect(() => {
     const mobileQuery = window.matchMedia(MOBILE_CHART_QUERY);
     const leaveDesktopEditing = (event: MediaQueryListEvent) => {
-      if (!event.matches) return;
+      if (!event.matches) {
+        setInteractionMessage((current) => current === "Desktop editing closed because the chart moved to the mobile layout." ? "" : current);
+        return;
+      }
 
       const activeDrag = nodeDragRef.current;
       if (activeDrag) {
@@ -954,8 +963,10 @@ export function OrganisationTree({
   }, []);
 
   useEffect(() => {
-    const preserveArrange = preserveArrangeAfterProfileUpdateRef.current
-      && document.fullscreenElement === rootRef.current;
+    const preserveArrange = (
+      preserveArrangeAfterProfileUpdateRef.current
+      || arrangeModeRef.current
+    ) && document.fullscreenElement === rootRef.current;
     const preserveInteractionMessage = preserveInteractionMessageAfterProfileUpdateRef.current;
     preserveArrangeAfterProfileUpdateRef.current = false;
     preserveInteractionMessageAfterProfileUpdateRef.current = false;
@@ -1209,28 +1220,36 @@ export function OrganisationTree({
 
   useEffect(() => {
     if (initialViewportRef.current || !primaryRootId) return;
-    initialViewportRef.current = true;
-
-    const timer = window.setTimeout(() => {
+    let frame = 0;
+    let attempts = 0;
+    const fitInitialViewport = () => {
       const viewport = viewportRef.current;
-      const node = viewport?.querySelector<HTMLElement>(
-        `[data-node-id="${primaryRootId}"]`,
+      if (!viewport || viewport.clientWidth <= 0 || viewport.clientHeight <= 0) {
+        attempts += 1;
+        if (attempts < 12) frame = window.requestAnimationFrame(fitInitialViewport);
+        return;
+      }
+      initialViewportRef.current = true;
+      const nextZoom = Math.max(
+        MIN_ZOOM,
+        Math.min(
+          DEFAULT_ZOOM,
+          (viewport.clientWidth - 48) / layout.width,
+          (viewport.clientHeight - 86) / layout.height,
+        ),
       );
-      if (!viewport || !node) return;
-      const viewportRect = viewport.getBoundingClientRect();
-      const nodeRect = node.getBoundingClientRect();
-      viewport.scrollTo({
-        behavior: "auto",
-        left:
-          viewport.scrollLeft +
-          nodeRect.left -
-          viewportRect.left -
-          (viewport.clientWidth - nodeRect.width) / 2,
-        top: 0,
+      setZoom(nextZoom);
+      frame = window.requestAnimationFrame(() => {
+        viewport.scrollTo({
+          behavior: "auto",
+          left: Math.max(0, (layout.width * nextZoom - viewport.clientWidth) / 2),
+          top: 0,
+        });
       });
-    }, 80);
+    };
+    frame = window.requestAnimationFrame(fitInitialViewport);
 
-    return () => window.clearTimeout(timer);
+    return () => window.cancelAnimationFrame(frame);
   }, [layout.height, layout.width, primaryRootId]);
 
   const expandAncestorBranches = (id: string) => {
@@ -1430,6 +1449,7 @@ export function OrganisationTree({
     if (document.fullscreenElement === root) return true;
     try {
       await root.requestFullscreen();
+      setInteractionMessage((current) => current === "Full screen could not be opened. Check your browser permissions and try again." ? "" : current);
       return true;
     } catch {
       setInteractionMessage("Full screen could not be opened. Check your browser permissions and try again.");

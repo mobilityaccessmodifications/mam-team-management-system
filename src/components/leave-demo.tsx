@@ -23,7 +23,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import {
@@ -234,6 +234,10 @@ const LEAVE_ATTACHMENT_ACCEPT = "application/pdf,image/jpeg,image/png,image/webp
 function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function cancelLeaveTriggerId(requestId: string) {
+  return `cancel-leave-${requestId.replace(/[^A-Za-z0-9_-]/g, "-")}`;
 }
 
 function validateLeaveAttachmentFiles(files: File[], existingCount = 0) {
@@ -494,6 +498,7 @@ export function LeaveDemo({
   const [managerNote, setManagerNote] = useState("");
   const [formError, setFormError] = useState("");
   const [cancellationRequestId, setCancellationRequestId] = useState<string | null>(null);
+  const [cancellationFocusRequestId, setCancellationFocusRequestId] = useState<string | null>(null);
   const [cancellationError, setCancellationError] = useState("");
   const [cancelledRequestId, setCancelledRequestId] = useState<string | null>(null);
   const [toast, setToast] = useState("");
@@ -589,6 +594,9 @@ export function LeaveDemo({
       setCalendarBirthdays([]);
       setCheckInCalendarEntries([]);
       setSelectedRequestId("");
+      setCancellationRequestId(null);
+      setCancellationFocusRequestId(null);
+      setCancellationError("");
       setCanReviewLeaveWorkspace(false);
       setLeaveDataError("Leave records could not be loaded. Refresh and try again.");
     } finally {
@@ -844,6 +852,28 @@ export function LeaveDemo({
     };
   }, [employeeDirectoryRefreshKey, selectedEmployeeProfileReloadKey, selectedPreviewPersonId]);
 
+  useEffect(() => {
+    if (!cancellationRequestId || isMutating) return;
+
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const requestId = cancellationRequestId;
+      setCancellationRequestId(null);
+      setCancellationFocusRequestId(requestId);
+      setCancellationError("");
+    };
+
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  }, [cancellationRequestId, isMutating]);
+
+  useLayoutEffect(() => {
+    if (!cancellationFocusRequestId || cancellationRequestId) return;
+    const trigger = document.getElementById(cancelLeaveTriggerId(cancellationFocusRequestId));
+    if (!(trigger instanceof HTMLButtonElement)) return;
+    trigger.focus({ preventScroll: true });
+  }, [cancellationFocusRequestId, cancellationRequestId]);
+
   const signedInProfile = directoryProfiles.find((profile) => profile.id === currentPersonId)
     ?? (isNonRosterSystemAdminWorkspace ? {
       id: "platform-system-administrator",
@@ -1092,6 +1122,7 @@ export function LeaveDemo({
     setFormError("");
     setManagerNote("");
     setCancellationRequestId(null);
+    setCancellationFocusRequestId(null);
     setCancellationError("");
     setCancelledRequestId(null);
     setSelectedRequestId("");
@@ -1106,6 +1137,9 @@ export function LeaveDemo({
 
   function chooseLeaveSection(section: LeaveSection, requestedId?: string) {
     if (section === "approvals" && !canReviewLeave) return;
+    setCancellationRequestId(null);
+    setCancellationFocusRequestId(null);
+    setCancellationError("");
     if (section === "approvals" && approvalQueue[0]) {
       const nextId = requestedId && approvalQueue.some((request) => request.id === requestedId)
         ? requestedId
@@ -1119,8 +1153,20 @@ export function LeaveDemo({
 
   function navigate(view: AppView, section?: LeaveSection) {
     if (view === "leave") chooseLeaveSection(section ?? "requests");
+    else {
+      setCancellationRequestId(null);
+      setCancellationFocusRequestId(null);
+      setCancellationError("");
+    }
     setActiveView(view);
     scrollPageToTop();
+  }
+
+  function changeLeaveStatusFilter(filter: "All" | RequestStatus) {
+    setStatusFilter(filter);
+    setCancellationRequestId(null);
+    setCancellationFocusRequestId(null);
+    setCancellationError("");
   }
 
   function openLeaveRequestForm() {
@@ -1133,6 +1179,7 @@ export function LeaveDemo({
     setSelectedRequestId(id);
     setManagerNote("");
     setCancellationRequestId(null);
+    setCancellationFocusRequestId(null);
     setCancellationError("");
     setCancelledRequestId(null);
     chooseLeaveSection(section, id);
@@ -1291,12 +1338,15 @@ export function LeaveDemo({
     ) return;
 
     setCancellationError("");
+    setCancellationFocusRequestId(null);
     setCancellationRequestId(requestId);
   }
 
   function dismissLeaveCancellation() {
     if (isMutating) return;
+    const requestId = cancellationRequestId;
     setCancellationRequestId(null);
+    setCancellationFocusRequestId(requestId);
     setCancellationError("");
   }
 
@@ -1316,6 +1366,7 @@ export function LeaveDemo({
     try {
       const cancelled = await cancelMyApprovedLeaveRequest({ requestId });
       setCancellationRequestId(null);
+      setCancellationFocusRequestId(null);
       setCancelledRequestId(cancelled.id);
       await refreshLeaveWorkspace();
       setSelectedRequestId(requestId);
@@ -1451,7 +1502,7 @@ export function LeaveDemo({
           {selectedEmployeeProfileError && isPreviewingEmployeeAccess ? <div className={styles.loadErrorAction} role="alert"><span>{selectedEmployeeProfileError}</span><button type="button" onClick={() => setSelectedEmployeeProfileReloadKey((current) => current + 1)}>Retry profile</button></div> : null}
           {organisationAccessError && activeView === "people" ? <div className={styles.loadErrorAction} role="alert"><span>{organisationAccessError}</span><button type="button" onClick={() => void loadOrganisation()}>Retry permissions</button></div> : null}
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} canReview={canReviewLeave} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
-          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} hidePrivateDetails={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
+          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} hidePrivateDetails={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
           {activeView === "calendar" ? <CalendarView birthdays={calendarBirthdays} checkIns={calendarCheckIns} requests={calendarRequests} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
@@ -1694,7 +1745,6 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
     && isApprovedLeave
     && request.canCancel === true;
   const canAddAttachments = !readOnly && request.canAttach === true;
-
   return <aside className={styles.detailPanel} aria-label={`${request.id} details`}>
     <header className={!showEmployee ? styles.personalDetailHeader : undefined}>
       {showEmployee ? <span className={styles.avatarOrange}>{request.initials}</span> : null}
@@ -1708,7 +1758,7 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
       <div><dt>Assigned reviewer</dt><dd>{request.approvalRequired ? request.assignedReviewerLabel ?? "Authorised reviewer" : "Not required"}</dd></div>
     </dl>
     {isCancelled ? <section className={styles.cancelLeaveRecorded} role="status"><CheckCircle2 aria-hidden="true" size={17} /><span><strong>Leave cancelled</strong><small>This leave is no longer on the team calendar. Its approval history is kept.</small></span></section> : null}
-    {canCancel ? <section className={styles.cancelLeaveAction}>{!isConfirmingCancellation ? <><span>Approved leave</span><p>Need to cancel this future approved leave?</p><button className={styles.cancelLeaveButton} type="button" onClick={() => onStartCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> Cancel leave</button></> : <><span>Cancel approved leave</span><p>This removes the future leave from the team calendar. The approval history is kept.</p><p>Past, same-day, and partly used leave cannot be cancelled here.</p>{cancellationError ? <p className={styles.cancelLeaveError} role="alert">{cancellationError}</p> : null}<div className={styles.cancelLeaveControls}><button className={styles.cancelLeaveKeepButton} type="button" onClick={onDismissCancellation} disabled={busy}>Keep leave</button><button className={styles.cancelLeaveConfirmButton} type="button" onClick={() => onConfirmCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> {busy ? "Cancelling…" : "Yes, cancel leave"}</button></div></>}</section> : null}
+    {canCancel ? <section className={styles.cancelLeaveAction}>{!isConfirmingCancellation ? <><span>Approved leave</span><p>Need to cancel this future approved leave?</p><button id={cancelLeaveTriggerId(request.id)} className={styles.cancelLeaveButton} type="button" onClick={() => onStartCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> Cancel leave</button></> : <><span>Cancel approved leave</span><p>This removes the future leave from the team calendar. The approval history is kept.</p><p>Past, same-day, and partly used leave cannot be cancelled here.</p>{cancellationError ? <p className={styles.cancelLeaveError} role="alert">{cancellationError}</p> : null}<div className={styles.cancelLeaveControls}><button className={styles.cancelLeaveKeepButton} type="button" onClick={onDismissCancellation} disabled={busy}>Keep leave</button><button className={styles.cancelLeaveConfirmButton} type="button" onClick={() => onConfirmCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> {busy ? "Cancelling…" : "Yes, cancel leave"}</button></div></>}</section> : null}
     {!hidePrivateDetails && request.employeeNote ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}
     {!hidePrivateDetails && request.managerNote ? <section><span>Reviewer decision note</span><p>{request.managerNote}</p></section> : null}
     {!hidePrivateDetails ? <AttachmentList attachments={attachments} /> : null}

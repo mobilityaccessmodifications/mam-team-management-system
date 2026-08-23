@@ -227,6 +227,7 @@ export function EmployeeDirectory({
   const [endDatePrompt, setEndDatePrompt] = useState<{ date: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EmployeeDirectoryRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const observedRefreshKey = useRef(refreshKey);
   const endDateDialogRef = useRef<HTMLElement>(null);
   const endDateInputRef = useRef<HTMLInputElement>(null);
   const deleteDialogRef = useRef<HTMLElement>(null);
@@ -268,6 +269,12 @@ export function EmployeeDirectory({
 
   useEffect(() => {
     if (refreshKey === undefined) return;
+    // The primary loader already fetches the current snapshot on mount. Treat
+    // refreshKey only as a later invalidation signal so opening Directory does
+    // not issue the same HR-only RPC twice (four times in React development
+    // strict mode).
+    if (observedRefreshKey.current === refreshKey) return;
+    observedRefreshKey.current = refreshKey;
 
     let cancelled = false;
     async function refreshRecords() {
@@ -471,6 +478,13 @@ export function EmployeeDirectory({
                 value={query}
                 onChange={(event) => {
                   setQuery(event.target.value);
+                }}
+                onInput={(event) => {
+                  // Browsers dispatch `input` (and sometimes only `search`)
+                  // when the native clear affordance on type="search" is used.
+                  // Keep the controlled filter in sync with that cleared DOM
+                  // value so the full directory is restored immediately.
+                  setQuery(event.currentTarget.value);
                 }}
                 placeholder="Search name, role, team or manager"
                 type="search"

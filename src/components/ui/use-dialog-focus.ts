@@ -37,6 +37,7 @@ export function useDialogFocus(
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         onClose();
         return;
       }
@@ -60,10 +61,10 @@ export function useDialogFocus(
       }
     };
 
-    dialog.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
     return () => {
       window.cancelAnimationFrame(focusFrame);
-      dialog.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown, true);
       document.body.style.overflow = previousOverflow;
       const returnTarget = returnFocusRef.current;
       window.requestAnimationFrame(() => returnTarget?.focus({ preventScroll: true }));

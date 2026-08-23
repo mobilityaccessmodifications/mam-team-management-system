@@ -16,7 +16,6 @@ export function LoginForm({ initialMessage = "" }: { initialMessage?: string }) 
     <form
       className="auth-form"
       action={action}
-      onInput={() => setMessageDismissed(true)}
       onSubmit={() => setMessageDismissed(false)}
     >
       <label htmlFor="username">Username</label>
@@ -31,6 +30,7 @@ export function LoginForm({ initialMessage = "" }: { initialMessage?: string }) 
         required
         autoFocus
         aria-describedby={visibleMessage ? "login-message" : undefined}
+        onChange={() => setMessageDismissed(true)}
       />
       <label htmlFor="password">Password</label>
       <input
@@ -42,6 +42,7 @@ export function LoginForm({ initialMessage = "" }: { initialMessage?: string }) 
         maxLength={128}
         required
         aria-describedby={visibleMessage ? "login-message" : undefined}
+        onChange={() => setMessageDismissed(true)}
       />
       <button type="submit" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
