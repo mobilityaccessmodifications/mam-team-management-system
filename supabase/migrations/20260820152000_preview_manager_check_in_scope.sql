@@ -12,7 +12,7 @@ begin
 end;
 $$;
 
--- Change view is a Super Admin-only read-only preview. These RPCs deliberately
+-- Change Profile is a Super Admin-only scope projection. These RPCs deliberately
 -- take the selected person as an input but never trust that person for auth:
 -- the caller is still required to be a real system portal administrator.
 create function public.list_employee_check_in_workspace_for_preview(p_person_id uuid)
@@ -191,9 +191,9 @@ as $$
 $$;
 
 comment on function public.list_employee_check_in_workspace_for_preview(uuid) is
-  'Super Admin-only read-only preview of the selected manager’s safe check-in scope.';
+  'Super Admin-only projection of the selected manager’s safe check-in scope.';
 comment on function public.list_employee_check_in_tasks_for_preview(uuid) is
-  'Super Admin-only read-only preview of the selected manager’s actionable check-in tasks.';
+  'Super Admin-only projection of the selected manager’s actionable check-in tasks.';
 
 revoke all on function public.list_employee_check_in_workspace_for_preview(uuid) from public, anon, authenticated;
 revoke all on function public.list_employee_check_in_tasks_for_preview(uuid) from public, anon, authenticated;

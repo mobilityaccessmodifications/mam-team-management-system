@@ -22,7 +22,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { ChangeEvent, FormEvent, type ReactNode, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, type ReactNode, useMemo, useRef, useState } from "react";
 
 import { AboutMeDemo } from "@/components/about-me-demo";
 import { getOrganisationPersonWorkEmail } from "@/app/people/actions";
@@ -30,6 +30,7 @@ import {
   MotionTabs,
   type MotionTabOption,
 } from "@/components/ui/motion-tabs";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   OrganisationTree,
   type OrganisationPerson,
@@ -585,13 +586,16 @@ function CreateCaseModal({ mode, profiles, onClose, onSubmit }: {
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const personSelectRef = useRef<HTMLSelectElement>(null);
+  useDialogFocus(true, dialogRef, personSelectRef, onClose);
   const people = profiles
     .filter((profile) => profile.kind !== "org_unit" && profile.isActive !== false)
     .sort((first, second) => first.name.localeCompare(second.name));
   const label = mode === "onboarding" ? "onboarding" : mode === "offboarding" ? "offboarding" : "check-ins";
   const dateLabel = mode === "offboarding" ? "Final working day" : "Start date";
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="people-case-title"><header><div><span>Tasks</span><h2 id="people-case-title">Start {label}</h2></div><button type="button" onClick={onClose} aria-label="Close"><X size={19} /></button></header><form onSubmit={onSubmit}>
-    <label><span>Person</span><select name="personId" required defaultValue=""><option value="" disabled>Select from organisation</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.position}</option>)}</select></label>
+  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="people-case-title" tabIndex={-1}><header><div><span>Tasks</span><h2 id="people-case-title">Start {label}</h2></div><button type="button" onClick={onClose} aria-label="Close"><X size={19} /></button></header><form onSubmit={onSubmit}>
+    <label><span>Person</span><select ref={personSelectRef} name="personId" required defaultValue=""><option value="" disabled>Select from organisation</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.position}</option>)}</select></label>
     <label><span>{dateLabel}</span><input name="date" type="date" required /></label>
     <footer><button type="button" className={styles.cancelButton} onClick={onClose}>Cancel</button><button type="submit" className={styles.primaryAction}>Create <ArrowUpRight size={16} /></button></footer>
   </form></section></div>;

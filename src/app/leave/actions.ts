@@ -10,6 +10,8 @@ export type LeaveStatus = "Pending" | "Approved" | "Declined" | "Cancelled";
 
 export type LeaveWorkspaceRequest = {
   id: string;
+  /** Stable employee directory identifier. Missing legacy links fail closed in employee previews. */
+  personId?: string;
   employee: string;
   company: "mam" | "equipsy";
   leaveType: string;
@@ -29,13 +31,25 @@ export type LeaveWorkspaceRequest = {
    * a browser-selected employee, display name, or local date calculation.
    */
   canCancel: boolean;
+  /** True only for the current owner while a submitted/approved request accepts evidence. */
+  canAttach: boolean;
   employeeNote?: string;
   managerNote?: string;
+};
+
+export type LeaveAttachment = {
+  id: string;
+  leaveRequestId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
 };
 
 export type LeaveCalendarEntry = Pick<
   LeaveWorkspaceRequest,
   | "id"
+  | "personId"
   | "employee"
   | "company"
   | "leaveType"
@@ -71,6 +85,7 @@ export type CheckInCalendarEntry = {
 
 export type LeaveWorkspaceData = {
   requests: LeaveWorkspaceRequest[];
+  attachments: LeaveAttachment[];
   calendarEntries: LeaveCalendarEntry[];
   birthdayEntries: BirthdayCalendarEntry[];
   checkInEntries: CheckInCalendarEntry[];
@@ -81,6 +96,8 @@ export type LeaveWorkspaceData = {
    * request is pending.
    */
   canReviewLeave: boolean;
+  /** Non-blocking notice when an optional calendar projection is unavailable. */
+  warning?: string;
 };
 
 export type SubmitLeaveInput = {
@@ -102,8 +119,27 @@ export type CancelLeaveInput = {
   requestId: string;
 };
 
+export type PrepareLeaveAttachmentInput = {
+  requestId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+};
+
+export type CompleteLeaveAttachmentInput = {
+  storagePath: string;
+};
+
+export type LeaveAttachmentUploadPlan = {
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+};
+
 type WorkspaceRpcRow = {
   id: string;
+  person_id?: string | null;
   employee_name: string;
   company_key: string;
   leave_type_label: string;
@@ -119,14 +155,31 @@ type WorkspaceRpcRow = {
   assigned_reviewer_label: string | null;
   can_decide: boolean;
   can_cancel: boolean;
+  can_attach?: boolean;
   employee_note: string | null;
   manager_note: string | null;
 };
 
 type CalendarRpcRow = Omit<
   WorkspaceRpcRow,
-  "approval_required" | "submitted_at" | "assigned_reviewer_label" | "can_decide" | "can_cancel" | "employee_note" | "manager_note"
+  "approval_required" | "submitted_at" | "assigned_reviewer_label" | "can_decide" | "can_cancel" | "can_attach" | "employee_note" | "manager_note"
 >;
+
+type AttachmentRpcRow = {
+  id: string;
+  leave_request_id: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number | string;
+  created_at: string;
+};
+
+type AttachmentUploadPlanRpcRow = {
+  storage_path: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number | string;
+};
 
 type BirthdayCalendarRpcRow = {
   employee_name: string;
@@ -167,11 +220,21 @@ type SubmitRpcRow = {
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^(?:(?:0[6-9]|1[0-7]):(?:00|15|30|45)|18:00)$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ATTACHMENT_STORAGE_PATH_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:pdf|heic|heif|jpg|png|webp)$/i;
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const LEAVE_TYPES = new Set([
   "Annual leave",
   "Sick leave",
   "Carer's leave",
   "Unpaid leave",
+]);
+const ATTACHMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/heic",
+  "image/heif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
 ]);
 
 const LOAD_ERROR = "Leave records could not be loaded. Refresh and try again.";
@@ -179,6 +242,7 @@ const SAVE_ERROR = "The leave request could not be saved. Refresh and try again.
 const DECISION_ERROR = "The leave decision could not be saved. Refresh and try again.";
 const SELECTED_PROFILE_SUBMIT_ERROR = "The selected employee leave request could not be saved. Refresh and try again.";
 const CANCEL_ERROR = "The leave request could not be cancelled. Refresh and try again.";
+const ATTACHMENT_ERROR = "The supporting file could not be attached. Refresh and try again.";
 
 function requireText(value: unknown, errorMessage: string) {
   if (typeof value !== "string" || !value.trim()) throw new Error(errorMessage);
@@ -187,6 +251,13 @@ function requireText(value: unknown, errorMessage: string) {
 
 function optionalText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function optionalUuid(value: unknown, errorMessage: string) {
+  if (value === null || value === undefined || value === "") return undefined;
+  const id = requireText(value, errorMessage);
+  if (!UUID_PATTERN.test(id)) throw new Error(errorMessage);
+  return id;
 }
 
 function requiredDate(value: unknown, errorMessage: string) {
@@ -262,6 +333,7 @@ function toWorkspaceRequest(value: unknown): LeaveWorkspaceRequest {
 
   return {
     id,
+    personId: optionalUuid(row.person_id, LOAD_ERROR),
     employee: requireText(row.employee_name, LOAD_ERROR),
     company: company(row.company_key, LOAD_ERROR),
     leaveType: requireText(row.leave_type_label, LOAD_ERROR),
@@ -277,8 +349,42 @@ function toWorkspaceRequest(value: unknown): LeaveWorkspaceRequest {
     assignedReviewerLabel: optionalText(row.assigned_reviewer_label),
     canDecide: row.can_decide === true,
     canCancel: row.can_cancel === true,
+    canAttach: row.can_attach === true,
     employeeNote: optionalText(row.employee_note),
     managerNote: optionalText(row.manager_note),
+  };
+}
+
+function attachmentMimeType(value: unknown, errorMessage: string) {
+  const mimeType = requireText(value, errorMessage).toLowerCase();
+  if (!ATTACHMENT_MIME_TYPES.has(mimeType)) throw new Error(errorMessage);
+  return mimeType;
+}
+
+function attachmentFileName(value: unknown, errorMessage: string) {
+  const fileName = requireText(value, errorMessage);
+  if (fileName.length > 255 || /[\\/\u0000-\u001f]/u.test(fileName)) throw new Error(errorMessage);
+  return fileName;
+}
+
+function attachmentSize(value: unknown, errorMessage: string) {
+  const size = positiveNumber(value, errorMessage);
+  if (!Number.isSafeInteger(size) || size > MAX_ATTACHMENT_BYTES) throw new Error(errorMessage);
+  return size;
+}
+
+function toLeaveAttachment(value: unknown, errorMessage = LOAD_ERROR): LeaveAttachment {
+  const row = value as AttachmentRpcRow;
+  const id = requireText(row?.id, errorMessage);
+  const leaveRequestId = requireText(row?.leave_request_id, errorMessage);
+  if (!UUID_PATTERN.test(id) || !UUID_PATTERN.test(leaveRequestId)) throw new Error(errorMessage);
+  return {
+    id,
+    leaveRequestId,
+    fileName: attachmentFileName(row.file_name, errorMessage),
+    mimeType: attachmentMimeType(row.mime_type, errorMessage),
+    sizeBytes: attachmentSize(row.size_bytes, errorMessage),
+    createdAt: requireText(row.created_at, errorMessage),
   };
 }
 
@@ -289,6 +395,7 @@ function toCalendarEntry(value: unknown): LeaveCalendarEntry {
 
   return {
     id,
+    personId: optionalUuid(row.person_id, LOAD_ERROR),
     employee: requireText(row.employee_name, LOAD_ERROR),
     company: company(row.company_key, LOAD_ERROR),
     leaveType: requireText(row.leave_type_label, LOAD_ERROR),
@@ -387,6 +494,25 @@ function normaliseCancelInput(input: CancelLeaveInput) {
   const requestId = requireText(input.requestId, CANCEL_ERROR);
   if (!UUID_PATTERN.test(requestId)) throw new Error(CANCEL_ERROR);
   return { requestId };
+}
+
+function normalisePrepareAttachmentInput(input: PrepareLeaveAttachmentInput) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error(ATTACHMENT_ERROR);
+  const requestId = requireText(input.requestId, ATTACHMENT_ERROR);
+  if (!UUID_PATTERN.test(requestId)) throw new Error(ATTACHMENT_ERROR);
+  return {
+    requestId,
+    fileName: attachmentFileName(input.fileName, "Choose a PDF or supported image up to 5 MB."),
+    mimeType: attachmentMimeType(input.mimeType, "Choose a PDF or supported image up to 5 MB."),
+    sizeBytes: attachmentSize(input.sizeBytes, "Choose a PDF or supported image up to 5 MB."),
+  };
+}
+
+function normaliseCompleteAttachmentInput(input: CompleteLeaveAttachmentInput) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error(ATTACHMENT_ERROR);
+  const storagePath = requireText(input.storagePath, ATTACHMENT_ERROR);
+  if (!ATTACHMENT_STORAGE_PATH_PATTERN.test(storagePath)) throw new Error(ATTACHMENT_ERROR);
+  return { storagePath };
 }
 
 function toSubmitResult(value: unknown) {
@@ -494,6 +620,19 @@ function toCancellationResult(value: unknown) {
   return toRequestStatusResult(value, CANCEL_ERROR);
 }
 
+function toAttachmentUploadPlan(value: unknown) {
+  const rows = Array.isArray(value) ? value : [];
+  const row = rows[0] as AttachmentUploadPlanRpcRow | undefined;
+  const storagePath = requireText(row?.storage_path, ATTACHMENT_ERROR);
+  if (!row || !ATTACHMENT_STORAGE_PATH_PATTERN.test(storagePath)) throw new Error(ATTACHMENT_ERROR);
+  return {
+    storagePath,
+    fileName: attachmentFileName(row.file_name, ATTACHMENT_ERROR),
+    mimeType: attachmentMimeType(row.mime_type, ATTACHMENT_ERROR),
+    sizeBytes: attachmentSize(row.size_bytes, ATTACHMENT_ERROR),
+  } satisfies LeaveAttachmentUploadPlan;
+}
+
 function toRequestStatusResult(value: unknown, errorMessage: string) {
   const rows = Array.isArray(value) ? value : [];
   const row = rows[0] as { id?: unknown; status?: unknown } | undefined;
@@ -534,6 +673,37 @@ function userFacingDecisionError(error: unknown) {
   return DECISION_ERROR;
 }
 
+function userFacingAttachmentError(error: unknown) {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "object" && error && "message" in error && typeof error.message === "string"
+      ? error.message
+      : "";
+  if (
+    message === "Choose a PDF or supported image up to 5 MB."
+    || message === "A leave request can have up to 10 supporting files."
+    || message === "The supporting file upload was not found. Please try again."
+    || message === "Supporting-file uploads are temporarily limited. Please try again later or contact HR."
+  ) return message;
+  return ATTACHMENT_ERROR;
+}
+
+function parseOptionalProjection<T>(
+  data: unknown,
+  error: unknown,
+  parseRow: (row: unknown) => T,
+) {
+  if (error || !Array.isArray(data)) return { available: false, rows: [] as T[] };
+  try {
+    return { available: true, rows: data.map(parseRow) };
+  } catch {
+    // Optional projections are deliberately isolated from the core leave
+    // register. One malformed birthday, calendar, check-in or attachment row
+    // must not erase otherwise valid leave requests from the workspace.
+    return { available: false, rows: [] as T[] };
+  }
+}
+
 export async function getLeaveWorkspaceData(): Promise<LeaveWorkspaceData> {
   const supabase = await requireLeaveSession();
   const [
@@ -542,40 +712,49 @@ export async function getLeaveWorkspaceData(): Promise<LeaveWorkspaceData> {
     { data: birthdayData, error: birthdayError },
     { data: checkInData, error: checkInError },
     { data: canReviewLeave, error: canReviewError },
+    { data: attachmentData, error: attachmentError },
   ] = await Promise.all([
     supabase.rpc("list_leave_workspace_requests"),
     supabase.rpc("list_leave_calendar_entries"),
     supabase.rpc("list_calendar_birthdays"),
     supabase.rpc("list_employee_check_in_calendar_entries"),
     supabase.rpc("can_review_leave_workspace"),
+    supabase.rpc("list_leave_workspace_attachments"),
   ]);
 
-  if (
-    workspaceError
-    || calendarError
-    || birthdayError
-    || checkInError
-    || canReviewError
-    || !Array.isArray(workspaceData)
-    || !Array.isArray(calendarData)
-    || !Array.isArray(birthdayData)
-    || !Array.isArray(checkInData)
-    || typeof canReviewLeave !== "boolean"
-  ) {
+  if (workspaceError || canReviewError || !Array.isArray(workspaceData) || typeof canReviewLeave !== "boolean") {
     throw new Error(LOAD_ERROR);
   }
 
+  let requests: LeaveWorkspaceRequest[];
   try {
-    return {
-      requests: workspaceData.map(toWorkspaceRequest),
-      calendarEntries: calendarData.map(toCalendarEntry),
-      birthdayEntries: birthdayData.map(toBirthdayCalendarEntry),
-      checkInEntries: checkInData.map(toCheckInCalendarEntry),
-      canReviewLeave,
-    };
+    requests = workspaceData.map(toWorkspaceRequest);
   } catch {
     throw new Error(LOAD_ERROR);
   }
+
+  const attachments = parseOptionalProjection(attachmentData, attachmentError, toLeaveAttachment);
+  const calendar = parseOptionalProjection(calendarData, calendarError, toCalendarEntry);
+  const birthdays = parseOptionalProjection(birthdayData, birthdayError, toBirthdayCalendarEntry);
+  const checkIns = parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry);
+  const unavailable = [
+    !calendar.available ? "leave calendar" : "",
+    !birthdays.available ? "birthdays" : "",
+    !checkIns.available ? "check-ins" : "",
+    !attachments.available ? "supporting files" : "",
+  ].filter(Boolean);
+
+  return {
+    requests,
+    attachments: attachments.rows,
+    calendarEntries: calendar.rows,
+    birthdayEntries: birthdays.rows,
+    checkInEntries: checkIns.rows,
+    canReviewLeave,
+    warning: unavailable.length
+      ? `Some optional data is temporarily unavailable (${unavailable.join(", ")}). Leave requests remain available.`
+      : undefined,
+  };
 }
 
 export async function submitLeaveRequest(input: SubmitLeaveInput) {
@@ -666,4 +845,43 @@ export async function cancelMyApprovedLeaveRequest(input: CancelLeaveInput) {
   await deliverLeaveNotification(supabase, "leave-cancelled", result.id, { status: "Cancelled" });
   revalidatePath("/");
   return result;
+}
+
+export async function prepareLeaveRequestAttachmentUpload(input: PrepareLeaveAttachmentInput) {
+  const checked = normalisePrepareAttachmentInput(input);
+  const supabase = await requireLeaveSession();
+  const { data, error } = await supabase.rpc("prepare_my_leave_request_attachment_upload", {
+    p_request_id: checked.requestId,
+    p_file_name: checked.fileName,
+    p_mime_type: checked.mimeType,
+    p_size_bytes: checked.sizeBytes,
+  });
+  if (error) throw new Error(userFacingAttachmentError(error));
+  const result = toAttachmentUploadPlan(data);
+  if (result.fileName !== checked.fileName || result.mimeType !== checked.mimeType || result.sizeBytes !== checked.sizeBytes) {
+    throw new Error(ATTACHMENT_ERROR);
+  }
+  return result;
+}
+
+export async function discardLeaveRequestAttachmentUpload(input: CompleteLeaveAttachmentInput) {
+  const checked = normaliseCompleteAttachmentInput(input);
+  const supabase = await requireLeaveSession();
+  const { error } = await supabase.rpc("discard_my_leave_request_attachment_upload", {
+    p_storage_path: checked.storagePath,
+  });
+  if (error) throw new Error(ATTACHMENT_ERROR);
+}
+
+export async function completeLeaveRequestAttachmentUpload(input: CompleteLeaveAttachmentInput) {
+  const checked = normaliseCompleteAttachmentInput(input);
+  const supabase = await requireLeaveSession();
+  const { data, error } = await supabase.rpc("complete_my_leave_request_attachment_upload", {
+    p_storage_path: checked.storagePath,
+  });
+  if (error) throw new Error(userFacingAttachmentError(error));
+  const rows = Array.isArray(data) ? data : [];
+  const attachment = toLeaveAttachment(rows[0], ATTACHMENT_ERROR);
+  revalidatePath("/");
+  return attachment;
 }

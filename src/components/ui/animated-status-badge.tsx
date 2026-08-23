@@ -37,9 +37,9 @@ export function AnimatedStatusBadge({
           key={tone}
           className={styles.icon}
           initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.65, rotate: -12 }}
-          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, rotate: 0 }}
           exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.65, rotate: 12 }}
-          transition={{ duration: 0.18, ease: EASE_OUT }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: EASE_OUT }}
           aria-hidden="true"
         >
           <Icon className={tone === "loading" && !reduceMotion ? styles.spinning : undefined} size={12} />

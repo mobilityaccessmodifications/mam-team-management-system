@@ -1780,7 +1780,13 @@
 }
 
 .attachmentList > small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   margin-top: 9px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .approvalRecord > .attachmentList {
@@ -1798,6 +1804,59 @@
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+
+.detailPanel > .attachmentUpload {
+  border-color: color-mix(in srgb, var(--brand-primary) 24%, var(--line));
+  background: linear-gradient(145deg, var(--brand-soft), var(--surface-raised));
+}
+
+.detailPanel > .attachmentUpload > span {
+  color: var(--brand-deep);
+}
+
+.detailPanel > .attachmentUpload > p {
+  color: var(--text-secondary);
+}
+
+.attachmentUploadButton {
+  position: relative;
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 48%, var(--line));
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--brand-deep);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.attachmentUploadButton:hover,
+.attachmentUploadButton:focus-within {
+  border-color: var(--brand-primary);
+  background: var(--brand-soft);
+  transform: translateY(-1px);
+}
+
+.attachmentUploadButton:focus-within {
+  outline: 3px solid color-mix(in srgb, var(--brand-primary) 24%, transparent);
+  outline-offset: 2px;
+}
+
+.attachmentUploadButton[data-busy="true"] {
+  cursor: not-allowed;
+  opacity: 0.62;
+  transform: none;
+}
+
+.attachmentUploadButton[data-busy="true"] > input {
+  pointer-events: none;
 }
 
 .board {
@@ -5169,6 +5228,46 @@
   background: var(--red-soft);
   box-shadow: var(--shadow-xs);
   color: var(--danger-strong);
+}
+
+.loadErrorAction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 11px 13px;
+  border: 1px solid #ecc8c5;
+  border-radius: var(--radius-md);
+  background: var(--red-soft);
+  color: var(--danger-strong);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.loadErrorAction button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0 10px;
+}
+
+.loadErrorAction button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.directoryRecoveryActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .modal {

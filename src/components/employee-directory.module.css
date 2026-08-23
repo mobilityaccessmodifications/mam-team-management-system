@@ -196,6 +196,16 @@
   cursor: pointer;
 }
 
+.notice[data-error="true"] {
+  border-color: #efc8c3;
+  background: #fff6f4;
+  color: #8c3b32;
+}
+
+.notice[data-error="true"] svg {
+  color: #b14b3f;
+}
+
 .directoryDesk {
   display: grid;
   grid-template-columns: minmax(292px, 0.43fr) minmax(0, 1.57fr);
@@ -309,6 +319,18 @@
 
 .listState[data-error="true"] {
   color: #a84e43;
+}
+
+.listState button {
+  min-height: 30px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 750;
+  padding: 0 10px;
 }
 
 .records {

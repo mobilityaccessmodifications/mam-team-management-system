@@ -8,6 +8,7 @@ import {
   Focus,
   GripVertical,
   Link2,
+  Link2Off,
   LocateFixed,
   Mail,
   Maximize2,
@@ -19,6 +20,7 @@ import {
   Rows3,
   Search,
   UnfoldVertical,
+  Undo2,
   UserPlus,
   WandSparkles,
   X,
@@ -28,6 +30,7 @@ import {
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -36,6 +39,7 @@ import {
 } from "react";
 
 import styles from "@/components/organisation-tree.module.css";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 
 export type OrganisationCompany = "mam" | "equipsy";
 
@@ -110,12 +114,24 @@ type Connector = {
   path: string;
 };
 type NodeOffset = { x: number; y: number };
+type DropIntent = "sibling" | "report-to-target" | "target-reports-to-dragged";
+type DropTarget = { id: string; intent: DropIntent };
+type LinkGuideState = {
+  sourceId: string;
+  pointer: NodeOffset;
+};
+type RelationshipHistoryEntry = {
+  personId: string;
+  previousReportsTo: string | null;
+  nextReportsTo: string | null;
+};
 type NodeDragState = {
   id: string;
   pointerId: number;
   startX: number;
   startY: number;
   startOffset: NodeOffset;
+  startedWithManualOffset: boolean;
   node: PositionedNode;
   moved: boolean;
 };
@@ -284,7 +300,11 @@ const DEFAULT_ZOOM = 0.92;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 1.35;
 const DRAG_THRESHOLD = 5;
+const GRID_SIZE = 24;
+const DROP_SNAP_X = 64;
+const DROP_SNAP_Y = 64;
 const ARRANGE_DURATION = 260;
+const MOBILE_CHART_QUERY = "(max-width: 900px)";
 
 const emptyDraft: OrganisationPersonDraft = {
   name: "",
@@ -740,6 +760,9 @@ export function OrganisationTree({
   const [arrangeMode, setArrangeMode] = useState(false);
   const [manualOffsets, setManualOffsets] = useState<Record<string, NodeOffset>>({});
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [linkGuide, setLinkGuide] = useState<LinkGuideState | null>(null);
+  const [relationshipHistory, setRelationshipHistory] = useState<RelationshipHistoryEntry[]>([]);
   const [arranging, setArranging] = useState(false);
   const [interactionMessage, setInteractionMessage] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
@@ -756,13 +779,26 @@ export function OrganisationTree({
   const descriptionId = useId();
   const searchResultsId = useId();
   const markerPrefix = useId().replaceAll(":", "");
+  const rootRef = useRef<HTMLElement>(null);
+  const editorDialogRef = useRef<HTMLElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const chartWorldRef = useRef<HTMLDivElement>(null);
   const initialViewportRef = useRef(false);
   const suppressCardClickRef = useRef(false);
   const nodeDragRef = useRef<NodeDragState | null>(null);
+  const dropTargetRef = useRef<DropTarget | null>(null);
   const pendingOffsetRef = useRef<{ id: string; offset: NodeOffset } | null>(null);
   const dragFrameRef = useRef<number | null>(null);
+  const pendingLinkPointerRef = useRef<{
+    clientX: number;
+    clientY: number;
+    pointer: NodeOffset;
+    sourceId: string;
+  } | null>(null);
+  const linkFrameRef = useRef<number | null>(null);
   const arrangeTimerRef = useRef<number | null>(null);
+  const preserveArrangeAfterProfileUpdateRef = useRef(false);
+  const preserveInteractionMessageAfterProfileUpdateRef = useRef(false);
   const workContactRequestRef = useRef(0);
   const panRef = useRef<{
     pointerId: number;
@@ -777,6 +813,12 @@ export function OrganisationTree({
   // not supplied the HR record entry point.
   const canArrange = canArrangeProp ?? canEdit;
   const canUseLegacyTreeEditor = canEdit && !onOpenEmployeeRecord;
+  const canUseRelationshipEditor = canEdit && Boolean(onUpdate);
+  const linkGuideActive = Boolean(linkGuide);
+  const closeEditor = useCallback(() => {
+    if (!saving) setEditor(null);
+  }, [saving]);
+  useDialogFocus(Boolean(editor), editorDialogRef, null, closeEditor);
   const profileLayoutKey = useMemo(
     () =>
       profiles
@@ -791,7 +833,17 @@ export function OrganisationTree({
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (openNodeActionsId) setOpenNodeActionsId(null);
+      if (linkGuideActive) {
+        pendingLinkPointerRef.current = null;
+        if (linkFrameRef.current !== null) {
+          window.cancelAnimationFrame(linkFrameRef.current);
+          linkFrameRef.current = null;
+        }
+        setLinkGuide(null);
+        dropTargetRef.current = null;
+        setDropTarget(null);
+        setInteractionMessage("Add line cancelled.");
+      } else if (openNodeActionsId) setOpenNodeActionsId(null);
       else if (editor && !saving) setEditor(null);
       else if (selectedId) {
         workContactRequestRef.current += 1;
@@ -800,7 +852,37 @@ export function OrganisationTree({
       }
     };
     const handleFullscreen = () => {
-      setFullscreen(document.fullscreenElement === viewportRef.current);
+      const active = document.fullscreenElement === rootRef.current;
+      setFullscreen(active);
+      if (!active) {
+        const activeDrag = nodeDragRef.current;
+        if (activeDrag) {
+          setManualOffsets((current) => {
+            const next = { ...current };
+            if (activeDrag.startedWithManualOffset) next[activeDrag.id] = activeDrag.startOffset;
+            else delete next[activeDrag.id];
+            return next;
+          });
+        }
+        nodeDragRef.current = null;
+        pendingOffsetRef.current = null;
+        if (dragFrameRef.current !== null) {
+          window.cancelAnimationFrame(dragFrameRef.current);
+          dragFrameRef.current = null;
+        }
+        pendingLinkPointerRef.current = null;
+        if (linkFrameRef.current !== null) {
+          window.cancelAnimationFrame(linkFrameRef.current);
+          linkFrameRef.current = null;
+        }
+        panRef.current = null;
+        setDraggingNodeId(null);
+        setPanning(false);
+        setArrangeMode(false);
+        setLinkGuide(null);
+        dropTargetRef.current = null;
+        setDropTarget(null);
+      }
     };
 
     window.addEventListener("keydown", handleKeydown);
@@ -809,12 +891,15 @@ export function OrganisationTree({
       window.removeEventListener("keydown", handleKeydown);
       document.removeEventListener("fullscreenchange", handleFullscreen);
     };
-  }, [editor, openNodeActionsId, saving, selectedId]);
+  }, [editor, linkGuideActive, openNodeActionsId, saving, selectedId]);
 
   useEffect(() => {
     return () => {
       if (dragFrameRef.current !== null) {
         window.cancelAnimationFrame(dragFrameRef.current);
+      }
+      if (linkFrameRef.current !== null) {
+        window.cancelAnimationFrame(linkFrameRef.current);
       }
       if (arrangeTimerRef.current !== null) {
         window.clearTimeout(arrangeTimerRef.current);
@@ -823,11 +908,70 @@ export function OrganisationTree({
   }, []);
 
   useEffect(() => {
+    const mobileQuery = window.matchMedia(MOBILE_CHART_QUERY);
+    const leaveDesktopEditing = (event: MediaQueryListEvent) => {
+      if (!event.matches) return;
+
+      const activeDrag = nodeDragRef.current;
+      if (activeDrag) {
+        setManualOffsets((current) => {
+          const next = { ...current };
+          if (activeDrag.startedWithManualOffset) next[activeDrag.id] = activeDrag.startOffset;
+          else delete next[activeDrag.id];
+          return next;
+        });
+      }
+      nodeDragRef.current = null;
+      pendingOffsetRef.current = null;
+      if (dragFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+      pendingLinkPointerRef.current = null;
+      if (linkFrameRef.current !== null) {
+        window.cancelAnimationFrame(linkFrameRef.current);
+        linkFrameRef.current = null;
+      }
+      panRef.current = null;
+      dropTargetRef.current = null;
+      setDraggingNodeId(null);
+      setPanning(false);
+      setArrangeMode(false);
+      setLinkGuide(null);
+      setDropTarget(null);
+      setOpenNodeActionsId(null);
+      setInteractionMessage("Desktop editing closed because the chart moved to the mobile layout.");
+
+      if (document.fullscreenElement === rootRef.current) {
+        void document.exitFullscreen().catch(() => {
+          setInteractionMessage("Use Escape to leave full screen and continue in the mobile layout.");
+        });
+      }
+    };
+
+    mobileQuery.addEventListener("change", leaveDesktopEditing);
+    return () => mobileQuery.removeEventListener("change", leaveDesktopEditing);
+  }, []);
+
+  useEffect(() => {
+    const preserveArrange = preserveArrangeAfterProfileUpdateRef.current
+      && document.fullscreenElement === rootRef.current;
+    const preserveInteractionMessage = preserveInteractionMessageAfterProfileUpdateRef.current;
+    preserveArrangeAfterProfileUpdateRef.current = false;
+    preserveInteractionMessageAfterProfileUpdateRef.current = false;
+    pendingLinkPointerRef.current = null;
+    if (linkFrameRef.current !== null) {
+      window.cancelAnimationFrame(linkFrameRef.current);
+      linkFrameRef.current = null;
+    }
     const timer = window.setTimeout(() => {
       setManualOffsets({});
-      setArrangeMode(false);
+      setArrangeMode(preserveArrange);
       setDraggingNodeId(null);
-      setInteractionMessage("");
+      dropTargetRef.current = null;
+      setDropTarget(null);
+      setLinkGuide(null);
+      if (!preserveInteractionMessage) setInteractionMessage("");
       setOpenNodeActionsId(null);
       setBranchLayouts({});
     }, 0);
@@ -986,12 +1130,13 @@ export function OrganisationTree({
   };
 
   const activeEditor =
-    canUseLegacyTreeEditor &&
-    (editor?.mode === "create" ||
-      (editor?.mode === "update" &&
+    (canUseLegacyTreeEditor || canUseRelationshipEditor) &&
+    (editor?.mode === "create"
+      ? canUseLegacyTreeEditor
+      : editor?.mode === "update" &&
         profiles.some(
           (profile) => profile.id === editor.id && isPerson(profile),
-        )))
+        ))
       ? editor
       : null;
   const editorProfile =
@@ -1279,8 +1424,35 @@ export function OrganisationTree({
     }, ARRANGE_DURATION);
   };
 
-  const toggleArrangeMode = () => {
+  const requestOrganisationFullscreen = async () => {
+    const root = rootRef.current;
+    if (!root) return false;
+    if (document.fullscreenElement === root) return true;
+    try {
+      await root.requestFullscreen();
+      return true;
+    } catch {
+      setInteractionMessage("Full screen could not be opened. Check your browser permissions and try again.");
+      return false;
+    }
+  };
+
+  const toggleArrangeMode = async () => {
     if (!canArrange) return;
+    if (window.matchMedia(MOBILE_CHART_QUERY).matches) {
+      setInteractionMessage("Arrange mode is available on a larger screen.");
+      return;
+    }
+    if (linkGuide) {
+      pendingLinkPointerRef.current = null;
+      if (linkFrameRef.current !== null) {
+        window.cancelAnimationFrame(linkFrameRef.current);
+        linkFrameRef.current = null;
+      }
+      setLinkGuide(null);
+      dropTargetRef.current = null;
+      setDropTarget(null);
+    }
     if (arrangeMode) {
       setArrangeMode(false);
       setInteractionMessage(
@@ -1289,12 +1461,16 @@ export function OrganisationTree({
       return;
     }
 
+    if (!(await requestOrganisationFullscreen())) return;
+
     workContactRequestRef.current += 1;
     setWorkContact(null);
     setSelectedId(null);
     setArrangeMode(true);
     setInteractionMessage(
-      "Arrange mode on. Drag a person to compare positions. Clean up restores the reporting layout.",
+      canUseRelationshipEditor
+        ? "Arrange mode on. Drop beside a card for peers, above it to become its manager, or below it to report to it."
+        : "Arrange mode on. Drag a person to compare positions. Clean up restores the reporting layout.",
     );
   };
 
@@ -1326,18 +1502,33 @@ export function OrganisationTree({
   };
 
   const toggleFullscreen = async () => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    if (document.fullscreenElement === viewport) {
-      await document.exitFullscreen();
-    } else {
-      await viewport.requestFullscreen();
+    const root = rootRef.current;
+    if (!root) return;
+    try {
+      if (document.fullscreenElement === root) {
+        await document.exitFullscreen();
+      } else {
+        await requestOrganisationFullscreen();
+      }
+    } catch {
+      setInteractionMessage("Full screen could not be opened. Check your browser permissions and try again.");
     }
   };
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
+    if (linkGuide && !target.closest("[data-link-target]")) {
+      pendingLinkPointerRef.current = null;
+      if (linkFrameRef.current !== null) {
+        window.cancelAnimationFrame(linkFrameRef.current);
+        linkFrameRef.current = null;
+      }
+      setLinkGuide(null);
+      setCurrentDropTarget(null);
+      setInteractionMessage("Add line cancelled.");
+      return;
+    }
     if (target.closest("button, input, select, label, aside")) return;
     const viewport = viewportRef.current;
     if (!viewport) return;
@@ -1398,11 +1589,207 @@ export function OrganisationTree({
     dragFrameRef.current = window.requestAnimationFrame(flushPendingOffset);
   };
 
+  const setCurrentDropTarget = (next: DropTarget | null) => {
+    const current = dropTargetRef.current;
+    if (current?.id === next?.id && current?.intent === next?.intent) return;
+    dropTargetRef.current = next;
+    setDropTarget(next);
+  };
+
+  const pointInChart = (clientX: number, clientY: number): NodeOffset | null => {
+    const world = chartWorldRef.current;
+    if (!world) return null;
+    const rect = world.getBoundingClientRect();
+    return {
+      x: clamp((clientX - rect.left) / zoom, 0, layout.width),
+      y: clamp((clientY - rect.top) / zoom, 0, layout.height),
+    };
+  };
+
+  const detectDropTargetAt = (
+    clientX: number,
+    clientY: number,
+    draggedId: string,
+  ): DropTarget | null => {
+    if (!canUseRelationshipEditor) return null;
+    const descendants = getDescendantIds(draggedId, orderedProfiles);
+    const candidates = [...(rootRef.current?.querySelectorAll<HTMLElement>("[data-node-id]") ?? [])]
+      .filter((element) => {
+        const targetId = element.dataset.nodeId;
+        return Boolean(targetId && targetId !== draggedId && profileById.has(targetId) && !descendants.has(targetId));
+      })
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        const dx = Math.max(rect.left - clientX, 0, clientX - rect.right);
+        const dy = Math.max(rect.top - clientY, 0, clientY - rect.bottom);
+        return { element, rect, distance: Math.hypot(dx, dy) };
+      })
+      .filter(({ rect, distance }) => rect.width > 0 && rect.height > 0 && distance <= Math.max(DROP_SNAP_X, DROP_SNAP_Y))
+      .sort((first, second) => first.distance - second.distance);
+
+    const candidate = candidates[0];
+    const targetId = candidate?.element.dataset.nodeId;
+    if (!candidate || !targetId) return null;
+    const { rect } = candidate;
+    const targetProfile = profileById.get(targetId);
+    if (!targetProfile) return null;
+
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const anchors: Array<{ intent: DropIntent; distance: number }> = [
+      {
+        intent: "target-reports-to-dragged",
+        distance: Math.hypot(clientX - centerX, clientY - (rect.top - 18)),
+      },
+      {
+        intent: "report-to-target",
+        distance: Math.hypot(clientX - centerX, clientY - (rect.bottom + 18)),
+      },
+      {
+        intent: "sibling",
+        distance: Math.min(
+          Math.hypot(clientX - (rect.left - 18), clientY - centerY),
+          Math.hypot(clientX - (rect.right + 18), clientY - centerY),
+        ),
+      },
+    ];
+    anchors.sort((first, second) => first.distance - second.distance);
+    const intent = anchors[0]?.intent;
+    if (!intent || (intent === "target-reports-to-dragged" && !isPerson(targetProfile))) return null;
+    return { id: targetId, intent };
+  };
+
+  const flushLinkPointer = () => {
+    const pending = pendingLinkPointerRef.current;
+    pendingLinkPointerRef.current = null;
+    linkFrameRef.current = null;
+    if (!pending || document.fullscreenElement !== rootRef.current) return;
+    setLinkGuide((current) => current?.sourceId === pending.sourceId
+      ? { ...current, pointer: pending.pointer }
+      : current);
+    setCurrentDropTarget(detectDropTargetAt(
+      pending.clientX,
+      pending.clientY,
+      pending.sourceId,
+    ));
+  };
+
+  const moveLinkGuide = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!linkGuide || document.fullscreenElement !== rootRef.current) return;
+    const pointer = pointInChart(event.clientX, event.clientY);
+    if (!pointer) return;
+    pendingLinkPointerRef.current = {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      pointer,
+      sourceId: linkGuide.sourceId,
+    };
+    if (linkFrameRef.current === null) {
+      linkFrameRef.current = window.requestAnimationFrame(flushLinkPointer);
+    }
+  };
+
+  const animateCleanUp = () => {
+    if (arrangeTimerRef.current !== null) window.clearTimeout(arrangeTimerRef.current);
+    setManualOffsets({});
+    setArranging(true);
+    arrangeTimerRef.current = window.setTimeout(() => {
+      arrangeTimerRef.current = null;
+      setArranging(false);
+    }, ARRANGE_DURATION);
+  };
+
+  const persistReportsTo = async (
+    person: OrganisationPerson,
+    nextReportsTo: string | null,
+    message: string,
+    recordHistory = true,
+  ) => {
+    if (!canUseRelationshipEditor || !onUpdate || !isPerson(person) || saving) return false;
+    const descendants = getDescendantIds(person.id, orderedProfiles);
+    if (nextReportsTo === person.id || (nextReportsTo ? descendants.has(nextReportsTo) : false)) {
+      setInteractionMessage("That connection would create a reporting cycle.");
+      return false;
+    }
+    if (nextReportsTo === person.reportsTo) {
+      setInteractionMessage("That card is already in this reporting group.");
+      return false;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      preserveArrangeAfterProfileUpdateRef.current = arrangeMode
+        && document.fullscreenElement === rootRef.current;
+      preserveInteractionMessageAfterProfileUpdateRef.current = true;
+      await onUpdate(person.id, {
+        name: person.name,
+        position: person.position,
+        company: person.company,
+        reportsTo: nextReportsTo,
+        kind: "person",
+      });
+      if (recordHistory) {
+        setRelationshipHistory((current) => [...current.slice(-19), {
+          personId: person.id,
+          previousReportsTo: person.reportsTo,
+          nextReportsTo,
+        }]);
+      }
+      animateCleanUp();
+      setInteractionMessage(message);
+      return true;
+    } catch (caught) {
+      preserveArrangeAfterProfileUpdateRef.current = false;
+      preserveInteractionMessageAfterProfileUpdateRef.current = false;
+      setInteractionMessage(caught instanceof Error ? caught.message : "The reporting connection could not be saved.");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const persistDropRelationship = async (dragged: OrganisationPerson, target: DropTarget) => {
+    const targetProfile = profileById.get(target.id);
+    if (!targetProfile) return false;
+    if (target.intent === "target-reports-to-dragged") {
+      return persistReportsTo(targetProfile, dragged.id, `${dragged.name} is now ${targetProfile.name}'s manager.`);
+    }
+    const nextReportsTo = target.intent === "sibling" ? targetProfile.reportsTo : targetProfile.id;
+    return persistReportsTo(
+      dragged,
+      nextReportsTo,
+      target.intent === "sibling"
+        ? `${dragged.name} is now grouped with ${targetProfile.name}.`
+        : `${dragged.name} now reports to ${targetProfile.name}.`,
+    );
+  };
+
+  const undoLastRelationship = async () => {
+    const last = relationshipHistory.at(-1);
+    if (!last || saving) return;
+    const person = profileById.get(last.personId);
+    if (!person) {
+      setRelationshipHistory((current) => current.slice(0, -1));
+      setInteractionMessage("That previous person is no longer in this chart.");
+      return;
+    }
+    const restored = await persistReportsTo(person, last.previousReportsTo, `Restored ${person.name}'s previous reporting line.`, false);
+    if (restored) setRelationshipHistory((current) => current.slice(0, -1));
+  };
+
   const startNodeDrag = (
     event: ReactPointerEvent<HTMLButtonElement>,
     node: PositionedNode,
   ) => {
-    if (!canArrange || !arrangeMode || event.button !== 0) return;
+    if (
+      saving
+      || !canArrange
+      || !arrangeMode
+      || document.fullscreenElement !== rootRef.current
+      || event.button !== 0
+      || !isPerson(node.node)
+    ) return;
 
     event.currentTarget.setPointerCapture(event.pointerId);
     nodeDragRef.current = {
@@ -1411,6 +1798,7 @@ export function OrganisationTree({
       startX: event.clientX,
       startY: event.clientY,
       startOffset: manualOffsets[node.node.id] ?? { x: 0, y: 0 },
+      startedWithManualOffset: manualOffsets[node.node.id] !== undefined,
       node,
       moved: false,
     };
@@ -1420,6 +1808,26 @@ export function OrganisationTree({
   const moveNodeDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const drag = nodeDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
+    if (document.fullscreenElement !== rootRef.current) {
+      setManualOffsets((current) => {
+        const next = { ...current };
+        if (drag.startedWithManualOffset) next[drag.id] = drag.startOffset;
+        else delete next[drag.id];
+        return next;
+      });
+      nodeDragRef.current = null;
+      pendingOffsetRef.current = null;
+      if (dragFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      setDraggingNodeId(null);
+      setCurrentDropTarget(null);
+      return;
+    }
 
     const deltaX = (event.clientX - drag.startX) / zoom;
     const deltaY = (event.clientY - drag.startY) / zoom;
@@ -1428,17 +1836,30 @@ export function OrganisationTree({
     drag.moved = true;
     event.preventDefault();
     event.stopPropagation();
+    setCurrentDropTarget(detectDropTargetAt(event.clientX, event.clientY, drag.id));
+    const desiredWorldX = drag.node.x + drag.startOffset.x + deltaX;
+    const desiredWorldY = drag.node.y + drag.startOffset.y + deltaY;
+    const minimumWorldX = Math.ceil(CANVAS_MARGIN / GRID_SIZE) * GRID_SIZE;
+    const minimumWorldY = Math.ceil(CANVAS_MARGIN / GRID_SIZE) * GRID_SIZE;
+    const maximumWorldX = Math.max(
+      minimumWorldX,
+      Math.floor((layout.width - CANVAS_MARGIN - drag.node.width) / GRID_SIZE) * GRID_SIZE,
+    );
+    const maximumWorldY = Math.max(
+      minimumWorldY,
+      Math.floor((layout.height - CANVAS_MARGIN - drag.node.height) / GRID_SIZE) * GRID_SIZE,
+    );
     scheduleOffset(drag.id, {
       x: clamp(
-        drag.startOffset.x + deltaX,
-        CANVAS_MARGIN - drag.node.x,
-        layout.width - CANVAS_MARGIN - drag.node.width - drag.node.x,
-      ),
+        Math.round(desiredWorldX / GRID_SIZE) * GRID_SIZE,
+        minimumWorldX,
+        maximumWorldX,
+      ) - drag.node.x,
       y: clamp(
-        drag.startOffset.y + deltaY,
-        CANVAS_MARGIN - drag.node.y,
-        layout.height - CANVAS_MARGIN - drag.node.height - drag.node.y,
-      ),
+        Math.round(desiredWorldY / GRID_SIZE) * GRID_SIZE,
+        minimumWorldY,
+        maximumWorldY,
+      ) - drag.node.y,
     });
   };
 
@@ -1446,29 +1867,47 @@ export function OrganisationTree({
     const drag = nodeDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
 
+    const canCommit = event.type === "pointerup"
+      && document.fullscreenElement === rootRef.current;
     if (dragFrameRef.current !== null) {
       window.cancelAnimationFrame(dragFrameRef.current);
       dragFrameRef.current = null;
-      flushPendingOffset();
+      if (canCommit) flushPendingOffset();
+      else pendingOffsetRef.current = null;
     }
+    if (!canCommit && drag.moved) {
+      setManualOffsets((current) => {
+        const next = { ...current };
+        if (drag.startedWithManualOffset) next[drag.id] = drag.startOffset;
+        else delete next[drag.id];
+        return next;
+      });
+    }
+    // Clear the ref before releasing capture: releasePointerCapture may fire
+    // lostpointercapture synchronously, and a second finish used to replay the
+    // relationship mutation and leave subsequent drags stuck.
+    nodeDragRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
 
-    nodeDragRef.current = null;
     setDraggingNodeId(null);
+    const nextDropTarget = dropTargetRef.current;
+    setCurrentDropTarget(null);
     if (drag.moved) {
       suppressCardClickRef.current = true;
       window.setTimeout(() => {
         suppressCardClickRef.current = false;
       }, 0);
-      setInteractionMessage(
-        `${drag.node.node.name} moved locally. Clean up restores the reporting layout.`,
-      );
+      if (canCommit && nextDropTarget && canUseRelationshipEditor) {
+        void persistDropRelationship(drag.node.node, nextDropTarget);
+      } else if (canCommit) {
+        setInteractionMessage(`${drag.node.node.name} moved on the grid. Clean up restores the reporting layout.`);
+      }
       return;
     }
 
-    if (event.type !== "pointercancel") {
+    if (canCommit) {
       suppressCardClickRef.current = true;
       selectProfile(drag.id);
       window.setTimeout(() => {
@@ -1489,7 +1928,7 @@ export function OrganisationTree({
   };
 
   const openUpdate = (profile: OrganisationPerson) => {
-    if (!canUseLegacyTreeEditor || !isPerson(profile)) return;
+    if ((!canUseLegacyTreeEditor && !canUseRelationshipEditor) || !isPerson(profile)) return;
     setDraft({
       name: profile.name,
       position: profile.position,
@@ -1499,6 +1938,62 @@ export function OrganisationTree({
     });
     setError("");
     setEditor({ mode: "update", id: profile.id });
+  };
+
+  const startReportingLinkGuide = async (profile: OrganisationPerson) => {
+    setOpenNodeActionsId(null);
+    if (!canUseRelationshipEditor || !isPerson(profile) || saving) {
+      setInteractionMessage("Only HR can edit reporting links.");
+      return;
+    }
+    pendingLinkPointerRef.current = null;
+    if (linkFrameRef.current !== null) {
+      window.cancelAnimationFrame(linkFrameRef.current);
+      linkFrameRef.current = null;
+    }
+    setLinkGuide(null);
+    setCurrentDropTarget(null);
+    if (!(await requestOrganisationFullscreen())) return;
+
+    // Fullscreen requests yield to the browser. Cancel again so an animation
+    // frame queued by the previous source cannot update this new guide.
+    pendingLinkPointerRef.current = null;
+    if (linkFrameRef.current !== null) {
+      window.cancelAnimationFrame(linkFrameRef.current);
+      linkFrameRef.current = null;
+    }
+
+    const item = layoutNodesById.get(profile.id);
+    const offset = manualOffsets[profile.id] ?? { x: 0, y: 0 };
+    const pointer = item
+      ? {
+          x: item.x + offset.x + item.width / 2,
+          y: item.y + offset.y + item.height / 2,
+        }
+      : { x: layout.width / 2, y: layout.height / 2 };
+    setArrangeMode(false);
+    setSelectedId(null);
+    setLinkGuide({ sourceId: profile.id, pointer });
+    setInteractionMessage(`Add line from ${profile.name}: choose the top, side or bottom + on another card. Click blank space or press Escape to cancel.`);
+  };
+
+  const finishReportingLinkGuide = async (target: DropTarget) => {
+    const source = linkGuide ? profileById.get(linkGuide.sourceId) : undefined;
+    if (
+      !source
+      || saving
+      || document.fullscreenElement !== rootRef.current
+    ) return;
+    const saved = await persistDropRelationship(source, target);
+    if (saved) {
+      pendingLinkPointerRef.current = null;
+      if (linkFrameRef.current !== null) {
+        window.cancelAnimationFrame(linkFrameRef.current);
+        linkFrameRef.current = null;
+      }
+      setLinkGuide(null);
+      setCurrentDropTarget(null);
+    }
   };
 
   const openReportingLinkEditor = (profile: OrganisationPerson) => {
@@ -1511,21 +2006,27 @@ export function OrganisationTree({
       return;
     }
 
-    if (onOpenEmployeeRecord) {
-      onOpenEmployeeRecord(profile.id);
+    if (canUseRelationshipEditor) {
+      openUpdate(profile);
       return;
     }
 
-    if (canUseLegacyTreeEditor) {
-      openUpdate(profile);
+    if (onOpenEmployeeRecord) {
+      onOpenEmployeeRecord(profile.id);
       return;
     }
 
     setInteractionMessage("Only HR can edit reporting links.");
   };
 
-  const closeEditor = () => {
-    if (!saving) setEditor(null);
+  const disconnectReportingLine = (profile: OrganisationPerson) => {
+    setOpenNodeActionsId(null);
+    if (!canUseRelationshipEditor || !profile.reportsTo) {
+      setInteractionMessage(profile.reportsTo ? "Only HR can edit reporting links." : `${profile.name} is already top level.`);
+      return;
+    }
+    if (!window.confirm(`Disconnect ${profile.name} from their current manager?`)) return;
+    void persistReportsTo(profile, null, `${profile.name} is now top level.`);
   };
 
   const savePerson = async (event: FormEvent<HTMLFormElement>) => {
@@ -1552,10 +2053,35 @@ export function OrganisationTree({
         await onCreate(cleanDraft);
       } else {
         if (!onUpdate) throw new Error("Editing people is not connected yet.");
+        const previous = profileById.get(activeEditor.id);
+        preserveInteractionMessageAfterProfileUpdateRef.current = Boolean(
+          previous
+          && isPerson(previous)
+          && previous.reportsTo !== cleanDraft.reportsTo,
+        );
+        if (preserveInteractionMessageAfterProfileUpdateRef.current) {
+          preserveArrangeAfterProfileUpdateRef.current = arrangeMode
+            && document.fullscreenElement === rootRef.current;
+        }
         await onUpdate(activeEditor.id, cleanDraft);
+        if (
+          previous
+          && isPerson(previous)
+          && previous.reportsTo !== cleanDraft.reportsTo
+        ) {
+          setRelationshipHistory((current) => [...current.slice(-19), {
+            personId: previous.id,
+            previousReportsTo: previous.reportsTo,
+            nextReportsTo: cleanDraft.reportsTo,
+          }]);
+          animateCleanUp();
+          setInteractionMessage(`Updated ${previous.name}'s reporting line.`);
+        }
       }
       setEditor(null);
     } catch (caught) {
+      preserveArrangeAfterProfileUpdateRef.current = false;
+      preserveInteractionMessageAfterProfileUpdateRef.current = false;
       setError(
         caught instanceof Error ? caught.message : "Changes could not be saved.",
       );
@@ -1576,9 +2102,41 @@ export function OrganisationTree({
     width: layout.width * zoom,
     height: layout.height * zoom,
   } as CSSProperties;
+  const linkSourceNode = linkGuide ? layoutNodesById.get(linkGuide.sourceId) : undefined;
+  const linkSourceOffset = linkGuide ? manualOffsets[linkGuide.sourceId] ?? { x: 0, y: 0 } : { x: 0, y: 0 };
+  const linkStart = linkSourceNode
+    ? {
+        x: linkSourceNode.x + linkSourceOffset.x + linkSourceNode.width / 2,
+        y: linkSourceNode.y + linkSourceOffset.y + linkSourceNode.height / 2,
+      }
+    : null;
+  const linkTargetNode = dropTarget ? layoutNodesById.get(dropTarget.id) : undefined;
+  const linkTargetOffset = dropTarget ? manualOffsets[dropTarget.id] ?? { x: 0, y: 0 } : { x: 0, y: 0 };
+  const linkEnd = linkTargetNode && dropTarget
+    ? dropTarget.intent === "sibling"
+      ? {
+          x: linkTargetNode.x + linkTargetOffset.x - 22,
+          y: linkTargetNode.y + linkTargetOffset.y + linkTargetNode.height / 2,
+        }
+      : dropTarget.intent === "target-reports-to-dragged"
+        ? {
+            x: linkTargetNode.x + linkTargetOffset.x + linkTargetNode.width / 2,
+            y: linkTargetNode.y + linkTargetOffset.y - 22,
+          }
+        : {
+            x: linkTargetNode.x + linkTargetOffset.x + linkTargetNode.width / 2,
+            y: linkTargetNode.y + linkTargetOffset.y + linkTargetNode.height + 22,
+          }
+    : linkGuide?.pointer ?? null;
+  const linkGuidePath = linkStart && linkEnd
+    ? `M ${linkStart.x} ${linkStart.y} C ${(linkStart.x + linkEnd.x) / 2} ${linkStart.y}, ${(linkStart.x + linkEnd.x) / 2} ${linkEnd.y}, ${linkEnd.x} ${linkEnd.y}`
+    : null;
+  const linkForbiddenTargetIds = linkGuide
+    ? getDescendantIds(linkGuide.sourceId, orderedProfiles).add(linkGuide.sourceId)
+    : new Set<string>();
 
   return (
-    <section aria-labelledby={titleId} className={rootClassName}>
+    <section aria-labelledby={titleId} className={rootClassName} ref={rootRef}>
       <header className={styles.heading}>
         <div>
           <span className={styles.eyebrow}>People</span>
@@ -1600,7 +2158,9 @@ export function OrganisationTree({
                 aria-pressed={arrangeMode}
                 className={styles.arrangeAction}
                 data-active={arrangeMode}
+                disabled={Boolean(linkGuide)}
                 onClick={toggleArrangeMode}
+                title={linkGuide ? "Finish adding the current reporting line first" : undefined}
                 type="button"
               >
                 <GripVertical aria-hidden="true" size={16} />
@@ -1754,18 +2314,24 @@ export function OrganisationTree({
           aria-label="Organisation chart. Select a person for details. Use arrow keys to pan the chart."
           className={styles.treeViewport}
           data-arrange={arrangeMode}
+          data-linking={linkGuide ? "true" : undefined}
           data-panning={panning}
           onKeyDown={handleViewportKeyDown}
+          onLostPointerCapture={stopPan}
           onPointerCancel={stopPan}
           onPointerDown={startPan}
-          onPointerMove={movePan}
+          onPointerMove={(event) => {
+            movePan(event);
+            moveLinkGuide(event);
+          }}
           onPointerUp={stopPan}
           ref={viewportRef}
           tabIndex={0}
         >
           <div className={styles.chartMeta}>
             <span>{visiblePersonCount} people</span>
-            {arrangeMode ? <span>Arrange mode · drag a person</span> : null}
+            {arrangeMode ? <span>Arrange mode · drag to a card edge</span> : null}
+            {linkGuide ? <span>Add line · choose a + or click blank space to cancel</span> : null}
           </div>
 
           <div aria-label="Chart view controls" className={styles.chartControls}>
@@ -1780,6 +2346,17 @@ export function OrganisationTree({
               >
                 <WandSparkles aria-hidden="true" size={15} />
                 <span>Clean up</span>
+              </button>
+            ) : null}
+            {canUseRelationshipEditor ? (
+              <button
+                aria-label="Undo last reporting-line change"
+                disabled={!relationshipHistory.length || saving}
+                onClick={() => void undoLastRelationship()}
+                title="Undo last reporting-line change"
+                type="button"
+              >
+                <Undo2 aria-hidden="true" size={15} />
               </button>
             ) : null}
             <button
@@ -1844,10 +2421,12 @@ export function OrganisationTree({
           </div>
 
           <div className={styles.desktopChart} style={frameStyle}>
-            <div className={styles.chartWorld} style={worldStyle}>
+            <div className={styles.chartWorld} data-arrange={arrangeMode} data-linking={linkGuide ? "true" : undefined} ref={chartWorldRef} style={worldStyle}>
               <svg
-                aria-hidden="true"
+                aria-hidden={canUseRelationshipEditor ? undefined : "true"}
+                aria-label={canUseRelationshipEditor ? "Editable reporting lines" : undefined}
                 className={styles.connectors}
+                data-editable={canUseRelationshipEditor ? "true" : "false"}
                 height={layout.height}
                 viewBox={`0 0 ${layout.width} ${layout.height}`}
                 width={layout.width}
@@ -1881,8 +2460,14 @@ export function OrganisationTree({
                     !selectedId ||
                     (relatedIds.has(connector.fromId) &&
                       relatedIds.has(connector.toId));
+                  const child = profileById.get(connector.toId);
                   return (
                     <path
+                      aria-label={
+                        canUseRelationshipEditor
+                          ? `Edit reporting line for ${child?.name ?? "this employee"}`
+                          : undefined
+                      }
                       className={styles.connector}
                       d={getConnectorPath(
                         connector,
@@ -1892,11 +2477,24 @@ export function OrganisationTree({
                       data-active={active}
                       data-arranging={arranging}
                       data-company={connector.company}
+                      data-editable={canUseRelationshipEditor ? "true" : "false"}
                       key={connector.id}
                       markerEnd={`url(#${markerPrefix}-${connector.company})`}
+                      onClick={() => {
+                        if (!canUseRelationshipEditor) return;
+                        if (child) openReportingLinkEditor(child);
+                      }}
+                      onKeyDown={(event) => {
+                        if (!canUseRelationshipEditor || (event.key !== "Enter" && event.key !== " ")) return;
+                        event.preventDefault();
+                        if (child) openReportingLinkEditor(child);
+                      }}
+                      role={canUseRelationshipEditor ? "button" : undefined}
+                      tabIndex={canUseRelationshipEditor ? 0 : -1}
                     />
                   );
                 })}
+                {linkGuidePath ? <path className={styles.linkGuide} d={linkGuidePath} data-snapped={dropTarget ? "true" : "false"} /> : null}
               </svg>
 
               {layout.nodes.map((item) => {
@@ -1907,7 +2505,7 @@ export function OrganisationTree({
                 const actionsOpen = openNodeActionsId === item.node.id;
                 const canEditReportingLink =
                   isPerson(item.node) &&
-                  Boolean(onOpenEmployeeRecord || canUseLegacyTreeEditor);
+                  canUseRelationshipEditor;
                 const nextLayout =
                   item.childrenLayout === "vertical" ? "horizontal" : "vertical";
                 const orientationTooltip = item.hasChildren
@@ -1917,17 +2515,23 @@ export function OrganisationTree({
                   ? `${collapsed ? "Expand" : "Collapse"} ${item.node.name}'s team`
                   : `${item.node.name} has no direct reports to ${collapsed ? "expand" : "collapse"}`;
                 const linkTooltip = canEditReportingLink
-                  ? `Edit ${item.node.name}'s reporting link`
+                  ? `Add or edit ${item.node.name}'s reporting line`
                   : "Only HR can edit reporting links";
+                const disconnectTooltip = item.node.reportsTo
+                  ? `Disconnect ${item.node.name} from its manager`
+                  : `${item.node.name} is already top level`;
                 return (
                   <div
                     className={styles.nodeWrap}
                     data-arrange={arrangeMode}
                     data-actions-open={actionsOpen}
                     data-dragging={draggingNodeId === item.node.id}
+                    data-drop-intent={dropTarget?.id === item.node.id ? dropTarget.intent : undefined}
+                    data-drop-target={dropTarget?.id === item.node.id ? "true" : undefined}
                     data-manual={Boolean(manualOffsets[item.node.id])}
                     data-muted={muted}
                     data-node-id={item.node.id}
+                    data-link-source={linkGuide?.sourceId === item.node.id ? "true" : undefined}
                     data-selected={selectedId === item.node.id}
                     key={item.node.id}
                     onMouseLeave={() => {
@@ -1962,9 +2566,12 @@ export function OrganisationTree({
                       onPointerDown={(event) => startNodeDrag(event, item)}
                       onPointerMove={moveNodeDrag}
                       onPointerUp={finishNodeDrag}
+                      onLostPointerCapture={finishNodeDrag}
                       title={
                         arrangeMode
-                          ? "Drag to compare positions. Clean up restores the reporting layout."
+                          ? canUseRelationshipEditor
+                            ? "Drop beside a card for peers, above it to become its manager, or below it to report to it."
+                            : "Drag to compare positions. Clean up restores the reporting layout."
                           : `${item.node.name}, ${item.node.position || companyLabels[item.node.company]}`
                       }
                       type="button"
@@ -1984,6 +2591,36 @@ export function OrganisationTree({
                         {companyLabels[item.node.company]}
                       </span>
                     </button>
+
+                    {linkGuide && !linkForbiddenTargetIds.has(item.node.id) ? (
+                      <div className={styles.linkTargets} aria-label={`Connect ${profileById.get(linkGuide.sourceId)?.name ?? "selected person"} with ${item.node.name}`}>
+                        {([
+                          ["target-reports-to-dragged", "top", `Make ${profileById.get(linkGuide.sourceId)?.name ?? "the selected person"} ${item.node.name}'s manager`],
+                          ["sibling", "side", `Group ${profileById.get(linkGuide.sourceId)?.name ?? "the selected person"} with ${item.node.name} as a peer`],
+                          ["report-to-target", "bottom", `Make ${profileById.get(linkGuide.sourceId)?.name ?? "the selected person"} report to ${item.node.name}`],
+                        ] as const)
+                          .filter(([intent]) => intent !== "target-reports-to-dragged" || isPerson(item.node))
+                          .map(([intent, position, label]) => (
+                          <button
+                            aria-label={label}
+                            className={styles.linkTarget}
+                            data-active={dropTarget?.id === item.node.id && dropTarget.intent === intent ? "true" : undefined}
+                            data-link-target={intent}
+                            data-position={position}
+                            key={intent}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void finishReportingLinkGuide({ id: item.node.id, intent });
+                            }}
+                            onFocus={() => setCurrentDropTarget({ id: item.node.id, intent })}
+                            onPointerEnter={() => setCurrentDropTarget({ id: item.node.id, intent })}
+                            type="button"
+                          >
+                            <Plus aria-hidden="true" size={14} />
+                          </button>
+                          ))}
+                      </div>
+                    ) : null}
 
                     <button
                       aria-controls={`node-actions-${item.node.id}`}
@@ -2065,11 +2702,27 @@ export function OrganisationTree({
                           className={styles.nodeActionOption}
                           data-company={item.node.company}
                           disabled={!canEditReportingLink}
-                          onClick={() => openReportingLinkEditor(item.node)}
+                          onClick={() => void startReportingLinkGuide(item.node)}
                           title={linkTooltip}
                           type="button"
                         >
                           <Link2 aria-hidden="true" size={15} />
+                        </button>
+                      </span>
+                      <span
+                        className={styles.nodeActionOptionWrap}
+                        data-tooltip={disconnectTooltip}
+                      >
+                        <button
+                          aria-label={disconnectTooltip}
+                          className={styles.nodeActionOption}
+                          data-company={item.node.company}
+                          disabled={!canEditReportingLink || !item.node.reportsTo}
+                          onClick={() => disconnectReportingLine(item.node)}
+                          title={disconnectTooltip}
+                          type="button"
+                        >
+                          <Link2Off aria-hidden="true" size={15} />
                         </button>
                       </span>
                     </div>
@@ -2160,7 +2813,10 @@ export function OrganisationTree({
                         </a>
                       ) : workContact?.personId === selectedProfile.id
                         && workContact.state === "error" ? (
-                          <p>Work contact could not be loaded. Try again.</p>
+                          <button type="button" onClick={() => requestWorkContact(selectedProfile.id)}>
+                            <strong>Retry work email</strong>
+                            <small>The previous request did not complete.</small>
+                          </button>
                         ) : onRequestWorkEmail ? (
                           <p>Work email not listed.</p>
                         ) : (
@@ -2264,15 +2920,25 @@ export function OrganisationTree({
             aria-labelledby={`${titleId}-editor`}
             aria-modal="true"
             className={styles.drawer}
+            ref={editorDialogRef}
             role="dialog"
+            tabIndex={-1}
           >
             <header className={styles.drawerHeader}>
               <div>
                 <span className={styles.eyebrow}>Organisation</span>
                 <h3 id={`${titleId}-editor`}>
-                  {activeEditor.mode === "create" ? "Add person" : "Edit person"}
+                  {activeEditor.mode === "create"
+                    ? "Add person"
+                    : canUseLegacyTreeEditor
+                      ? "Edit person"
+                      : "Edit reporting line"}
                 </h3>
-                <p id={descriptionId}>Name, position and reporting line.</p>
+                <p id={descriptionId}>
+                  {activeEditor.mode === "create" || canUseLegacyTreeEditor
+                    ? "Name, position and reporting line."
+                    : "Move this person to a different reporting group."}
+                </p>
               </div>
               <button
                 aria-label="Close"
@@ -2285,52 +2951,45 @@ export function OrganisationTree({
             </header>
 
             <form className={styles.form} onSubmit={savePerson}>
-              <label>
-                <span>Name</span>
-                <input
-                  autoComplete="off"
-                  autoFocus
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      name: event.target.value,
-                    }))
-                  }
-                  required
-                  value={draft.name}
-                />
-              </label>
+              {canUseLegacyTreeEditor ? (
+                <>
+                  <label>
+                    <span>Name</span>
+                    <input
+                      autoComplete="off"
+                      autoFocus
+                      onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+                      required
+                      value={draft.name}
+                    />
+                  </label>
 
-              <label>
-                <span>Position</span>
-                <input
-                  autoComplete="off"
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      position: event.target.value,
-                    }))
-                  }
-                  required
-                  value={draft.position}
-                />
-              </label>
+                  <label>
+                    <span>Position</span>
+                    <input
+                      autoComplete="off"
+                      onChange={(event) => setDraft((current) => ({ ...current, position: event.target.value }))}
+                      required
+                      value={draft.position}
+                    />
+                  </label>
 
-              <label>
-                <span>Company</span>
-                <select
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      company: event.target.value as OrganisationCompany,
-                    }))
-                  }
-                  value={draft.company}
-                >
-                  <option value="mam">MAM</option>
-                  <option value="equipsy">Equipsy</option>
-                </select>
-              </label>
+                  <label>
+                    <span>Company</span>
+                    <select
+                      onChange={(event) => setDraft((current) => ({ ...current, company: event.target.value as OrganisationCompany }))}
+                      value={draft.company}
+                    >
+                      <option value="mam">MAM</option>
+                      <option value="equipsy">Equipsy</option>
+                    </select>
+                  </label>
+                </>
+              ) : (
+                <p className={styles.relationshipEditorNote}>
+                  Change the reporting line only. Employee details stay in the HR record.
+                </p>
+              )}
 
               <label>
                 <span>Reports to</span>

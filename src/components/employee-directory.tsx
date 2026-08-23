@@ -17,8 +17,10 @@ import {
 import {
   type FormEvent,
   type ReactNode,
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -30,6 +32,7 @@ import {
 } from "@/app/people/actions";
 import styles from "@/components/employee-directory.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryDraft,
@@ -213,6 +216,8 @@ export function EmployeeDirectory({
   const [records, setRecords] = useState<EmployeeDirectoryRecord[]>(initialRecords ?? []);
   const [loading, setLoading] = useState(!initialRecords);
   const [loadError, setLoadError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [refreshError, setRefreshError] = useState("");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<DirectorySort>("name");
   const [editor, setEditor] = useState<EditorState | null>(null);
@@ -222,6 +227,19 @@ export function EmployeeDirectory({
   const [endDatePrompt, setEndDatePrompt] = useState<{ date: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EmployeeDirectoryRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const endDateDialogRef = useRef<HTMLElement>(null);
+  const endDateInputRef = useRef<HTMLInputElement>(null);
+  const deleteDialogRef = useRef<HTMLElement>(null);
+  const deleteCancelRef = useRef<HTMLButtonElement>(null);
+  const closeEndDatePrompt = useCallback(() => setEndDatePrompt(null), []);
+  const closeDeletePrompt = useCallback(() => {
+    if (deleting) return;
+    setDeleteTarget(null);
+    setSaveError("");
+  }, [deleting]);
+
+  useDialogFocus(Boolean(endDatePrompt), endDateDialogRef, endDateInputRef, closeEndDatePrompt);
+  useDialogFocus(Boolean(deleteTarget), deleteDialogRef, deleteCancelRef, closeDeletePrompt);
 
   useEffect(() => {
     if (initialRecords) return;
@@ -246,7 +264,7 @@ export function EmployeeDirectory({
     return () => {
       cancelled = true;
     };
-  }, [initialRecords]);
+  }, [initialRecords, loadAttempt]);
 
   useEffect(() => {
     if (refreshKey === undefined) return;
@@ -255,10 +273,16 @@ export function EmployeeDirectory({
     async function refreshRecords() {
       try {
         const response = await listEmployeeDirectoryRecords();
-        if (!cancelled) setRecords(response);
-      } catch {
-        // The currently displayed authorised data remains usable. A later
-        // change will try again, rather than replacing it with an error state.
+        if (!cancelled) {
+          setRecords(response);
+          setRefreshError("");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setRefreshError(error instanceof Error
+            ? error.message
+            : "Employee records could not be refreshed. The existing list is still available.");
+        }
       }
     }
 
@@ -435,6 +459,7 @@ export function EmployeeDirectory({
       </header>
 
       {notice ? <div className={styles.notice} role="status"><Check size={16} /><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={15} /></button></div> : null}
+      {refreshError ? <div className={styles.notice} data-error="true" role="alert"><AlertCircle size={16} /><span>{refreshError}</span><button type="button" onClick={() => setRefreshError("")} aria-label="Dismiss refresh error"><X size={15} /></button></div> : null}
 
       <div className={styles.directoryDesk}>
         <aside className={styles.directoryList} aria-label="Employee records">
@@ -468,7 +493,7 @@ export function EmployeeDirectory({
           </div>
 
           {loading ? <div className={styles.listState}><MotionLoader label="Loading employee records" /></div> : null}
-          {!loading && loadError ? <div className={styles.listState} data-error="true"><AlertCircle size={17} /><span>{loadError}</span></div> : null}
+          {!loading && loadError ? <div className={styles.listState} data-error="true"><AlertCircle size={17} /><span>{loadError}</span><button type="button" onClick={() => setLoadAttempt((current) => current + 1)}>Retry</button></div> : null}
           {!loading && !loadError && !sortedRecords.length ? <div className={styles.listState}>No employee records match that search.</div> : null}
 
           {!loading && !loadError && sortedRecords.length ? <EmployeeDirectoryList
@@ -492,29 +517,29 @@ export function EmployeeDirectory({
         /> : <EmptyDetail onCreate={openCreate} />}
       </div>
 
-      {endDatePrompt ? <div className={styles.modalBackdrop} role="presentation">
-        <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="end-date-title">
+      {endDatePrompt ? <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEndDatePrompt(); }}>
+        <section className={styles.modal} ref={endDateDialogRef} role="dialog" aria-modal="true" aria-labelledby="end-date-title" tabIndex={-1}>
           <header className={styles.modalHeader}>
             <div><span>Employee status</span><h3 id="end-date-title">Set employment end date</h3></div>
-            <button type="button" className={styles.modalClose} onClick={() => setEndDatePrompt(null)} aria-label="Close"><X size={17} /></button>
+            <button type="button" className={styles.modalClose} onClick={closeEndDatePrompt} aria-label="Close"><X size={17} /></button>
           </header>
           <div className={styles.modalBody}>
             <p>Confirm the employee is no longer active. The date defaults to today.</p>
-            <label className={styles.modalField}><span>End date</span><input type="date" value={endDatePrompt.date} onChange={(event) => setEndDatePrompt({ date: event.target.value })} /></label>
+            <label className={styles.modalField}><span>End date</span><input ref={endDateInputRef} type="date" value={endDatePrompt.date} onChange={(event) => setEndDatePrompt({ date: event.target.value })} /></label>
             {saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}
           </div>
-          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={() => setEndDatePrompt(null)}>Cancel</button><button type="button" className={styles.primaryAction} onClick={confirmEndDate}>Set end date</button></footer>
+          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={closeEndDatePrompt}>Cancel</button><button type="button" className={styles.primaryAction} onClick={confirmEndDate}>Set end date</button></footer>
         </section>
       </div> : null}
 
-      {deleteTarget ? <div className={styles.modalBackdrop} role="presentation">
-        <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="delete-profile-title">
+      {deleteTarget ? <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDeletePrompt(); }}>
+        <section className={styles.modal} ref={deleteDialogRef} role="dialog" aria-modal="true" aria-labelledby="delete-profile-title" tabIndex={-1}>
           <header className={styles.modalHeader}>
             <div><span>Permanent action</span><h3 id="delete-profile-title">Delete {deleteTarget.fullName}?</h3></div>
-            <button type="button" className={styles.modalClose} onClick={() => { if (!deleting) { setDeleteTarget(null); setSaveError(""); } }} disabled={deleting} aria-label="Close"><X size={17} /></button>
+            <button type="button" className={styles.modalClose} onClick={closeDeletePrompt} disabled={deleting} aria-label="Close"><X size={17} /></button>
           </header>
           <div className={styles.modalBody}><p>This removes the profile only when it is inactive, unlinked and has no reporting, roster or check-in history. Otherwise, deactivate it instead.</p>{saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}</div>
-          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={() => { setDeleteTarget(null); setSaveError(""); }} disabled={deleting}>Cancel</button><button type="button" className={styles.dangerAction} onClick={() => void confirmDelete()} disabled={deleting}><Trash2 size={15} />{deleting ? "Deleting…" : "Delete profile"}</button></footer>
+          <footer className={styles.modalActions}><button ref={deleteCancelRef} type="button" className={styles.secondaryAction} onClick={closeDeletePrompt} disabled={deleting}>Cancel</button><button type="button" className={styles.dangerAction} onClick={() => void confirmDelete()} disabled={deleting}><Trash2 size={15} />{deleting ? "Deleting…" : "Delete profile"}</button></footer>
         </section>
       </div> : null}
     </section>

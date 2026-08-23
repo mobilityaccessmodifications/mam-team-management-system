@@ -66,7 +66,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   // Preserve previously shared About-me demo links by opening the merged People profile view.
   const resolvedView = view === "about"
     ? "people"
-    : view === "leave" || view === "people" ? view : "home";
+    : view === "leave" || view === "calendar" || view === "people" ? view : "home";
 
   return <LeaveDemo
     isAdmin={isAdmin}

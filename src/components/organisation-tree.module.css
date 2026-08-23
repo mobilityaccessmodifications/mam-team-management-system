@@ -16,6 +16,18 @@
   color: var(--ink);
 }
 
+.organisation:fullscreen {
+  width: 100vw;
+  height: 100dvh;
+  overflow: auto;
+  background: var(--surface-canvas, #fbfcfa);
+  padding: 18px;
+}
+
+.organisation:fullscreen .treeViewport {
+  min-height: calc(100dvh - 190px);
+}
+
 .heading {
   display: flex;
   min-height: 56px;
@@ -395,6 +407,10 @@
   cursor: default;
 }
 
+.treeViewport[data-linking="true"] {
+  cursor: crosshair;
+}
+
 .chartMeta,
 .chartControls {
   position: sticky;
@@ -510,6 +526,31 @@
   transform-origin: top left;
 }
 
+.chartWorld[data-arrange="true"],
+.chartWorld[data-linking="true"] {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--line-strong) 22%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--line-strong) 22%, transparent) 1px, transparent 1px),
+    radial-gradient(circle, color-mix(in srgb, var(--mam) 36%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px, 24px 24px;
+}
+
+.linkGuide {
+  fill: none;
+  stroke: var(--mam);
+  stroke-dasharray: 8 6;
+  stroke-linecap: round;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 3px 5px rgb(24 36 33 / 0.18));
+  pointer-events: none;
+  animation: link-guide-dash 760ms linear infinite;
+}
+
+.linkGuide[data-snapped="true"] {
+  stroke-dasharray: none;
+  stroke-width: 3.5;
+}
+
 .connectors {
   position: absolute;
   z-index: 0;
@@ -543,6 +584,18 @@
   opacity: 0.32;
 }
 
+.connectors[data-editable="true"] .connector[data-editable="true"] {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.connectors[data-editable="true"] .connector[data-editable="true"]:hover,
+.connectors[data-editable="true"] .connector[data-editable="true"]:focus {
+  stroke-width: 4;
+  filter: drop-shadow(0 2px 3px rgb(24 36 33 / 0.18));
+  outline: none;
+}
+
 .nodeWrap {
   position: absolute;
   z-index: 2;
@@ -557,6 +610,170 @@
 .nodeWrap[data-dragging="true"] {
   z-index: 9;
   transition: opacity 120ms var(--ease-out);
+}
+
+.nodeWrap[data-drop-target="true"] {
+  z-index: 8;
+}
+
+.nodeWrap[data-link-source="true"] {
+  z-index: 9;
+}
+
+.nodeWrap[data-link-source="true"] .personCard {
+  outline: 4px solid color-mix(in srgb, var(--company) 36%, transparent);
+  outline-offset: 5px;
+  box-shadow: 0 14px 34px rgb(24 36 33 / 0.2);
+}
+
+.chartWorld[data-linking="true"] .nodeWrap[data-drop-target="true"]::before,
+.chartWorld[data-linking="true"] .nodeWrap[data-drop-target="true"]::after {
+  display: none;
+}
+
+.nodeWrap[data-drop-target="true"]::after {
+  position: absolute;
+  z-index: -1;
+  border: 2px solid var(--mam);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--mam) 9%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.nodeWrap[data-drop-target="true"]::before {
+  position: absolute;
+  z-index: 12;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--mam);
+  box-shadow: 0 5px 14px rgb(24 36 33 / 0.2);
+  color: #fff;
+  content: "+";
+  font-size: 16px;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.nodeWrap[data-drop-intent="sibling"]::after {
+  inset: -11px -22px;
+  border-style: dashed;
+}
+
+.nodeWrap[data-drop-intent="sibling"]::before {
+  top: 50%;
+  left: -33px;
+  transform: translateY(-50%);
+}
+
+.nodeWrap[data-drop-intent="target-reports-to-dragged"]::after {
+  inset: -22px -11px 20px;
+  border-top-width: 4px;
+}
+
+.nodeWrap[data-drop-intent="target-reports-to-dragged"]::before {
+  top: -33px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.nodeWrap[data-drop-intent="report-to-target"]::after {
+  inset: 20px -11px -22px;
+  border-bottom-width: 4px;
+}
+
+.nodeWrap[data-drop-intent="report-to-target"]::before {
+  bottom: -33px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.linkTargets {
+  position: absolute;
+  z-index: 11;
+  inset: 0;
+  pointer-events: none;
+}
+
+.linkTarget {
+  --target-accent: var(--mam);
+  position: absolute;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  cursor: crosshair;
+  opacity: 0.48;
+  padding: 0;
+  pointer-events: auto;
+  transition: opacity 140ms var(--ease-out), transform 140ms var(--ease-out);
+}
+
+.linkTarget::before {
+  position: absolute;
+  width: 25px;
+  height: 25px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--target-accent);
+  box-shadow: 0 5px 14px rgb(24 36 33 / 0.2);
+  content: "";
+}
+
+.linkTarget svg {
+  position: relative;
+  z-index: 1;
+}
+
+.linkTarget[data-position="top"] {
+  top: -42px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.linkTarget[data-position="side"] {
+  top: 50%;
+  left: -42px;
+  transform: translateY(-50%);
+}
+
+.linkTarget[data-position="bottom"] {
+  bottom: -42px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.linkTarget:hover,
+.linkTarget:focus-visible,
+.linkTarget[data-active="true"] {
+  opacity: 1;
+  outline: none;
+}
+
+.linkTarget[data-position="top"]:hover,
+.linkTarget[data-position="top"]:focus-visible,
+.linkTarget[data-position="top"][data-active="true"] {
+  transform: translateX(-50%) scale(1.14);
+}
+
+.linkTarget[data-position="side"]:hover,
+.linkTarget[data-position="side"]:focus-visible,
+.linkTarget[data-position="side"][data-active="true"] {
+  transform: translateY(-50%) scale(1.14);
+}
+
+.linkTarget[data-position="bottom"]:hover,
+.linkTarget[data-position="bottom"]:focus-visible,
+.linkTarget[data-position="bottom"][data-active="true"] {
+  transform: translateX(-50%) scale(1.14);
 }
 
 .personCard,
@@ -1174,6 +1391,17 @@
   padding: 9px 10px;
 }
 
+.relationshipEditorNote {
+  margin: 0;
+  border-left: 3px solid var(--mam);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--mam-soft);
+  color: var(--text-secondary, #53625e);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 11px 12px;
+}
+
 .formActions {
   display: flex;
   justify-content: flex-end;
@@ -1210,6 +1438,12 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes link-guide-dash {
+  to {
+    stroke-dashoffset: -28;
   }
 }
 
@@ -1297,6 +1531,7 @@
   }
 
   .arrangeAction {
+    display: none;
     width: 100%;
   }
 
@@ -1447,6 +1682,10 @@
     transition: none;
   }
 
+  .linkGuide {
+    animation: none;
+  }
+
   .primaryAction,
   .arrangeAction,
   .secondaryAction,
@@ -1458,6 +1697,10 @@
   .inspectorHeader button,
   .drawerHeader > button,
   .mobileToggle {
+    transition: none;
+  }
+
+  .linkTarget {
     transition: none;
   }
 }
