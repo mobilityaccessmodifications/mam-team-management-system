@@ -298,6 +298,45 @@ function scrollPageToTop() {
   window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
 }
 
+function getApprovalCalendarDays(request: LeaveRequest) {
+  const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const first = new Date(`${request.startDate}T12:00:00`);
+  const last = new Date(`${request.endDate}T12:00:00`);
+  first.setDate(first.getDate() - 21);
+  last.setDate(last.getDate() + 21);
+
+  const firstWeekday = first.getDay();
+  first.setDate(first.getDate() - (firstWeekday === 0 ? 6 : firstWeekday - 1));
+  const lastWeekday = last.getDay();
+  last.setDate(last.getDate() + (lastWeekday === 0 ? 0 : 7 - lastWeekday));
+
+  const dayCount = Math.round((last.getTime() - first.getTime()) / 86_400_000) + 1;
+  return Array.from({ length: dayCount }, (_, index) => {
+    const current = new Date(first);
+    current.setDate(first.getDate() + index);
+    return {
+      iso: toIsoDate(current),
+      day: current.getDate(),
+      month: shortMonths[current.getMonth()],
+      isWeekend: current.getDay() === 0 || current.getDay() === 6,
+    };
+  });
+}
+
+function requestsOverlap(first: LeaveRequest, second: LeaveRequest) {
+  if (first.endDate < second.startDate || second.endDate < first.startDate) return false;
+
+  const sharedStart = first.startDate > second.startDate ? first.startDate : second.startDate;
+  const sharedEnd = first.endDate < second.endDate ? first.endDate : second.endDate;
+  if (sharedStart !== sharedEnd) return true;
+
+  const firstIsPartial = first.startDate === first.endDate && first.startTime && first.endTime;
+  const secondIsPartial = second.startDate === second.endDate && second.startTime && second.endTime;
+  if (!firstIsPartial || !secondIsPartial) return true;
+
+  return first.startTime! < second.endTime! && second.startTime! < first.endTime!;
+}
+
 function startOfCalendarMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1, 12);
 }
@@ -1182,7 +1221,7 @@ export function LeaveDemo({
   }
 
   function navigate(view: AppView, section?: LeaveSection) {
-    if (view === "leave") chooseLeaveSection(section ?? "requests");
+    if (view === "leave") chooseLeaveSection(section ?? (canReviewLeave ? "approvals" : "requests"));
     else {
       setCancellationRequestId(null);
       setCancellationFocusRequestId(null);
@@ -1532,7 +1571,7 @@ export function LeaveDemo({
           {selectedEmployeeProfileError && isPreviewingEmployeeAccess ? <div className={styles.loadErrorAction} role="alert"><span>{selectedEmployeeProfileError}</span><button type="button" onClick={() => setSelectedEmployeeProfileReloadKey((current) => current + 1)}>Retry profile</button></div> : null}
           {organisationAccessError && activeView === "people" ? <div className={styles.loadErrorAction} role="alert"><span>{organisationAccessError}</span><button type="button" onClick={() => void loadOrganisation()}>Retry permissions</button></div> : null}
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} canReview={canReviewLeave} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
-          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} hidePrivateDetails={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
+          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} hidePrivateDetails={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
           {activeView === "calendar" ? <CalendarView birthdays={calendarBirthdays} checkIns={calendarCheckIns} requests={calendarRequests} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
@@ -1725,21 +1764,21 @@ function PanelHeader({ title, action, onAction }: { title: string; action?: stri
   return <header className={styles.panelHeader}><h2>{title}</h2>{action && onAction ? <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button> : null}</header>;
 }
 
-function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancelledRequestId, onFilter, onSection, onNote, onSelect, onDecision, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancelledRequestId, onFilter, onSection, onNote, onSelect, onDecision, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   return (
     <section className={styles.leaveDesk}>
       {canReview ? (
         <div className={styles.leaveSwitch} aria-label="Leave workspace">
-          <button className={section === "requests" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "requests"} onClick={() => onSection("requests")}>
-            <strong>Leave register</strong><i>{allRequests.length}</i>
-          </button>
           <button className={section === "approvals" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "approvals"} onClick={() => onSection("approvals")}>
             <strong>Approvals</strong><i>{pending.length}</i>
+          </button>
+          <button className={section === "requests" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "requests"} onClick={() => onSection("requests")}>
+            <strong>Leave register</strong><i>{allRequests.length}</i>
           </button>
         </div>
       ) : null}
       {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} attachmentsByRequestId={attachmentsByRequestId} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
-      {section === "approvals" && canReview ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} attachmentsByRequestId={attachmentsByRequestId} busy={busy} readOnly={readOnly} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
+      {section === "approvals" && canReview ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={busy} readOnly={readOnly} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
     </section>
   );
 }
@@ -1829,7 +1868,7 @@ function AttachmentList({ attachments }: { attachments: LeaveAttachment[] }) {
   </section>;
 }
 
-function ApprovalsView({ pending, selected, selectedId, note, attachmentsByRequestId, busy, readOnly, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
+function ApprovalsView({ pending, selected, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
   const showQueue = pending.length > 1 || !selected;
   return <div className={`${styles.approvalGrid} ${!selected ? styles.approvalGridEmpty : ""} ${!showQueue ? styles.approvalGridSingle : ""}`}>
     {showQueue ? <section className={`${styles.panel} ${styles.queue}`}><PanelHeader title="Requests" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} disabled={busy} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Nothing needs review</strong></div>}</section> : null}
@@ -1838,9 +1877,61 @@ function ApprovalsView({ pending, selected, selectedId, note, attachmentsByReque
       <div className={styles.factGrid}><article><CalendarDays size={17} /><span><small>When</small><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><small>Duration</small><strong>{formatDurationWithTime(selected)}</strong></span></article><article><ClipboardList size={17} /><span><small>Leave type</small><strong>{selected.leaveType}</strong></span></article></div>
       {selected.employeeNote ? <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div> : null}
       <AttachmentList attachments={attachmentsByRequestId.get(selected.id) ?? []} />
+      <ApprovalCalendar selected={selected} requests={calendarRequests} checkIns={calendarCheckIns} />
       {selected.status === "Pending" ? <div className={styles.decisionBox}><label><span>Decision note <small>Required when declining</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} placeholder="Add context that will remain with this record." disabled={busy || readOnly} /></label><div><button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")} disabled={busy || readOnly}><XCircle size={16} /> {busy ? "Sending…" : readOnly ? "Preview only" : "Decline"}</button><button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")} disabled={busy || readOnly}><CheckCircle2 size={16} /> {busy ? "Sending…" : readOnly ? "Preview only" : "Approve leave"}</button></div></div> : <div className={styles.decisionRecorded}><CheckCircle2 size={19} /><span><strong>Decision recorded</strong><small>The employee view and leave register show {selected.status.toLowerCase()}.</small></span></div>}
     </section> : null}
   </div>;
+}
+
+function ApprovalCalendar({ selected, requests, checkIns }: { selected: LeaveRequest; requests: LeaveRequest[]; checkIns: CheckInCalendarEntry[] }) {
+  const days = getApprovalCalendarDays(selected);
+  const rangeStart = days[0].iso;
+  const rangeEnd = days[days.length - 1].iso;
+  const teamLeave = requests.filter((request) => request.id !== selected.id && request.personId !== selected.personId && request.team === selected.team && request.status !== "Declined" && request.status !== "Cancelled" && request.endDate >= rangeStart && request.startDate <= rangeEnd);
+  const rangeCheckIns = checkIns.filter((entry) => entry.dueDate >= rangeStart && entry.dueDate <= rangeEnd);
+  const overlaps = teamLeave.filter((request) => requestsOverlap(selected, request));
+
+  return (
+    <section className={styles.calendarImpact} aria-labelledby="calendar-impact-title">
+      <header className={styles.impactHeader}>
+        <div><h3 id="calendar-impact-title">Calendar impact</h3><p>Three weeks before and after this request · {formatDateRange(rangeStart, rangeEnd)}</p></div>
+        <span className={overlaps.length ? styles.impactWarning : styles.impactClear}>{overlaps.length ? `${overlaps.length} ${overlaps.length === 1 ? "overlap" : "overlaps"}` : "No direct overlap"}</span>
+      </header>
+      <div className={styles.impactLegend} aria-label="Calendar legend">
+        <span><i className={styles.legendApplicant} />This request</span>
+        <span><i className={styles.legendApproved} />Approved leave</span>
+        <span><i className={styles.legendPending} />Pending leave</span>
+        <span><i className={styles.legendCheckIn} />Check-in</span>
+      </div>
+      <div className={styles.reviewCalendarViewport} tabIndex={0} aria-label="Scrollable team calendar comparison">
+        <div className={styles.reviewCalendar} role="grid" aria-label={`Team calendar from ${formatDateRange(rangeStart, rangeEnd)}`}>
+          <div className={styles.reviewCalendarWeek} role="row">
+            {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((weekday) => <span role="columnheader" key={weekday}>{weekday}</span>)}
+          </div>
+          <div className={styles.reviewCalendarGrid}>
+            {days.map((day, index) => {
+              const isRequestedDay = day.iso >= selected.startDate && day.iso <= selected.endDate;
+              const otherLeave = teamLeave.filter((request) => day.iso >= request.startDate && day.iso <= request.endDate);
+              const dayCheckIns = rangeCheckIns.filter((entry) => entry.dueDate === day.iso);
+              const visibleOtherLeave = otherLeave.slice(0, 2);
+              const visibleCheckIns = dayCheckIns.slice(0, 2);
+              const hiddenCount = Math.max(0, otherLeave.length - visibleOtherLeave.length) + Math.max(0, dayCheckIns.length - visibleCheckIns.length);
+              return (
+                <div className={`${styles.reviewCalendarDay} ${day.isWeekend ? styles.reviewCalendarWeekend : ""} ${isRequestedDay ? styles.reviewCalendarRequestedDay : ""}`} role="gridcell" key={day.iso}>
+                  <time dateTime={day.iso}><b>{day.day}</b>{day.day === 1 || index === 0 ? <span>{day.month}</span> : null}</time>
+                  {isRequestedDay ? <article className={styles.reviewEventApplicant}><i>{selected.initials}</i><span><strong>{selected.employee}</strong><small>{formatTimeRange(selected) || "This request"}</small></span></article> : null}
+                  {visibleOtherLeave.map((request) => <article className={request.status === "Approved" ? styles.reviewEventApproved : styles.reviewEventPending} key={request.id}><i>{request.initials}</i><span><strong>{request.employee}</strong><small>{formatTimeRange(request) || `${request.status} leave`}</small></span></article>)}
+                  {visibleCheckIns.map((entry) => <article className={styles.reviewEventCheckIn} key={`checkin:${entry.reminderId}`}><i>CI</i><span><strong>{entry.employee}</strong><small>{checkInMilestoneLabel(entry.milestone)}{entry.sequence === "final" ? " · final reminder" : ""}</small></span></article>)}
+                  {hiddenCount ? <span className={styles.reviewMoreLeave}>+{hiddenCount} more</span> : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      <p className={styles.reviewCalendarPrivacy}><ShieldCheck size={14} /> Team dates, leave status and check-in milestones only. Private reasons stay hidden.</p>
+    </section>
+  );
 }
 
 function CalendarView({

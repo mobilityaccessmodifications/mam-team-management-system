@@ -2247,7 +2247,8 @@
 .reviewHoliday,
 .reviewEventApplicant,
 .reviewEventApproved,
-.reviewEventPending {
+.reviewEventPending,
+.reviewEventCheckIn {
   min-width: 0;
   display: grid;
   align-items: center;
@@ -2286,7 +2287,8 @@
 
 .reviewEventApplicant,
 .reviewEventApproved,
-.reviewEventPending {
+.reviewEventPending,
+.reviewEventCheckIn {
   grid-template-columns: 20px minmax(0, 1fr);
 }
 
@@ -2308,9 +2310,16 @@
   color: var(--blue);
 }
 
+.reviewEventCheckIn {
+  border-color: #d9cbe8;
+  background: #f3eef8;
+  color: #765596;
+}
+
 .reviewEventApplicant > i,
 .reviewEventApproved > i,
-.reviewEventPending > i {
+.reviewEventPending > i,
+.reviewEventCheckIn > i {
   width: 20px;
   height: 20px;
   display: grid;
@@ -2328,7 +2337,9 @@
 .reviewEventApproved strong,
 .reviewEventApproved small,
 .reviewEventPending strong,
-.reviewEventPending small {
+.reviewEventPending small,
+.reviewEventCheckIn strong,
+.reviewEventCheckIn small {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2337,13 +2348,15 @@
 
 .reviewEventApplicant strong,
 .reviewEventApproved strong,
-.reviewEventPending strong {
+.reviewEventPending strong,
+.reviewEventCheckIn strong {
   font-size: 11px;
 }
 
 .reviewEventApplicant small,
 .reviewEventApproved small,
-.reviewEventPending small {
+.reviewEventPending small,
+.reviewEventCheckIn small {
   margin-top: 1px;
   font-size: 10px;
   font-weight: 600;
@@ -4992,7 +5005,8 @@
 
 .reviewEventApplicant,
 .reviewEventApproved,
-.reviewEventPending {
+.reviewEventPending,
+.reviewEventCheckIn {
   border-radius: 8px;
 }
 

@@ -183,6 +183,13 @@
   backdrop-filter: blur(16px);
 }
 
+.toolbarActions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+}
+
 .searchWrap {
   position: relative;
   z-index: 20;
@@ -1622,6 +1629,11 @@
     justify-content: flex-start;
   }
 
+  .toolbarActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .heading {
     gap: 16px;
   }
@@ -1651,6 +1663,7 @@
   }
 
   .filters {
+    flex: 1 1 auto;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
   }
