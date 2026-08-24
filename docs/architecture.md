@@ -92,7 +92,7 @@ The leave calendar is an availability view, not a leave-balance or payroll ledge
 - Calendar reads a controlled task projection: Todd/HR, Penny and Steven receive all employees; Kieran, Sujant and Serene receive only current organisation-tree descendants. The manager projection omits HR private fields.
 - Completion is durable. Reminders due before 1 July 2026 are migration-backfilled complete; no manual enable or catch-up queue is exposed.
 - The reminder scheduler claims only due, incomplete work and sends the approved manager message and resource links through the controlled delivery route.
-- Production scheduling is owned by the MAM n8n 15-minute Schedule Trigger, which calls the server-only `CRON_SECRET`-protected route. The route claims at most two reminders per call and only during 09:00–16:59 Australia/Melbourne; Vercel Cron is intentionally not part of this deployment.
+- Production scheduling is owned by the MAM n8n daily 08:00 Australia/Melbourne Schedule Trigger, which calls the server-only `CRON_SECRET`-protected route. The route claims at most two reminders per call and only during 08:00–16:59 Australia/Melbourne; Vercel Cron is intentionally not part of this deployment.
 - Before each outbound request, the database re-resolves the current employee and manager and returns a short-lived authorization snapshot. That claimed token is immutable through provider finalisation; later organisation changes apply to later deliveries, while an abandoned claim times out and must pass current-context validation again.
 
 Onboarding and offboarding remain separate review work. No People workflow creates a portal login or provisions or revokes an external system.

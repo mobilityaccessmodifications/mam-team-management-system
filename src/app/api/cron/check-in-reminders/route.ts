@@ -125,9 +125,10 @@ function isWithinMelbourneDeliveryWindow(now = new Date()) {
     hourCycle: "h23",
   }).formatToParts(now).find((part) => part.type === "hour")?.value;
   const numericHour = Number(hour);
-  // The scheduler may invoke every 15 minutes, but manager notifications are
-  // deliberately only claimed in the local 09:00–16:59 delivery window.
-  return Number.isInteger(numericHour) && numericHour >= 9 && numericHour < 17;
+  // The daily scheduler runs at 08:00 Melbourne time. Keep claims inside the
+  // local 08:00–16:59 delivery window so a missed run can be retried safely
+  // later that same business day.
+  return Number.isInteger(numericHour) && numericHour >= 8 && numericHour < 17;
 }
 
 function isClaimedReminder(value: unknown): value is ClaimedReminder {

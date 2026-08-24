@@ -586,10 +586,10 @@ async function resolveLeaveEmployeeEmail(requestId: string) {
 }
 
 /**
- * Leave submission is routed to the request's assigned manager. Approval,
- * decline and cancellation events are routed to the requesting employee. The
- * browser never supplies a recipient, and a delivery failure cannot roll back
- * a leave decision already recorded in Supabase.
+ * Leave submission and cancellation events are routed to the request's
+ * nearest active manager/admin. Approval and decline events are routed to the
+ * requesting employee. The browser never supplies a recipient, and a delivery
+ * failure cannot roll back a leave decision already recorded in Supabase.
  */
 async function deliverLeaveNotification(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -666,9 +666,9 @@ async function deliverLeaveNotification(
     });
     const text = await response.text();
     const result = text.length <= 4096 ? JSON.parse(text) as { ok?: boolean; sent?: boolean; alreadySent?: boolean; actualRecipient?: string } : {};
-    const expectedRecipient = event === "leave-submitted"
-      ? managerEmail ?? "marketing@mobilityaccess.com.au"
-      : employeeEmail ?? "marketing@mobilityaccess.com.au";
+    const expectedRecipient = event === "leave-submitted" || event === "leave-cancelled"
+      ? managerEmail ?? ""
+      : employeeEmail ?? "";
     if (!response.ok || result.ok !== true || (result.sent !== true && result.alreadySent !== true) || result.actualRecipient !== expectedRecipient) {
       console.warn("Leave notification delivery was not confirmed.", { event, requestId, status: response.status, expectedRecipient });
     }
