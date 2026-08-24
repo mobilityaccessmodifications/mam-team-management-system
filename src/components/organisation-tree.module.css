@@ -413,11 +413,40 @@
   cursor: crosshair;
 }
 
+.canvasShell {
+  position: relative;
+}
+
+.canvasDock {
+  position: absolute;
+  z-index: 12;
+  top: 12px;
+  right: 12px;
+  left: 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.canvasDock > * {
+  pointer-events: auto;
+}
+
 .chartMeta,
 .chartControls {
   position: sticky;
   z-index: 12;
   top: 12px;
+}
+
+.canvasDock .chartMeta,
+.canvasDock .chartControls {
+  position: relative;
+  top: auto;
+  right: auto;
+  left: auto;
+  float: none;
 }
 
 .chartMeta {
@@ -1618,6 +1647,7 @@
     padding: 12px;
   }
 
+  .canvasDock,
   .chartMeta,
   .chartControls,
   .desktopChart {
