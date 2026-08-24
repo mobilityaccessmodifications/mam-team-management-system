@@ -737,11 +737,14 @@ export async function getLeaveWorkspaceData(): Promise<LeaveWorkspaceData> {
   const calendar = parseOptionalProjection(calendarData, calendarError, toCalendarEntry);
   const birthdays = parseOptionalProjection(birthdayData, birthdayError, toBirthdayCalendarEntry);
   const checkIns = parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry);
+  // Supporting files are a Leave-detail capability, not a calendar projection.
+  // Keep attachment capability failures out of the global notice so a missing
+  // optional attachment RPC cannot make Calendar look unhealthy or block the
+  // otherwise usable leave workspace.
   const unavailable = [
     !calendar.available ? "leave calendar" : "",
     !birthdays.available ? "birthdays" : "",
     !checkIns.available ? "check-ins" : "",
-    !attachments.available ? "supporting files" : "",
   ].filter(Boolean);
 
   return {
