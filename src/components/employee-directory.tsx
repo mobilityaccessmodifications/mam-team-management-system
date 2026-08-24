@@ -169,21 +169,6 @@ function compareByCompany(first: EmployeeDirectoryRecord, second: EmployeeDirect
   return companyComparison || compareByName(first, second);
 }
 
-function paginationItems(totalPages: number, currentPage: number) {
-  if (totalPages <= 9) return Array.from({ length: totalPages }, (_, index) => index + 1);
-
-  const pageNumbers = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, totalPages])]
-    .filter((pageNumber) => pageNumber > 0 && pageNumber <= totalPages)
-    .sort((first, second) => first - second);
-
-  return pageNumbers.flatMap((pageNumber, index) => {
-    const previousPage = pageNumbers[index - 1];
-    return previousPage && pageNumber - previousPage > 1
-      ? ["ellipsis" as const, pageNumber]
-      : [pageNumber];
-  });
-}
-
 function initialPageForSelectedRecord(
   records: EmployeeDirectoryRecord[],
   selectedPersonId: string | null,
@@ -339,8 +324,6 @@ export function EmployeeDirectory({
     return next.sort(compareByName);
   }, [searchedRecords, sort]);
 
-  const activeCount = records.filter((record) => record.isActive).length;
-  const archivedCount = records.length - activeCount;
   const externallySelectedRecord = selectedPersonId
     ? records.find((record) => record.personId === selectedPersonId) ?? null
     : null;
@@ -530,7 +513,7 @@ export function EmployeeDirectory({
                   // value so the full directory is restored immediately.
                   setQuery(event.currentTarget.value);
                 }}
-                placeholder="Search name, role, team or manager"
+                placeholder="Search employees"
                 type="search"
               />
             </label>
@@ -550,11 +533,10 @@ export function EmployeeDirectory({
             <label className={styles.sortField}>
               <span>View</span>
               <select value={directoryFilter} onChange={(event) => setDirectoryFilter(event.target.value as "active" | "archived")}>
-                <option value="active">Active ({activeCount})</option>
-                <option value="archived">Archived ({archivedCount})</option>
+                <option value="active">Active</option>
+                <option value="archived">Archived</option>
               </select>
             </label>
-            <span className={styles.recordCount}><UsersRound size={15} /> {sortedRecords.length} {directoryFilter}</span>
           </div>
 
           {loading ? <div className={styles.listState}><MotionLoader label="Loading employee records" /></div> : null}
@@ -626,9 +608,6 @@ function EmployeeDirectoryList({
   const currentPage = Math.min(page, totalPages);
   const firstRecordIndex = (currentPage - 1) * recordsPerPage;
   const paginatedRecords = records.slice(firstRecordIndex, firstRecordIndex + recordsPerPage);
-  const firstVisibleRecord = firstRecordIndex + 1;
-  const lastVisibleRecord = Math.min(firstRecordIndex + recordsPerPage, records.length);
-  const pageItems = paginationItems(totalPages, currentPage);
 
   return <>
     <div className={styles.records}>
@@ -658,7 +637,7 @@ function EmployeeDirectoryList({
 
     <nav className={styles.pagination} aria-label="Employee list pagination">
       <span className={styles.pageRange} aria-live="polite" aria-atomic="true">
-        Showing {firstVisibleRecord}–{lastVisibleRecord} of {records.length}
+        Page {currentPage} of {totalPages}
       </span>
       <div className={styles.paginationControls}>
         <button
@@ -671,17 +650,7 @@ function EmployeeDirectoryList({
         >
           <ChevronLeft size={15} aria-hidden="true" />
         </button>
-        {pageItems.map((pageItem, index) => typeof pageItem === "number" ? <button
-          key={pageItem}
-          type="button"
-          className={styles.paginationButton}
-          data-current={pageItem === currentPage}
-          onClick={() => setPage(pageItem)}
-          aria-label={`Page ${pageItem}`}
-          aria-current={pageItem === currentPage ? "page" : undefined}
-        >
-          {pageItem}
-        </button> : <span key={`${pageItem}-${index}`} className={styles.paginationEllipsis} aria-hidden="true">…</span>)}
+        <span className={styles.pageIndicator} aria-hidden="true">{currentPage} / {totalPages}</span>
         <button
           type="button"
           className={styles.paginationButton}
