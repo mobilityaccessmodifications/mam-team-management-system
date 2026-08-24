@@ -2257,21 +2257,9 @@ export function OrganisationTree({
   return (
     <section aria-labelledby={titleId} className={rootClassName} ref={rootRef}>
       <header className={styles.heading}>
-        <div>
-          <span className={styles.eyebrow}>People</span>
-          <h2 id={titleId}>Organisation</h2>
-          <p>Select a person to view their reporting line and work contact.</p>
-        </div>
+        <h2 className={styles.srOnly} id={titleId}>Organisation</h2>
 
         <div className={styles.headerActions}>
-          <button
-            className={styles.secondaryAction}
-            onClick={exportPdf}
-            type="button"
-          >
-            <Download aria-hidden="true" size={16} />
-            Export PDF
-          </button>
             {canArrange ? (
               <button
                 aria-pressed={arrangeMode}
@@ -2387,26 +2375,36 @@ export function OrganisationTree({
           ) : null}
         </div>
 
-        <div aria-label="Filter by company" className={styles.filters}>
-          {(["all", "mam", "equipsy"] as const).map((filter) => (
-            <button
-              aria-pressed={companyFilter === filter}
-              data-active={companyFilter === filter}
-              data-company={filter}
-              key={filter}
-              onClick={() => {
-                setCompanyFilter(filter);
-                setFocusedRootId(null);
-                setQuery("");
-                setSelectedId(null);
-                workContactRequestRef.current += 1;
-                setWorkContact(null);
-              }}
-              type="button"
-            >
-              {filter === "all" ? "All" : companyLabels[filter]}
-            </button>
-          ))}
+        <div className={styles.toolbarActions}>
+          <button
+            className={styles.secondaryAction}
+            onClick={exportPdf}
+            type="button"
+          >
+            <Download aria-hidden="true" size={16} />
+            Export PDF
+          </button>
+          <div aria-label="Filter by company" className={styles.filters}>
+            {(["all", "mam", "equipsy"] as const).map((filter) => (
+              <button
+                aria-pressed={companyFilter === filter}
+                data-active={companyFilter === filter}
+                data-company={filter}
+                key={filter}
+                onClick={() => {
+                  setCompanyFilter(filter);
+                  setFocusedRootId(null);
+                  setQuery("");
+                  setSelectedId(null);
+                  workContactRequestRef.current += 1;
+                  setWorkContact(null);
+                }}
+                type="button"
+              >
+                {filter === "all" ? "All" : companyLabels[filter]}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
