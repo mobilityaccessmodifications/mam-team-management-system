@@ -1448,7 +1448,7 @@ export function LeaveDemo({
               <input ref={profilePickerSearchRef} value={profilePickerQuery} onChange={(event) => setProfilePickerQuery(event.target.value)} placeholder="Search name, role or team" type="search" />
             </label>
             <div className={styles.profilePickerList}>
-              <button type="button" className={`${styles.profilePickerOption} ${styles.profilePickerSuperAdmin} ${!previewProfile ? styles.profilePickerOptionActive : ""}`} onClick={() => changeEmployeeAccessPreview("")}>
+              <button type="button" className={`${styles.profilePickerOption} ${!previewProfile ? styles.profilePickerOptionActive : ""}`} onClick={() => changeEmployeeAccessPreview("")}>
                 <span className={styles.profilePickerAvatar}>SA</span><span><strong>Super Admin</strong><small>Full system access</small></span>
               </button>
               {profilePickerResults.map((profile) => <button type="button" key={profile.id} className={`${styles.profilePickerOption} ${previewProfile?.id === profile.id ? styles.profilePickerOptionActive : ""}`} onClick={() => changeEmployeeAccessPreview(profile.id)}>

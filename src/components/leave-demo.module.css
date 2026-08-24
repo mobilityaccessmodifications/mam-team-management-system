@@ -308,8 +308,7 @@
 
 .viewPickerTrigger:focus-visible,
 .profilePickerClose:focus-visible,
-.profilePickerOption:focus-visible,
-.profilePickerSearch input:focus-visible {
+.profilePickerOption:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--accent) 46%, transparent);
   outline-offset: 2px;
 }
@@ -387,8 +386,12 @@
 }
 
 .profilePickerSearch:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: var(--line-dark);
+  box-shadow: none;
+}
+
+.profilePickerSearch input:focus-visible {
+  outline: none;
 }
 
 .profilePickerSearch input {
@@ -4292,16 +4295,6 @@
   border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
   background: var(--surface-raised);
   box-shadow: inset 3px 0 var(--accent);
-}
-
-/* Keep the system account anchored as the first, stable choice in the
- * profile list even while employee records are filtered or re-ordered. */
-.profilePickerSuperAdmin {
-  position: sticky;
-  z-index: 2;
-  top: 0;
-  border-bottom-color: var(--line);
-  background: var(--surface-raised);
 }
 
 .profilePickerAvatar,
