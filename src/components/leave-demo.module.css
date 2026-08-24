@@ -4863,6 +4863,14 @@
   gap: 0;
 }
 
+/* A single approval has no queue column. Keep the record full-width after
+ * the desktop workspace defaults above so it cannot collapse into the first
+ * 320px grid track. */
+.approvalGrid.approvalGridSingle,
+.approvalGrid.approvalGridEmpty {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .approvalGrid .queue {
   border: 0;
   border-right: 1px solid var(--line);

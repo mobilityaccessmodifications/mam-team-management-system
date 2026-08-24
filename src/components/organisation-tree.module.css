@@ -546,7 +546,10 @@
 .desktopChart {
   position: relative;
   clear: both;
-  margin: 52px auto 30px;
+  /* The toolbar is now docked outside the scrolling viewport. Reserve the
+   * same control-height that the previous in-flow floats occupied so the
+   * chart keeps its established top spacing and scale. */
+  margin: 96px auto 30px;
 }
 
 .chartWorld {
