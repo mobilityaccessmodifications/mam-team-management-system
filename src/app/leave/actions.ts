@@ -744,8 +744,17 @@ function parseOptionalProjection<T>(
   }
 }
 
-export async function getLeaveWorkspaceData(): Promise<LeaveWorkspaceData> {
+export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<LeaveWorkspaceData> {
   const supabase = await requireLeaveSession();
+  const checkedPreviewPersonId = previewPersonId ? selectedPersonId(previewPersonId) : null;
+
+  if (checkedPreviewPersonId) {
+    const { data: canChangeProfile, error: previewPermissionError } = await supabase.rpc("can_change_employee_view");
+    if (previewPermissionError || canChangeProfile !== true) {
+      throw new Error(SELECTED_PROFILE_SUBMIT_ERROR);
+    }
+  }
+
   const [
     { data: workspaceData, error: workspaceError },
     { data: calendarData, error: calendarError },
@@ -757,7 +766,9 @@ export async function getLeaveWorkspaceData(): Promise<LeaveWorkspaceData> {
     supabase.rpc("list_leave_workspace_requests"),
     supabase.rpc("list_leave_calendar_entries"),
     supabase.rpc("list_calendar_birthdays"),
-    supabase.rpc("list_employee_check_in_calendar_entries"),
+    checkedPreviewPersonId
+      ? supabase.rpc("list_employee_check_in_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId })
+      : supabase.rpc("list_employee_check_in_calendar_entries"),
     supabase.rpc("can_review_leave_workspace"),
     supabase.rpc("list_leave_workspace_attachments"),
   ]);
