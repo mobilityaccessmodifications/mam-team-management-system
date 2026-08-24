@@ -85,15 +85,22 @@ type EditorState =
   | { mode: "create" }
   | { mode: "update"; id: string }
   | null;
-type LayoutMode = "leaf" | "horizontal" | "vertical";
+type LayoutMode = "leaf" | "horizontal" | "vertical" | "grouped";
 type BranchLayout = Exclude<LayoutMode, "leaf">;
 type MeasuredNode = {
   node: TreeNode;
   children: MeasuredNode[];
+  groups: ChildGroup[];
   width: number;
   height: number;
   mode: LayoutMode;
   depth: number;
+};
+type ChildGroup = {
+  key: string;
+  children: MeasuredNode[];
+  width: number;
+  height: number;
 };
 type PositionedNode = {
   node: TreeNode;
@@ -483,6 +490,7 @@ function measureNode(
     return {
       node,
       children,
+      groups: [],
       width: CARD_WIDTH,
       height: CARD_HEIGHT,
       mode: "leaf",
@@ -490,19 +498,58 @@ function measureNode(
     };
   }
 
-  // Every operating branch reads top-to-bottom by default. Steven's direct
-  // leadership area is the sole exception, so it stays side by side.
+  // Group the same-title direct reports into vertical stacks by default. This
+  // keeps a warehouse's labourers/welders together without changing who they
+  // report to. Steven's direct leadership area remains side by side.
   // A local visual switch can override either default without altering data.
-  const automaticVertical = !isStevenMakris(node);
   const requestedLayout = branchLayouts[node.id];
-  const vertical =
-    requestedLayout === "vertical" ||
-    (requestedLayout !== "horizontal" && automaticVertical);
+  const automaticLayout: BranchLayout = isStevenMakris(node)
+    ? "horizontal"
+    : "grouped";
+  const effectiveLayout = requestedLayout ?? automaticLayout;
 
-  if (vertical) {
+  if (effectiveLayout === "grouped") {
+    const groupsByKey = new Map<string, MeasuredNode[]>();
+    for (const child of children) {
+      const key = normalise(child.node.position || companyLabels[child.node.company]) || "other";
+      const group = groupsByKey.get(key) ?? [];
+      group.push(child);
+      groupsByKey.set(key, group);
+    }
+    const groups = [...groupsByKey.entries()].map(([key, groupChildren]) => ({
+      key,
+      children: groupChildren,
+      width: Math.max(
+        CARD_WIDTH + STACK_BUS,
+        ...groupChildren.map((child) => child.width),
+      ),
+      height:
+        groupChildren.reduce((height, child) => height + child.height, 0) +
+        (groupChildren.length - 1) * STACK_GAP,
+    }));
+    const groupsWidth =
+      groups.reduce((width, group) => width + group.width, 0) +
+      HORIZONTAL_GAP * (groups.length - 1);
+
     return {
       node,
       children,
+      groups,
+      width: Math.max(CARD_WIDTH, groupsWidth),
+      height:
+        CARD_HEIGHT +
+        VERTICAL_GAP +
+        Math.max(...groups.map((group) => group.height)),
+      mode: "grouped",
+      depth,
+    };
+  }
+
+  if (effectiveLayout === "vertical") {
+    return {
+      node,
+      children,
+      groups: [],
       width: Math.max(
         CARD_WIDTH + STACK_BUS,
         ...children.map((child) => child.width),
@@ -524,6 +571,7 @@ function measureNode(
   return {
     node,
     children,
+    groups: [],
     width: Math.max(CARD_WIDTH, childrenWidth),
     height:
       CARD_HEIGHT +
@@ -569,7 +617,9 @@ function layoutForest(
           ? null
           : box.mode === "vertical"
             ? "vertical"
-            : "horizontal",
+            : box.mode === "grouped"
+              ? "grouped"
+              : "horizontal",
       descendantCount: countTreeDescendants(box.node),
     });
 
@@ -577,6 +627,37 @@ function layoutForest(
 
     const parentCenter = x + CARD_WIDTH / 2;
     const parentBottom = y + CARD_HEIGHT;
+
+    if (box.mode === "grouped") {
+      const groupsWidth =
+        box.groups.reduce((width, group) => width + group.width, 0) +
+        HORIZONTAL_GAP * (box.groups.length - 1);
+      const groupTop = top + CARD_HEIGHT + VERTICAL_GAP;
+      const busTop = parentBottom + VERTICAL_GAP / 2;
+      let groupLeft = left + (box.width - groupsWidth) / 2;
+
+      box.groups.forEach((group) => {
+        const groupCardX = groupLeft + (group.width - CARD_WIDTH) / 2;
+        const groupBusX = groupCardX - STACK_BUS;
+        let childTop = groupTop;
+
+        group.children.forEach((child) => {
+          const childMiddle = childTop + CARD_HEIGHT / 2;
+          place(child, groupCardX - (child.width - CARD_WIDTH) / 2, childTop);
+          connectors.push({
+            id: `${box.node.id}-${child.node.id}`,
+            fromId: box.node.id,
+            toId: child.node.id,
+            company: child.node.company,
+            path: `M ${parentCenter} ${parentBottom} V ${busTop} H ${groupBusX} V ${childMiddle} H ${groupCardX}`,
+          });
+          childTop += child.height + STACK_GAP;
+        });
+
+        groupLeft += group.width + HORIZONTAL_GAP;
+      });
+      return;
+    }
 
     if (box.mode === "vertical") {
       const childX = x;
@@ -861,6 +942,9 @@ export function OrganisationTree({
     const handleFullscreen = () => {
       const active = document.fullscreenElement === rootRef.current;
       setFullscreen(active);
+      // Full-screen is the editing canvas. Entering it directly should expose
+      // the same drag-and-drop mode as the Arrange button.
+      if (active) setArrangeMode(canArrange);
       if (!active) {
         if (linkGuideActive) setInteractionMessage("Add line cancelled.");
         const activeDrag = nodeDragRef.current;
@@ -899,7 +983,7 @@ export function OrganisationTree({
       window.removeEventListener("keydown", handleKeydown);
       document.removeEventListener("fullscreenchange", handleFullscreen);
     };
-  }, [editor, linkGuideActive, openNodeActionsId, pendingDisconnect, saving, selectedId]);
+  }, [canArrange, editor, linkGuideActive, openNodeActionsId, pendingDisconnect, saving, selectedId]);
 
   useEffect(() => {
     return () => {
@@ -1378,14 +1462,21 @@ export function OrganisationTree({
   };
 
   const toggleBranchLayout = (id: string, currentLayout: BranchLayout) => {
+    const nextLayout: BranchLayout = currentLayout === "grouped"
+      ? "horizontal"
+      : currentLayout === "horizontal"
+        ? "vertical"
+        : "grouped";
     setBranchLayouts((current) => ({
       ...current,
-      [id]: currentLayout === "vertical" ? "horizontal" : "vertical",
+      [id]: nextLayout,
     }));
     setInteractionMessage(
-      currentLayout === "vertical"
-        ? "Reports are now arranged side by side."
-        : "Reports are now arranged vertically.",
+      nextLayout === "grouped"
+        ? "Same-title reports are now grouped vertically."
+        : nextLayout === "vertical"
+          ? "Reports are now arranged in one vertical stack."
+          : "Reports are now arranged side by side.",
     );
   };
 
@@ -2534,8 +2625,11 @@ export function OrganisationTree({
                 const canEditReportingLink =
                   isPerson(item.node) &&
                   canUseRelationshipEditor;
-                const nextLayout =
-                  item.childrenLayout === "vertical" ? "horizontal" : "vertical";
+                const nextLayout = item.childrenLayout === "grouped"
+                  ? "side-by-side"
+                  : item.childrenLayout === "horizontal"
+                    ? "one vertical stack"
+                    : "same-title vertical groups";
                 const orientationTooltip = item.hasChildren
                   ? `Switch ${item.node.name}'s reports to ${nextLayout} layout`
                   : `${item.node.name} has no direct reports to arrange`;
@@ -2690,7 +2784,9 @@ export function OrganisationTree({
                           title={orientationTooltip}
                           type="button"
                         >
-                          {item.childrenLayout === "vertical" ? (
+                          {item.childrenLayout === "grouped" ? (
+                            <Network aria-hidden="true" size={15} />
+                          ) : item.childrenLayout === "vertical" ? (
                             <Rows3 aria-hidden="true" size={15} />
                           ) : (
                             <Columns3 aria-hidden="true" size={15} />
