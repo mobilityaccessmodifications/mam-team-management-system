@@ -530,9 +530,9 @@ function toSubmitResult(value: unknown) {
 }
 
 /**
- * The HR test receiver is fixed server-side. The browser never supplies a
- * recipient, and a delivery failure cannot roll back a leave decision that
- * has already been durably recorded in Supabase.
+ * The marketing test receiver is fixed server-side. The browser never
+ * supplies a recipient, and a delivery failure cannot roll back a leave
+ * decision that has already been durably recorded in Supabase.
  */
 async function deliverLeaveNotification(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -561,7 +561,7 @@ async function deliverLeaveNotification(
     }
   } catch {
     // The durable leave mutation already succeeded; fallback fields below are
-    // still sufficient for the HR test message.
+    // still sufficient for the marketing test message.
   }
 
   const payload = {
@@ -602,7 +602,7 @@ async function deliverLeaveNotification(
     });
     const text = await response.text();
     const result = text.length <= 4096 ? JSON.parse(text) as { ok?: boolean; sent?: boolean; alreadySent?: boolean; actualRecipient?: string } : {};
-    if (!response.ok || result.ok !== true || (result.sent !== true && result.alreadySent !== true) || result.actualRecipient !== "hr@mobilityaccess.com.au") {
+    if (!response.ok || result.ok !== true || (result.sent !== true && result.alreadySent !== true) || result.actualRecipient !== "marketing@mobilityaccess.com.au") {
       console.warn("Leave notification delivery was not confirmed.", { event, requestId, status: response.status });
     }
   } catch {
