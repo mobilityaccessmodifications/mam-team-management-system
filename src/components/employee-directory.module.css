@@ -208,7 +208,7 @@
 
 .directoryDesk {
   display: grid;
-  grid-template-columns: minmax(292px, 0.43fr) minmax(0, 1.57fr);
+  grid-template-columns: minmax(320px, 0.5fr) minmax(0, 1.5fr);
   min-height: 650px;
   border: 1px solid var(--directory-line);
   border-radius: var(--radius-xl);
@@ -225,12 +225,12 @@
 
 .listTools {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
   gap: 8px;
   border-bottom: 1px solid var(--directory-line);
   background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
-  padding: 13px;
+  padding: 12px;
 }
 
 .searchField {
@@ -242,7 +242,7 @@
   grid-template-columns: 17px minmax(0, 1fr);
   align-items: center;
   gap: 7px;
-  min-height: 42px;
+  min-height: 40px;
   border: 1px solid var(--surface-border-strong);
   border-radius: var(--radius-md);
   background: var(--surface-raised);
@@ -251,8 +251,8 @@
 }
 
 .searchField:focus-within {
-  border-color: var(--directory-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--directory-accent) 14%, transparent);
+  border-color: var(--surface-border-strong);
+  box-shadow: none;
 }
 
 .searchField input {
@@ -276,9 +276,14 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 6px;
-  color: #657378;
-  font-size: 12px;
+  color: var(--text-tertiary);
+  font-size: 10px;
   font-weight: 750;
+}
+
+.sortField > span {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .sortField select {
@@ -293,16 +298,6 @@
   font: inherit;
   font-size: 12px;
   padding: 6px 7px;
-}
-
-.recordCount {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-  color: #728085;
-  font-size: 12px;
-  white-space: nowrap;
 }
 
 .listState {
@@ -438,11 +433,13 @@
 }
 
 .pagination {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   border-top: 1px solid var(--directory-line);
   background: var(--surface-muted);
-  padding: 11px 13px;
+  padding: 9px 12px;
 }
 
 .pageRange {
@@ -453,9 +450,8 @@
 
 .paginationControls {
   display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 5px;
+  align-items: center;
+  gap: 6px;
 }
 
 .paginationButton {
@@ -476,6 +472,14 @@
   padding: 5px 7px;
 }
 
+.pageIndicator {
+  min-width: 54px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 750;
+  text-align: center;
+}
+
 .paginationButton:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--directory-accent) 52%, #d1dcda);
   background: var(--directory-accent-soft);
@@ -491,15 +495,6 @@
 .paginationButton:disabled {
   cursor: not-allowed;
   opacity: 0.48;
-}
-
-.paginationEllipsis {
-  display: inline-grid;
-  width: 31px;
-  min-height: 31px;
-  place-items: center;
-  color: #7a878b;
-  font-weight: 800;
 }
 
 .emptyDetail {
@@ -908,10 +903,6 @@
   .listTools {
     grid-template-columns: 1fr;
     align-items: stretch;
-  }
-
-  .recordCount {
-    justify-self: start;
   }
 
   .modalActions {
