@@ -64,7 +64,7 @@ The paired forward migration `20260818140000_shared_calendar_birthdays` must be 
 
 Active employees receive an automatic check-in schedule from their canonical start date. Weekend milestone due dates move forward to the next Monday-to-Friday working day. Reminder lead time is calculated from that scheduled workday, and any resulting weekend notification moves back to the previous working day. Due tasks appear in Calendar. Todd/HR, Penny and Steven receive the all-staff task projection; Kieran, Sujant and Serene receive only current organisation-tree descendants. Manager responses exclude HR private fields. Reminders due before 1 July 2026 are backfilled complete, and no manual enable or catch-up queue is used.
 
-During the marketing test phase, leave submit/approve/decline/cancel events are delivered by the MAM n8n Leave Email Delivery workflow to `marketing@mobilityaccess.com.au` only. The application supplies a server-derived request payload and deterministic event key; the receiver rejects browser-supplied recipients and deduplicates retries. No manager, employee, CC or BCC delivery is enabled.
+During the marketing test phase, a leave submission is delivered by the MAM n8n Leave Email Delivery workflow to the request's server-resolved assigned manager. Approval, decline and cancellation events remain routed to `marketing@mobilityaccess.com.au` for HR testing. The application supplies a server-derived request payload and deterministic event key; the receiver rejects browser-supplied recipients and deduplicates retries. No employee, CC or BCC delivery is enabled.
 
 ## Environment verification
 
