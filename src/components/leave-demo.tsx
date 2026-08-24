@@ -139,6 +139,24 @@ type InternalOrgRow = {
   version: number;
 };
 
+// The current HR reference charts (PDF and SVG) contain people and reporting
+// lines only. These legacy placeholder org-unit cards are not present in
+// either reference, so keep them out of the chart without deleting the
+// underlying records. Their children are reattached to the nearest real
+// person below when the chart DTO is built.
+const legacyReferenceOrgUnitLabels = new Set([
+  "scheduling team",
+  "estimating team",
+  "trades team",
+  "admin team",
+  "cso team",
+]);
+
+function isLegacyReferenceOrgUnit(row: InternalOrgRow) {
+  return row.node_kind === "org_unit"
+    && legacyReferenceOrgUnitLabels.has(row.position_title.trim().toLocaleLowerCase());
+}
+
 type DirectoryState = "connecting" | "live" | "error";
 
 type InitialNavigation = {
@@ -762,18 +780,34 @@ export function LeaveDemo({
     };
   }, [directorySupabase, refreshLeaveWorkspace]);
 
-  const organisationPeople = useMemo<OrganisationPerson[]>(() => organisationRows
-    .filter((row) => row.node_kind !== "vacancy")
-    .map((row) => ({
+  const organisationPeople = useMemo<OrganisationPerson[]>(() => {
+    const rowsById = new Map(organisationRows.map((row) => [row.id, row]));
+    const visibleRows = organisationRows.filter(
+      (row) => row.node_kind !== "vacancy" && !isLegacyReferenceOrgUnit(row),
+    );
+    const visibleIds = new Set(visibleRows.map((row) => row.id));
+    const nearestVisibleParentId = (row: InternalOrgRow) => {
+      const seen = new Set<string>();
+      let parentId = row.parent_id;
+      while (parentId && !seen.has(parentId)) {
+        seen.add(parentId);
+        if (visibleIds.has(parentId)) return parentId;
+        parentId = rowsById.get(parentId)?.parent_id ?? null;
+      }
+      return null;
+    };
+
+    return visibleRows.map((row) => ({
       id: row.id,
       name: row.node_kind === "org_unit" ? row.position_title : row.full_name ?? "Unnamed person",
       position: row.node_kind === "org_unit" ? "" : row.position_title,
       company: row.company_key,
-      reportsTo: row.parent_id,
+      reportsTo: nearestVisibleParentId(row),
       kind: row.node_kind === "org_unit" ? "org_unit" : "person",
       sortOrder: row.sort_order,
       isActive: row.is_active,
-    })), [organisationRows]);
+    }));
+  }, [organisationRows]);
   const directoryProfiles = useMemo<Profile[]>(() => {
     const rowsById = new Map(organisationRows.map((row) => [row.id, row]));
     const managerIds = new Set(organisationRows
