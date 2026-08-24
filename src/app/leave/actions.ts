@@ -532,29 +532,29 @@ function toSubmitResult(value: unknown) {
   };
 }
 
-type LeaveManagerRow = { manager_user_id: string | null };
+type LeaveNotificationManagerRow = {
+  manager_user_id: string | null;
+  manager_name: string | null;
+  manager_email: string | null;
+};
 
 /**
- * Resolve the request's authoritative manager account on the server. The
- * manager_user_id is written by the leave RPC from the approval grant; it is
- * never accepted from browser input. The auth email stays server-side and is
- * only included in the signed n8n notification payload.
+ * Resolve the employee's nearest active reporting manager on the server. The
+ * notification recipient is the HR-recorded work email, never the portal
+ * login email (which may be an internal accounts alias). The browser never
+ * supplies a recipient and the private work email is only included in the
+ * signed n8n notification payload.
  */
 async function resolveLeaveManagerEmail(requestId: string) {
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("leave_requests")
-      .select("manager_user_id")
-      .eq("id", requestId)
-      .maybeSingle<LeaveManagerRow>();
+    const { data, error } = await admin.rpc("resolve_leave_notification_manager", {
+      p_request_id: requestId,
+    });
+    if (error || !Array.isArray(data) || data.length !== 1) return undefined;
 
-    if (error || !data?.manager_user_id) return undefined;
-
-    const { data: authData, error: authError } = await admin.auth.admin.getUserById(data.manager_user_id);
-    if (authError) return undefined;
-
-    const email = authData.user?.email?.trim().toLowerCase();
+    const row = data[0] as LeaveNotificationManagerRow;
+    const email = row?.manager_email?.trim().toLowerCase();
     return email && EMAIL_PATTERN.test(email) ? email : undefined;
   } catch {
     return undefined;
