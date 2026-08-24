@@ -562,10 +562,32 @@ async function resolveLeaveManagerEmail(requestId: string) {
 }
 
 /**
- * Leave submission is routed to the request's assigned manager. Other leave
- * lifecycle events keep the Marketing test route until the HR templates are
- * approved. The browser never supplies a recipient, and a delivery failure
- * cannot roll back a leave decision already recorded in Supabase.
+ * Resolve the employee's HR-recorded work email on the server. The address is
+ * included only in the signed n8n delivery payload; it is never returned to
+ * the browser or accepted from the leave form.
+ */
+async function resolveLeaveEmployeeEmail(requestId: string) {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin.rpc("resolve_leave_notification_employee", {
+      p_request_id: requestId,
+    });
+    if (error || !Array.isArray(data) || data.length !== 1) return undefined;
+
+    const email = (data[0] as { employee_email?: unknown })?.employee_email;
+    return typeof email === "string" && EMAIL_PATTERN.test(email.trim().toLowerCase())
+      ? email.trim().toLowerCase()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Leave submission is routed to the request's assigned manager. Approval,
+ * decline and cancellation events are routed to the requesting employee. The
+ * browser never supplies a recipient, and a delivery failure cannot roll back
+ * a leave decision already recorded in Supabase.
  */
 async function deliverLeaveNotification(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -598,6 +620,7 @@ async function deliverLeaveNotification(
   }
 
   const managerEmail = await resolveLeaveManagerEmail(requestId);
+  const employeeEmail = await resolveLeaveEmployeeEmail(requestId);
 
   const payload = {
     version: 1,
@@ -610,6 +633,7 @@ async function deliverLeaveNotification(
       endDate: request?.endDate ?? fallback.endDate ?? "",
       managerNote: request?.managerNote ?? fallback.managerNote ?? "",
       managerEmail: managerEmail ?? fallback.managerEmail ?? "",
+      employeeEmail: employeeEmail ?? "",
     })).digest("hex").slice(0, 24)}`,
     requestId,
     employeeName: request?.employee ?? "Employee",
@@ -625,6 +649,7 @@ async function deliverLeaveNotification(
     employeeNote: request?.employeeNote ?? fallback.employeeNote ?? null,
     managerNote: request?.managerNote ?? fallback.managerNote ?? null,
     managerEmail: managerEmail ?? fallback.managerEmail ?? null,
+    employeeEmail: employeeEmail ?? null,
   };
 
   const controller = new AbortController();
@@ -639,9 +664,9 @@ async function deliverLeaveNotification(
     });
     const text = await response.text();
     const result = text.length <= 4096 ? JSON.parse(text) as { ok?: boolean; sent?: boolean; alreadySent?: boolean; actualRecipient?: string } : {};
-    const expectedRecipient = event === "leave-submitted" && managerEmail
-      ? managerEmail
-      : "marketing@mobilityaccess.com.au";
+    const expectedRecipient = event === "leave-submitted"
+      ? managerEmail ?? "marketing@mobilityaccess.com.au"
+      : employeeEmail ?? "marketing@mobilityaccess.com.au";
     if (!response.ok || result.ok !== true || (result.sent !== true && result.alreadySent !== true) || result.actualRecipient !== expectedRecipient) {
       console.warn("Leave notification delivery was not confirmed.", { event, requestId, status: response.status, expectedRecipient });
     }
