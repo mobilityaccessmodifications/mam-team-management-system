@@ -16,6 +16,8 @@ import {
   completeVisibleCheckInReminder,
 } from "@/app/check-ins/actions";
 import styles from "@/components/check-in-register.module.css";
+import { AnimatedStatusBadge } from "@/components/ui/animated-status-badge";
+import { MotionLoader } from "@/components/ui/motion-loader";
 import { parseCheckInWorkspaceRecords } from "@/lib/check-in-workspace-data";
 import type {
   CheckInResourceLinks,
@@ -63,6 +65,12 @@ function canCompleteReminder(reminder: CheckInWorkspaceReminder) {
   const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
   const today = `${value("year")}-${value("month")}-${value("day")}`;
   return reminder.status !== "completed" && /^\d{4}-\d{2}-\d{2}$/.test(reminder.dueDate) && reminder.dueDate <= today;
+}
+
+function reminderTone(status: CheckInWorkspaceReminder["status"]): "success" | "warning" | "info" {
+  if (status === "completed" || status === "delivered") return "success";
+  if (status === "needs_review") return "warning";
+  return "info";
 }
 
 function initials(record: CheckInWorkspaceRecord) {
@@ -237,7 +245,7 @@ export function CheckInWorkspace({
 
     {error ? <div className={styles.error} role="alert"><AlertTriangle size={17} /><span>{error}</span></div> : null}
     {notice ? <div className={styles.notice} role="status"><CheckCircle2 size={17} /><span>{notice}</span></div> : null}
-    {loading ? <div className={styles.loading}><CalendarClock size={23} /><strong>Loading check-ins…</strong></div> : null}
+    {loading ? <div className={styles.loading}><CalendarClock size={23} /><MotionLoader label="Loading check-ins" /></div> : null}
     {!loading && data && !data.records.length ? <div className={styles.loading}><UsersRound size={23} /><strong>No check-ins</strong></div> : null}
 
     {!loading && selected && data ? <div className={styles.desk}>
@@ -259,6 +267,7 @@ export function CheckInWorkspace({
               key={record.personId}
               className={styles.employeeRow}
               data-selected={record.personId === selected.personId}
+              data-company={record.company}
               aria-pressed={record.personId === selected.personId}
               onClick={() => selectPerson(record.personId)}
             >
@@ -275,7 +284,7 @@ export function CheckInWorkspace({
         </nav>
       </aside>
 
-      <article className={styles.detail}>
+      <article className={styles.detail} data-company={selected.company}>
         <header className={styles.personHeader}>
           <div><span className={styles.avatar}>{initials(selected)}</span><span><h3>{selected.fullName}</h3><p>{selected.positionTitle || "Role not recorded"}</p></span></div>
         </header>
@@ -294,7 +303,7 @@ export function CheckInWorkspace({
                 <strong>{milestoneLabel(reminder.milestone)}{reminder.sequence === "final" ? " · final reminder" : ""}</strong>
                 <p>Due {formatDate(reminder.dueDate)}</p>
               </div>
-              <span className={styles.status}>{reminder.status.replaceAll("_", " ")}</span>
+              <AnimatedStatusBadge className={styles.status} tone={reminderTone(reminder.status)}>{reminder.status.replaceAll("_", " ")}</AnimatedStatusBadge>
               {!readOnly && canCompleteReminder(reminder) ? <div className={styles.reminderActions}>
                 <button type="button" disabled={Boolean(pendingReminderId)} onClick={() => void markComplete(reminder.id)}>
                   {pendingReminderId === reminder.id ? "Saving…" : "Mark complete"}

@@ -20,6 +20,7 @@ import {
 import { FormEvent, useMemo, useState } from "react";
 
 import styles from "@/components/account-management.module.css";
+import { AnimatedStatusBadge } from "@/components/ui/animated-status-badge";
 
 export type AccountStatus = "unlinked" | "active" | "disabled";
 
@@ -105,6 +106,12 @@ const statusLabels: Record<AccountStatus, string> = {
   unlinked: "No login",
   active: "Active",
   disabled: "Disabled",
+};
+
+const statusTones: Record<AccountStatus, "neutral" | "success" | "danger"> = {
+  unlinked: "neutral",
+  active: "success",
+  disabled: "danger",
 };
 
 const passwordCharacters =
@@ -619,9 +626,9 @@ export function AccountManagement({
                   <span>{formatLastSignIn(account.lastSignInAt)}</span>
                 </div>
 
-                <span className={styles.status} data-status={account.status}>
+                <AnimatedStatusBadge className={styles.status} tone={statusTones[account.status]}>
                   {statusLabels[account.status]}
-                </span>
+                </AnimatedStatusBadge>
 
                 <div className={styles.actions}>
                   {!linked ? (

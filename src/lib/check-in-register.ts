@@ -247,8 +247,9 @@ export async function getVisibleCheckInWorkspace(): Promise<CheckInWorkspaceData
 }
 
 /**
- * Read-only Change view projection. The database requires the caller to be a
- * Super Admin and evaluates the selected person's live manager/global scope.
+ * Change Profile projection. The database requires the caller to be the real
+ * System Admin and evaluates the selected person's live manager/global scope;
+ * any later mutation is independently authorised as that System Admin.
  */
 export async function getVisibleCheckInWorkspaceForPreview(personId: string): Promise<CheckInWorkspaceData> {
   const supabase = await createClient();

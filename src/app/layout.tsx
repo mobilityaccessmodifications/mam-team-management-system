@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Barlow_Condensed, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -23,6 +23,11 @@ export const metadata: Metadata = {
   description: "Private people, leave and organisation workspace for MAM and Equipsy.",
 };
 
+export const viewport: Viewport = {
+  colorScheme: "light",
+  themeColor: "#182421",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -31,6 +36,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable} ${barlowCondensed.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

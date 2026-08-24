@@ -1,0 +1,56 @@
+.badge {
+  display: inline-flex;
+  min-height: 27px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.badge[data-tone="info"] {
+  border-color: color-mix(in srgb, var(--equipsy-blue) 24%, transparent);
+  background: color-mix(in srgb, var(--equipsy-blue) 10%, var(--surface-raised));
+  color: var(--equipsy-blue-deep);
+}
+
+.badge[data-tone="success"] {
+  border-color: color-mix(in srgb, var(--success) 24%, transparent);
+  background: color-mix(in srgb, var(--success) 10%, var(--surface-raised));
+  color: var(--success-strong);
+}
+
+.badge[data-tone="warning"],
+.badge[data-tone="loading"] {
+  border-color: color-mix(in srgb, var(--warning) 24%, transparent);
+  background: color-mix(in srgb, var(--warning) 10%, var(--surface-raised));
+  color: var(--warning-strong);
+}
+
+.badge[data-tone="danger"] {
+  border-color: color-mix(in srgb, var(--danger) 24%, transparent);
+  background: color-mix(in srgb, var(--danger) 9%, var(--surface-raised));
+  color: var(--danger-strong);
+}
+
+.icon {
+  display: inline-flex;
+}
+
+.spinning {
+  animation: status-spin 900ms linear infinite;
+}
+
+@keyframes status-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinning { animation: none; }
+}

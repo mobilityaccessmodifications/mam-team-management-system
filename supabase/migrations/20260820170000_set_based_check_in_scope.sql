@@ -38,7 +38,8 @@ as $$
   ),
   global_scope as (
     select
-      private.is_internal_org_hr()
+      private.is_system_portal_account_admin()
+      or private.is_internal_org_hr()
       or exists (
         select 1
         from private.employee_check_in_access_grants access_grant

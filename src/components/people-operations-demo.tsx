@@ -8,19 +8,29 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDot,
+  ContactRound,
   FileCheck2,
+  KeyRound,
   Laptop,
+  ListChecks,
+  Network,
   Paperclip,
   Plus,
   RotateCcw,
   ShieldCheck,
+  UserRound,
   UsersRound,
   X,
 } from "lucide-react";
-import { ChangeEvent, FormEvent, type ReactNode, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, type ReactNode, useMemo, useRef, useState } from "react";
 
 import { AboutMeDemo } from "@/components/about-me-demo";
 import { getOrganisationPersonWorkEmail } from "@/app/people/actions";
+import {
+  MotionTabs,
+  type MotionTabOption,
+} from "@/components/ui/motion-tabs";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   OrganisationTree,
   type OrganisationPerson,
@@ -460,6 +470,15 @@ export function PeopleOperationsDemo({
 
   const actionableOwner = activeProfile.accessRole === "manager" ? "Team Leader" : activeProfile.accessRole === "employee" ? "Employee" : undefined;
   const totalOverdue = accessibleWorkflows.reduce((count, workflow) => count + workflow.tasks.filter((task) => task.status === "Overdue" && (!actionableOwner || task.owner === actionableOwner)).length, 0);
+  const sectionTabs: MotionTabOption<PeopleSection>[] = [
+    renderEmployeeDirectory
+      ? { value: "directory", label: "Directory", icon: <ContactRound size={16} /> }
+      : { value: "profile", label: "Profile", icon: <UserRound size={16} /> },
+    { value: "organisation", label: "Organisation", icon: <Network size={16} /> },
+    { value: "checkins", label: "Check-ins", icon: <CalendarClock size={16} />, hidden: !renderCheckInRegister },
+    { value: "tasks", label: "Tasks", icon: <ListChecks size={16} />, hidden: !hasRealCheckInTasks },
+    { value: "accounts", label: "Accounts", icon: <KeyRound size={16} />, hidden: !renderAccounts },
+  ];
 
   return <section className={styles.workspace} aria-label="People operations workspace">
     <header className={styles.pageHeader}>
@@ -467,18 +486,18 @@ export function PeopleOperationsDemo({
       {canManage && section === "tasks" ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleTaskSection === "checkins" ? "checkin" : visibleTaskSection)}><Plus size={17} /> {visibleTaskSection === "checkins" ? "Schedule check-ins" : `Start ${visibleTaskSection}`}</button> : null}
     </header>
 
-    <nav className={styles.sectionSwitch} aria-label="People sections">
-      {renderEmployeeDirectory ? <button type="button" aria-pressed={section === "directory"} className={section === "directory" ? styles.sectionActive : undefined} onClick={() => setSection("directory")}><span><strong>Directory</strong></span></button> : <button type="button" aria-pressed={section === "profile"} className={section === "profile" ? styles.sectionActive : undefined} onClick={() => setSection("profile")}><span><strong>Profile</strong></span></button>}
-      <button type="button" aria-pressed={section === "organisation"} className={section === "organisation" ? styles.sectionActive : undefined} onClick={() => setSection("organisation")}><span><strong>Organisation</strong></span></button>
-      {renderCheckInRegister ? <button type="button" aria-pressed={section === "checkins"} className={section === "checkins" ? styles.sectionActive : undefined} onClick={() => setSection("checkins")}><span><strong>Check-ins</strong></span></button> : null}
-      {hasRealCheckInTasks ? <button type="button" aria-pressed={section === "tasks"} className={section === "tasks" ? styles.sectionActive : undefined} onClick={() => setSection("tasks")}><span><strong>Tasks</strong></span></button> : null}
-      {renderAccounts ? <button type="button" aria-pressed={section === "accounts"} className={section === "accounts" ? styles.sectionActive : undefined} onClick={() => setSection("accounts")}><span><strong>Accounts</strong></span></button> : null}
-    </nav>
+    <MotionTabs
+      value={section}
+      onValueChange={setSection}
+      options={sectionTabs}
+      ariaLabel="People sections"
+      className={styles.sectionSwitch}
+    />
 
     {section === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} manager={activeProfile.manager} company={activeProfile.company} /> : null}
     {section === "directory" ? renderEmployeeDirectory : null}
     {section === "checkins" ? renderCheckInRegister : null}
-    {section === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation && !renderEmployeeDirectory} canArrange={canArrangeOrganisation && !isAccessPreview} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={renderEmployeeDirectory ? (personId) => {
+    {section === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation} canArrange={canArrangeOrganisation && !isAccessPreview} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={renderEmployeeDirectory ? (personId) => {
       onOpenEmployeeDirectoryRecord?.(personId);
       setSection("directory");
     } : undefined} /> : null}
@@ -567,13 +586,16 @@ function CreateCaseModal({ mode, profiles, onClose, onSubmit }: {
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const personSelectRef = useRef<HTMLSelectElement>(null);
+  useDialogFocus(true, dialogRef, personSelectRef, onClose);
   const people = profiles
     .filter((profile) => profile.kind !== "org_unit" && profile.isActive !== false)
     .sort((first, second) => first.name.localeCompare(second.name));
   const label = mode === "onboarding" ? "onboarding" : mode === "offboarding" ? "offboarding" : "check-ins";
   const dateLabel = mode === "offboarding" ? "Final working day" : "Start date";
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="people-case-title"><header><div><span>Tasks</span><h2 id="people-case-title">Start {label}</h2></div><button type="button" onClick={onClose} aria-label="Close"><X size={19} /></button></header><form onSubmit={onSubmit}>
-    <label><span>Person</span><select name="personId" required defaultValue=""><option value="" disabled>Select from organisation</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.position}</option>)}</select></label>
+  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="people-case-title" tabIndex={-1}><header><div><span>Tasks</span><h2 id="people-case-title">Start {label}</h2></div><button type="button" onClick={onClose} aria-label="Close"><X size={19} /></button></header><form onSubmit={onSubmit}>
+    <label><span>Person</span><select ref={personSelectRef} name="personId" required defaultValue=""><option value="" disabled>Select from organisation</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.position}</option>)}</select></label>
     <label><span>{dateLabel}</span><input name="date" type="date" required /></label>
     <footer><button type="button" className={styles.cancelButton} onClick={onClose}>Cancel</button><button type="submit" className={styles.primaryAction}>Create <ArrowUpRight size={16} /></button></footer>
   </form></section></div>;

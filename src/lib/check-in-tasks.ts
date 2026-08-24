@@ -21,7 +21,7 @@ export async function getMyEmployeeCheckInTasks(): Promise<CheckInTasksData> {
   return parseCheckInTasks(data);
 }
 
-/** Read-only Change view projection; the RPC is Super Admin-only. */
+/** Change Profile scope projection; the RPC is Super Admin-only. */
 export async function getEmployeeCheckInTasksForPreview(personId: string): Promise<CheckInTasksData> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("list_employee_check_in_tasks_for_preview", {

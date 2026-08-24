@@ -20,6 +20,7 @@ import {
 } from "@/lib/check-in-tasks-data";
 import type { CheckInTask, CheckInTasksData } from "@/lib/check-in-tasks-types";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
+import { MotionLoader } from "@/components/ui/motion-loader";
 
 function formatDate(value: string) {
   const parsed = new Date(`${value}T12:00:00`);
@@ -131,7 +132,7 @@ export function CheckInTasks({ previewPersonId, readOnly = false }: { previewPer
     {error ? <p className={styles.error} role="alert"><AlertTriangle size={17} aria-hidden="true" />{error}</p> : null}
     {notice ? <p className={styles.notice} role="status"><CheckCircle2 size={17} aria-hidden="true" />{notice}</p> : null}
 
-    {loading ? <div className={styles.loading} aria-live="polite"><CalendarCheck2 size={24} aria-hidden="true" /><strong>Loading check-in tasks…</strong></div> : null}
+    {loading ? <div className={styles.loading} aria-live="polite"><CalendarCheck2 size={24} aria-hidden="true" /><MotionLoader label="Loading check-in tasks" /></div> : null}
     {!loading && data && !data.tasks.length ? <div className={styles.empty}>
       <UsersRound size={24} aria-hidden="true" />
       <strong>No check-ins need your action.</strong>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, UserRound } from "lucide-react";
+import { BriefcaseBusiness, Building2, UserRound } from "lucide-react";
 
 import styles from "@/components/about-me-demo.module.css";
 
@@ -20,13 +20,13 @@ export function AboutMeDemo({
 
   return (
     <section className={styles.workspace} aria-label="My profile">
-      <section className={styles.profileCard} aria-label={`${companyName} profile summary`}>
+      <section className={styles.profileCard} data-company={company} aria-label={`${companyName} profile summary`}>
         <div className={styles.profileSummary}>
           <span><Building2 aria-hidden="true" size={16} /> Company</span>
           <strong>{companyName}</strong>
         </div>
         <div className={styles.profileSummary}>
-          <span>Position</span>
+          <span><BriefcaseBusiness aria-hidden="true" size={16} /> Position</span>
           <strong>{roleLabel}</strong>
         </div>
         {manager ? (

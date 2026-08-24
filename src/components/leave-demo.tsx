@@ -10,17 +10,20 @@ import {
   ClipboardList,
   Clock3,
   Eye,
+  FileText,
   LayoutDashboard,
   Plus,
+  Paperclip,
   RotateCcw,
   Search,
   ShieldCheck,
   LogOut,
+  Upload,
   UsersRound,
   X,
   XCircle,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import {
@@ -40,12 +43,16 @@ import {
 } from "@/app/accounts/actions";
 import {
   cancelMyApprovedLeaveRequest,
+  completeLeaveRequestAttachmentUpload,
   decideLeaveRequest,
+  discardLeaveRequestAttachmentUpload,
   getLeaveWorkspaceData,
+  prepareLeaveRequestAttachmentUpload,
   submitLeaveRequest,
   submitLeaveRequestForSelectedEmployee,
   type BirthdayCalendarEntry,
   type CheckInCalendarEntry,
+  type LeaveAttachment,
   type LeaveCalendarEntry,
   type LeaveWorkspaceRequest,
 } from "@/app/leave/actions";
@@ -58,6 +65,7 @@ import { CheckInRegister } from "@/components/check-in-register";
 import { CheckInWorkspace } from "@/components/check-in-workspace";
 import { CheckInTasks } from "@/components/check-in-tasks";
 import { EmployeeDirectory } from "@/components/employee-directory";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   SelfProfileMenu,
   type SelfProfileChanges,
@@ -82,6 +90,7 @@ type PreviewAccessRole = Exclude<AccessRole, "hr">;
 
 type LeaveRequest = {
   id: string;
+  personId?: string;
   employee: string;
   initials: string;
   team: string;
@@ -100,6 +109,8 @@ type LeaveRequest = {
   canDecide: boolean;
   /** Server-derived only. A missing capability intentionally fails closed. */
   canCancel: boolean;
+  /** Server-derived only. Missing support fails closed. */
+  canAttach: boolean;
   employeeNote?: string;
   managerNote?: string;
 };
@@ -208,6 +219,41 @@ const TIME_OPTIONS = Array.from({ length: 49 }, (_, index) => {
 const START_TIME_OPTIONS = TIME_OPTIONS.slice(0, -1);
 const END_TIME_OPTIONS = TIME_OPTIONS.slice(1);
 const TIME_VALUES = new Set(TIME_OPTIONS.map((option) => option.value));
+const MAX_LEAVE_ATTACHMENTS = 10;
+const MAX_LEAVE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const LEAVE_ATTACHMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/heic",
+  "image/heif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+const LEAVE_ATTACHMENT_ACCEPT = "application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif";
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function cancelLeaveTriggerId(requestId: string) {
+  return `cancel-leave-${requestId.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+}
+
+function validateLeaveAttachmentFiles(files: File[], existingCount = 0) {
+  if (files.length + existingCount > MAX_LEAVE_ATTACHMENTS) {
+    return `A leave request can have up to ${MAX_LEAVE_ATTACHMENTS} supporting files.`;
+  }
+  const unsupported = files.find((file) => !LEAVE_ATTACHMENT_MIME_TYPES.has(file.type.toLowerCase()));
+  if (unsupported) return `${unsupported.name || "That file"} is not a supported PDF or image file.`;
+  const empty = files.find((file) => file.size < 1);
+  if (empty) return `${empty.name || "That file"} is empty.`;
+  const oversized = files.find((file) => file.size > MAX_LEAVE_ATTACHMENT_BYTES);
+  if (oversized) return `${oversized.name || "That file"} is larger than 5 MB.`;
+  const unsafeName = files.find((file) => !file.name.trim() || file.name.length > 255 || /[\\/\u0000-\u001f]/u.test(file.name));
+  if (unsafeName) return "One supporting file has an unsupported name. Rename it and try again.";
+  return "";
+}
 
 function formatDateRange(start: string, end: string) {
   const date = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" });
@@ -221,6 +267,17 @@ function formatDateRange(start: string, end: string) {
 
 function toIsoDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function nextAvailableLeaveDate() {
+  const date = new Date();
+  while (date.getDay() === 0 || date.getDay() === 6) date.setDate(date.getDate() + 1);
+  return toIsoDate(date);
+}
+
+function scrollPageToTop() {
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
 }
 
 function getApprovalCalendarDays(request: LeaveRequest) {
@@ -321,7 +378,7 @@ function getEmployeePreviewRequests(requests: LeaveRequest[], profile: Profile) 
   // Change profile scopes the view to the selected employee for the Super
   // Admin, while all reviewer/capability decisions still come from the
   // signed-in account's server-projected request fields.
-  return requests.filter((request) => request.employee === profile.name);
+  return requests.filter((request) => request.personId === profile.id);
 }
 
 function initialsForName(name: string) {
@@ -337,6 +394,7 @@ function initialsForName(name: string) {
 function toLeaveRequest(record: LeaveWorkspaceRequest): LeaveRequest {
   return {
     id: record.id,
+    personId: record.personId,
     employee: record.employee,
     initials: initialsForName(record.employee),
     team: record.company === "mam" ? "MAM" : "Equipsy",
@@ -354,6 +412,7 @@ function toLeaveRequest(record: LeaveWorkspaceRequest): LeaveRequest {
     assignedReviewerLabel: record.assignedReviewerLabel,
     canDecide: record.canDecide,
     canCancel: record.canCancel === true,
+    canAttach: record.canAttach === true,
     employeeNote: record.employeeNote,
     managerNote: record.managerNote,
   };
@@ -362,6 +421,7 @@ function toLeaveRequest(record: LeaveWorkspaceRequest): LeaveRequest {
 function toCalendarLeaveRequest(record: LeaveCalendarEntry): LeaveRequest {
   return {
     id: record.id,
+    personId: record.personId,
     employee: record.employee,
     initials: initialsForName(record.employee),
     team: record.company === "mam" ? "MAM" : "Equipsy",
@@ -378,6 +438,7 @@ function toCalendarLeaveRequest(record: LeaveCalendarEntry): LeaveRequest {
     submittedAt: "",
     canDecide: false,
     canCancel: false,
+    canAttach: false,
   };
 }
 
@@ -422,6 +483,7 @@ export function LeaveDemo({
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [activeView, setActiveView] = useState<AppView>(initialNavigation?.view ?? "home");
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [leaveAttachments, setLeaveAttachments] = useState<LeaveAttachment[]>([]);
   const [calendarEntries, setCalendarEntries] = useState<LeaveRequest[]>([]);
   const [calendarBirthdays, setCalendarBirthdays] = useState<BirthdayCalendarEntry[]>([]);
   const [checkInCalendarEntries, setCheckInCalendarEntries] = useState<CheckInCalendarEntry[]>([]);
@@ -436,6 +498,7 @@ export function LeaveDemo({
   const [managerNote, setManagerNote] = useState("");
   const [formError, setFormError] = useState("");
   const [cancellationRequestId, setCancellationRequestId] = useState<string | null>(null);
+  const [cancellationFocusRequestId, setCancellationFocusRequestId] = useState<string | null>(null);
   const [cancellationError, setCancellationError] = useState("");
   const [cancelledRequestId, setCancelledRequestId] = useState<string | null>(null);
   const [toast, setToast] = useState("");
@@ -446,20 +509,46 @@ export function LeaveDemo({
   const [employeeDirectoryRefreshKey, setEmployeeDirectoryRefreshKey] = useState(0);
   const [employeeDirectorySelectedPersonId, setEmployeeDirectorySelectedPersonId] = useState<string | null>(null);
   const [organisationState, setOrganisationState] = useState<DirectoryState>("connecting");
+  const [organisationAccessError, setOrganisationAccessError] = useState("");
   const [accounts, setAccounts] = useState<AccountDto[]>([]);
   const [accountsError, setAccountsError] = useState("");
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [selfProfile, setSelfProfile] = useState<CurrentEmployeeSelfProfile | null>(null);
   const [selfProfileLoading, setSelfProfileLoading] = useState(Boolean(currentPersonId));
+  const [selfProfileError, setSelfProfileError] = useState("");
   // Private selected-employee details are never derived from the organisation
   // tree. This state is populated only by the HR-authorised server action.
   const [selectedEmployeeProfile, setSelectedEmployeeProfile] = useState<SelectedEmployeeProfile | null>(null);
+  const [selectedEmployeeProfileErrorState, setSelectedEmployeeProfileErrorState] = useState<{
+    personId: string;
+    message: string;
+  } | null>(null);
+  const [selectedEmployeeProfileReloadKey, setSelectedEmployeeProfileReloadKey] = useState(0);
   // This is intentionally UI-only. It never changes the authenticated user or
   // the capability checks that protect HR records and organisation writes.
   const [previewPersonId, setPreviewPersonId] = useState("");
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [profilePickerQuery, setProfilePickerQuery] = useState("");
   const leaveRefreshSequence = useRef(0);
+  const profilePickerDialogRef = useRef<HTMLElement>(null);
+  const profilePickerSearchRef = useRef<HTMLInputElement>(null);
+  const leaveRequestDialogRef = useRef<HTMLElement>(null);
+  const leaveRequestInitialFocusRef = useRef<HTMLSelectElement>(null);
+  const closeProfilePicker = useCallback(() => setProfilePickerOpen(false), []);
+  const closeLeaveRequestForm = useCallback(() => setShowRequestForm(false), []);
+
+  useDialogFocus(
+    profilePickerOpen,
+    profilePickerDialogRef,
+    profilePickerSearchRef,
+    closeProfilePicker,
+  );
+  useDialogFocus(
+    showRequestForm,
+    leaveRequestDialogRef,
+    leaveRequestInitialFocusRef,
+    closeLeaveRequestForm,
+  );
 
   const handleSignOut = useCallback(async () => {
     if (isSigningOut) return;
@@ -488,21 +577,26 @@ export function LeaveDemo({
       // Only the newest role-scoped response may update calendar data.
       if (requestSequence !== leaveRefreshSequence.current) return;
       setRequests(data.requests.map(toLeaveRequest));
+      setLeaveAttachments(data.attachments);
       setCalendarEntries(data.calendarEntries.map(toCalendarLeaveRequest));
       setCalendarBirthdays(data.birthdayEntries);
       setCheckInCalendarEntries(data.checkInEntries);
       setCanReviewLeaveWorkspace(data.canReviewLeave);
-      setLeaveDataError("");
+      setLeaveDataError(data.warning ?? "");
     } catch {
       if (requestSequence !== leaveRefreshSequence.current) return;
       // Do not leave a previously authorised calendar visible after a session,
       // access, or projection failure. The next successful role-scoped load
       // repopulates it.
       setRequests([]);
+      setLeaveAttachments([]);
       setCalendarEntries([]);
       setCalendarBirthdays([]);
       setCheckInCalendarEntries([]);
       setSelectedRequestId("");
+      setCancellationRequestId(null);
+      setCancellationFocusRequestId(null);
+      setCancellationError("");
       setCanReviewLeaveWorkspace(false);
       setLeaveDataError("Leave records could not be loaded. Refresh and try again.");
     } finally {
@@ -530,7 +624,11 @@ export function LeaveDemo({
 
   const loadOrganisation = useCallback(async () => {
     if (!directorySupabase) return;
-    const [{ data: rows, error }, { data: canEdit }, { data: canManageEmployeeDirectory }] = await Promise.all([
+    const [
+      { data: rows, error },
+      { data: canEdit, error: canEditError },
+      { data: canManageEmployeeDirectory, error: canManageEmployeeDirectoryError },
+    ] = await Promise.all([
       directorySupabase
         .from("internal_org_people")
         .select("id,node_kind,company_key,full_name,position_title,parent_id,sort_order,is_active,updated_at,version")
@@ -542,11 +640,15 @@ export function LeaveDemo({
 
     if (error) {
       setOrganisationState("error");
+      setOrganisationAccessError("");
       return;
     }
     setOrganisationRows((rows ?? []) as InternalOrgRow[]);
     setCanEditOrganisation(canEdit === true);
     setCanManageEmployeeDirectory(canManageEmployeeDirectory === true);
+    setOrganisationAccessError(canEditError || canManageEmployeeDirectoryError
+      ? "Some People permissions could not be loaded. Retry before making changes."
+      : "");
     setOrganisationState("live");
   }, [directorySupabase]);
 
@@ -554,17 +656,22 @@ export function LeaveDemo({
     if (!currentPersonId) {
       setSelfProfile(null);
       setSelfProfileLoading(false);
+      setSelfProfileError("");
       return;
     }
 
     setSelfProfileLoading(true);
     try {
       setSelfProfile(await getCurrentEmployeeSelfProfile());
-    } catch {
+      setSelfProfileError("");
+    } catch (error) {
       // Do not substitute organisation-tree fields for the private profile
       // DTO. A failed self-only lookup must not accidentally display or save
       // another person's contact data.
       setSelfProfile(null);
+      setSelfProfileError(error instanceof Error
+        ? error.message
+        : "Your profile could not be loaded. Retry before editing it.");
     } finally {
       setSelfProfileLoading(false);
     }
@@ -705,6 +812,9 @@ export function LeaveDemo({
     ? directoryProfiles.find((profile) => profile.id === previewPersonId)
     : undefined;
   const selectedPreviewPersonId = selectedPreviewCandidate?.id ?? "";
+  const selectedEmployeeProfileError = selectedEmployeeProfileErrorState?.personId === selectedPreviewPersonId
+    ? selectedEmployeeProfileErrorState.message
+    : "";
   const profilePickerResults = useMemo(() => {
     const search = profilePickerQuery.trim().toLocaleLowerCase();
     const candidates = search
@@ -721,18 +831,48 @@ export function LeaveDemo({
       .then((profile) => {
         if (!cancelled && profile.personId === selectedPreviewPersonId) {
           setSelectedEmployeeProfile(profile);
+          setSelectedEmployeeProfileErrorState(null);
         }
       })
-      .catch(() => {
+      .catch((error) => {
         // The org-tree fallback below has no private contact fields and stays
         // disabled. The server action independently re-checks HR authority.
-        if (!cancelled) setSelectedEmployeeProfile(null);
+        if (!cancelled) {
+          setSelectedEmployeeProfileErrorState({
+            personId: selectedPreviewPersonId,
+            message: error instanceof Error
+              ? error.message
+              : "This employee profile could not be loaded. Retry before editing it.",
+          });
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [employeeDirectoryRefreshKey, selectedPreviewPersonId]);
+  }, [employeeDirectoryRefreshKey, selectedEmployeeProfileReloadKey, selectedPreviewPersonId]);
+
+  useEffect(() => {
+    if (!cancellationRequestId || isMutating) return;
+
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const requestId = cancellationRequestId;
+      setCancellationRequestId(null);
+      setCancellationFocusRequestId(requestId);
+      setCancellationError("");
+    };
+
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  }, [cancellationRequestId, isMutating]);
+
+  useLayoutEffect(() => {
+    if (!cancellationFocusRequestId || cancellationRequestId) return;
+    const trigger = document.getElementById(cancelLeaveTriggerId(cancellationFocusRequestId));
+    if (!(trigger instanceof HTMLButtonElement)) return;
+    trigger.focus({ preventScroll: true });
+  }, [cancellationFocusRequestId, cancellationRequestId]);
 
   const signedInProfile = directoryProfiles.find((profile) => profile.id === currentPersonId)
     ?? (isNonRosterSystemAdminWorkspace ? {
@@ -746,7 +886,12 @@ export function LeaveDemo({
       company: "mam" as const,
     } : undefined);
   if (!signedInProfile) {
-    return <DirectoryLoading state={organisationState} />;
+    return <DirectoryLoading
+      state={organisationState === "live" ? "unlinked" : organisationState}
+      onRetry={() => void loadOrganisation()}
+      onSignOut={() => void handleSignOut()}
+      signingOut={isSigningOut}
+    />;
   }
   const adminProfile: Profile = canManageEmployeeDirectory
     ? { ...signedInProfile, accessRole: "hr" }
@@ -789,7 +934,7 @@ export function LeaveDemo({
       : topbarPreviewFallback ?? topbarSelfProfile
     : topbarSelfProfile;
   const topbarProfileLoading = isPreviewingEmployeeAccess
-    ? !authorisedPreviewProfile
+    ? !authorisedPreviewProfile && !selectedEmployeeProfileError
     : !isNonRosterSystemAdminWorkspace && (!selfProfile || selfProfileLoading);
   const isNonRosterAdminHrWorkspace = isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess;
 
@@ -804,8 +949,8 @@ export function LeaveDemo({
   // The server-projected per-request capability remains the source of truth.
   // This only prevents a Change profile or non-roster platform workspace from
   // presenting an impossible cancellation control.
-  const canCancelOwnApprovedLeave = !isPreviewingEmployeeAccess
-    && !isNonRosterSystemAdminWorkspace;
+  const canCancelOwnApprovedLeave = !isNonRosterSystemAdminWorkspace
+    || isPreviewingEmployeeAccess;
   const viewTitles = getViewTitles(activeProfile, calendarMonth, canReviewLeave);
   // The durable workspace/calendar RPCs have already applied the current
   // session's server-side scope. Do not re-derive access in the browser from a
@@ -817,19 +962,26 @@ export function LeaveDemo({
   const calendarRequests = isPreviewingEmployeeAccess
     ? getEmployeePreviewRequests(calendarEntries, activeProfile)
     : calendarEntries;
-  // A Change profile does not impersonate the selected employee. Keep the real
-  // viewer's scoped check-in tasks out of that read-only preview.
-  const calendarCheckIns = isPreviewingEmployeeAccess ? [] : checkInCalendarEntries;
+  // Change Profile changes presentation, not the Super Admin's authority.
+  // Keep the complete authorised calendar available so the profile switch
+  // never removes a function the real Super Admin can safely exercise.
+  const calendarCheckIns = checkInCalendarEntries;
   const approvalQueue = canReviewLeave
     ? visibleRequests.filter((request) => request.canDecide)
     : [];
-  const myRequests = requests.filter((request) => request.employee === activeProfile.name);
+  const myRequests = requests.filter((request) => request.personId === activeProfile.id);
   const filteredRequests = visibleRequests.filter((request) => {
     return statusFilter === "All" || request.status === statusFilter;
   });
   const selectedRegisterRequest = filteredRequests.find((request) => request.id === selectedRequestId) ?? filteredRequests[0];
   const selectedApprovalRequest = approvalQueue.find((request) => request.id === selectedRequestId) ?? approvalQueue[0];
   const selectedRequest = leaveSection === "approvals" ? selectedApprovalRequest : selectedRegisterRequest;
+  const attachmentsByRequestId = new Map<string, LeaveAttachment[]>();
+  leaveAttachments.forEach((attachment) => {
+    const current = attachmentsByRequestId.get(attachment.leaveRequestId) ?? [];
+    current.push(attachment);
+    attachmentsByRequestId.set(attachment.leaveRequestId, current);
+  });
 
   async function createOrganisationPerson(person: OrganisationPersonDraft) {
     if (!directorySupabase) throw new Error("The directory is not connected.");
@@ -917,6 +1069,45 @@ export function LeaveDemo({
     window.setTimeout(() => setToast(""), 3200);
   }
 
+  async function uploadLeaveAttachments(requestId: string, files: File[]) {
+    if (!directorySupabase) return { uploaded: 0, failed: files.map((file) => file.name || "supporting file") };
+    const failed: string[] = [];
+    let uploaded = 0;
+    for (const file of files) {
+      let storagePath: string | undefined;
+      try {
+        const plan = await prepareLeaveRequestAttachmentUpload({
+          requestId,
+          fileName: file.name,
+          mimeType: file.type.toLowerCase(),
+          sizeBytes: file.size,
+        });
+        storagePath = plan.storagePath;
+        const { error: storageError } = await directorySupabase.storage
+          .from("leave-evidence")
+          .upload(plan.storagePath, file, {
+            cacheControl: "0",
+            contentType: plan.mimeType,
+            upsert: false,
+          });
+        if (storageError) throw new Error("Storage upload failed.");
+        await completeLeaveRequestAttachmentUpload({ storagePath: plan.storagePath });
+        uploaded += 1;
+      } catch {
+        if (storagePath) {
+          try {
+            await discardLeaveRequestAttachmentUpload({ storagePath });
+          } catch {
+            // A retention job removes any unregistered private object if the
+            // upload reached Storage before registration failed.
+          }
+        }
+        failed.push(file.name || "supporting file");
+      }
+    }
+    return { uploaded, failed };
+  }
+
   function changeEmployeeAccessPreview(personId: string) {
     if (!canPreviewEmployeeAccess) return;
     const nextProfile = directoryProfiles.find((profile) => profile.id === personId);
@@ -926,10 +1117,12 @@ export function LeaveDemo({
     setProfilePickerOpen(false);
     setProfilePickerQuery("");
     setSelectedEmployeeProfile(null);
+    setSelectedEmployeeProfileErrorState(null);
     setShowRequestForm(false);
     setFormError("");
     setManagerNote("");
     setCancellationRequestId(null);
+    setCancellationFocusRequestId(null);
     setCancellationError("");
     setCancelledRequestId(null);
     setSelectedRequestId("");
@@ -944,6 +1137,9 @@ export function LeaveDemo({
 
   function chooseLeaveSection(section: LeaveSection, requestedId?: string) {
     if (section === "approvals" && !canReviewLeave) return;
+    setCancellationRequestId(null);
+    setCancellationFocusRequestId(null);
+    setCancellationError("");
     if (section === "approvals" && approvalQueue[0]) {
       const nextId = requestedId && approvalQueue.some((request) => request.id === requestedId)
         ? requestedId
@@ -957,8 +1153,20 @@ export function LeaveDemo({
 
   function navigate(view: AppView, section?: LeaveSection) {
     if (view === "leave") chooseLeaveSection(section ?? "requests");
+    else {
+      setCancellationRequestId(null);
+      setCancellationFocusRequestId(null);
+      setCancellationError("");
+    }
     setActiveView(view);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    scrollPageToTop();
+  }
+
+  function changeLeaveStatusFilter(filter: "All" | RequestStatus) {
+    setStatusFilter(filter);
+    setCancellationRequestId(null);
+    setCancellationFocusRequestId(null);
+    setCancellationError("");
   }
 
   function openLeaveRequestForm() {
@@ -971,11 +1179,12 @@ export function LeaveDemo({
     setSelectedRequestId(id);
     setManagerNote("");
     setCancellationRequestId(null);
+    setCancellationFocusRequestId(null);
     setCancellationError("");
     setCancelledRequestId(null);
     chooseLeaveSection(section, id);
     setActiveView("leave");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    scrollPageToTop();
   }
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
@@ -989,6 +1198,14 @@ export function LeaveDemo({
     const startTime = String(data.get("startTime") ?? "").trim();
     const endTime = String(data.get("endTime") ?? "").trim();
     const employeeNote = String(data.get("employeeNote"));
+    const attachmentFiles = data.getAll("attachments").filter((entry): entry is File => (
+      entry instanceof File && Boolean(entry.name)
+    ));
+    const attachmentValidationError = validateLeaveAttachmentFiles(attachmentFiles);
+    if (attachmentValidationError) {
+      setFormError(attachmentValidationError);
+      return;
+    }
     if (endDate < startDate) {
       setFormError("End date must be on or after the start date.");
       return;
@@ -1036,15 +1253,22 @@ export function LeaveDemo({
       const next = isPreviewingEmployeeAccess && previewProfile
         ? await submitLeaveRequestForSelectedEmployee(previewProfile.id, requestInput)
         : await submitLeaveRequest(requestInput);
+      const attachmentResult = attachmentFiles.length
+        ? await uploadLeaveAttachments(next.id, attachmentFiles)
+        : { uploaded: 0, failed: [] as string[] };
       await refreshLeaveWorkspace();
       setSelectedRequestId(next.id);
       setShowRequestForm(false);
       setFormError("");
       form.reset();
       navigate("leave");
-      announce(next.assignedReviewerLabel
-        ? `Your leave request is pending review by ${next.assignedReviewerLabel}.`
-        : "Your leave request is pending review by an authorised reviewer.");
+      if (attachmentResult.failed.length) {
+        announce(`Leave request saved. ${attachmentResult.failed.length} supporting ${attachmentResult.failed.length === 1 ? "file was" : "files were"} not attached; open the request to retry.`);
+      } else {
+        announce(next.assignedReviewerLabel
+          ? `Your leave request is pending review by ${next.assignedReviewerLabel}.`
+          : "Your leave request is pending review by an authorised reviewer.");
+      }
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "The leave request could not be saved. Refresh and try again.");
     } finally {
@@ -1052,8 +1276,34 @@ export function LeaveDemo({
     }
   }
 
+  async function addSupportingFiles(requestId: string, files: File[]) {
+    if (!files.length || isMutating) return;
+    const request = requests.find((candidate) => candidate.id === requestId);
+    if (!request || request.canAttach !== true) {
+      announce("Supporting files can only be added to an eligible submitted or approved leave request.");
+      return;
+    }
+    const validationError = validateLeaveAttachmentFiles(files, attachmentsByRequestId.get(requestId)?.length ?? 0);
+    if (validationError) {
+      announce(validationError);
+      return;
+    }
+    setIsMutating(true);
+    try {
+      const result = await uploadLeaveAttachments(requestId, files);
+      await refreshLeaveWorkspace();
+      if (result.failed.length) {
+        announce(`${result.uploaded ? `${result.uploaded} added. ` : ""}${result.failed.length} ${result.failed.length === 1 ? "file was" : "files were"} not attached; choose ${result.failed.length === 1 ? "it" : "them"} again to retry.`);
+      } else {
+        announce(`${result.uploaded} supporting ${result.uploaded === 1 ? "file was" : "files were"} added.`);
+      }
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   async function decideRequest(status: "Approved" | "Declined") {
-    if (!selectedRequest || isMutating || !canReviewLeave || isNonRosterSystemAdminWorkspace) return;
+    if (!selectedRequest || isMutating || !canReviewLeave) return;
     if (status === "Declined" && !managerNote.trim()) {
       announce("Add a decision note before declining this request.");
       return;
@@ -1088,12 +1338,15 @@ export function LeaveDemo({
     ) return;
 
     setCancellationError("");
+    setCancellationFocusRequestId(null);
     setCancellationRequestId(requestId);
   }
 
   function dismissLeaveCancellation() {
     if (isMutating) return;
+    const requestId = cancellationRequestId;
     setCancellationRequestId(null);
+    setCancellationFocusRequestId(requestId);
     setCancellationError("");
   }
 
@@ -1113,6 +1366,7 @@ export function LeaveDemo({
     try {
       const cancelled = await cancelMyApprovedLeaveRequest({ requestId });
       setCancellationRequestId(null);
+      setCancellationFocusRequestId(null);
       setCancelledRequestId(cancelled.id);
       await refreshLeaveWorkspace();
       setSelectedRequestId(requestId);
@@ -1140,7 +1394,7 @@ export function LeaveDemo({
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
-              <button className={`${styles.navItem} ${activeView === item.id ? styles.navItemActive : ""}`} type="button" onClick={() => navigate(item.id)} key={item.id}>
+              <button aria-current={activeView === item.id ? "page" : undefined} className={`${styles.navItem} ${activeView === item.id ? styles.navItemActive : ""}`} type="button" onClick={() => navigate(item.id)} key={item.id}>
                 <Icon size={17} strokeWidth={1.8} /><b>{item.label}</b>{item.badge ? <i>{item.badge}</i> : null}
               </button>
             );
@@ -1156,7 +1410,13 @@ export function LeaveDemo({
               <Eye aria-hidden="true" size={17} />
               <span>
                 <strong>Change profile</strong>
-                <small role="status">{previewProfile ? !authorisedPreviewProfile ? `Loading ${previewProfile.name}'s profile` : `Viewing ${previewProfile.name}` : "Super Admin"}</small>
+                <small role="status">{previewProfile
+                  ? selectedEmployeeProfileError
+                    ? `${previewProfile.name}'s profile is unavailable`
+                    : !authorisedPreviewProfile
+                      ? `Loading ${previewProfile.name}'s profile`
+                      : `Viewing ${previewProfile.name}`
+                  : "Super Admin"}</small>
               </span>
             </label>
             <button
@@ -1182,16 +1442,16 @@ export function LeaveDemo({
             ) : null}
           </section>
         ) : null}
-        {profilePickerOpen ? <div className={styles.profilePickerBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProfilePickerOpen(false); }}>
-          <section className={styles.profilePicker} role="dialog" aria-modal="true" aria-labelledby="profile-picker-title">
+            {profilePickerOpen ? <div className={styles.profilePickerBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeProfilePicker(); }}>
+          <section className={styles.profilePicker} ref={profilePickerDialogRef} role="dialog" aria-modal="true" aria-labelledby="profile-picker-title" tabIndex={-1}>
             <header className={styles.profilePickerHeader}>
               <div><span>Super Admin</span><h2 id="profile-picker-title">Change profile</h2></div>
-              <button type="button" className={styles.profilePickerClose} onClick={() => setProfilePickerOpen(false)} aria-label="Close profile picker"><X size={17} /></button>
+              <button type="button" className={styles.profilePickerClose} onClick={closeProfilePicker} aria-label="Close profile picker"><X size={17} /></button>
             </header>
             <label className={styles.profilePickerSearch}>
               <Search aria-hidden="true" size={16} />
               <span className={styles.srOnly}>Search profiles</span>
-              <input autoFocus value={profilePickerQuery} onChange={(event) => setProfilePickerQuery(event.target.value)} placeholder="Search name, role or team" type="search" />
+              <input ref={profilePickerSearchRef} value={profilePickerQuery} onChange={(event) => setProfilePickerQuery(event.target.value)} placeholder="Search name, role or team" type="search" />
             </label>
             <div className={styles.profilePickerList}>
               <button type="button" className={`${styles.profilePickerOption} ${!previewProfile ? styles.profilePickerOptionActive : ""}`} onClick={() => changeEmployeeAccessPreview("")}>
@@ -1222,7 +1482,7 @@ export function LeaveDemo({
                 <ShieldCheck aria-hidden="true" size={15} /> Platform administrator
               </span>
             ) : <SelfProfileMenu
-                disabled={topbarProfileLoading}
+                disabled={topbarProfileLoading || Boolean(selectedEmployeeProfileError)}
                 mode={isPreviewingEmployeeAccess ? "hr-preview" : "self"}
                 onSave={isPreviewingEmployeeAccess ? saveSelectedEmployeeProfile : saveMyProfile}
                 profile={topbarProfile}
@@ -1237,16 +1497,19 @@ export function LeaveDemo({
             {activeView === "leave" && canApplyForLeave ? <button className={`${styles.primaryButton} ${styles.applyForLeaveButton}`} type="button" onClick={openLeaveRequestForm} disabled={isMutating} aria-haspopup="dialog"><Plus aria-hidden="true" size={17} /><span>Apply for leave</span></button> : null}
           </section> : null}
 
-          {leaveDataError && activeView !== "people" ? <p className={styles.leaveLoadError} role="alert">{leaveDataError}</p> : null}
+          {leaveDataError && activeView !== "people" ? <div className={styles.loadErrorAction} role="alert"><span>{leaveDataError}</span><button type="button" onClick={() => void refreshLeaveWorkspace()} disabled={leaveDataLoading}>{leaveDataLoading ? "Retrying…" : "Retry"}</button></div> : null}
+          {selfProfileError && !isPreviewingEmployeeAccess && !isNonRosterSystemAdminWorkspace ? <div className={styles.loadErrorAction} role="alert"><span>{selfProfileError}</span><button type="button" onClick={() => void loadSelfProfile()} disabled={selfProfileLoading}>{selfProfileLoading ? "Retrying…" : "Retry profile"}</button></div> : null}
+          {selectedEmployeeProfileError && isPreviewingEmployeeAccess ? <div className={styles.loadErrorAction} role="alert"><span>{selectedEmployeeProfileError}</span><button type="button" onClick={() => setSelectedEmployeeProfileReloadKey((current) => current + 1)}>Retry profile</button></div> : null}
+          {organisationAccessError && activeView === "people" ? <div className={styles.loadErrorAction} role="alert"><span>{organisationAccessError}</span><button type="button" onClick={() => void loadOrganisation()}>Retry permissions</button></div> : null}
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} canReview={canReviewLeave} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
-          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} busy={isMutating} readOnly={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} hidePrivateDetails={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onFilter={setStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
+          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} hidePrivateDetails={isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
           {activeView === "calendar" ? <CalendarView birthdays={calendarBirthdays} checkIns={calendarCheckIns} requests={calendarRequests} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
               key={showHrWorkspace ? "hr-directory" : isPreviewingEmployeeAccess ? `employee-preview:${activeProfile.id}` : "standard-people"}
               activeProfile={activeProfile}
               organisationProfiles={organisationPeople}
-              canEditOrganisation={false}
+              canEditOrganisation={canEditOrganisation && showHrWorkspace}
               canArrangeOrganisation={canEditOrganisation && showHrWorkspace}
               isAccessPreview={isPreviewingEmployeeAccess}
               onCreateOrganisationPerson={createOrganisationPerson}
@@ -1272,7 +1535,7 @@ export function LeaveDemo({
                 : (canViewCheckIns || canRenderPreviewCheckIns)
                   ? <CheckInWorkspace
                       previewPersonId={canRenderPreviewCheckIns ? previewProfile?.id : undefined}
-                      readOnly={isPreviewingEmployeeAccess}
+                      readOnly={false}
                       onRecordsChanged={() => void refreshLeaveWorkspace()}
                       resources={checkInResources}
                     />
@@ -1280,13 +1543,13 @@ export function LeaveDemo({
               renderCheckInTasks={(canViewCheckInTasks || canRenderPreviewCheckIns)
                 ? <CheckInTasks
                     previewPersonId={canRenderPreviewCheckIns ? previewProfile?.id : undefined}
-                    readOnly={isPreviewingEmployeeAccess}
+                    readOnly={false}
                   />
                 : undefined}
               renderAccounts={isAdmin && showHrWorkspace ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
                 : accountsError
-                ? <div className={styles.emptyState}><ShieldCheck size={24} /><strong>Accounts could not be loaded</strong><span>{accountsError}</span></div>
+                ? <div className={styles.emptyState}><ShieldCheck size={24} /><strong>Accounts could not be loaded</strong><span>{accountsError}</span><button className={styles.primaryButton} type="button" onClick={() => void loadAccounts()}>Retry accounts</button></div>
                 : <AccountManagement
                     accounts={accounts}
                     onAccountChanged={updateAccountRecord}
@@ -1302,19 +1565,23 @@ export function LeaveDemo({
       </div>
 
       {showRequestForm ? (
-        <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowRequestForm(false)}>
-          <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="new-request-title">
-            <header><div><span>New request</span><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={() => setShowRequestForm(false)} aria-label="Close request form"><X size={19} /></button></header>
+        <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeLeaveRequestForm()}>
+          <section className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
+            <header><div><span>New request</span><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={closeLeaveRequestForm} aria-label="Close request form"><X size={19} /></button></header>
             <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{activeProfile.name}</strong><small>{activeProfile.team} · Your request will be routed to an authorised reviewer</small></span></div>
             <form className={styles.form} onSubmit={submitRequest}>
-              <label><span>Leave type</span><select name="leaveType" defaultValue="Annual leave" required><option>Annual leave</option><option>Sick leave</option><option>Carer&apos;s leave</option><option>Unpaid leave</option></select></label>
-              <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" defaultValue="2026-09-21" required /></label><label><span>End date</span><input name="endDate" type="date" defaultValue="2026-09-21" required /></label></div>
+              <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" defaultValue="Annual leave" required><option>Annual leave</option><option>Sick leave</option><option>Carer&apos;s leave</option><option>Unpaid leave</option></select></label>
+              <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" defaultValue={nextAvailableLeaveDate()} required /></label><label><span>End date</span><input name="endDate" type="date" defaultValue={nextAvailableLeaveDate()} required /></label></div>
               <fieldset className={styles.timeRange}><legend>Start and end times <small>Optional</small></legend><div className={styles.formRow}><label><span>From · first day</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>To · last day</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>6:00 am–6:00 pm in 15-minute intervals. For multiple dates, these apply to the first and last day. Leave both blank for full working days.</p></fieldset>
               <label><span>Note for your reviewer <small>Optional</small></span><textarea name="employeeNote" rows={3} placeholder="Add only what your reviewer needs to decide." /></label>
-              <div className={styles.attachmentField} role="note"><span>Supporting files</span><small>Supporting-file uploads are not stored with live leave requests yet. Contact HR if evidence is required.</small></div>
+              <label className={styles.attachmentField}>
+                <span>Supporting files <small>Optional</small></span>
+                <input className={styles.fileInput} name="attachments" type="file" accept={LEAVE_ATTACHMENT_ACCEPT} multiple disabled={isMutating} />
+                <small>PDF or image files only · up to 10 files, 5 MB each. Private to the employee, authorised reviewer and HR.</small>
+              </label>
               <div className={styles.privacyNote}><ShieldCheck size={17} /><span>Your note is private to you, your approver and HR. Coworkers only see that you are unavailable.</span></div>
               {formError ? <p className={styles.formError} role="alert">{formError}</p> : null}
-              <footer><button className={styles.secondaryButton} type="button" onClick={() => setShowRequestForm(false)} disabled={isMutating}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : "Send request"} <ArrowUpRight size={16} /></button></footer>
+              <footer><button className={styles.secondaryButton} type="button" onClick={closeLeaveRequestForm} disabled={isMutating}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : "Send request"} <ArrowUpRight size={16} /></button></footer>
             </form>
           </section>
         </div>
@@ -1325,7 +1592,19 @@ export function LeaveDemo({
   );
 }
 
-function DirectoryLoading({ state }: { state: DirectoryState }) {
+function DirectoryLoading({
+  state,
+  onRetry,
+  onSignOut,
+  signingOut,
+}: {
+  state: DirectoryState | "unlinked";
+  onRetry: () => void;
+  onSignOut: () => void;
+  signingOut: boolean;
+}) {
+  const isUnlinked = state === "unlinked";
+  const hasError = state === "error" || isUnlinked;
   return <div className={styles.shell} data-company="mam">
     <aside className={styles.sidebar} aria-label="Safer People System navigation">
       <div className={styles.brandRow}><BrandMark /></div>
@@ -1335,8 +1614,16 @@ function DirectoryLoading({ state }: { state: DirectoryState }) {
       <main className={styles.main} id="main-content">
         <div className={styles.emptyState}>
           <UsersRound size={25} />
-          <strong>{state === "error" ? "The directory could not be loaded" : "Loading your profile"}</strong>
-          <span>{state === "error" ? "Refresh the page or ask the system administrator to check your account link." : "Connecting to the live organisation directory…"}</span>
+          <strong>{isUnlinked ? "Your account is not linked to an active employee" : state === "error" ? "The directory could not be loaded" : "Loading your profile"}</strong>
+          <span>{isUnlinked
+            ? "Retry after HR links this login to your directory record, or sign out and use another account."
+            : state === "error"
+              ? "Retry the directory connection or ask the system administrator to check your account link."
+              : "Connecting to the live organisation directory…"}</span>
+          {hasError ? <div className={styles.directoryRecoveryActions}>
+            <button className={styles.secondaryButton} type="button" onClick={onRetry}>Retry directory</button>
+            <button className={styles.primaryButton} type="button" onClick={onSignOut} disabled={signingOut}>{signingOut ? "Signing out…" : "Sign out"}</button>
+          </div> : null}
         </div>
       </main>
     </div>
@@ -1364,7 +1651,7 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
 
   const activeOwnRequests = myRequests.filter((request) => request.status !== "Cancelled");
   const nextOwn = activeOwnRequests.find((request) => request.status === "Pending") ?? activeOwnRequests[0];
-  const attentionRequests = canReview ? pending : requests.filter((request) => request.status === "Pending" && request.employee !== profile.name);
+  const attentionRequests = canReview ? pending : requests.filter((request) => request.status === "Pending" && request.personId !== profile.id);
   const attentionTitle = canReview ? "Needs review" : "Pending leave";
   const recordSection: LeaveSection = canReview ? "approvals" : "requests";
 
@@ -1408,7 +1695,7 @@ function PanelHeader({ title, action, onAction }: { title: string; action?: stri
   return <header className={styles.panelHeader}><h2>{title}</h2>{action && onAction ? <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button> : null}</header>;
 }
 
-function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, busy, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancelledRequestId, onFilter, onSection, onNote, onSelect, onDecision, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancelledRequestId, onFilter, onSection, onNote, onSelect, onDecision, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   return (
     <section className={styles.leaveDesk}>
       {canReview ? (
@@ -1421,34 +1708,34 @@ function LeaveView({ profile, section, requests, allRequests, selected, filter, 
           </button>
         </div>
       ) : null}
-      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
-      {section === "approvals" && canReview ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} requests={calendarRequests} busy={busy} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
+      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} attachmentsByRequestId={attachmentsByRequestId} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
+      {section === "approvals" && canReview ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} requests={calendarRequests} attachmentsByRequestId={attachmentsByRequestId} busy={busy} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
     </section>
   );
 }
 
-function RequestsView({ profile, requests, allRequests, selected, filter, canReview, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function RequestsView({ profile, requests, allRequests, selected, filter, canReview, attachmentsByRequestId, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; attachmentsByRequestId: Map<string, LeaveAttachment[]>; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   const filters: ("All" | RequestStatus)[] = ["All", "Pending", "Approved", "Declined", "Cancelled"];
   const isEmployee = !canReview;
   return (
     <section className={styles.recordsWorkspace}>
       <div className={styles.viewToolbar}>
-        <div className={styles.filterTabs}>{filters.map((item) => <button className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => request.status === item).length}</span></button>)}</div>
+        <div className={styles.filterTabs}>{filters.map((item) => <button aria-pressed={filter === item} className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => request.status === item).length}</span></button>)}</div>
       </div>
       <div className={`${styles.recordsGrid} ${isEmployee ? styles.employeeRecordsGrid : ""} ${!selected ? styles.recordsGridNoDetail : ""}`}>
         <div className={styles.recordsTable} role="table" aria-label="Leave requests">
           <div className={`${styles.tableHead} ${isEmployee ? styles.employeeTableRow : ""}`} role="row">{!isEmployee ? <span>Employee</span> : null}<span>Leave</span><span>Dates</span><span>Duration</span><span>Status</span><span /></div>
-          {requests.map((request) => <button className={`${styles.tableRow} ${isEmployee ? styles.employeeTableRow : ""} ${selected?.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} role="row" key={request.id}>{!isEmployee ? <span><i>{request.initials}</i><b>{request.employee === profile.name ? "You" : request.employee}<small>{request.team}</small></b></span> : null}<span><b>{request.leaveType}</b><small>{request.id}</small></span><span>{request.dateLabel}</span><span>{formatDuration(request)}{formatTimeRange(request) ? <small>{formatTimeRange(request)}</small> : null}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} /></button>)}
+          {requests.map((request) => <button className={`${styles.tableRow} ${isEmployee ? styles.employeeTableRow : ""} ${selected?.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} role="row" key={request.id}>{!isEmployee ? <span><i>{request.initials}</i><b>{request.personId === profile.id ? "You" : request.employee}<small>{request.team}</small></b></span> : null}<span><b>{request.leaveType}</b><small>{request.id}</small></span><span>{request.dateLabel}</span><span>{formatDuration(request)}{formatTimeRange(request) ? <small>{formatTimeRange(request)}</small> : null}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} /></button>)}
           {!requests.length ? <div className={styles.emptyState}><Search size={23} /><strong>{allRequests.length ? "No requests match this status" : "No leave requests yet"}</strong><span>{allRequests.length ? "Choose another status." : isEmployee ? "Use “New leave request” when you need time away." : "Employee leave requests appear here once they are submitted."}</span></div> : null}
         </div>
-        {selected ? <RequestDetail profile={profile} request={selected} canReview={canReview} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancellationSucceeded={cancelledRequestId === selected.id} busy={busy} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
+        {selected ? <RequestDetail profile={profile} request={selected} attachments={attachmentsByRequestId.get(selected.id) ?? []} canReview={canReview} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancellationSucceeded={cancelledRequestId === selected.id} busy={busy} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
       </div>
     </section>
   );
 }
 
-function RequestDetail({ profile, request, canReview, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancellationSucceeded, busy, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; request: LeaveRequest; canReview: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancellationSucceeded: boolean; busy: boolean; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
-  const showEmployee = canReview && request.employee !== profile.name;
+function RequestDetail({ profile, request, attachments, canReview, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancellationSucceeded, busy, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; request: LeaveRequest; attachments: LeaveAttachment[]; canReview: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancellationSucceeded: boolean; busy: boolean; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+  const showEmployee = canReview && request.personId !== profile.id;
   const isApprovedLeave = request.status === "Approved";
   const isConfirmingCancellation = cancellationRequestId === request.id;
   const isCancelled = request.status === "Cancelled" || cancellationSucceeded;
@@ -1457,11 +1744,62 @@ function RequestDetail({ profile, request, canReview, readOnly, hidePrivateDetai
     && canCancelOwnApprovedLeave
     && isApprovedLeave
     && request.canCancel === true;
-
-  return <aside className={styles.detailPanel} aria-label={`${request.id} details`}><header className={!showEmployee ? styles.personalDetailHeader : undefined}>{showEmployee ? <span className={styles.avatarOrange}>{request.initials}</span> : null}<span><small>{request.id}</small>{showEmployee ? <><h2>{request.employee}</h2><p>{request.team}</p></> : <h2>{request.leaveType}</h2>}</span></header><StatusPill status={request.status} /><dl>{showEmployee ? <div><dt>Leave type</dt><dd>{request.leaveType}</dd></div> : null}<div><dt>When</dt><dd>{request.dateLabel}</dd></div><div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div><div><dt>Assigned reviewer</dt><dd>{request.approvalRequired ? request.assignedReviewerLabel ?? "Authorised reviewer" : "Not required"}</dd></div></dl>{isCancelled ? <section className={styles.cancelLeaveRecorded} role="status"><CheckCircle2 aria-hidden="true" size={17} /><span><strong>Leave cancelled</strong><small>This leave is no longer on the team calendar. Its approval history is kept.</small></span></section> : null}{canCancel ? <section className={styles.cancelLeaveAction}>{!isConfirmingCancellation ? <><span>Approved leave</span><p>Need to cancel this future approved leave?</p><button className={styles.cancelLeaveButton} type="button" onClick={() => onStartCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> Cancel leave</button></> : <><span>Cancel approved leave</span><p>This removes the future leave from the team calendar. The approval history is kept.</p><p>Past, same-day, and partly used leave cannot be cancelled here.</p>{cancellationError ? <p className={styles.cancelLeaveError} role="alert">{cancellationError}</p> : null}<div className={styles.cancelLeaveControls}><button className={styles.cancelLeaveKeepButton} type="button" onClick={onDismissCancellation} disabled={busy}>Keep leave</button><button className={styles.cancelLeaveConfirmButton} type="button" onClick={() => onConfirmCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> {busy ? "Cancelling…" : "Yes, cancel leave"}</button></div></>}</section> : null}{!hidePrivateDetails && request.employeeNote ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}{!hidePrivateDetails && request.managerNote ? <section><span>Reviewer decision note</span><p>{request.managerNote}</p></section> : null}</aside>;
+  const canAddAttachments = !readOnly && request.canAttach === true;
+  return <aside className={styles.detailPanel} aria-label={`${request.id} details`}>
+    <header className={!showEmployee ? styles.personalDetailHeader : undefined}>
+      {showEmployee ? <span className={styles.avatarOrange}>{request.initials}</span> : null}
+      <span><small>{request.id}</small>{showEmployee ? <><h2>{request.employee}</h2><p>{request.team}</p></> : <h2>{request.leaveType}</h2>}</span>
+    </header>
+    <StatusPill status={request.status} />
+    <dl>
+      {showEmployee ? <div><dt>Leave type</dt><dd>{request.leaveType}</dd></div> : null}
+      <div><dt>When</dt><dd>{request.dateLabel}</dd></div>
+      <div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div>
+      <div><dt>Assigned reviewer</dt><dd>{request.approvalRequired ? request.assignedReviewerLabel ?? "Authorised reviewer" : "Not required"}</dd></div>
+    </dl>
+    {isCancelled ? <section className={styles.cancelLeaveRecorded} role="status"><CheckCircle2 aria-hidden="true" size={17} /><span><strong>Leave cancelled</strong><small>This leave is no longer on the team calendar. Its approval history is kept.</small></span></section> : null}
+    {canCancel ? <section className={styles.cancelLeaveAction}>{!isConfirmingCancellation ? <><span>Approved leave</span><p>Need to cancel this future approved leave?</p><button id={cancelLeaveTriggerId(request.id)} className={styles.cancelLeaveButton} type="button" onClick={() => onStartCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> Cancel leave</button></> : <><span>Cancel approved leave</span><p>This removes the future leave from the team calendar. The approval history is kept.</p><p>Past, same-day, and partly used leave cannot be cancelled here.</p>{cancellationError ? <p className={styles.cancelLeaveError} role="alert">{cancellationError}</p> : null}<div className={styles.cancelLeaveControls}><button className={styles.cancelLeaveKeepButton} type="button" onClick={onDismissCancellation} disabled={busy}>Keep leave</button><button className={styles.cancelLeaveConfirmButton} type="button" onClick={() => onConfirmCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> {busy ? "Cancelling…" : "Yes, cancel leave"}</button></div></>}</section> : null}
+    {!hidePrivateDetails && request.employeeNote ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}
+    {!hidePrivateDetails && request.managerNote ? <section><span>Reviewer decision note</span><p>{request.managerNote}</p></section> : null}
+    {!hidePrivateDetails ? <AttachmentList attachments={attachments} /> : null}
+    {!hidePrivateDetails && canAddAttachments ? <section className={styles.attachmentUpload}>
+      <span>Supporting files</span>
+      <p>{attachments.length ? `${attachments.length} of ${MAX_LEAVE_ATTACHMENTS} files attached.` : "No supporting files added yet."}</p>
+      <label className={styles.attachmentUploadButton} data-busy={busy ? "true" : "false"}>
+        <Upload aria-hidden="true" size={15} /> {busy ? "Uploading…" : "Add supporting files"}
+        <input
+          className={styles.srOnly}
+          type="file"
+          accept={LEAVE_ATTACHMENT_ACCEPT}
+          multiple
+          disabled={busy}
+          onChange={(event) => {
+            const files = Array.from(event.currentTarget.files ?? []);
+            event.currentTarget.value = "";
+            if (files.length) void onAddSupportingFiles(request.id, files);
+          }}
+        />
+      </label>
+      <small>PDF or image files only · up to 5 MB each. Files are not malware-scanned; do not upload unsafe or unrelated content.</small>
+    </section> : null}
+  </aside>;
 }
 
-function ApprovalsView({ pending, selected, selectedId, note, requests, busy, readOnly, hidePrivateDetails, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; requests: LeaveRequest[]; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
+function AttachmentList({ attachments }: { attachments: LeaveAttachment[] }) {
+  if (!attachments.length) return null;
+
+  return <section className={styles.attachmentList} aria-label="Supporting files">
+    <span><Paperclip aria-hidden="true" size={14} /> Supporting files</span>
+    {attachments.map((attachment) => <a href={`/leave/attachments/${attachment.id}`} key={attachment.id}>
+      <FileText aria-hidden="true" size={17} />
+      <span><strong>{attachment.fileName}</strong><small>{formatFileSize(attachment.sizeBytes)} · Download</small></span>
+      <ArrowUpRight aria-hidden="true" size={15} />
+    </a>)}
+    <small><ShieldCheck aria-hidden="true" size={13} /> Private to the employee, authorised reviewer and HR.</small>
+  </section>;
+}
+
+function ApprovalsView({ pending, selected, selectedId, note, requests, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; requests: LeaveRequest[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
   const showQueue = pending.length > 1 || !selected;
   return <div className={`${styles.approvalGrid} ${!selected ? styles.approvalGridEmpty : ""} ${!showQueue ? styles.approvalGridSingle : ""}`}>
     {showQueue ? <section className={`${styles.panel} ${styles.queue}`}><PanelHeader title="Requests" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} disabled={busy} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Nothing needs review</strong></div>}</section> : null}
@@ -1469,6 +1807,7 @@ function ApprovalsView({ pending, selected, selectedId, note, requests, busy, re
       <header className={styles.approvalHeader}><span className={styles.avatarOrange}>{selected.initials}</span><span><small>{selected.id}</small><h2>{selected.employee}</h2><p>{selected.team}</p></span><StatusPill status={selected.status} /></header>
       <div className={styles.factGrid}><article><CalendarDays size={17} /><span><small>When</small><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><small>Duration</small><strong>{formatDurationWithTime(selected)}</strong></span></article><article><ClipboardList size={17} /><span><small>Leave type</small><strong>{selected.leaveType}</strong></span></article></div>
       {!hidePrivateDetails && selected.employeeNote ? <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div> : null}
+      {!hidePrivateDetails ? <AttachmentList attachments={attachmentsByRequestId.get(selected.id) ?? []} /> : null}
       <ApprovalCalendar selected={selected} requests={requests} />
       {selected.status === "Pending" ? <div className={styles.decisionBox}><label><span>Decision note <small>Required when declining</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} placeholder="Add context that will remain with this record." disabled={busy || readOnly} /></label><div><button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")} disabled={busy || readOnly}><XCircle size={16} /> {busy ? "Sending…" : readOnly ? "Preview only" : "Decline"}</button><button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")} disabled={busy || readOnly}><CheckCircle2 size={16} /> {busy ? "Sending…" : readOnly ? "Preview only" : "Approve leave"}</button></div></div> : <div className={styles.decisionRecorded}><CheckCircle2 size={19} /><span><strong>Decision recorded</strong><small>The employee view and leave register show {selected.status.toLowerCase()}.</small></span></div>}
     </section> : null}
@@ -1479,7 +1818,7 @@ function ApprovalCalendar({ selected, requests }: { selected: LeaveRequest; requ
   const days = getApprovalCalendarDays(selected);
   const rangeStart = days[0].iso;
   const rangeEnd = days[days.length - 1].iso;
-  const teamLeave = requests.filter((request) => request.id !== selected.id && request.employee !== selected.employee && request.team === selected.team && request.status !== "Declined" && request.status !== "Cancelled" && request.endDate >= rangeStart && request.startDate <= rangeEnd);
+  const teamLeave = requests.filter((request) => request.id !== selected.id && request.personId !== selected.personId && request.team === selected.team && request.status !== "Declined" && request.status !== "Cancelled" && request.endDate >= rangeStart && request.startDate <= rangeEnd);
   const overlaps = teamLeave.filter((request) => requestsOverlap(selected, request));
 
   return (
@@ -1574,7 +1913,7 @@ function CalendarView({
             .filter((request) => day.iso >= request.startDate && day.iso <= request.endDate)
             .map((request) => ({ kind: "leave" as const, id: request.id, request }));
           const checkInEvents = Array.from(new Map(checkIns
-            .filter((entry) => entry.status !== "completed" && entry.dueDate === day.iso)
+            .filter((entry) => entry.dueDate === day.iso)
             .map((entry) => [`${entry.personId}:${entry.milestone}:${entry.dueDate}`, entry])).values());
           // Birthdays and open check-ins are never hidden. Leave entries use
           // any remaining compact slots and keep their existing overflow row.

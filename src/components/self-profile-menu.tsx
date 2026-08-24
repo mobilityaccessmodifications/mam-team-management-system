@@ -15,6 +15,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   type FormEvent,
   useCallback,
@@ -26,6 +27,7 @@ import {
 } from "react";
 
 import styles from "@/components/self-profile-menu.module.css";
+import { EASE_OUT } from "@/lib/ease";
 
 /**
  * A profile DTO already authorised for the current viewer. The caller must
@@ -124,6 +126,7 @@ export function SelfProfileMenu({
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const reduceMotion = useReducedMotion();
 
   const profileKey = [
     mode,
@@ -290,13 +293,18 @@ export function SelfProfileMenu({
         <ChevronDown className={styles.chevron} aria-hidden="true" size={16} />
       </button>
 
-      {isOpen ? (
-        <section
-          aria-labelledby={titleId}
-          className={styles.panel}
-          id={panelId}
-          role="dialog"
-        >
+      <AnimatePresence initial={false}>
+        {isOpen ? (
+          <motion.section
+            aria-labelledby={titleId}
+            className={styles.panel}
+            id={panelId}
+            role="dialog"
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.985 }}
+            transition={{ duration: reduceMotion ? 0 : 0.2, ease: EASE_OUT }}
+          >
           <header className={styles.panelHeader}>
             <div className={styles.profileHeading}>
               <span className={styles.avatarLarge} aria-hidden="true">{initialsFor(displayName)}</span>
@@ -400,8 +408,9 @@ export function SelfProfileMenu({
               </footer>
             </form>
           </>}
-        </section>
-      ) : null}
+          </motion.section>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
