@@ -551,7 +551,7 @@ export function LeaveDemo({
     leaveRefreshSequence.current = requestSequence;
     setLeaveDataLoading(true);
     try {
-      const data = await getLeaveWorkspaceData();
+      const data = await getLeaveWorkspaceData(previewPersonId || undefined);
       // A save, a safe Realtime invalidation and an initial load can overlap.
       // Only the newest role-scoped response may update calendar data.
       if (requestSequence !== leaveRefreshSequence.current) return;
@@ -581,7 +581,7 @@ export function LeaveDemo({
     } finally {
       if (requestSequence === leaveRefreshSequence.current) setLeaveDataLoading(false);
     }
-  }, []);
+  }, [previewPersonId]);
 
   const loadAccounts = useCallback(async () => {
     if (!isAdmin || !canManageEmployeeDirectory) {
@@ -947,19 +947,18 @@ export function LeaveDemo({
   const canCancelOwnApprovedLeave = !isNonRosterSystemAdminWorkspace
     || isPreviewingEmployeeAccess;
   const viewTitles = getViewTitles(activeProfile, calendarMonth, canReviewLeave);
-  // The durable workspace/calendar RPCs have already applied the current
-  // session's server-side scope. Do not re-derive access in the browser from a
-  // mutable name or hierarchy snapshot; that could hide a valid immutable
-  // assignment after an organisation edit.
+  // The durable leave projections remain scoped to the real session. Check-in
+  // Calendar data uses the selected profile's guarded server-side scope while
+  // Change profile is active; it is never derived from browser hierarchy data.
   const visibleRequests = isPreviewingEmployeeAccess
     ? getEmployeePreviewRequests(requests, activeProfile)
     : requests;
   const calendarRequests = isPreviewingEmployeeAccess
     ? getEmployeePreviewRequests(calendarEntries, activeProfile)
     : calendarEntries;
-  // Change Profile changes presentation, not the Super Admin's authority.
-  // Keep the complete authorised calendar available so the profile switch
-  // never removes a function the real Super Admin can safely exercise.
+  // The Check-in Calendar is a manager-safe projection of the selected profile
+  // in Change profile mode, while the Super Admin retains its real authority
+  // for guarded actions and testing.
   const calendarCheckIns = checkInCalendarEntries;
   const approvalQueue = canReviewLeave
     ? visibleRequests.filter((request) => request.canDecide)
