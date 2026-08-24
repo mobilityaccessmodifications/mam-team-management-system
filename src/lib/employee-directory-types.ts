@@ -26,6 +26,7 @@ export type EmployeeDirectoryRecord = {
   dateOfBirth: string;
   startedDate: string;
   scheduledEmploymentEndDate: string;
+  archiveReason: string;
   laptopSupplied: EmployeeLaptopSupply;
   laptopId: string;
   mouseId: string;
@@ -47,6 +48,7 @@ export type EmployeeDirectoryDraft = {
   dateOfBirth: string;
   startedDate: string;
   scheduledEmploymentEndDate: string;
+  archiveReason: string;
   laptopSupplied: EmployeeLaptopSupply;
   laptopId: string;
   mouseId: string;

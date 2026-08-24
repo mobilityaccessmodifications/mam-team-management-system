@@ -26,6 +26,7 @@ import {
 
 import {
   createEmployeeDirectoryRecord,
+  archiveEmployeeDirectoryRecord,
   deleteEmployeeDirectoryRecord,
   listEmployeeDirectoryRecords,
   updateEmployeeDirectoryRecord,
@@ -47,6 +48,13 @@ type EditorState =
 type DirectorySort = "name" | "startedDate" | "company";
 
 const recordsPerPage = 8;
+const archiveReasons = [
+  "Resigned",
+  "End of contract",
+  "Terminated",
+  "Redundant",
+  "Other",
+] as const;
 
 export type EmployeeDirectoryProps = {
   /**
@@ -77,6 +85,7 @@ const emptyDraft: EmployeeDirectoryDraft = {
   dateOfBirth: "",
   startedDate: "",
   scheduledEmploymentEndDate: "",
+  archiveReason: "",
   laptopSupplied: "",
   laptopId: "",
   mouseId: "",
@@ -101,6 +110,7 @@ function toDraft(record: EmployeeDirectoryRecord): EmployeeDirectoryDraft {
     dateOfBirth: record.dateOfBirth,
     startedDate: record.startedDate,
     scheduledEmploymentEndDate: record.scheduledEmploymentEndDate,
+    archiveReason: record.archiveReason,
     laptopSupplied: record.laptopSupplied,
     laptopId: record.laptopId,
     mouseId: record.mouseId,
@@ -224,9 +234,11 @@ export function EmployeeDirectory({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [notice, setNotice] = useState("");
-  const [endDatePrompt, setEndDatePrompt] = useState<{ date: string } | null>(null);
+  const [endDatePrompt, setEndDatePrompt] = useState<{ date: string; reason: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EmployeeDirectoryRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [directoryFilter, setDirectoryFilter] = useState<"active" | "archived">("active");
   const observedRefreshKey = useRef(refreshKey);
   const endDateDialogRef = useRef<HTMLElement>(null);
   const endDateInputRef = useRef<HTMLInputElement>(null);
@@ -299,10 +311,15 @@ export function EmployeeDirectory({
     };
   }, [refreshKey]);
 
+  const statusRecords = useMemo(
+    () => records.filter((record) => directoryFilter === "active" ? record.isActive : !record.isActive),
+    [directoryFilter, records],
+  );
+
   const searchedRecords = useMemo(() => {
     const searched = normalise(query);
-    if (!searched) return records;
-    return records.filter((record) => normalise([
+    if (!searched) return statusRecords;
+    return statusRecords.filter((record) => normalise([
       record.fullName,
       record.positionTitle,
       record.teamName,
@@ -313,7 +330,7 @@ export function EmployeeDirectory({
       record.keyboardId,
       record.assetTags.join(" "),
     ].join(" ")).includes(searched));
-  }, [query, records]);
+  }, [query, statusRecords]);
 
   const sortedRecords = useMemo(() => {
     const next = [...searchedRecords];
@@ -323,6 +340,7 @@ export function EmployeeDirectory({
   }, [searchedRecords, sort]);
 
   const activeCount = records.filter((record) => record.isActive).length;
+  const archivedCount = records.length - activeCount;
   const externallySelectedRecord = selectedPersonId
     ? records.find((record) => record.personId === selectedPersonId) ?? null
     : null;
@@ -365,23 +383,45 @@ export function EmployeeDirectory({
     const base = editor ?? activeEditor;
     if (!base) return;
     if (key === "isActive" && value === false && base.draft.isActive) {
-      setEndDatePrompt({ date: base.draft.scheduledEmploymentEndDate || todayIso() });
+      setEndDatePrompt({ date: base.draft.scheduledEmploymentEndDate || todayIso(), reason: "Resigned" });
       return;
     }
     setEditor(updateDraft(base, key, value));
   }
 
-  function confirmEndDate() {
+  async function confirmEndDate() {
     const base = editor ?? activeEditor;
-    if (!base || !endDatePrompt?.date) return;
+    const record = selectedRecord(records, base);
+    if (!base || !record || !endDatePrompt?.date || archiving) return;
     if (base.draft.startedDate && endDatePrompt.date < base.draft.startedDate) {
       setSaveError("The end date cannot be before the start date.");
       return;
     }
-    const withDate = updateDraft(base, "scheduledEmploymentEndDate", endDatePrompt.date);
-    setEditor(updateDraft(withDate, "isActive", false));
-    setEndDatePrompt(null);
+    setArchiving(true);
     setSaveError("");
+    try {
+      const result = await archiveEmployeeDirectoryRecord({
+        personId: record.personId,
+        personVersion: record.personVersion,
+        detailVersion: record.detailVersion,
+        endDate: endDatePrompt.date,
+        reason: endDatePrompt.reason,
+      });
+      if (!result.ok) {
+        setSaveError(result.message);
+        return;
+      }
+      setRecords((current) => current.map((candidate) => candidate.personId === result.record.personId ? result.record : candidate));
+      setEditor({ mode: "edit", personId: result.record.personId, draft: toDraft(result.record) });
+      setEndDatePrompt(null);
+      setNotice("Profile archived.");
+      setDirectoryFilter("archived");
+      await onRecordsChanged?.();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "The employee profile could not be archived.");
+    } finally {
+      setArchiving(false);
+    }
   }
 
   async function confirmDelete() {
@@ -507,7 +547,14 @@ export function EmployeeDirectory({
                 <option value="company">Company</option>
               </select>
             </label>
-            <span className={styles.recordCount}><UsersRound size={15} /> {activeCount} active</span>
+            <label className={styles.sortField}>
+              <span>View</span>
+              <select value={directoryFilter} onChange={(event) => setDirectoryFilter(event.target.value as "active" | "archived")}>
+                <option value="active">Active ({activeCount})</option>
+                <option value="archived">Archived ({archivedCount})</option>
+              </select>
+            </label>
+            <span className={styles.recordCount}><UsersRound size={15} /> {sortedRecords.length} {directoryFilter}</span>
           </div>
 
           {loading ? <div className={styles.listState}><MotionLoader label="Loading employee records" /></div> : null}
@@ -531,33 +578,34 @@ export function EmployeeDirectory({
           onChange={handleDraftChange}
           onClose={closeEditor}
           onSubmit={saveRecord}
-          onRequestDelete={!activeEditor || activeEditor.mode === "create" || !currentRecord ? undefined : () => setDeleteTarget(currentRecord)}
+          onRequestDelete={!activeEditor || activeEditor.mode === "create" || !currentRecord || currentRecord.isActive ? undefined : () => setDeleteTarget(currentRecord)}
         /> : <EmptyDetail onCreate={openCreate} />}
       </div>
 
       {endDatePrompt ? <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEndDatePrompt(); }}>
         <section className={styles.modal} ref={endDateDialogRef} role="dialog" aria-modal="true" aria-labelledby="end-date-title" tabIndex={-1}>
           <header className={styles.modalHeader}>
-            <div><span>Employee status</span><h3 id="end-date-title">Set employment end date</h3></div>
+            <div><span>Employee status</span><h3 id="end-date-title">Archive employee profile</h3></div>
             <button type="button" className={styles.modalClose} onClick={closeEndDatePrompt} aria-label="Close"><X size={17} /></button>
           </header>
           <div className={styles.modalBody}>
-            <p>Confirm the employee is no longer active. The date defaults to today.</p>
-            <label className={styles.modalField}><span>End date</span><input ref={endDateInputRef} type="date" value={endDatePrompt.date} onChange={(event) => setEndDatePrompt({ date: event.target.value })} /></label>
+            <p>Archived profiles leave the active directory but remain available to authorised HR reviewers.</p>
+            <label className={styles.modalField}><span>End date</span><input ref={endDateInputRef} type="date" value={endDatePrompt.date} onChange={(event) => setEndDatePrompt((current) => current ? { ...current, date: event.target.value } : current)} /></label>
+            <label className={styles.modalField}><span>Reason</span><select value={endDatePrompt.reason} onChange={(event) => setEndDatePrompt((current) => current ? { ...current, reason: event.target.value } : current)}>{archiveReasons.map((reason) => <option key={reason} value={reason}>{reason}</option>)}</select></label>
             {saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}
           </div>
-          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={closeEndDatePrompt}>Cancel</button><button type="button" className={styles.primaryAction} onClick={confirmEndDate}>Set end date</button></footer>
+          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={closeEndDatePrompt} disabled={archiving}>Cancel</button><button type="button" className={styles.primaryAction} onClick={() => void confirmEndDate()} disabled={archiving}>{archiving ? "Archiving…" : "Save & archive profile"}</button></footer>
         </section>
       </div> : null}
 
       {deleteTarget ? <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDeletePrompt(); }}>
         <section className={styles.modal} ref={deleteDialogRef} role="dialog" aria-modal="true" aria-labelledby="delete-profile-title" tabIndex={-1}>
           <header className={styles.modalHeader}>
-            <div><span>Permanent action</span><h3 id="delete-profile-title">Delete {deleteTarget.fullName}?</h3></div>
+            <div><span>Permanent action</span><h3 id="delete-profile-title">Delete archived profile?</h3><p>{deleteTarget.fullName}</p></div>
             <button type="button" className={styles.modalClose} onClick={closeDeletePrompt} disabled={deleting} aria-label="Close"><X size={17} /></button>
           </header>
-          <div className={styles.modalBody}><p>This removes the profile only when it is inactive, unlinked and has no reporting, roster or check-in history. Otherwise, deactivate it instead.</p>{saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}</div>
-          <footer className={styles.modalActions}><button ref={deleteCancelRef} type="button" className={styles.secondaryAction} onClick={closeDeletePrompt} disabled={deleting}>Cancel</button><button type="button" className={styles.dangerAction} onClick={() => void confirmDelete()} disabled={deleting}><Trash2 size={15} />{deleting ? "Deleting…" : "Delete profile"}</button></footer>
+          <div className={styles.modalBody}><p>This permanently removes the archived profile. This cannot be undone.</p>{saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}</div>
+          <footer className={styles.modalActions}><button ref={deleteCancelRef} type="button" className={styles.secondaryAction} onClick={closeDeletePrompt} disabled={deleting}>Cancel</button><button type="button" className={styles.dangerAction} onClick={() => void confirmDelete()} disabled={deleting}><Trash2 size={15} />{deleting ? "Deleting…" : "Delete permanently"}</button></footer>
         </section>
       </div> : null}
     </section>
@@ -602,7 +650,7 @@ function EmployeeDirectoryList({
           </span>
           <span className={styles.recordMeta}>
             <i data-company={record.company}>{companyLabel(record.company)}</i>
-            {!record.isActive ? <em>Inactive</em> : null}
+            {!record.isActive ? <em>Archived</em> : null}
           </span>
         </button>;
       })}
@@ -764,6 +812,9 @@ function EmployeeEditor({
           <Field label="Scheduled employment end date" className={styles.fullSpan}>
             <input value={editor.draft.scheduledEmploymentEndDate} onChange={(event) => onChange("scheduledEmploymentEndDate", event.target.value)} type="date" />
           </Field>
+          {!editor.draft.isActive ? <Field label="Archive reason" className={styles.fullSpan}>
+            <input value={editor.draft.archiveReason} readOnly />
+          </Field> : null}
         </div>
       </fieldset>
 
@@ -803,7 +854,7 @@ function EmployeeEditor({
           <p><Mail size={14} /> The CSV keeps the HR workbook columns, then adds the private equipment audit fields.</p>
         </div>
         <div>
-          {onRequestDelete ? <button type="button" className={styles.dangerAction} onClick={onRequestDelete} disabled={saving}><Trash2 size={14} /> Delete profile</button> : null}
+          {onRequestDelete ? <button type="button" className={styles.dangerAction} onClick={onRequestDelete} disabled={saving}><Trash2 size={14} /> Delete archived profile</button> : null}
           <button type="button" className={styles.secondaryAction} onClick={onClose} disabled={saving}>Cancel</button>
           <button type="submit" className={styles.primaryAction} disabled={saving}>{saving ? "Saving…" : isCreate ? "Create employee" : "Save changes"}</button>
         </div>
