@@ -238,6 +238,64 @@ export async function updateEmployeeDirectoryRecord(
   return { record };
 }
 
+export type ArchiveEmployeeDirectoryResult =
+  | { ok: true; record: EmployeeDirectoryRecord }
+  | { ok: false; message: string };
+
+export async function archiveEmployeeDirectoryRecord(input: {
+  personId: string;
+  personVersion: number;
+  detailVersion: number;
+  endDate: string;
+  reason: string;
+}): Promise<ArchiveEmployeeDirectoryResult> {
+  try {
+    const inputValue = inputObject(input);
+    if (typeof inputValue.personId !== "string" || !UUID_PATTERN.test(inputValue.personId)) {
+      return { ok: false, message: "The employee record is invalid." };
+    }
+    const endDate = optionalDate(inputValue.endDate, "End date");
+    const reason = requiredText(inputValue.reason, "Archive reason", 120);
+    if (!endDate) return { ok: false, message: "Choose an employment end date." };
+
+    const { supabase } = await requireEmployeeDirectoryManager();
+    const { data, error } = await supabase.rpc("archive_employee_directory_record", {
+      p_person_id: inputValue.personId,
+      p_expected_person_version: version(inputValue.personVersion),
+      p_expected_detail_version: version(inputValue.detailVersion),
+      p_end_date: endDate,
+      p_archive_reason: reason,
+    });
+    if (error) {
+      const message = error.message?.toLocaleLowerCase() ?? "";
+      if (message.includes("reporting") || message.includes("account") || message.includes("manager") || message.includes("end date")) {
+        return { ok: false, message: error.message };
+      }
+      if (message.includes("changed") || message.includes("version")) {
+        return { ok: false, message: "This record has changed. Refresh it, then try again." };
+      }
+      if (message.includes("could not find the function") || message.includes("schema cache") || message.includes("archive_employee_directory_record")) {
+        return { ok: false, message: "Profile archiving is not available until the profile lifecycle setup is applied. Ask an administrator to refresh the system setup." };
+      }
+      return { ok: false, message: "The employee profile could not be archived. Refresh and try again." };
+    }
+
+    const returned = Array.isArray(data) ? data[0] : data;
+    const returnedId = returned && typeof returned === "object" && "person_id" in returned
+      ? (returned as { person_id?: unknown }).person_id
+      : undefined;
+    if (typeof returnedId !== "string" || !UUID_PATTERN.test(returnedId)) {
+      return { ok: false, message: "The employee profile could not be archived. Refresh and try again." };
+    }
+
+    const record = await findEmployeeDirectoryRecord(supabase, returnedId);
+    revalidatePath("/");
+    return { ok: true, record };
+  } catch {
+    return { ok: false, message: "The employee profile could not be archived. Refresh and try again." };
+  }
+}
+
 export type DeleteEmployeeDirectoryResult =
   | { ok: true; personId: string }
   | { ok: false; message: string };

@@ -28,6 +28,7 @@ type DirectoryRpcRow = {
   date_of_birth: string | null;
   started_date: string | null;
   scheduled_employment_end_date: string | null;
+  archive_reason: string | null;
   laptop_supplied: string | null;
   laptop_id: string | null;
   mouse_id: string | null;
@@ -95,6 +96,7 @@ function toRecord(row: DirectoryRpcRow): EmployeeDirectoryRecord {
     dateOfBirth: optionalText(row.date_of_birth),
     startedDate: optionalText(row.started_date),
     scheduledEmploymentEndDate: optionalText(row.scheduled_employment_end_date),
+    archiveReason: optionalText(row.archive_reason),
     laptopSupplied: laptopSupply(row.laptop_supplied),
     laptopId: optionalText(row.laptop_id),
     mouseId: optionalText(row.mouse_id),
@@ -127,8 +129,19 @@ export async function listEmployeeDirectoryRecordsForManager() {
 export async function listEmployeeDirectoryRecordsWithClient(
   supabase: Awaited<ReturnType<typeof createClient>>,
 ) {
-  const { data, error } = await supabase.rpc("list_employee_directory_records");
-  if (error || !Array.isArray(data)) throw new Error(GENERIC_LOAD_ERROR);
+  const { data: archiveData, error: archiveError } = await supabase.rpc("list_employee_directory_records_with_archive_visibility", {
+    p_include_archived: true,
+  });
+  // Keep the active directory usable while production applies the additive
+  // archive migration. The legacy RPC never returns archived rows, but it is
+  // a safe compatibility projection and avoids turning a staged migration
+  // into a full Directory outage.
+  let data = archiveData;
+  if (archiveError || !Array.isArray(data)) {
+    const legacy = await supabase.rpc("list_employee_directory_records");
+    if (legacy.error || !Array.isArray(legacy.data)) throw new Error(GENERIC_LOAD_ERROR);
+    data = legacy.data;
+  }
 
   return (data as DirectoryRpcRow[])
     .map(toRecord)
