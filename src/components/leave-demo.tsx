@@ -353,11 +353,40 @@ function getViewTitles(profile: Profile, calendarMonth: Date, canReviewLeave: bo
   };
 }
 
-function getEmployeePreviewRequests(requests: LeaveRequest[], profile: Profile) {
-  // Change profile scopes the view to the selected employee for the Super
-  // Admin, while all reviewer/capability decisions still come from the
-  // signed-in account's server-projected request fields.
-  return requests.filter((request) => request.personId === profile.id);
+function getEmployeePreviewRequests(
+  requests: LeaveRequest[],
+  profile: Profile,
+  organisationRows: InternalOrgRow[],
+) {
+  // Change profile is a Super Admin-only projection. An employee preview is
+  // limited to that person's own register, while a manager preview mirrors
+  // the manager's approval workspace: their own requests plus every active
+  // person beneath them in the reporting tree. Walk through org-unit nodes as
+  // well, since a department grouping can sit between a manager and a person.
+  const visiblePersonIds = new Set<string>([profile.id]);
+  if (profile.accessRole === "manager") {
+    const childrenByParent = new Map<string, InternalOrgRow[]>();
+    organisationRows.forEach((row) => {
+      if (!row.is_active || !row.parent_id) return;
+      const children = childrenByParent.get(row.parent_id) ?? [];
+      children.push(row);
+      childrenByParent.set(row.parent_id, children);
+    });
+
+    const pendingParents = [profile.id];
+    const visited = new Set<string>();
+    while (pendingParents.length > 0) {
+      const parentId = pendingParents.shift();
+      if (!parentId || visited.has(parentId)) continue;
+      visited.add(parentId);
+      for (const child of childrenByParent.get(parentId) ?? []) {
+        pendingParents.push(child.id);
+        if (child.node_kind === "person") visiblePersonIds.add(child.id);
+      }
+    }
+  }
+
+  return requests.filter((request) => Boolean(request.personId && visiblePersonIds.has(request.personId)));
 }
 
 function initialsForName(name: string) {
@@ -951,10 +980,10 @@ export function LeaveDemo({
   // Calendar data uses the selected profile's guarded server-side scope while
   // Change profile is active; it is never derived from browser hierarchy data.
   const visibleRequests = isPreviewingEmployeeAccess
-    ? getEmployeePreviewRequests(requests, activeProfile)
+    ? getEmployeePreviewRequests(requests, activeProfile, organisationRows)
     : requests;
   const calendarRequests = isPreviewingEmployeeAccess
-    ? getEmployeePreviewRequests(calendarEntries, activeProfile)
+    ? getEmployeePreviewRequests(calendarEntries, activeProfile, organisationRows)
     : calendarEntries;
   // The Check-in Calendar is a manager-safe projection of the selected profile
   // in Change profile mode, while the Super Admin retains its real authority
