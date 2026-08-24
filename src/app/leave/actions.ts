@@ -97,6 +97,8 @@ export type LeaveWorkspaceData = {
    * request is pending.
    */
   canReviewLeave: boolean;
+  /** True when Super Admin has requested a server-scoped Change Profile view. */
+  isProfilePreview: boolean;
   /** Non-blocking notice when an optional calendar projection is unavailable. */
   warning?: string;
 };
@@ -744,6 +746,189 @@ function parseOptionalProjection<T>(
   }
 }
 
+/**
+ * Builds the Leave workspace for Super Admin's Change Profile mode.
+ *
+ * This is intentionally server-side: the browser never decides who sits in a
+ * manager's reporting scope. It also avoids borrowing the signed-in System
+ * Admin's leave projection, which is the wrong data source when testing Todd
+ * or Luke's account view. The selected profile sees its own request(s); a
+ * manager sees their active reporting subtree; HR/System Admin sees the full
+ * register. The real authenticated System Admin remains the actor for every
+ * later guarded action and audit event.
+ */
+async function getSelectedEmployeeLeaveWorkspacePreview(personId: string) {
+  const admin = createAdminClient();
+  const [peopleResult, profilesResult, requestsResult] = await Promise.all([
+    admin
+      .from("internal_org_people")
+      .select("id,node_kind,company_key,full_name,parent_id,is_active,auth_user_id"),
+    admin
+      .from("profiles")
+      .select("id,full_name,preferred_name,app_role,account_status,login_name"),
+    admin
+      .from("leave_requests")
+      .select("id,user_id,request_type_label,start_date,end_date,start_time,end_time,business_days,hours,approval_required,status,submitted_at,manager_name_snapshot,reason,manager_note,created_at")
+      .in("status", ["submitted", "approved", "rejected", "changes_requested", "cancelled"])
+      .order("start_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false }),
+  ]);
+
+  if (peopleResult.error || profilesResult.error || requestsResult.error) {
+    throw new Error(LOAD_ERROR);
+  }
+
+  const people = Array.isArray(peopleResult.data) ? peopleResult.data : [];
+  const profiles = Array.isArray(profilesResult.data) ? profilesResult.data : [];
+  const leaveRecords = Array.isArray(requestsResult.data) ? requestsResult.data : [];
+  const targetPerson = people.find((person) => (
+    person.id === personId
+    && person.node_kind === "person"
+    && person.is_active === true
+    && typeof person.auth_user_id === "string"
+  ));
+  if (!targetPerson) throw new Error(SELECTED_PROFILE_SUBMIT_ERROR);
+
+  const targetProfile = profiles.find((profile) => (
+    profile.id === targetPerson.auth_user_id
+    && profile.account_status === "active"
+    && typeof profile.login_name === "string"
+  ));
+  if (!targetProfile) throw new Error(SELECTED_PROFILE_SUBMIT_ERROR);
+
+  const activeChildrenByParent = new Map<string, typeof people>();
+  const personByUserId = new Map<string, (typeof people)[number]>();
+  people.forEach((person) => {
+    if (person.node_kind !== "person" || person.is_active !== true) return;
+    if (typeof person.auth_user_id === "string") personByUserId.set(person.auth_user_id, person);
+    if (!person.parent_id || typeof person.parent_id !== "string") return;
+    const children = activeChildrenByParent.get(person.parent_id) ?? [];
+    children.push(person);
+    activeChildrenByParent.set(person.parent_id, children);
+  });
+
+  // Include active intermediary org-unit nodes in the walk so a manager's
+  // scope remains correct if HR uses a department grouping in the tree.
+  people.forEach((person) => {
+    if (person.node_kind === "person" || person.is_active !== true || !person.parent_id || typeof person.parent_id !== "string") return;
+    const children = activeChildrenByParent.get(person.parent_id) ?? [];
+    children.push(person);
+    activeChildrenByParent.set(person.parent_id, children);
+  });
+
+  const allCompanyScope = targetProfile.app_role === "hr" || targetProfile.app_role === "system_admin";
+  const managerScope = targetProfile.app_role === "manager";
+  const visiblePersonIds = new Set<string>();
+  if (allCompanyScope) {
+    people.forEach((person) => {
+      if (person.node_kind === "person" && person.is_active === true) visiblePersonIds.add(person.id);
+    });
+  } else {
+    visiblePersonIds.add(personId);
+    if (managerScope) {
+      const pendingParents = [personId];
+      const visited = new Set<string>();
+      while (pendingParents.length > 0) {
+        const parentId = pendingParents.shift();
+        if (!parentId || visited.has(parentId)) continue;
+        visited.add(parentId);
+        for (const child of activeChildrenByParent.get(parentId) ?? []) {
+          pendingParents.push(child.id);
+          if (child.node_kind === "person") visiblePersonIds.add(child.id);
+        }
+      }
+    }
+  }
+
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const workspaceRows: WorkspaceRpcRow[] = leaveRecords.flatMap((record) => {
+    if (typeof record.user_id !== "string") return [];
+    const employee = personByUserId.get(record.user_id);
+    if (!employee || !visiblePersonIds.has(employee.id)) return [];
+    const employeeProfile = profileById.get(record.user_id);
+    const employeeName = typeof employee.full_name === "string" && employee.full_name.trim()
+      ? employee.full_name
+      : employeeProfile?.preferred_name || employeeProfile?.full_name || "Employee";
+    const mappedStatus = record.status === "approved"
+      ? "Approved"
+      : record.status === "rejected"
+        ? "Declined"
+        : record.status === "cancelled"
+          ? "Cancelled"
+          : "Pending";
+
+    return [{
+      id: record.id,
+      person_id: employee.id,
+      employee_name: employeeName,
+      company_key: employee.company_key,
+      leave_type_label: record.request_type_label,
+      start_date: record.start_date,
+      end_date: record.end_date,
+      start_time: record.start_time,
+      end_time: record.end_time,
+      business_days: record.business_days,
+      hours: record.hours,
+      approval_required: record.approval_required,
+      status: mappedStatus,
+      submitted_at: record.submitted_at,
+      assigned_reviewer_label: record.manager_name_snapshot,
+      can_decide: (allCompanyScope || managerScope)
+        && record.user_id !== targetPerson.auth_user_id
+        && record.approval_required === true
+        && record.status === "submitted",
+      can_cancel: record.user_id === targetPerson.auth_user_id
+        && record.status === "approved",
+      can_attach: record.user_id === targetPerson.auth_user_id
+        && (record.status === "submitted" || record.status === "approved"),
+      employee_note: record.reason,
+      manager_note: record.manager_note,
+    }];
+  });
+
+  const requests = workspaceRows.map(toWorkspaceRequest);
+  const requestIds = requests.map((request) => request.id);
+  let attachments: LeaveAttachment[] = [];
+  if (requestIds.length > 0) {
+    const { data, error } = await admin
+      .from("leave_request_attachments")
+      .select("id,leave_request_id,file_name,mime_type,size_bytes,created_at")
+      .in("leave_request_id", requestIds);
+    if (!error && Array.isArray(data)) {
+      attachments = data.flatMap((attachment) => {
+        try {
+          return [toLeaveAttachment(attachment)];
+        } catch {
+          return [];
+        }
+      });
+    }
+  }
+
+  return {
+    requests,
+    attachments,
+    calendarEntries: requests
+      .filter((request) => request.status === "Pending" || request.status === "Approved")
+      .map((request) => ({
+        id: request.id,
+        personId: request.personId,
+        employee: request.employee,
+        company: request.company,
+        leaveType: request.leaveType,
+        startDate: request.startDate,
+        endDate: request.endDate,
+        startTime: request.startTime,
+        endTime: request.endTime,
+        days: request.days,
+        hours: request.hours,
+        status: request.status,
+      })),
+    canReviewLeave: allCompanyScope || managerScope,
+  };
+}
+
 export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<LeaveWorkspaceData> {
   const supabase = await requireLeaveSession();
   const checkedPreviewPersonId = previewPersonId ? selectedPersonId(previewPersonId) : null;
@@ -753,6 +938,30 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
     if (previewPermissionError || canChangeProfile !== true) {
       throw new Error(SELECTED_PROFILE_SUBMIT_ERROR);
     }
+  }
+
+  if (checkedPreviewPersonId) {
+    const [preview, { data: birthdayData, error: birthdayError }, { data: checkInData, error: checkInError }] = await Promise.all([
+      getSelectedEmployeeLeaveWorkspacePreview(checkedPreviewPersonId),
+      supabase.rpc("list_calendar_birthdays"),
+      supabase.rpc("list_employee_check_in_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
+    ]);
+    const birthdays = parseOptionalProjection(birthdayData, birthdayError, toBirthdayCalendarEntry);
+    const checkIns = parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry);
+    const unavailable = [
+      !birthdays.available ? "birthdays" : "",
+      !checkIns.available ? "check-ins" : "",
+    ].filter(Boolean);
+
+    return {
+      ...preview,
+      birthdayEntries: birthdays.rows,
+      checkInEntries: checkIns.rows,
+      isProfilePreview: true,
+      warning: unavailable.length
+        ? `Some optional data is temporarily unavailable (${unavailable.join(", ")}). Leave requests remain available.`
+        : undefined,
+    };
   }
 
   const [
@@ -766,9 +975,7 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
     supabase.rpc("list_leave_workspace_requests"),
     supabase.rpc("list_leave_calendar_entries"),
     supabase.rpc("list_calendar_birthdays"),
-    checkedPreviewPersonId
-      ? supabase.rpc("list_employee_check_in_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId })
-      : supabase.rpc("list_employee_check_in_calendar_entries"),
+    supabase.rpc("list_employee_check_in_calendar_entries"),
     supabase.rpc("can_review_leave_workspace"),
     supabase.rpc("list_leave_workspace_attachments"),
   ]);
@@ -805,6 +1012,7 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
     birthdayEntries: birthdays.rows,
     checkInEntries: checkIns.rows,
     canReviewLeave,
+    isProfilePreview: false,
     warning: unavailable.length
       ? `Some optional data is temporarily unavailable (${unavailable.join(", ")}). Leave requests remain available.`
       : undefined,

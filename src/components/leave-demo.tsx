@@ -496,6 +496,7 @@ export function LeaveDemo({
   const [calendarBirthdays, setCalendarBirthdays] = useState<BirthdayCalendarEntry[]>([]);
   const [checkInCalendarEntries, setCheckInCalendarEntries] = useState<CheckInCalendarEntry[]>([]);
   const [canReviewLeaveWorkspace, setCanReviewLeaveWorkspace] = useState(false);
+  const [leaveWorkspaceUsesProfileScope, setLeaveWorkspaceUsesProfileScope] = useState(false);
   const [leaveDataLoading, setLeaveDataLoading] = useState(true);
   const [leaveDataError, setLeaveDataError] = useState("");
   const [calendarMonth, setCalendarMonth] = useState(() => startOfCalendarMonth(new Date()));
@@ -590,6 +591,7 @@ export function LeaveDemo({
       setCalendarBirthdays(data.birthdayEntries);
       setCheckInCalendarEntries(data.checkInEntries);
       setCanReviewLeaveWorkspace(data.canReviewLeave);
+      setLeaveWorkspaceUsesProfileScope(data.isProfilePreview);
       setLeaveDataError(data.warning ?? "");
     } catch {
       if (requestSequence !== leaveRefreshSequence.current) return;
@@ -606,6 +608,7 @@ export function LeaveDemo({
       setCancellationFocusRequestId(null);
       setCancellationError("");
       setCanReviewLeaveWorkspace(false);
+      setLeaveWorkspaceUsesProfileScope(false);
       setLeaveDataError("Leave records could not be loaded. Refresh and try again.");
     } finally {
       if (requestSequence === leaveRefreshSequence.current) setLeaveDataLoading(false);
@@ -976,14 +979,18 @@ export function LeaveDemo({
   const canCancelOwnApprovedLeave = !isNonRosterSystemAdminWorkspace
     || isPreviewingEmployeeAccess;
   const viewTitles = getViewTitles(activeProfile, calendarMonth, canReviewLeave);
-  // The durable leave projections remain scoped to the real session. Check-in
-  // Calendar data uses the selected profile's guarded server-side scope while
-  // Change profile is active; it is never derived from browser hierarchy data.
+  // Change Profile's leave data is already projected by the guarded server
+  // action. Do not narrow it again in the browser: that used to hide a
+  // manager's team queue when testing Luke or Todd from Super Admin.
   const visibleRequests = isPreviewingEmployeeAccess
-    ? getEmployeePreviewRequests(requests, activeProfile, organisationRows)
+    ? leaveWorkspaceUsesProfileScope
+      ? requests
+      : getEmployeePreviewRequests(requests, activeProfile, organisationRows)
     : requests;
   const calendarRequests = isPreviewingEmployeeAccess
-    ? getEmployeePreviewRequests(calendarEntries, activeProfile, organisationRows)
+    ? leaveWorkspaceUsesProfileScope
+      ? calendarEntries
+      : getEmployeePreviewRequests(calendarEntries, activeProfile, organisationRows)
     : calendarEntries;
   // The Check-in Calendar is a manager-safe projection of the selected profile
   // in Change profile mode, while the Super Admin retains its real authority
