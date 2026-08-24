@@ -389,10 +389,14 @@ export function EmployeeDirectory({
     setDeleting(true);
     setSaveError("");
     try {
-      await deleteEmployeeDirectoryRecord({
+      const result = await deleteEmployeeDirectoryRecord({
         personId: deleteTarget.personId,
         personVersion: deleteTarget.personVersion,
       });
+      if (!result.ok) {
+        setSaveError(result.message);
+        return;
+      }
       setRecords((current) => current.filter((record) => record.personId !== deleteTarget.personId));
       setDeleteTarget(null);
       setEditor(null);
