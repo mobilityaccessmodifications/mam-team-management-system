@@ -2429,6 +2429,101 @@ export function OrganisationTree({
       </span>
 
       {forest.length ? (
+        <div className={styles.canvasShell}>
+          <div className={styles.canvasDock}>
+            <div className={styles.chartMeta}>
+              <span>{visiblePersonCount} people</span>
+              {arrangeMode ? <span>Arrange mode · drag to a card edge</span> : null}
+              {linkGuide ? <span>Add line · choose a + or click blank space to cancel</span> : null}
+            </div>
+
+            <div aria-label="Chart view controls" className={styles.chartControls}>
+              {canArrange ? (
+                <button
+                  aria-label="Clean up chart and restore the reporting layout"
+                  className={styles.cleanUpControl}
+                  disabled={!Object.keys(manualOffsets).length && !arrangeMode}
+                  onClick={cleanUpChart}
+                  title="Clean up chart"
+                  type="button"
+                >
+                  <WandSparkles aria-hidden="true" size={15} />
+                  <span>Clean up</span>
+                </button>
+              ) : null}
+              {canUseRelationshipEditor ? (
+                <button
+                  aria-label="Undo last reporting-line change"
+                  disabled={!relationshipHistory.length || saving}
+                  onClick={() => void undoLastRelationship()}
+                  title="Undo last reporting-line change"
+                  type="button"
+                >
+                  <Undo2 aria-hidden="true" size={15} />
+                </button>
+              ) : null}
+              <button
+                aria-label="Zoom out"
+                disabled={zoom <= MIN_ZOOM}
+                onClick={() =>
+                  setZoom((current) =>
+                    Math.max(MIN_ZOOM, Math.round((current - 0.1) * 100) / 100),
+                  )
+                }
+                type="button"
+              >
+                <Minus aria-hidden="true" size={15} />
+              </button>
+              <span aria-label={`${Math.round(zoom * 100)} percent zoom`}>
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                aria-label="Zoom in"
+                disabled={zoom >= MAX_ZOOM}
+                onClick={() =>
+                  setZoom((current) =>
+                    Math.min(MAX_ZOOM, Math.round((current + 0.1) * 100) / 100),
+                  )
+                }
+                type="button"
+              >
+                <Plus aria-hidden="true" size={15} />
+              </button>
+              <button
+                aria-label="Fit chart to screen"
+                className={styles.namedChartControl}
+                onClick={fitChart}
+                title="Fit chart to screen"
+                type="button"
+              >
+                <LocateFixed aria-hidden="true" size={15} />
+                <span>Fit</span>
+              </button>
+              <button
+                aria-label="Expand or collapse all reporting lines"
+                onClick={toggleAllBranches}
+                type="button"
+              >
+                <UnfoldVertical aria-hidden="true" size={15} />
+              </button>
+              <button aria-label="Reset chart view" onClick={resetView} type="button">
+                <Focus aria-hidden="true" size={15} />
+              </button>
+              <button
+                aria-label={fullscreen ? "Exit full screen" : "Open full screen"}
+                aria-pressed={fullscreen}
+                onClick={toggleFullscreen}
+                type="button"
+              >
+                {fullscreen ? (
+                  <Minimize2 aria-hidden="true" size={15} />
+                ) : (
+                  <Maximize2 aria-hidden="true" size={15} />
+                )}
+              </button>
+            </div>
+          </div>
+
         <div
           aria-label="Organisation chart. Select a person for details. Use arrow keys to pan the chart."
           className={styles.treeViewport}
@@ -2447,98 +2542,6 @@ export function OrganisationTree({
           ref={viewportRef}
           tabIndex={0}
         >
-          <div className={styles.chartMeta}>
-            <span>{visiblePersonCount} people</span>
-            {arrangeMode ? <span>Arrange mode · drag to a card edge</span> : null}
-            {linkGuide ? <span>Add line · choose a + or click blank space to cancel</span> : null}
-          </div>
-
-          <div aria-label="Chart view controls" className={styles.chartControls}>
-            {canArrange ? (
-              <button
-                aria-label="Clean up chart and restore the reporting layout"
-                className={styles.cleanUpControl}
-                disabled={!Object.keys(manualOffsets).length && !arrangeMode}
-                onClick={cleanUpChart}
-                title="Clean up chart"
-                type="button"
-              >
-                <WandSparkles aria-hidden="true" size={15} />
-                <span>Clean up</span>
-              </button>
-            ) : null}
-            {canUseRelationshipEditor ? (
-              <button
-                aria-label="Undo last reporting-line change"
-                disabled={!relationshipHistory.length || saving}
-                onClick={() => void undoLastRelationship()}
-                title="Undo last reporting-line change"
-                type="button"
-              >
-                <Undo2 aria-hidden="true" size={15} />
-              </button>
-            ) : null}
-            <button
-              aria-label="Zoom out"
-              disabled={zoom <= MIN_ZOOM}
-              onClick={() =>
-                setZoom((current) =>
-                  Math.max(MIN_ZOOM, Math.round((current - 0.1) * 100) / 100),
-                )
-              }
-              type="button"
-            >
-              <Minus aria-hidden="true" size={15} />
-            </button>
-            <span aria-label={`${Math.round(zoom * 100)} percent zoom`}>
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              aria-label="Zoom in"
-              disabled={zoom >= MAX_ZOOM}
-              onClick={() =>
-                setZoom((current) =>
-                  Math.min(MAX_ZOOM, Math.round((current + 0.1) * 100) / 100),
-                )
-              }
-              type="button"
-            >
-              <Plus aria-hidden="true" size={15} />
-            </button>
-            <button
-              aria-label="Fit chart to screen"
-              className={styles.namedChartControl}
-              onClick={fitChart}
-              title="Fit chart to screen"
-              type="button"
-            >
-              <LocateFixed aria-hidden="true" size={15} />
-              <span>Fit</span>
-            </button>
-            <button
-              aria-label="Expand or collapse all reporting lines"
-              onClick={toggleAllBranches}
-              type="button"
-            >
-              <UnfoldVertical aria-hidden="true" size={15} />
-            </button>
-            <button aria-label="Reset chart view" onClick={resetView} type="button">
-              <Focus aria-hidden="true" size={15} />
-            </button>
-            <button
-              aria-label={fullscreen ? "Exit full screen" : "Open full screen"}
-              aria-pressed={fullscreen}
-              onClick={toggleFullscreen}
-              type="button"
-            >
-              {fullscreen ? (
-                <Minimize2 aria-hidden="true" size={15} />
-              ) : (
-                <Maximize2 aria-hidden="true" size={15} />
-              )}
-            </button>
-          </div>
-
           <div className={styles.desktopChart} style={frameStyle}>
             <div className={styles.chartWorld} data-arrange={arrangeMode} data-linking={linkGuide ? "true" : undefined} ref={chartWorldRef} style={worldStyle}>
               <svg
@@ -2869,6 +2872,7 @@ export function OrganisationTree({
               />
             ))}
           </ul>
+        </div>
         </div>
       ) : (
         <div className={styles.emptyState}>
