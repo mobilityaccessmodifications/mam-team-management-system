@@ -4209,7 +4209,7 @@
   width: min(560px, 100%);
   max-height: min(720px, calc(100dvh - 40px));
   overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 72%);
+  border: 2px solid var(--accent);
   border-radius: var(--radius-xl);
   background: var(--surface-raised);
   box-shadow: 0 32px 80px rgb(18 34 29 / 24%);
@@ -4264,9 +4264,9 @@
 }
 
 .profilePickerSearch:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  background: #fff;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 11%, transparent);
+  border-color: var(--line);
+  background: var(--surface-canvas);
+  box-shadow: none;
 }
 
 .profilePickerList {
@@ -4285,13 +4285,23 @@
 .profilePickerOption:hover {
   border-color: var(--line);
   background: var(--surface-canvas);
-  transform: translateX(2px);
+  transform: none;
 }
 
 .profilePickerOptionActive {
   border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
-  background: var(--accent-soft);
+  background: var(--surface-raised);
   box-shadow: inset 3px 0 var(--accent);
+}
+
+/* Keep the system account anchored as the first, stable choice in the
+ * profile list even while employee records are filtered or re-ordered. */
+.profilePickerSuperAdmin {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  border-bottom-color: var(--line);
+  background: var(--surface-raised);
 }
 
 .profilePickerAvatar,
