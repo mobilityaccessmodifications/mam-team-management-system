@@ -1080,7 +1080,8 @@
 
 .inspectorLayer {
   position: fixed;
-  z-index: 70;
+  /* Keep the detail surface above the chart toolbar and its filters. */
+  z-index: 80;
   inset: 0;
   pointer-events: none;
 }
