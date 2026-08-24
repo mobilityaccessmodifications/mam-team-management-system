@@ -1087,11 +1087,11 @@
 
 .inspector {
   position: absolute;
-  top: 84px;
+  top: clamp(112px, 12dvh, 148px);
   right: 22px;
   display: flex;
   width: min(360px, calc(100vw - 44px));
-  max-height: calc(100dvh - 108px);
+  max-height: calc(100dvh - 136px);
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -1293,6 +1293,61 @@
   flex: 1 1 auto;
   min-height: 38px;
   padding-inline: 9px;
+}
+
+.confirmationLayer {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.confirmationBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  background: rgb(20 31 28 / 0.46);
+  backdrop-filter: blur(3px);
+  cursor: pointer;
+}
+
+.confirmationCard {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(390px, 100%);
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-top: 5px solid var(--mam);
+  border-radius: var(--radius-lg, 16px);
+  background: var(--surface);
+  box-shadow: 0 24px 70px rgb(24 36 33 / 0.26);
+  padding: 20px;
+  animation: inspector-slide 180ms var(--ease-out) both;
+}
+
+.confirmationCard h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.confirmationCard p {
+  margin: 0;
+  color: var(--text-tertiary, #75817d);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.confirmationActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .drawerLayer {

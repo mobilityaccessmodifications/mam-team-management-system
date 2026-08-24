@@ -766,6 +766,7 @@ export function OrganisationTree({
   const [arranging, setArranging] = useState(false);
   const [interactionMessage, setInteractionMessage] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
+  const [pendingDisconnect, setPendingDisconnect] = useState<OrganisationPerson | null>(null);
   const [editor, setEditor] = useState<EditorState>(null);
   const [draft, setDraft] = useState<OrganisationPersonDraft>(emptyDraft);
   const [saving, setSaving] = useState(false);
@@ -848,7 +849,8 @@ export function OrganisationTree({
         dropTargetRef.current = null;
         setDropTarget(null);
         setInteractionMessage("Add line cancelled.");
-      } else if (openNodeActionsId) setOpenNodeActionsId(null);
+      } else if (pendingDisconnect) setPendingDisconnect(null);
+      else if (openNodeActionsId) setOpenNodeActionsId(null);
       else if (editor && !saving) setEditor(null);
       else if (selectedId) {
         workContactRequestRef.current += 1;
@@ -897,7 +899,7 @@ export function OrganisationTree({
       window.removeEventListener("keydown", handleKeydown);
       document.removeEventListener("fullscreenchange", handleFullscreen);
     };
-  }, [editor, linkGuideActive, openNodeActionsId, saving, selectedId]);
+  }, [editor, linkGuideActive, openNodeActionsId, pendingDisconnect, saving, selectedId]);
 
   useEffect(() => {
     return () => {
@@ -2045,7 +2047,13 @@ export function OrganisationTree({
       setInteractionMessage(profile.reportsTo ? "Only HR can edit reporting links." : `${profile.name} is already top level.`);
       return;
     }
-    if (!window.confirm(`Disconnect ${profile.name} from their current manager?`)) return;
+    setPendingDisconnect(profile);
+  };
+
+  const confirmDisconnect = () => {
+    const profile = pendingDisconnect;
+    if (!profile) return;
+    setPendingDisconnect(null);
     void persistReportsTo(profile, null, `${profile.name} is now top level.`);
   };
 
@@ -2922,6 +2930,46 @@ export function OrganisationTree({
               ) : null}
             </footer>
           </aside>
+        </div>
+      ) : null}
+
+      {pendingDisconnect ? (
+        <div
+          aria-labelledby={`${titleId}-disconnect-title`}
+          aria-modal="true"
+          className={styles.confirmationLayer}
+          role="dialog"
+        >
+          <button
+            aria-label="Cancel disconnect confirmation"
+            className={styles.confirmationBackdrop}
+            onClick={() => setPendingDisconnect(null)}
+            type="button"
+          />
+          <div className={styles.confirmationCard}>
+            <span className={styles.eyebrow}>Reporting line</span>
+            <h3 id={`${titleId}-disconnect-title`}>Disconnect this link?</h3>
+            <p>
+              {pendingDisconnect.name} will become a top-level person until a new manager is selected.
+            </p>
+            <div className={styles.confirmationActions}>
+              <button
+                className={styles.secondaryAction}
+                onClick={() => setPendingDisconnect(null)}
+                type="button"
+              >
+                Keep link
+              </button>
+              <button
+                className={styles.primaryAction}
+                disabled={saving}
+                onClick={confirmDisconnect}
+                type="button"
+              >
+                {saving ? "Disconnecting…" : "Disconnect"}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 
