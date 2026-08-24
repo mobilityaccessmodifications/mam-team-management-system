@@ -13,11 +13,16 @@
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   display: grid;
   gap: 16px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   color: var(--ink);
 }
 
 .organisation:fullscreen {
   width: 100vw;
+  max-width: none;
+  min-width: 0;
   height: 100dvh;
   overflow: auto;
   background: var(--surface-canvas, #fbfcfa);
@@ -26,6 +31,15 @@
 
 .organisation:fullscreen .treeViewport {
   min-height: calc(100dvh - 190px);
+}
+
+/* Keep the chart's wide, scrollable canvas inside the People workspace. The
+ * chart itself intentionally has an intrinsic width, but that width must not
+ * become the min-content width of the page (which stretches the tab bar and
+ * pushes the surrounding controls off-screen). */
+.organisation > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .heading {
@@ -368,6 +382,9 @@
 
 .treeViewport {
   position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: min(680px, calc(100dvh - 310px));
   border: 1px solid var(--line);
   border-radius: var(--radius-lg, 16px);
@@ -415,6 +432,9 @@
 
 .canvasShell {
   position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .canvasDock {
