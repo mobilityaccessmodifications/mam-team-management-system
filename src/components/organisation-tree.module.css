@@ -1087,11 +1087,11 @@
 
 .inspector {
   position: absolute;
-  top: clamp(176px, 18dvh, 220px);
+  top: clamp(240px, 24dvh, 300px);
   right: 22px;
   display: flex;
   width: min(360px, calc(100vw - 44px));
-  max-height: calc(100dvh - 200px);
+  max-height: calc(100dvh - 264px);
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line);
