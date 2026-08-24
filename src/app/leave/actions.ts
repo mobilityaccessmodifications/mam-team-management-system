@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 
 import { revalidatePath } from "next/cache";
 
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export type LeaveStatus = "Pending" | "Approved" | "Declined" | "Cancelled";
@@ -207,6 +208,7 @@ type LeaveNotificationFallback = {
   endTime?: string;
   employeeNote?: string;
   managerNote?: string;
+  managerEmail?: string;
   status?: LeaveStatus;
 };
 
@@ -220,6 +222,7 @@ type SubmitRpcRow = {
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^(?:(?:0[6-9]|1[0-7]):(?:00|15|30|45)|18:00)$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ATTACHMENT_STORAGE_PATH_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:pdf|heic|heif|jpg|png|webp)$/i;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const LEAVE_TYPES = new Set([
@@ -529,10 +532,40 @@ function toSubmitResult(value: unknown) {
   };
 }
 
+type LeaveManagerRow = { manager_user_id: string | null };
+
 /**
- * The marketing test receiver is fixed server-side. The browser never
- * supplies a recipient, and a delivery failure cannot roll back a leave
- * decision that has already been durably recorded in Supabase.
+ * Resolve the request's authoritative manager account on the server. The
+ * manager_user_id is written by the leave RPC from the approval grant; it is
+ * never accepted from browser input. The auth email stays server-side and is
+ * only included in the signed n8n notification payload.
+ */
+async function resolveLeaveManagerEmail(requestId: string) {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("leave_requests")
+      .select("manager_user_id")
+      .eq("id", requestId)
+      .maybeSingle<LeaveManagerRow>();
+
+    if (error || !data?.manager_user_id) return undefined;
+
+    const { data: authData, error: authError } = await admin.auth.admin.getUserById(data.manager_user_id);
+    if (authError) return undefined;
+
+    const email = authData.user?.email?.trim().toLowerCase();
+    return email && EMAIL_PATTERN.test(email) ? email : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Leave submission is routed to the request's assigned manager. Other leave
+ * lifecycle events keep the Marketing test route until the HR templates are
+ * approved. The browser never supplies a recipient, and a delivery failure
+ * cannot roll back a leave decision already recorded in Supabase.
  */
 async function deliverLeaveNotification(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -564,6 +597,8 @@ async function deliverLeaveNotification(
     // still sufficient for the marketing test message.
   }
 
+  const managerEmail = await resolveLeaveManagerEmail(requestId);
+
   const payload = {
     version: 1,
     event,
@@ -574,6 +609,7 @@ async function deliverLeaveNotification(
       startDate: request?.startDate ?? fallback.startDate ?? "",
       endDate: request?.endDate ?? fallback.endDate ?? "",
       managerNote: request?.managerNote ?? fallback.managerNote ?? "",
+      managerEmail: managerEmail ?? fallback.managerEmail ?? "",
     })).digest("hex").slice(0, 24)}`,
     requestId,
     employeeName: request?.employee ?? "Employee",
@@ -588,6 +624,7 @@ async function deliverLeaveNotification(
     status: request?.status ?? fallback.status ?? "Pending",
     employeeNote: request?.employeeNote ?? fallback.employeeNote ?? null,
     managerNote: request?.managerNote ?? fallback.managerNote ?? null,
+    managerEmail: managerEmail ?? fallback.managerEmail ?? null,
   };
 
   const controller = new AbortController();
@@ -602,8 +639,11 @@ async function deliverLeaveNotification(
     });
     const text = await response.text();
     const result = text.length <= 4096 ? JSON.parse(text) as { ok?: boolean; sent?: boolean; alreadySent?: boolean; actualRecipient?: string } : {};
-    if (!response.ok || result.ok !== true || (result.sent !== true && result.alreadySent !== true) || result.actualRecipient !== "marketing@mobilityaccess.com.au") {
-      console.warn("Leave notification delivery was not confirmed.", { event, requestId, status: response.status });
+    const expectedRecipient = event === "leave-submitted" && managerEmail
+      ? managerEmail
+      : "marketing@mobilityaccess.com.au";
+    if (!response.ok || result.ok !== true || (result.sent !== true && result.alreadySent !== true) || result.actualRecipient !== expectedRecipient) {
+      console.warn("Leave notification delivery was not confirmed.", { event, requestId, status: response.status, expectedRecipient });
     }
   } catch {
     console.warn("Leave notification delivery failed after the leave mutation.", { event, requestId });
