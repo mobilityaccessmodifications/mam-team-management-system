@@ -86,7 +86,6 @@ type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals";
 type RequestStatus = "Pending" | "Approved" | "Declined" | "Cancelled";
 type AccessRole = "hr" | "manager" | "employee";
-type PreviewAccessRole = Exclude<AccessRole, "hr">;
 
 type LeaveRequest = {
   id: string;
@@ -396,6 +395,7 @@ function getEmployeePreviewRequests(
   requests: LeaveRequest[],
   profile: Profile,
   organisationRows: InternalOrgRow[],
+  canViewReportingSubtree: boolean,
 ) {
   // Change profile is a Super Admin-only projection. An employee preview is
   // limited to that person's own register, while a manager preview mirrors
@@ -403,7 +403,7 @@ function getEmployeePreviewRequests(
   // person beneath them in the reporting tree. Walk through org-unit nodes as
   // well, since a department grouping can sit between a manager and a person.
   const visiblePersonIds = new Set<string>([profile.id]);
-  if (profile.accessRole === "manager") {
+  if (canViewReportingSubtree) {
     const childrenByParent = new Map<string, InternalOrgRow[]>();
     organisationRows.forEach((row) => {
       if (!row.is_active || !row.parent_id) return;
@@ -487,17 +487,6 @@ function toCalendarLeaveRequest(record: LeaveCalendarEntry): LeaveRequest {
     canCancel: false,
     canAttach: false,
   };
-}
-
-function accessRoleForOrgPerson(row: InternalOrgRow, managerIds: Set<string>): AccessRole {
-  if (/\bHR\b|PEOPLE\s*&\s*CULTURE/i.test(row.position_title)) return "hr";
-  return managerIds.has(row.id) ? "manager" : "employee";
-}
-
-function previewAccessRoleForOrgPerson(personId: string, rows: InternalOrgRow[]): PreviewAccessRole {
-  return rows.some((row) => row.is_active && row.parent_id === personId)
-    ? "manager"
-    : "employee";
 }
 
 export function LeaveDemo({
@@ -842,10 +831,6 @@ export function LeaveDemo({
   }, [organisationRows]);
   const directoryProfiles = useMemo<Profile[]>(() => {
     const rowsById = new Map(organisationRows.map((row) => [row.id, row]));
-    const managerIds = new Set(organisationRows
-      .filter((row) => row.is_active)
-      .map((row) => row.parent_id)
-      .filter((id): id is string => Boolean(id)));
     const managerFor = (row: InternalOrgRow) => {
       const visited = new Set<string>();
       let parentId = row.parent_id;
@@ -865,7 +850,12 @@ export function LeaveDemo({
           id: row.id,
           name: row.full_name ?? "Unnamed person",
           initials: initialsForName(row.full_name ?? ""),
-          accessRole: accessRoleForOrgPerson(row, managerIds),
+          // Organisation structure is a reporting relationship, not an
+          // authority grant. Keep every directory candidate fail-closed until
+          // the server-projected capability for the active/previewed profile
+          // is available below. In particular, a title containing “HR” or a
+          // person with direct reports must never create UI authority.
+          accessRole: "employee",
           roleLabel: row.position_title,
           team: row.company_key === "mam" ? "MAM" : "Equipsy",
           manager: managerFor(row),
@@ -959,15 +949,30 @@ export function LeaveDemo({
       signingOut={isSigningOut}
     />;
   }
+  // These are server-projected capabilities for the real signed-in session,
+  // not guesses from the employee's title or position in the organisation
+  // tree. Directory management is the controlled HR/System Admin capability.
+  const controlledAccessRole: AccessRole = canManageEmployeeDirectory
+    ? "hr"
+    : canReviewLeaveWorkspace
+      ? "manager"
+      : "employee";
   const adminProfile: Profile = canManageEmployeeDirectory
     ? { ...signedInProfile, accessRole: "hr" }
-    : signedInProfile;
-  // A preview is never an HR presentation. HR is an actual database capability,
-  // while manager presentation is derived only from active direct reports.
+    : { ...signedInProfile, accessRole: controlledAccessRole };
+  // A preview is never an HR presentation. The selected profile's app role is
+  // not included in the public directory DTO, so the UI fails closed here;
+  // guarded server actions/RPCs remain the source of truth for the preview.
+  // An organisation parent_id is not an authority grant.
   const previewProfile: Profile | undefined = selectedPreviewCandidate
     ? {
         ...selectedPreviewCandidate,
-        accessRole: previewAccessRoleForOrgPerson(selectedPreviewCandidate.id, organisationRows),
+        // Change profile is an administrator testing projection. The selected
+        // employee's app role is not part of the public directory DTO, so do
+        // not reuse the real actor's reviewer capability or infer authority
+        // from the reporting tree. Guarded server actions/RPCs remain the
+        // source of truth for the previewed profile.
+        accessRole: "employee",
       }
     : undefined;
   const isPreviewingEmployeeAccess = Boolean(previewProfile);
@@ -1027,12 +1032,12 @@ export function LeaveDemo({
   const visibleRequests = isPreviewingEmployeeAccess
     ? leaveWorkspaceUsesProfileScope
       ? requests
-      : getEmployeePreviewRequests(requests, activeProfile, organisationRows)
+      : getEmployeePreviewRequests(requests, activeProfile, organisationRows, false)
     : requests;
   const calendarRequests = isPreviewingEmployeeAccess
     ? leaveWorkspaceUsesProfileScope
       ? calendarEntries
-      : getEmployeePreviewRequests(calendarEntries, activeProfile, organisationRows)
+      : getEmployeePreviewRequests(calendarEntries, activeProfile, organisationRows, false)
     : calendarEntries;
   // The Check-in Calendar is a manager-safe projection of the selected profile
   // in Change profile mode, while the Super Admin retains its real authority
