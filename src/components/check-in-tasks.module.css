@@ -141,6 +141,24 @@
   white-space: nowrap;
 }
 
+.statusButton {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  transition: filter .16s var(--ease-out), transform .16s var(--ease-out);
+}
+
+.statusButton:hover {
+  filter: brightness(.97);
+  transform: translateY(-1px);
+}
+
+.statusButton:focus-visible {
+  outline: 3px solid color-mix(in srgb, #d35d22 32%, transparent);
+  outline-offset: 2px;
+}
+
 .status[data-status="delivered"] {
   background: #e8f4ec;
   color: #28664d;
@@ -165,6 +183,33 @@
   border-color: #4b9973;
   background: #edf8f1;
   color: #206445;
+}
+
+.reviewPanel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #f0c5b3;
+  border-radius: var(--radius-md);
+  background: #fff8f4;
+  color: #6f4a3b;
+  padding: 11px 13px;
+}
+
+.reviewPanel strong {
+  color: #8f3d16;
+  font-size: 12px;
+}
+
+.reviewPanel p,
+.reviewPanel small {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.reviewPanel small {
+  color: #7e685d;
 }
 
 .loading,

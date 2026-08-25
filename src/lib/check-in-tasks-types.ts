@@ -7,7 +7,8 @@ export type CheckInTaskStatus = "scheduled" | "claimed" | "delivered" | "needs_r
 /**
  * Minimal manager-safe task projection. This intentionally excludes all HR
  * register fields such as contact details, date of birth, address, manager
- * email, reminder delivery metadata, and enrolment controls.
+ * email, and enrolment controls. The review reason is a safe operational
+ * status, not private employee data.
  */
 export type CheckInTask = {
   reminderId: string;
@@ -18,6 +19,8 @@ export type CheckInTask = {
   dueDate: string;
   milestone: CheckInTaskMilestone;
   status: CheckInTaskStatus;
+  /** Why automatic delivery is paused when status is needs_review. */
+  needsReviewReason: string | null;
   /** Derived for presentation only; the completion RPC remains authoritative. */
   canComplete: boolean;
 };
