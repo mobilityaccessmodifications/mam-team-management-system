@@ -298,7 +298,7 @@ export function PeopleOperationsDemo({
   /** Durable session-authorised Check-in workspace; its DTO is chosen by the parent. */
   renderCheckInRegister?: ReactNode;
   /** Scoped, server-authorised manager task list. */
-  renderCheckInTasks?: ReactNode;
+  renderCheckInTasks?: (toolbarAction?: ReactNode) => ReactNode;
   /** Opens the selected safe tree node in the HR-only directory detail drawer. */
   onOpenEmployeeDirectoryRecord?: (personId: string) => void;
   renderAccounts?: ReactNode;
@@ -501,9 +501,9 @@ export function PeopleOperationsDemo({
 
   const showTaskAction = canManage && visibleSection === "tasks";
 
-  return <section className={styles.workspace} aria-label="People operations workspace">
-    {showTaskAction ? <div className={styles.sectionAction}><button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleTaskSection === "checkins" ? "checkin" : visibleTaskSection)}><Plus size={17} /> {visibleTaskSection === "checkins" ? "Schedule check-ins" : `Start ${visibleTaskSection}`}</button></div> : null}
+  const taskAction = showTaskAction ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleTaskSection === "checkins" ? "checkin" : visibleTaskSection)}><Plus size={17} /> {visibleTaskSection === "checkins" ? "Schedule check-ins" : `Start ${visibleTaskSection}`}</button> : undefined;
 
+  return <section className={styles.workspace} aria-label="People operations workspace">
     <MotionTabs
       value={visibleSection}
       onValueChange={setSection}
@@ -520,7 +520,7 @@ export function PeopleOperationsDemo({
       setSection("directory");
     } : undefined} /> : null}
     {visibleSection === "accounts" ? renderAccounts : null}
-    {visibleSection === "tasks" && hasRealCheckInTasks ? renderCheckInTasks : null}
+    {visibleSection === "tasks" && hasRealCheckInTasks ? renderCheckInTasks?.(taskAction) : null}
     {visibleSection === "tasks" && !hasRealCheckInTasks ? <nav className={styles.taskSwitch} aria-label="Task type">
       {!isEmployee || employeeLifecycleSection === "onboarding" ? <button type="button" aria-pressed={visibleTaskSection === "onboarding"} onClick={() => setTaskSection("onboarding")}>Onboarding</button> : null}
       {!renderCheckInRegister ? <button type="button" aria-pressed={visibleTaskSection === "checkins"} onClick={() => setTaskSection("checkins")}>Check-ins</button> : null}

@@ -8,7 +8,7 @@ import {
   RefreshCw,
   UsersRound,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import {
   completeMyEmployeeCheckInTask,
@@ -60,7 +60,15 @@ function taskActionHint(task: CheckInTask) {
  * Current-user-scoped manager task list. It has no HR register fields and the
  * Server Actions/database RPCs independently re-check each caller’s scope.
  */
-export function CheckInTasks({ previewPersonId, readOnly = false }: { previewPersonId?: string; readOnly?: boolean } = {}) {
+export function CheckInTasks({
+  previewPersonId,
+  readOnly = false,
+  toolbarAction,
+}: {
+  previewPersonId?: string;
+  readOnly?: boolean;
+  toolbarAction?: ReactNode;
+} = {}) {
   const [data, setData] = useState<CheckInTasksData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -118,15 +126,18 @@ export function CheckInTasks({ previewPersonId, readOnly = false }: { previewPer
   return <section className={styles.workspace} aria-label="Check-in tasks">
     <header className={styles.header}>
       <h2>Check-in tasks</h2>
-      <button
-        className={styles.refresh}
-        type="button"
-        onClick={() => void load()}
-        disabled={loading || Boolean(pendingReminderId)}
-      >
-        <RefreshCw size={16} aria-hidden="true" />
-        Refresh
-      </button>
+      <div className={styles.headerActions}>
+        {toolbarAction}
+        <button
+          className={styles.refresh}
+          type="button"
+          onClick={() => void load()}
+          disabled={loading || Boolean(pendingReminderId)}
+        >
+          <RefreshCw size={16} aria-hidden="true" />
+          Refresh
+        </button>
+      </div>
     </header>
 
     {error ? <p className={styles.error} role="alert"><AlertTriangle size={17} aria-hidden="true" />{error}</p> : null}

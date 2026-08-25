@@ -4,7 +4,6 @@
 .primaryAction, .previewButton { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--people-accent) 78%, #000); border-radius: var(--radius-md); background: var(--people-accent); box-shadow: 0 6px 16px color-mix(in srgb, var(--people-accent) 18%, transparent); color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 720; padding: 9px 15px; transition: background 160ms var(--ease-out), box-shadow 160ms var(--ease-out), transform 160ms var(--ease-out); }
 .primaryAction:hover, .previewButton:hover { background: var(--mam-orange-strong); box-shadow: 0 8px 20px color-mix(in srgb, var(--people-accent) 24%, transparent); transform: translateY(-1px); }
 .primaryAction:focus-visible, .previewButton:focus-visible { outline: 3px solid color-mix(in srgb, var(--people-accent) 32%, transparent); outline-offset: 3px; }
-.sectionAction { display: flex; justify-content: flex-end; }
 .sectionSwitch { width: 100%; }
 .taskSwitch { display: inline-flex; justify-self: start; gap: 4px; border: 1px solid var(--surface-border); border-radius: var(--radius-md); background: var(--surface-muted); padding: 4px; }
 .taskSwitch button { min-height: 34px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 11px; font-weight: 720; padding: 7px 12px; }

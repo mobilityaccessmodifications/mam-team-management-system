@@ -1621,9 +1621,10 @@ export function LeaveDemo({
                     />
                   : undefined}
               renderCheckInTasks={showHrWorkspace || showManagerTasks
-                ? <CheckInTasks
+                ? (toolbarAction) => <CheckInTasks
                     previewPersonId={previewScopedManagerPersonId}
                     readOnly={false}
+                    toolbarAction={toolbarAction}
                   />
                 : undefined}
               renderAccounts={showHrWorkspace ? accountsLoading
