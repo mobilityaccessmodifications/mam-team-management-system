@@ -4461,23 +4461,6 @@
   min-height: 260px;
 }
 
-.attentionPanel {
-  position: relative;
-}
-
-.attentionPanel::before,
-.myLeavePanel::before {
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: var(--accent);
-  content: "";
-}
-
-.myLeavePanel::before {
-  background: var(--company-accent);
-}
-
 .panelHeader {
   min-height: 62px;
   padding: 0 18px;

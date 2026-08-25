@@ -670,31 +670,9 @@
   gap: 12px;
 }
 
-.formFooter p {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  color: #738085;
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.formFooter p svg {
-  flex: 0 0 auto;
-  color: var(--directory-accent-deep);
-}
-
 .formFooter > div {
   flex: 0 0 auto;
   gap: 7px;
-}
-
-.formFooterLeft {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
 }
 
 .modalBackdrop {
@@ -854,15 +832,6 @@
 
   .formFooter > div {
     width: 100%;
-  }
-
-  .formFooterLeft {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .formFooterLeft p {
-    order: 2;
   }
 
   .formFooter > div > button {

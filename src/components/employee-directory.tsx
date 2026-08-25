@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Mail,
   Plus,
   Search,
   Trash2,
@@ -839,9 +838,6 @@ function EmployeeEditor({
       </fieldset>
 
       <footer className={styles.formFooter}>
-        <div className={styles.formFooterLeft}>
-          <p><Mail size={14} /> The CSV keeps the HR workbook columns, then adds the private equipment audit fields.</p>
-        </div>
         <div>
           {onRequestArchive ? <button type="button" className={styles.dangerAction} onClick={onRequestArchive} disabled={saving}><UserMinus size={14} /> End employment</button> : null}
           {onRequestDelete ? <button type="button" className={styles.dangerAction} onClick={onRequestDelete} disabled={saving}><Trash2 size={14} /> Delete archived profile</button> : null}
