@@ -122,6 +122,10 @@ export type CancelLeaveInput = {
   requestId: string;
 };
 
+export type CancelLeaveResult =
+  | { ok: true; id: string; status: "Cancelled" }
+  | { ok: false; message: string };
+
 export type PrepareLeaveAttachmentInput = {
   requestId: string;
   fileName: string;
@@ -1120,18 +1124,43 @@ export async function decideLeaveRequest(input: DecideLeaveInput) {
  * Melbourne start-date rule inside one locked database transaction.
  */
 export async function cancelMyApprovedLeaveRequest(input: CancelLeaveInput) {
-  const checked = normaliseCancelInput(input);
-  const supabase = await requireLeaveSession();
-  const { data, error } = await supabase.rpc("cancel_my_approved_leave_request", {
-    p_request_id: checked.requestId,
-  });
+  try {
+    const checked = normaliseCancelInput(input);
+    const supabase = await requireLeaveSession();
+    const { data, error } = await supabase.rpc("cancel_my_approved_leave_request", {
+      p_request_id: checked.requestId,
+    });
 
-  if (error) throw new Error(CANCEL_ERROR);
-  const result = toCancellationResult(data);
-  if (result.status !== "Cancelled") throw new Error(CANCEL_ERROR);
-  await deliverLeaveNotification(supabase, "leave-cancelled", result.id, { status: "Cancelled" });
-  revalidatePath("/");
-  return result;
+    // Cancellation is an expected, user-triggered failure mode (for example,
+    // the leave may have started in another tab). Returning a serialisable
+    // result keeps Next.js from converting the Server Action exception into a
+    // production-only "Server Components render" error. Log only the database
+    // error code/message; no leave notes or employee data are included.
+    if (error) {
+      console.warn("Leave cancellation RPC failed.", {
+        code: error.code,
+        message: error.message,
+      });
+      return { ok: false, message: CANCEL_ERROR } satisfies CancelLeaveResult;
+    }
+
+    const result = toCancellationResult(data);
+    if (result.status !== "Cancelled") {
+      console.warn("Leave cancellation RPC returned an unexpected status.", {
+        status: result.status,
+      });
+      return { ok: false, message: CANCEL_ERROR } satisfies CancelLeaveResult;
+    }
+
+    await deliverLeaveNotification(supabase, "leave-cancelled", result.id, { status: "Cancelled" });
+    revalidatePath("/");
+    return { ok: true, id: result.id, status: "Cancelled" } satisfies CancelLeaveResult;
+  } catch (error) {
+    console.warn("Leave cancellation action failed.", {
+      message: error instanceof Error ? error.message : "unknown",
+    });
+    return { ok: false, message: CANCEL_ERROR } satisfies CancelLeaveResult;
+  }
 }
 
 export async function prepareLeaveRequestAttachmentUpload(input: PrepareLeaveAttachmentInput) {

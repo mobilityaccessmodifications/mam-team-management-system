@@ -1437,6 +1437,10 @@ export function LeaveDemo({
     setCancellationError("");
     try {
       const cancelled = await cancelMyApprovedLeaveRequest({ requestId });
+      if (!cancelled.ok) {
+        setCancellationError(cancelled.message);
+        return;
+      }
       setCancellationRequestId(null);
       setCancellationFocusRequestId(null);
       setCancelledRequestId(cancelled.id);
