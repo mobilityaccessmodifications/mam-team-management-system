@@ -281,6 +281,8 @@ export function PeopleOperationsDemo({
   renderCheckInRegister,
   renderCheckInTasks,
   renderAccounts,
+  showProfile = true,
+  showTasks,
   isAccessPreview = false,
 }: {
   activeProfile: PeopleOperationsProfile;
@@ -301,11 +303,24 @@ export function PeopleOperationsDemo({
   /** Opens the selected safe tree node in the HR-only directory detail drawer. */
   onOpenEmployeeDirectoryRecord?: (personId: string) => void;
   renderAccounts?: ReactNode;
+  /** Lets a constrained employee workspace omit the legacy Profile tab. */
+  showProfile?: boolean;
+  /** Exposes the self-only task surface when a scoped manager task list is unavailable. */
+  showTasks?: boolean;
   /** Read-only UI preview for an administrator; it never changes the session. */
   isAccessPreview?: boolean;
 }) {
   const hasRealCheckInTasks = renderCheckInTasks !== undefined;
-  const [section, setSection] = useState<PeopleSection>(renderEmployeeDirectory ? "directory" : hasRealCheckInTasks ? "tasks" : "profile");
+  const hasTasks = showTasks ?? hasRealCheckInTasks;
+  const availableSections = useMemo<PeopleSection[]>(() => [
+    ...(renderEmployeeDirectory ? ["directory" as const] : []),
+    ...(showProfile ? ["profile" as const] : []),
+    "organisation",
+    ...(renderCheckInRegister ? ["checkins" as const] : []),
+    ...(hasTasks ? ["tasks" as const] : []),
+    ...(renderAccounts ? ["accounts" as const] : []),
+  ], [hasTasks, renderAccounts, renderCheckInRegister, renderEmployeeDirectory, showProfile]);
+  const [section, setSection] = useState<PeopleSection>(() => availableSections[0] ?? "organisation");
   const [taskSection, setTaskSection] = useState<PeopleTaskSection>(
     renderCheckInRegister ? "onboarding" : "checkins",
   );
@@ -317,6 +332,14 @@ export function PeopleOperationsDemo({
   const [showCreate, setShowCreate] = useState(false);
   const [createMode, setCreateMode] = useState<WorkflowKind | "checkin">("onboarding");
   const [toast, setToast] = useState("");
+
+  // Capability changes can remove a section (for example when Super Admin
+  // exits Change profile). Render the first permitted tab immediately rather
+  // than keeping a stale selection or synchronously setting state in an
+  // effect.
+  const visibleSection = availableSections.includes(section)
+    ? section
+    : availableSections[0] ?? "organisation";
 
   const canManage = !isAccessPreview && (activeProfile.accessRole === "hr" || activeProfile.accessRole === "manager");
   const isEmployee = activeProfile.accessRole === "employee";
@@ -470,46 +493,45 @@ export function PeopleOperationsDemo({
 
   const actionableOwner = activeProfile.accessRole === "manager" ? "Team Leader" : activeProfile.accessRole === "employee" ? "Employee" : undefined;
   const totalOverdue = accessibleWorkflows.reduce((count, workflow) => count + workflow.tasks.filter((task) => task.status === "Overdue" && (!actionableOwner || task.owner === actionableOwner)).length, 0);
-  const sectionTabs: MotionTabOption<PeopleSection>[] = [
-    renderEmployeeDirectory
-      ? { value: "directory", label: "Directory", icon: <ContactRound size={16} /> }
-      : { value: "profile", label: "Profile", icon: <UserRound size={16} /> },
-    { value: "organisation", label: "Organisation", icon: <Network size={16} /> },
-    { value: "checkins", label: "Check-ins", icon: <CalendarClock size={16} />, hidden: !renderCheckInRegister },
-    { value: "tasks", label: "Tasks", icon: <ListChecks size={16} />, hidden: !hasRealCheckInTasks },
-    { value: "accounts", label: "Accounts", icon: <KeyRound size={16} />, hidden: !renderAccounts },
-  ];
+  const sectionTabs: MotionTabOption<PeopleSection>[] = availableSections.map((value) => {
+    if (value === "directory") return { value, label: "Directory", icon: <ContactRound size={16} /> };
+    if (value === "profile") return { value, label: "Profile", icon: <UserRound size={16} /> };
+    if (value === "organisation") return { value, label: "Organisation", icon: <Network size={16} /> };
+    if (value === "checkins") return { value, label: "Check-ins", icon: <CalendarClock size={16} /> };
+    if (value === "tasks") return { value, label: "Tasks", icon: <ListChecks size={16} /> };
+    return { value, label: "Accounts", icon: <KeyRound size={16} /> };
+  });
 
   return <section className={styles.workspace} aria-label="People operations workspace">
     <header className={styles.pageHeader}>
       <div><h1>People</h1>{totalOverdue ? <p className={styles.attentionSummary}><AlertTriangle size={14} /> {totalOverdue} action{totalOverdue === 1 ? " needs" : "s need"} attention</p> : null}</div>
-      {canManage && section === "tasks" ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleTaskSection === "checkins" ? "checkin" : visibleTaskSection)}><Plus size={17} /> {visibleTaskSection === "checkins" ? "Schedule check-ins" : `Start ${visibleTaskSection}`}</button> : null}
+      {canManage && visibleSection === "tasks" ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleTaskSection === "checkins" ? "checkin" : visibleTaskSection)}><Plus size={17} /> {visibleTaskSection === "checkins" ? "Schedule check-ins" : `Start ${visibleTaskSection}`}</button> : null}
     </header>
 
     <MotionTabs
-      value={section}
+      value={visibleSection}
       onValueChange={setSection}
       options={sectionTabs}
       ariaLabel="People sections"
       className={styles.sectionSwitch}
     />
 
-    {section === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} manager={activeProfile.manager} company={activeProfile.company} /> : null}
-    {section === "directory" ? renderEmployeeDirectory : null}
-    {section === "checkins" ? renderCheckInRegister : null}
-    {section === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation} canArrange={canArrangeOrganisation && !isAccessPreview} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={renderEmployeeDirectory ? (personId) => {
+    {visibleSection === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} manager={activeProfile.manager} company={activeProfile.company} /> : null}
+    {visibleSection === "directory" ? renderEmployeeDirectory : null}
+    {visibleSection === "checkins" ? renderCheckInRegister : null}
+    {visibleSection === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation} canArrange={canArrangeOrganisation && !isAccessPreview} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={onOpenEmployeeDirectoryRecord ? (personId) => {
       onOpenEmployeeDirectoryRecord?.(personId);
       setSection("directory");
     } : undefined} /> : null}
-    {section === "accounts" ? renderAccounts : null}
-    {section === "tasks" && hasRealCheckInTasks ? renderCheckInTasks : null}
-    {section === "tasks" && !hasRealCheckInTasks ? <nav className={styles.taskSwitch} aria-label="Task type">
+    {visibleSection === "accounts" ? renderAccounts : null}
+    {visibleSection === "tasks" && hasRealCheckInTasks ? renderCheckInTasks : null}
+    {visibleSection === "tasks" && !hasRealCheckInTasks ? <nav className={styles.taskSwitch} aria-label="Task type">
       {!isEmployee || employeeLifecycleSection === "onboarding" ? <button type="button" aria-pressed={visibleTaskSection === "onboarding"} onClick={() => setTaskSection("onboarding")}>Onboarding</button> : null}
       {!renderCheckInRegister ? <button type="button" aria-pressed={visibleTaskSection === "checkins"} onClick={() => setTaskSection("checkins")}>Check-ins</button> : null}
       {!isEmployee || employeeLifecycleSection === "offboarding" ? <button type="button" aria-pressed={visibleTaskSection === "offboarding"} onClick={() => setTaskSection("offboarding")}>Offboarding</button> : null}
     </nav> : null}
-    {section === "tasks" && !hasRealCheckInTasks && visibleTaskSection === "checkins" && !renderCheckInRegister ? <CheckInsView people={visiblePeople} reminders={visibleReminders} selectedPerson={selectedPerson} selectedPersonId={selectedPerson?.id} activeProfile={activeProfile} canManage={canManage} onSelectPerson={setSelectedPersonId} onComplete={completeCheckIn} onSnooze={snoozeCheckIn} /> : null}
-    {section === "tasks" && !hasRealCheckInTasks && (visibleTaskSection === "onboarding" || visibleTaskSection === "offboarding") ? <WorkflowsView workflows={activeWorkflows} selected={selectedWorkflow} selectedId={selectedWorkflow?.id} activeProfile={activeProfile} onSelect={setSelectedWorkflowId} onTaskUpdate={updateTask} onAttach={attachEvidence} onAssetUpdate={updateAsset} onAccessUpdate={updateAccess} isAccessPreview={isAccessPreview} /> : null}
+    {visibleSection === "tasks" && !hasRealCheckInTasks && visibleTaskSection === "checkins" && !renderCheckInRegister ? <CheckInsView people={visiblePeople} reminders={visibleReminders} selectedPerson={selectedPerson} selectedPersonId={selectedPerson?.id} activeProfile={activeProfile} canManage={canManage} onSelectPerson={setSelectedPersonId} onComplete={completeCheckIn} onSnooze={snoozeCheckIn} /> : null}
+    {visibleSection === "tasks" && !hasRealCheckInTasks && (visibleTaskSection === "onboarding" || visibleTaskSection === "offboarding") ? <WorkflowsView workflows={activeWorkflows} selected={selectedWorkflow} selectedId={selectedWorkflow?.id} activeProfile={activeProfile} onSelect={setSelectedWorkflowId} onTaskUpdate={updateTask} onAttach={attachEvidence} onAssetUpdate={updateAsset} onAccessUpdate={updateAccess} isAccessPreview={isAccessPreview} /> : null}
 
     {showCreate ? <CreateCaseModal mode={createMode} profiles={organisationProfiles} onClose={() => setShowCreate(false)} onSubmit={createCase} /> : null}
     <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`} role="status" aria-live="polite"><CheckCircle2 size={16} />{toast}</div>

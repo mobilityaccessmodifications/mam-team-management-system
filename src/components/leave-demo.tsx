@@ -65,6 +65,7 @@ import { CheckInRegister } from "@/components/check-in-register";
 import { CheckInWorkspace } from "@/components/check-in-workspace";
 import { CheckInTasks } from "@/components/check-in-tasks";
 import { EmployeeDirectory } from "@/components/employee-directory";
+import { ReadOnlyDirectory } from "@/components/read-only-directory";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   SelfProfileMenu,
@@ -494,9 +495,9 @@ export function LeaveDemo({
   isAdmin = false,
   currentPersonId,
   isNonRosterSystemAdmin = false,
-  canViewCheckIns = false,
+  canViewEmployeeDirectory = false,
   canChangeEmployeeView = false,
-  canViewCheckInTasks = false,
+  canViewOwnTasks = false,
   checkInResources,
 }: {
   initialNavigation?: InitialNavigation;
@@ -508,10 +509,11 @@ export function LeaveDemo({
    * self-service profile or own-leave workspace.
    */
   isNonRosterSystemAdmin?: boolean;
-  /** Server-issued capability; row scope is independently enforced by each RPC. */
-  canViewCheckIns?: boolean;
+  /** Server-issued manager/System Admin capability for the safe directory projection. */
+  canViewEmployeeDirectory?: boolean;
   canChangeEmployeeView?: boolean;
-  canViewCheckInTasks?: boolean;
+  /** An active employee can see the self-only Tasks tab even without manager scope. */
+  canViewOwnTasks?: boolean;
   checkInResources?: CheckInResourceLinks;
 }) {
   const directorySupabase = isSupabaseConfigured() ? createClient() : null;
@@ -863,7 +865,7 @@ export function LeaveDemo({
         };
       });
   }, [organisationRows]);
-  const canPreviewEmployeeAccess = canChangeEmployeeView && canManageEmployeeDirectory;
+  const canPreviewEmployeeAccess = isAdmin && canChangeEmployeeView && canManageEmployeeDirectory;
   const selectedPreviewCandidate = canPreviewEmployeeAccess && previewPersonId
     ? directoryProfiles.find((profile) => profile.id === previewPersonId)
     : undefined;
@@ -951,37 +953,50 @@ export function LeaveDemo({
   }
   // These are server-projected capabilities for the real signed-in session,
   // not guesses from the employee's title or position in the organisation
-  // tree. Directory management is the controlled HR/System Admin capability.
-  const controlledAccessRole: AccessRole = canManageEmployeeDirectory
+  // tree. The visible People sections are selected from this role matrix.
+  // `can_view_employee_directory` is the role capability, rather than a
+  // data-dependent Check-in scope. A valid manager with no current reports
+  // must still receive the manager workspace (with empty Check-ins/Tasks),
+  // instead of being presented as an employee.
+  const controlledAccessRole: AccessRole = isAdmin
     ? "hr"
-    : canReviewLeaveWorkspace
+    : canViewEmployeeDirectory
       ? "manager"
       : "employee";
-  const adminProfile: Profile = canManageEmployeeDirectory
-    ? { ...signedInProfile, accessRole: "hr" }
-    : { ...signedInProfile, accessRole: controlledAccessRole };
-  // A preview is never an HR presentation. The selected profile's app role is
-  // not included in the public directory DTO, so the UI fails closed here;
-  // guarded server actions/RPCs remain the source of truth for the preview.
-  // An organisation parent_id is not an authority grant.
+  const adminProfile: Profile = { ...signedInProfile, accessRole: controlledAccessRole };
+  // The selected role comes from a Super Admin-only server projection. Until
+  // it arrives, Change profile fails closed as an employee presentation.
+  // Reporting lines and job titles are never authority grants.
   const previewProfile: Profile | undefined = selectedPreviewCandidate
     ? {
         ...selectedPreviewCandidate,
-        // Change profile is an administrator testing projection. The selected
-        // employee's app role is not part of the public directory DTO, so do
-        // not reuse the real actor's reviewer capability or infer authority
-        // from the reporting tree. Guarded server actions/RPCs remain the
-        // source of truth for the previewed profile.
-        accessRole: "employee",
+        accessRole: selectedEmployeeProfile?.personId === selectedPreviewCandidate.id
+          ? selectedEmployeeProfile.accessRole === "system_admin"
+            ? "hr"
+            : selectedEmployeeProfile.accessRole
+          : "employee",
       }
     : undefined;
   const isPreviewingEmployeeAccess = Boolean(previewProfile);
-  const canRenderPreviewCheckIns = isPreviewingEmployeeAccess && canChangeEmployeeView && Boolean(previewProfile?.id);
   const activeProfile = previewProfile ?? adminProfile;
-  // A System Admin keeps their real, server-authorised capabilities while
-  // viewing another profile. Change profile changes the presentation only; it
-  // must not downgrade the actual administrator into an employee workspace.
-  const showHrWorkspace = canManageEmployeeDirectory;
+  // Change profile changes what the System Admin sees, not their real server
+  // authority. Returning to their own profile restores the complete admin
+  // workspace. Server Actions and RPCs still re-authorise the real session.
+  const showHrWorkspace = isAdmin
+    && canManageEmployeeDirectory
+    && activeProfile.accessRole === "hr";
+  const hasManagerPeopleWorkspace = canViewEmployeeDirectory
+    || (isPreviewingEmployeeAccess && isAdmin);
+  const showManagerDirectory = activeProfile.accessRole === "manager"
+    && hasManagerPeopleWorkspace;
+  const showManagerCheckIns = activeProfile.accessRole === "manager"
+    && hasManagerPeopleWorkspace;
+  const showManagerTasks = activeProfile.accessRole === "manager"
+    && hasManagerPeopleWorkspace;
+  const previewScopedManagerPersonId = isPreviewingEmployeeAccess
+    && activeProfile.accessRole === "manager"
+    ? previewProfile?.id
+    : undefined;
   const topbarSelfProfile: SelfProfileData = selfProfile ?? {
     name: signedInProfile.name,
     title: signedInProfile.roleLabel,
@@ -1583,11 +1598,13 @@ export function LeaveDemo({
           {activeView === "calendar" ? <CalendarView birthdays={calendarBirthdays} checkIns={calendarCheckIns} requests={calendarRequests} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
-              key={showHrWorkspace ? "hr-directory" : isPreviewingEmployeeAccess ? `employee-preview:${activeProfile.id}` : "standard-people"}
+              key={`${activeProfile.accessRole}:${isPreviewingEmployeeAccess ? activeProfile.id : "signed-in"}`}
               activeProfile={activeProfile}
               organisationProfiles={organisationPeople}
               canEditOrganisation={canEditOrganisation && showHrWorkspace}
               canArrangeOrganisation={canEditOrganisation && showHrWorkspace}
+              showProfile={false}
+              showTasks={canViewOwnTasks || showHrWorkspace || showManagerTasks || (isPreviewingEmployeeAccess && activeProfile.accessRole === "employee")}
               isAccessPreview={isPreviewingEmployeeAccess}
               onCreateOrganisationPerson={createOrganisationPerson}
               onUpdateOrganisationPerson={updateOrganisationPerson}
@@ -1603,27 +1620,27 @@ export function LeaveDemo({
                 onSelectedPersonId={setEmployeeDirectorySelectedPersonId}
                 refreshKey={employeeDirectoryRefreshKey}
                 selectedPersonId={employeeDirectorySelectedPersonId}
-              /> : undefined}
+              /> : showManagerDirectory ? <ReadOnlyDirectory people={organisationPeople} /> : undefined}
               renderCheckInRegister={showHrWorkspace
                 ? <CheckInRegister
                     onRecordsChanged={() => void refreshLeaveWorkspace()}
                     resources={checkInResources}
                   />
-                : (canViewCheckIns || canRenderPreviewCheckIns)
+                : showManagerCheckIns
                   ? <CheckInWorkspace
-                      previewPersonId={canRenderPreviewCheckIns ? previewProfile?.id : undefined}
+                      previewPersonId={previewScopedManagerPersonId}
                       readOnly={false}
                       onRecordsChanged={() => void refreshLeaveWorkspace()}
                       resources={checkInResources}
                     />
                   : undefined}
-              renderCheckInTasks={(canViewCheckInTasks || canRenderPreviewCheckIns)
+              renderCheckInTasks={showHrWorkspace || showManagerTasks
                 ? <CheckInTasks
-                    previewPersonId={canRenderPreviewCheckIns ? previewProfile?.id : undefined}
+                    previewPersonId={previewScopedManagerPersonId}
                     readOnly={false}
                   />
                 : undefined}
-              renderAccounts={isAdmin && showHrWorkspace ? accountsLoading
+              renderAccounts={showHrWorkspace ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
                 : accountsError
                 ? <div className={styles.emptyState}><ShieldCheck size={24} /><strong>Accounts could not be loaded</strong><span>{accountsError}</span><button className={styles.primaryButton} type="button" onClick={() => void loadAccounts()}>Retry accounts</button></div>
