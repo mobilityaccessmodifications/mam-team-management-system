@@ -22,6 +22,13 @@ import type {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENERIC_SAVE_ERROR = "Employee details could not be saved. Refresh and try again.";
+const EMPLOYMENT_END_REASONS = new Set([
+  "Resigned",
+  "Terminated",
+  "End of contract",
+  "Redundant",
+  "Other",
+]);
 
 type MutationRpcRow = {
   person_id: string;
@@ -36,6 +43,14 @@ function requiredText(value: unknown, label: string, maximum = 120) {
   const cleaned = textValue(value, label).trim();
   if (!cleaned || cleaned.length > maximum) throw new Error(`${label} is required and must be ${maximum} characters or fewer.`);
   return cleaned;
+}
+
+function employmentEndReason(value: unknown) {
+  const reason = requiredText(value, "Employment end reason", 120);
+  if (!EMPLOYMENT_END_REASONS.has(reason)) {
+    throw new Error("Choose a valid employment end reason.");
+  }
+  return reason;
 }
 
 function optionalText(value: unknown, label: string, maximum = 254) {
@@ -255,7 +270,7 @@ export async function archiveEmployeeDirectoryRecord(input: {
       return { ok: false, message: "The employee record is invalid." };
     }
     const endDate = optionalDate(inputValue.endDate, "End date");
-    const reason = requiredText(inputValue.reason, "Archive reason", 120);
+    const reason = employmentEndReason(inputValue.reason);
     if (!endDate) return { ok: false, message: "Choose an employment end date." };
 
     const { supabase } = await requireEmployeeDirectoryManager();

@@ -11,6 +11,7 @@ import {
   Search,
   Trash2,
   UserPlus,
+  UserMinus,
   UsersRound,
   X,
 } from "lucide-react";
@@ -48,12 +49,12 @@ type EditorState =
 type DirectorySort = "name" | "startedDate" | "company";
 
 const recordsPerPage = 8;
-const archiveReasons = [
-  "Resigned",
-  "End of contract",
-  "Terminated",
-  "Redundant",
-  "Other",
+const employmentEndReasons = [
+  { value: "Resigned", label: "Voluntary resignation" },
+  { value: "Terminated", label: "Performance or role fit" },
+  { value: "End of contract", label: "End of contract" },
+  { value: "Redundant", label: "Redundancy" },
+  { value: "Other", label: "Other" },
 ] as const;
 
 export type EmployeeDirectoryProps = {
@@ -229,7 +230,11 @@ export function EmployeeDirectory({
   const endDateInputRef = useRef<HTMLInputElement>(null);
   const deleteDialogRef = useRef<HTMLElement>(null);
   const deleteCancelRef = useRef<HTMLButtonElement>(null);
-  const closeEndDatePrompt = useCallback(() => setEndDatePrompt(null), []);
+  const closeEndDatePrompt = useCallback(() => {
+    if (archiving) return;
+    setEndDatePrompt(null);
+    setSaveError("");
+  }, [archiving]);
   const closeDeletePrompt = useCallback(() => {
     if (deleting) return;
     setDeleteTarget(null);
@@ -365,17 +370,33 @@ export function EmployeeDirectory({
   ) {
     const base = editor ?? activeEditor;
     if (!base) return;
-    if (key === "isActive" && value === false && base.draft.isActive) {
-      setEndDatePrompt({ date: base.draft.scheduledEmploymentEndDate || todayIso(), reason: "Resigned" });
-      return;
-    }
     setEditor(updateDraft(base, key, value));
+  }
+
+  function openEmploymentEndPrompt() {
+    const base = editor ?? activeEditor;
+    const record = selectedRecord(records, base);
+    if (!base || !record || !record.isActive) return;
+
+    setSaveError("");
+    setEndDatePrompt({
+      date: todayIso(),
+      reason: "",
+    });
   }
 
   async function confirmEndDate() {
     const base = editor ?? activeEditor;
     const record = selectedRecord(records, base);
-    if (!base || !record || !endDatePrompt?.date || archiving) return;
+    if (!base || !record || archiving) return;
+    if (!endDatePrompt?.date) {
+      setSaveError("Choose an employment end date.");
+      return;
+    }
+    if (!endDatePrompt.reason) {
+      setSaveError("Select an employment end reason.");
+      return;
+    }
     if (base.draft.startedDate && endDatePrompt.date < base.draft.startedDate) {
       setSaveError("The end date cannot be before the start date.");
       return;
@@ -397,7 +418,7 @@ export function EmployeeDirectory({
       setRecords((current) => current.map((candidate) => candidate.personId === result.record.personId ? result.record : candidate));
       setEditor({ mode: "edit", personId: result.record.personId, draft: toDraft(result.record) });
       setEndDatePrompt(null);
-      setNotice("Profile archived.");
+      setNotice("Employment ended and profile archived.");
       setDirectoryFilter("archived");
       await onRecordsChanged?.();
     } catch (error) {
@@ -560,6 +581,7 @@ export function EmployeeDirectory({
           onChange={handleDraftChange}
           onClose={closeEditor}
           onSubmit={saveRecord}
+          onRequestArchive={!activeEditor || activeEditor.mode === "create" || !currentRecord || !currentRecord.isActive ? undefined : openEmploymentEndPrompt}
           onRequestDelete={!activeEditor || activeEditor.mode === "create" || !currentRecord || currentRecord.isActive ? undefined : () => setDeleteTarget(currentRecord)}
         /> : <EmptyDetail onCreate={openCreate} />}
       </div>
@@ -567,16 +589,16 @@ export function EmployeeDirectory({
       {endDatePrompt ? <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEndDatePrompt(); }}>
         <section className={styles.modal} ref={endDateDialogRef} role="dialog" aria-modal="true" aria-labelledby="end-date-title" tabIndex={-1}>
           <header className={styles.modalHeader}>
-            <div><span>Employee status</span><h3 id="end-date-title">Archive employee profile</h3></div>
-            <button type="button" className={styles.modalClose} onClick={closeEndDatePrompt} aria-label="Close"><X size={17} /></button>
+            <div><span>Employment end</span><h3 id="end-date-title">Confirm employment end</h3>{currentRecord ? <p>{currentRecord.fullName}</p> : null}</div>
+            <button type="button" className={styles.modalClose} onClick={closeEndDatePrompt} disabled={archiving} aria-label="Close"><X size={17} /></button>
           </header>
           <div className={styles.modalBody}>
-            <p>Archived profiles leave the active directory but remain available to authorised HR reviewers.</p>
-            <label className={styles.modalField}><span>End date</span><input ref={endDateInputRef} type="date" value={endDatePrompt.date} onChange={(event) => setEndDatePrompt((current) => current ? { ...current, date: event.target.value } : current)} /></label>
-            <label className={styles.modalField}><span>Reason</span><select value={endDatePrompt.reason} onChange={(event) => setEndDatePrompt((current) => current ? { ...current, reason: event.target.value } : current)}>{archiveReasons.map((reason) => <option key={reason} value={reason}>{reason}</option>)}</select></label>
+            <p>This ends the active employment record and moves the profile to Archived for authorised HR review.</p>
+            <label className={styles.modalField}><span>Employment end date <b aria-hidden="true">*</b></span><input ref={endDateInputRef} type="date" value={endDatePrompt.date} onChange={(event) => setEndDatePrompt((current) => current ? { ...current, date: event.target.value } : current)} required /></label>
+            <label className={styles.modalField}><span>Reason for leaving <b aria-hidden="true">*</b></span><select value={endDatePrompt.reason} onChange={(event) => setEndDatePrompt((current) => current ? { ...current, reason: event.target.value } : current)} required aria-required="true"><option value="" disabled>Select a reason</option>{employmentEndReasons.map((reason) => <option key={reason.value} value={reason.value}>{reason.label}</option>)}</select></label>
             {saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}
           </div>
-          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={closeEndDatePrompt} disabled={archiving}>Cancel</button><button type="button" className={styles.primaryAction} onClick={() => void confirmEndDate()} disabled={archiving}>{archiving ? "Archiving…" : "Save & archive profile"}</button></footer>
+          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={closeEndDatePrompt} disabled={archiving}>Cancel</button><button type="button" className={styles.dangerAction} onClick={() => void confirmEndDate()} disabled={archiving}><UserMinus size={15} />{archiving ? "Ending employment…" : "Confirm end employment"}</button></footer>
         </section>
       </div> : null}
 
@@ -684,6 +706,7 @@ function EmployeeEditor({
   onChange,
   onClose,
   onSubmit,
+  onRequestArchive,
   onRequestDelete,
 }: {
   editor: EditorState;
@@ -694,6 +717,7 @@ function EmployeeEditor({
   onChange: (key: keyof EmployeeDirectoryDraft, value: string | string[] | boolean | null) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onRequestArchive?: () => void;
   onRequestDelete?: () => void;
 }) {
   const managerOptions = records
@@ -741,10 +765,6 @@ function EmployeeEditor({
               <option value="equipsy">Equipsy</option>
             </select>
           </Field>
-          <label className={styles.statusField}>
-            <input checked={editor.draft.isActive} onChange={(event) => onChange("isActive", event.target.checked)} type="checkbox" />
-            <span><strong>Active employee</strong><small>Turn off only after their reporting line is resolved.</small></span>
-          </label>
         </div>
       </fieldset>
 
@@ -823,6 +843,7 @@ function EmployeeEditor({
           <p><Mail size={14} /> The CSV keeps the HR workbook columns, then adds the private equipment audit fields.</p>
         </div>
         <div>
+          {onRequestArchive ? <button type="button" className={styles.dangerAction} onClick={onRequestArchive} disabled={saving}><UserMinus size={14} /> End employment</button> : null}
           {onRequestDelete ? <button type="button" className={styles.dangerAction} onClick={onRequestDelete} disabled={saving}><Trash2 size={14} /> Delete archived profile</button> : null}
           <button type="button" className={styles.secondaryAction} onClick={onClose} disabled={saving}>Cancel</button>
           <button type="submit" className={styles.primaryAction} disabled={saving}>{saving ? "Saving…" : isCreate ? "Create employee" : "Save changes"}</button>
