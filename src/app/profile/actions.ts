@@ -34,6 +34,11 @@ export type SelectedEmployeeProfile = SelfProfileData & {
   personId: string;
   detailVersion: number;
   hasDetail: boolean;
+  /**
+   * Server-projected role used only to render the Super Admin's Change
+   * profile preview. It is never inferred from a job title or reporting line.
+   */
+  accessRole: "employee" | "manager" | "system_admin";
 };
 
 type UpdateSelfProfileInput = SelfProfileChanges & {
@@ -124,6 +129,10 @@ function selectedProfileVersion(value: unknown, errorMessage: string) {
   return value;
 }
 
+function selectedEmployeeAccessRole(value: unknown): SelectedEmployeeProfile["accessRole"] {
+  return value === "manager" || value === "system_admin" ? value : "employee";
+}
+
 function toSelfProfile(data: unknown): CurrentEmployeeSelfProfile {
   const rows = Array.isArray(data) ? data : [];
   const row = rows[0] as SelfProfileRpcRow | undefined;
@@ -146,7 +155,7 @@ function toSelfProfile(data: unknown): CurrentEmployeeSelfProfile {
   };
 }
 
-function toSelectedEmployeeProfile(data: unknown): SelectedEmployeeProfile {
+function toSelectedEmployeeProfile(data: unknown): Omit<SelectedEmployeeProfile, "accessRole"> {
   const rows = Array.isArray(data) ? data : [];
   const row = rows[0] as SelfProfileRpcRow | undefined;
   if (!row || rows.length !== 1 || (row.company_key !== "mam" && row.company_key !== "equipsy")) {
@@ -240,12 +249,20 @@ export async function getSelectedEmployeeProfile(
 ): Promise<SelectedEmployeeProfile> {
   const checkedPersonId = selectedPersonId(personId);
   const supabase = await requireSuperAdminChangeView();
-  const { data, error } = await supabase.rpc("get_selected_employee_profile_for_hr", {
-    p_person_id: checkedPersonId,
-  });
+  const [{ data, error }, { data: accessRole, error: accessRoleError }] = await Promise.all([
+    supabase.rpc("get_selected_employee_profile_for_hr", {
+      p_person_id: checkedPersonId,
+    }),
+    supabase.rpc("get_selected_employee_profile_access_role_for_preview", {
+      p_person_id: checkedPersonId,
+    }),
+  ]);
 
-  if (error) throw new Error(GENERIC_SELECTED_PROFILE_LOAD_ERROR);
-  return toSelectedEmployeeProfile(data);
+  if (error || accessRoleError) throw new Error(GENERIC_SELECTED_PROFILE_LOAD_ERROR);
+  return {
+    ...toSelectedEmployeeProfile(data),
+    accessRole: selectedEmployeeAccessRole(accessRole),
+  };
 }
 
 /**
@@ -280,6 +297,11 @@ export async function updateSelectedEmployeeProfile(
   }
 
   const profile = toSelectedEmployeeProfile(data);
+  const { data: accessRole, error: accessRoleError } = await supabase.rpc(
+    "get_selected_employee_profile_access_role_for_preview",
+    { p_person_id: checkedPersonId },
+  );
+  if (accessRoleError) throw new Error(GENERIC_SELECTED_PROFILE_SAVE_ERROR);
   revalidatePath("/");
-  return profile;
+  return { ...profile, accessRole: selectedEmployeeAccessRole(accessRole) };
 }

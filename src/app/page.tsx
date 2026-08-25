@@ -15,8 +15,9 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   let currentPersonId: string | undefined;
   let isNonRosterSystemAdmin = false;
   let canViewCheckIns = false;
+  let canViewEmployeeDirectory = false;
   let canChangeEmployeeView = false;
-  let canViewCheckInTasks = false;
+  let canViewOwnTasks = false;
   let checkInResources: ReturnType<typeof getCheckInResourceLinks> | undefined;
   if (isSupabaseConfigured()) {
     const supabase = await createClient();
@@ -28,12 +29,14 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       { data: account, error: accountError },
       { data: canAccessNonRosterSystemAdminWorkspace },
       { data: canViewCheckInWorkspace },
+      { data: canViewEmployeeDirectoryCapability },
       { data: canChangeEmployeeViewCapability },
     ] = await Promise.all([
       supabase.rpc("can_manage_portal_accounts"),
       supabase.rpc("current_portal_account"),
       supabase.rpc("can_access_non_roster_system_admin_workspace"),
       supabase.rpc("can_view_employee_check_in_workspace"),
+      supabase.rpc("can_view_employee_directory"),
       supabase.rpc("can_change_employee_view"),
     ]);
     const current = Array.isArray(account) ? account[0] : null;
@@ -41,12 +44,13 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     currentPersonId = current?.person_id ?? undefined;
     isNonRosterSystemAdmin = canAccessNonRosterSystemAdminWorkspace === true;
     canViewCheckIns = canViewCheckInWorkspace === true;
+    canViewEmployeeDirectory = canViewEmployeeDirectoryCapability === true;
     checkInResources = canViewCheckIns ? getCheckInResourceLinks() : undefined;
     canChangeEmployeeView = canChangeEmployeeViewCapability === true;
-    // The task and safe Check-in workspaces share the same database scope
-    // predicate. Reuse this capability instead of making a duplicate RPC
-    // round-trip during every page request.
-    canViewCheckInTasks = canViewCheckIns;
+    // Every active linked employee may open their own task surface. Its
+    // contents remain limited by the dedicated task data source; this flag
+    // only controls whether the tab itself is available.
+    canViewOwnTasks = Boolean(currentPersonId);
     if (
       accountError
       || (
@@ -72,9 +76,9 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     isAdmin={isAdmin}
     currentPersonId={currentPersonId}
     isNonRosterSystemAdmin={isNonRosterSystemAdmin}
-    canViewCheckIns={canViewCheckIns}
+    canViewEmployeeDirectory={canViewEmployeeDirectory}
     canChangeEmployeeView={canChangeEmployeeView}
-    canViewCheckInTasks={canViewCheckInTasks}
+    canViewOwnTasks={canViewOwnTasks}
     checkInResources={checkInResources}
     initialNavigation={{
     view: resolvedView,
