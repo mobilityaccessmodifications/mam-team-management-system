@@ -52,6 +52,12 @@ function text(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+function emailText(value: unknown) {
+  // Email addresses cannot contain whitespace. Remove accidental line breaks
+  // from imported records so neither the display nor reminder recipient splits.
+  return text(value).replace(/\s+/g, "");
+}
+
 function nullableText(value: unknown) {
   return typeof value === "string" && value ? value : null;
 }
@@ -121,9 +127,9 @@ function toRecord(row: CheckInRegisterRpcRow): CheckInRegisterRecord {
     address: text(row.address),
     dateOfBirth: text(row.date_of_birth),
     mobile: text(row.mobile),
-    email: text(row.email),
+    email: emailText(row.email),
     startDate: text(row.start_date),
-    recipientEmail: text(row.recipient_email),
+    recipientEmail: emailText(row.recipient_email),
     recipientSource,
     enrolmentMode: enrolmentMode(row.enrolment_mode),
     reminders: reminders(row.reminders),

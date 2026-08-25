@@ -184,12 +184,13 @@
 .enrolment { flex: 0 0 auto; border-radius: 999px; background: #eef5f1; color: #3e7059; font-size: 11px; font-weight: 800; padding: 7px 9px; white-space: nowrap; }
 .enrolment[data-mode="needs_review"] { background: #fff0e7; color: #a94b20; }
 
-.summaryGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+.summaryGrid { display: grid; grid-template-columns: minmax(0, .95fr) minmax(240px, 1.28fr) minmax(0, .95fr) minmax(110px, .74fr); gap: 10px; margin-top: 18px; }
 .workspaceSummary { grid-template-columns: repeat(2, minmax(0, 220px)); }
 .info { min-width: 0; border: 1px solid var(--surface-border); border-radius: var(--radius-md); background: color-mix(in srgb, var(--surface-muted) 48%, var(--surface-raised)); padding: 11px 12px; }
 .info[data-warning="true"] { border-color: #f0c8b4; background: #fff9f5; }
 .info small,.info strong { display: block; }
 .info strong { overflow-wrap: anywhere; margin-top: 5px; color: var(--text-primary); font-size: 12px; line-height: 1.4; }
+.info[data-value-kind="email"] strong { overflow: hidden; overflow-wrap: normal; text-overflow: ellipsis; white-space: nowrap; }
 
 .privateDetails { margin-top: 13px; border: 1px solid var(--surface-border); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--surface-muted) 30%, var(--surface-raised)); }
 .privateDetails summary { gap: 7px; cursor: pointer; list-style: none; padding: 10px; }

@@ -303,7 +303,7 @@ export function CheckInRegister({
 
         <div className={styles.summaryGrid}>
           <Info label="Manager" value={selected.managerName || "Not assigned"} />
-          <Info label="Manager work email" value={selected.recipientEmail || "Not recorded"} warning={selected.recipientSource === "missing"} />
+          <Info label="Manager work email" value={selected.recipientEmail || "Not recorded"} valueKind="email" warning={selected.recipientSource === "missing"} />
           <Info label="Start date" value={formatDate(selected.startDate)} />
           <Info label="Company" value={selected.company === "mam" ? "MAM" : "Equipsy"} />
         </div>
@@ -360,6 +360,19 @@ function ReminderRow({ reminder, pending, onComplete }: {
   </div>;
 }
 
-function Info({ label, value, warning = false }: { label: string; value: string; warning?: boolean }) {
-  return <div className={styles.info} data-warning={warning}><small>{label}</small><strong>{value}</strong></div>;
+function Info({
+  label,
+  value,
+  warning = false,
+  valueKind = "text",
+}: {
+  label: string;
+  value: string;
+  warning?: boolean;
+  valueKind?: "text" | "email";
+}) {
+  return <div className={styles.info} data-warning={warning} data-value-kind={valueKind}>
+    <small>{label}</small>
+    <strong title={valueKind === "email" ? value : undefined}>{value}</strong>
+  </div>;
 }
