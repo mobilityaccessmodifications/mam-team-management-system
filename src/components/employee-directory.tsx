@@ -498,10 +498,7 @@ export function EmployeeDirectory({
 
   return (
     <section className={styles.workspace} aria-label="Employee directory">
-      <header className={styles.header}>
-        <div>
-          <h2>Employee directory</h2>
-        </div>
+      <header className={styles.header} aria-label="Directory actions">
         <div className={styles.headerActions}>
           <a className={styles.secondaryAction} href="/people/export">
             <Download size={16} /> Export CSV

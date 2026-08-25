@@ -1,12 +1,10 @@
 .workspace { --people-accent: var(--mam-orange); --people-accent-deep: var(--mam-orange-dark); --people-accent-soft: var(--surface-warm); display: grid; gap: 18px; width: 100%; max-width: 1280px; margin: 0 auto; color: var(--text-primary); }
-.pageHeader { display: flex; min-height: 58px; align-items: flex-end; justify-content: space-between; gap: 24px; }
-.pageHeader > div > span, .checkInLead > div > span, .modal header span { display: block; color: var(--text-tertiary); font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; font-weight: 760; letter-spacing: .11em; text-transform: uppercase; }
-.pageHeader h1 { margin: 0; font-family: var(--font-display, Impact, sans-serif); font-size: clamp(36px, 4vw, 46px); font-weight: 650; letter-spacing: -.035em; line-height: .95; }
-.pageHeader p, .checkInLead p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.checkInLead > div > span, .modal header span { display: block; color: var(--text-tertiary); font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; font-weight: 760; letter-spacing: .11em; text-transform: uppercase; }
+.checkInLead p { margin: 0; color: var(--text-secondary); font-size: 13px; }
 .primaryAction, .previewButton { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--people-accent) 78%, #000); border-radius: var(--radius-md); background: var(--people-accent); box-shadow: 0 6px 16px color-mix(in srgb, var(--people-accent) 18%, transparent); color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 720; padding: 9px 15px; transition: background 160ms var(--ease-out), box-shadow 160ms var(--ease-out), transform 160ms var(--ease-out); }
 .primaryAction:hover, .previewButton:hover { background: var(--mam-orange-strong); box-shadow: 0 8px 20px color-mix(in srgb, var(--people-accent) 24%, transparent); transform: translateY(-1px); }
 .primaryAction:focus-visible, .previewButton:focus-visible { outline: 3px solid color-mix(in srgb, var(--people-accent) 32%, transparent); outline-offset: 3px; }
-.attentionSummary { display: inline-flex; align-items: center; gap: 6px; margin-top: 9px !important; color: #a24335 !important; font-size: 12px !important; font-weight: 700; }
+.sectionAction { display: flex; justify-content: flex-end; }
 .sectionSwitch { width: 100%; }
 .taskSwitch { display: inline-flex; justify-self: start; gap: 4px; border: 1px solid var(--surface-border); border-radius: var(--radius-md); background: var(--surface-muted); padding: 4px; }
 .taskSwitch button { min-height: 34px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 11px; font-weight: 720; padding: 7px 12px; }
@@ -170,7 +168,7 @@
 }
 
 @media (max-width: 680px) {
-  .pageHeader, .checkInLead { align-items: stretch; flex-direction: column; }
+  .checkInLead { align-items: stretch; flex-direction: column; }
   .primaryAction, .previewButton { width: 100%; }
   .workflowDetail, .checkInDetail { padding: 14px; }
   .readiness, .detailGrid, .checkInMeta { grid-template-columns: 1fr; }

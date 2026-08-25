@@ -384,14 +384,6 @@ function checkInMilestoneLabel(milestone: CheckInCalendarEntry["milestone"]) {
   return "5-month check-in";
 }
 
-function getViewTitles(profile: Profile, calendarMonth: Date, canReviewLeave: boolean): Record<Exclude<AppView, "people">, { title: string; helper?: string }> {
-  return {
-    home: { title: "Home" },
-    leave: { title: canReviewLeave ? "Leave" : "My leave" },
-    calendar: { title: "Team calendar", helper: getCalendarMonthLabel(calendarMonth) },
-  };
-}
-
 function getEmployeePreviewRequests(
   requests: LeaveRequest[],
   profile: Profile,
@@ -1040,7 +1032,6 @@ export function LeaveDemo({
   // presenting an impossible cancellation control.
   const canCancelOwnApprovedLeave = !isNonRosterSystemAdminWorkspace
     || isPreviewingEmployeeAccess;
-  const viewTitles = getViewTitles(activeProfile, calendarMonth, canReviewLeave);
   // Change Profile's leave data is already projected by the guarded server
   // action. Do not narrow it again in the browser: that used to hide a
   // manager's team queue when testing Luke or Todd from Super Admin.
@@ -1584,17 +1575,12 @@ export function LeaveDemo({
         </header>
 
         <main className={styles.main} id="main-content">
-          {activeView !== "people" ? <section className={styles.pageHeader}>
-            <div><h1>{viewTitles[activeView].title}</h1>{viewTitles[activeView].helper ? <p>{viewTitles[activeView].helper}</p> : null}</div>
-            {activeView === "leave" && canApplyForLeave ? <button className={`${styles.primaryButton} ${styles.applyForLeaveButton}`} type="button" onClick={openLeaveRequestForm} disabled={isMutating} aria-haspopup="dialog"><Plus aria-hidden="true" size={17} /><span>Apply for leave</span></button> : null}
-          </section> : null}
-
           {leaveDataError && activeView !== "people" ? <div className={styles.loadErrorAction} role="alert"><span>{leaveDataError}</span><button type="button" onClick={() => void refreshLeaveWorkspace()} disabled={leaveDataLoading}>{leaveDataLoading ? "Retrying…" : "Retry"}</button></div> : null}
           {selfProfileError && !isPreviewingEmployeeAccess && !isNonRosterSystemAdminWorkspace ? <div className={styles.loadErrorAction} role="alert"><span>{selfProfileError}</span><button type="button" onClick={() => void loadSelfProfile()} disabled={selfProfileLoading}>{selfProfileLoading ? "Retrying…" : "Retry profile"}</button></div> : null}
           {selectedEmployeeProfileError && isPreviewingEmployeeAccess ? <div className={styles.loadErrorAction} role="alert"><span>{selectedEmployeeProfileError}</span><button type="button" onClick={() => setSelectedEmployeeProfileReloadKey((current) => current + 1)}>Retry profile</button></div> : null}
           {organisationAccessError && activeView === "people" ? <div className={styles.loadErrorAction} role="alert"><span>{organisationAccessError}</span><button type="button" onClick={() => void loadOrganisation()}>Retry permissions</button></div> : null}
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} canReview={canReviewLeave} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
-          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
+          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
           {activeView === "calendar" ? <CalendarView birthdays={calendarBirthdays} checkIns={calendarCheckIns} requests={calendarRequests} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
@@ -1789,9 +1775,10 @@ function PanelHeader({ title, action, onAction }: { title: string; action?: stri
   return <header className={styles.panelHeader}><h2>{title}</h2>{action && onAction ? <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button> : null}</header>;
 }
 
-function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancelledRequestId, onFilter, onSection, onNote, onSelect, onDecision, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canApplyForLeave, canCancelOwnApprovedLeave, cancellationRequestId, cancellationError, cancelledRequestId, onRequestLeave, onFilter, onSection, onNote, onSelect, onDecision, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canApplyForLeave: boolean; canCancelOwnApprovedLeave: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onRequestLeave: () => void; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onDecision: (status: "Approved" | "Declined") => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   return (
     <section className={styles.leaveDesk}>
+      {canApplyForLeave ? <div className={styles.leaveActions}><button className={`${styles.primaryButton} ${styles.applyForLeaveButton}`} type="button" onClick={onRequestLeave} disabled={busy} aria-haspopup="dialog"><Plus aria-hidden="true" size={17} /><span>Apply for leave</span></button></div> : null}
       {canReview ? (
         <div className={styles.leaveSwitch} aria-label="Leave workspace">
           <button className={section === "approvals" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "approvals"} onClick={() => onSection("approvals")}>

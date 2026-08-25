@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlertTriangle,
   ArrowUpRight,
   CalendarClock,
   Check,
@@ -491,8 +490,6 @@ export function PeopleOperationsDemo({
     announce(`${kind === "onboarding" ? "Onboarding" : "Offboarding"} checklist created for ${directoryPerson.name}.`);
   }
 
-  const actionableOwner = activeProfile.accessRole === "manager" ? "Team Leader" : activeProfile.accessRole === "employee" ? "Employee" : undefined;
-  const totalOverdue = accessibleWorkflows.reduce((count, workflow) => count + workflow.tasks.filter((task) => task.status === "Overdue" && (!actionableOwner || task.owner === actionableOwner)).length, 0);
   const sectionTabs: MotionTabOption<PeopleSection>[] = availableSections.map((value) => {
     if (value === "directory") return { value, label: "Directory", icon: <ContactRound size={16} /> };
     if (value === "profile") return { value, label: "Profile", icon: <UserRound size={16} /> };
@@ -502,11 +499,10 @@ export function PeopleOperationsDemo({
     return { value, label: "Accounts", icon: <KeyRound size={16} /> };
   });
 
+  const showTaskAction = canManage && visibleSection === "tasks";
+
   return <section className={styles.workspace} aria-label="People operations workspace">
-    <header className={styles.pageHeader}>
-      <div><h1>People</h1>{totalOverdue ? <p className={styles.attentionSummary}><AlertTriangle size={14} /> {totalOverdue} action{totalOverdue === 1 ? " needs" : "s need"} attention</p> : null}</div>
-      {canManage && visibleSection === "tasks" ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleTaskSection === "checkins" ? "checkin" : visibleTaskSection)}><Plus size={17} /> {visibleTaskSection === "checkins" ? "Schedule check-ins" : `Start ${visibleTaskSection}`}</button> : null}
-    </header>
+    {showTaskAction ? <div className={styles.sectionAction}><button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleTaskSection === "checkins" ? "checkin" : visibleTaskSection)}><Plus size={17} /> {visibleTaskSection === "checkins" ? "Schedule check-ins" : `Start ${visibleTaskSection}`}</button></div> : null}
 
     <MotionTabs
       value={visibleSection}

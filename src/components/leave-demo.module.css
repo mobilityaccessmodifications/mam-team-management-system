@@ -785,6 +785,12 @@
   white-space: nowrap;
 }
 
+.leaveActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 2px;
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 9px;

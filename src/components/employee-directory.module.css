@@ -35,11 +35,10 @@
 
 .header {
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 18px;
 }
 
-.header > div:first-child > span,
 .editorHeader > div > span {
   display: block;
   color: #69767a;
@@ -50,16 +49,6 @@
   text-transform: uppercase;
 }
 
-.header h2 {
-  margin: 0;
-  font-family: var(--font-display, Impact, sans-serif);
-  font-size: clamp(30px, 4vw, 38px);
-  font-weight: 650;
-  letter-spacing: -0.035em;
-  line-height: 1;
-}
-
-.header p,
 .editorHeader p {
   margin: 7px 0 0;
   color: var(--directory-muted);
@@ -70,6 +59,7 @@
 .headerActions {
   flex: 0 0 auto;
   gap: 8px;
+  margin-left: auto;
 }
 
 .primaryAction,
