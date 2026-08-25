@@ -1,7 +1,7 @@
 .root {
   position: relative;
   flex: 0 0 auto;
-  z-index: 40;
+  z-index: 160;
   color: var(--ink, #252d2f);
 }
 

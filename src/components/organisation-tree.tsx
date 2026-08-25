@@ -2256,37 +2256,7 @@ export function OrganisationTree({
 
   return (
     <section aria-labelledby={titleId} className={rootClassName} ref={rootRef}>
-      <header className={styles.heading}>
-        <h2 className={styles.srOnly} id={titleId}>Organisation</h2>
-
-        <div className={styles.headerActions}>
-            {canArrange ? (
-              <button
-                aria-pressed={arrangeMode}
-                className={styles.arrangeAction}
-                data-active={arrangeMode}
-                disabled={Boolean(linkGuide)}
-                onClick={toggleArrangeMode}
-                title={linkGuide ? "Finish adding the current reporting line first" : undefined}
-                type="button"
-              >
-                <GripVertical aria-hidden="true" size={16} />
-                {arrangeMode ? "Finish arranging" : "Arrange"}
-              </button>
-            ) : null}
-            {canUseLegacyTreeEditor ? (
-              <button
-                className={styles.primaryAction}
-                disabled={!onCreate}
-                onClick={() => openCreate()}
-                type="button"
-              >
-                <Plus aria-hidden="true" size={16} />
-                Add person
-              </button>
-            ) : null}
-        </div>
-      </header>
+      <h2 className={styles.srOnly} id={titleId}>Organisation</h2>
 
       <div className={styles.toolbar}>
         <div className={styles.searchWrap}>
@@ -2376,14 +2346,42 @@ export function OrganisationTree({
         </div>
 
         <div className={styles.toolbarActions}>
-          <button
-            className={styles.secondaryAction}
-            onClick={exportPdf}
-            type="button"
-          >
-            <Download aria-hidden="true" size={16} />
-            Export PDF
-          </button>
+          <div className={styles.headerActions}>
+            <button
+              className={styles.secondaryAction}
+              onClick={exportPdf}
+              type="button"
+            >
+              <Download aria-hidden="true" size={16} />
+              Export PDF
+            </button>
+            {canArrange ? (
+              <button
+                aria-pressed={arrangeMode}
+                className={styles.arrangeAction}
+                data-active={arrangeMode}
+                disabled={Boolean(linkGuide)}
+                onClick={toggleArrangeMode}
+                title={linkGuide ? "Finish adding the current reporting line first" : undefined}
+                type="button"
+              >
+                <GripVertical aria-hidden="true" size={16} />
+                {arrangeMode ? "Finish arranging" : "Arrange"}
+              </button>
+            ) : null}
+            {canUseLegacyTreeEditor ? (
+              <button
+                className={styles.primaryAction}
+                disabled={!onCreate}
+                onClick={() => openCreate()}
+                type="button"
+              >
+                <Plus aria-hidden="true" size={16} />
+                Add person
+              </button>
+            ) : null}
+          </div>
+
           <div aria-label="Filter by company" className={styles.filters}>
             {(["all", "mam", "equipsy"] as const).map((filter) => (
               <button

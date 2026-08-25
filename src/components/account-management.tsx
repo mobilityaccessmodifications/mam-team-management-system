@@ -10,7 +10,6 @@ import {
   KeyRound,
   LockKeyhole,
   Search,
-  ShieldCheck,
   Sparkles,
   UserRoundCheck,
   UserRoundPlus,
@@ -309,10 +308,6 @@ export function AccountManagement({
       )} of ${sortedAccounts.length} account${sortedAccounts.length === 1 ? "" : "s"}`
     : "No matching accounts";
 
-  const linkedCount = records.filter(
-    (account) => account.status !== "unlinked",
-  ).length;
-
   function updateQuery(value: string) {
     setQuery(value);
     setPage(1);
@@ -519,27 +514,7 @@ export function AccountManagement({
 
   return (
     <section className={styles.workspace} aria-labelledby="account-title">
-      <header className={styles.header}>
-        <div>
-          <h2 id="account-title">Login accounts</h2>
-        </div>
-        <div
-          className={styles.accountCount}
-          aria-label={`${linkedCount} logins`}
-        >
-          <UserRoundCheck aria-hidden="true" size={16} />
-          <strong>{linkedCount}</strong>
-          <span>logins</span>
-        </div>
-      </header>
-
-      <div className={styles.securityNote}>
-        <ShieldCheck aria-hidden="true" size={17} />
-        <p>
-          Current passwords cannot be viewed. Create or reset a password, then
-          copy the new value once.
-        </p>
-      </div>
+      <h2 className={styles.srOnly} id="account-title">Login accounts</h2>
 
       <div className={styles.listControls}>
         <label className={styles.searchField}>
