@@ -8,7 +8,7 @@ begin
 
   if to_regclass('public.profiles') is null
     or to_regclass('public.internal_org_people') is null
-    or to_regprocedure('private.is_active_portal_account()') is null
+    or to_regprocedure('private.is_active_portal_account(uuid)') is null
     or to_regprocedure('private.is_active_linked_internal_employee(uuid)') is null
     or to_regprocedure('private.has_current_portal_access()') is null
     or to_regprocedure('private.is_system_portal_account_admin()') is null then
