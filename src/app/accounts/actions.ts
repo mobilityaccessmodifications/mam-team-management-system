@@ -136,12 +136,11 @@ function mapPasswordResetClaim(data: unknown) {
   return row;
 }
 
-function roleForPosition(position: string, hasReports: boolean) {
-  // UI roles are derived from the live organisation tree. Creating a login
-  // must not silently grant database HR permissions from an editable title.
-  void position;
-  return hasReports ? "manager" : "employee";
-}
+// A new login is deliberately unprivileged. Reporting-line position and
+// direct-report count describe the organisation tree; neither is authority to
+// approve leave, see HR records, or administer the portal. Any later role
+// change must be explicitly assigned by an authorised database operation.
+const NEW_ACCOUNT_ROLE = "employee" as const;
 
 async function requireLinkedAccount(
   personId: string,
@@ -207,7 +206,7 @@ export async function createPortalAccount(input: CreateAccountInput): Promise<Ac
   const admin = createAdminClient();
   const { data: person, error: personError } = await admin
     .from("internal_org_people")
-    .select("id,full_name,position_title,auth_user_id,version,parent_id")
+    .select("id,full_name,auth_user_id,version")
     .eq("id", input.personId)
     .eq("node_kind", "person")
     .eq("is_active", true)
@@ -215,13 +214,11 @@ export async function createPortalAccount(input: CreateAccountInput): Promise<Ac
 
   if (personError || !person || person.auth_user_id || person.version !== input.accountVersion) throw new Error(GENERIC_ERROR);
 
-  const [directReportsResult, loginResult] = await Promise.all([
-    admin.from("internal_org_people").select("id", { count: "exact", head: true }).eq("parent_id", input.personId).eq("is_active", true),
-    admin.from("profiles").select("id", { count: "exact", head: true }).eq("login_name", loginName),
-  ]);
-  if (directReportsResult.error || loginResult.error) throw new Error(GENERIC_ERROR);
-  const directReportCount = directReportsResult.count;
-  const loginCount = loginResult.count;
+  const { count: loginCount, error: loginError } = await admin
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("login_name", loginName);
+  if (loginError) throw new Error(GENERIC_ERROR);
   if (loginCount) throw new Error("That login name is already in use.");
 
   const opaqueAddress = `portal-${crypto.randomUUID()}@accounts.mobilityaccess.com.au`;
@@ -229,16 +226,15 @@ export async function createPortalAccount(input: CreateAccountInput): Promise<Ac
     email: opaqueAddress,
     password: input.newPassword,
     email_confirm: true,
-    app_metadata: { org_role: roleForPosition(person.position_title, Boolean(directReportCount)) },
+    app_metadata: { org_role: NEW_ACCOUNT_ROLE },
   });
   if (createError || !created.user) throw new Error("The login could not be created.");
 
-  const role = roleForPosition(person.position_title, Boolean(directReportCount));
   const { data: saved, error: saveError } = await supabase.rpc("create_portal_account", {
     p_person_id: input.personId,
     p_auth_user_id: created.user.id,
     p_login_name: loginName,
-    p_app_role: role,
+    p_app_role: NEW_ACCOUNT_ROLE,
     p_expected_person_version: input.accountVersion,
   });
 
