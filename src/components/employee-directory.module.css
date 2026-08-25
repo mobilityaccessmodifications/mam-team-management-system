@@ -617,7 +617,7 @@
   gap: 14px;
 }
 
-.formGrid > label:not(.statusField) {
+.formGrid > label {
   display: grid;
   min-width: 0;
   gap: 5px;
@@ -663,41 +663,6 @@
 .editor textarea:focus-visible {
   border-color: var(--directory-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--directory-accent) 12%, transparent);
-}
-
-.statusField {
-  display: flex;
-  min-height: 39px;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid #d4ddda;
-  border-radius: var(--radius-sm);
-  background: var(--surface-muted);
-  cursor: pointer;
-  padding: 7px 9px;
-}
-
-.statusField input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--directory-accent);
-}
-
-.statusField span,
-.statusField small {
-  display: block;
-}
-
-.statusField strong {
-  color: #405055;
-  font-size: 12px;
-}
-
-.statusField small {
-  margin-top: 1px;
-  color: #7a878b;
-  font-size: 11px;
-  line-height: 1.25;
 }
 
 .formFooter {
@@ -812,7 +777,8 @@
   font-weight: 750;
 }
 
-.modalField input {
+.modalField input,
+.modalField select {
   min-height: 40px;
   border: 1px solid #cbd6d3;
   border-radius: 6px;
@@ -822,7 +788,16 @@
   padding: 8px 9px;
 }
 
-.modalField input:focus-visible {
+.modalField select {
+  cursor: pointer;
+}
+
+.modalField span b {
+  color: #ba4e29;
+}
+
+.modalField input:focus-visible,
+.modalField select:focus-visible {
   border-color: var(--directory-accent);
   outline: 3px solid color-mix(in srgb, var(--directory-accent) 25%, transparent);
   outline-offset: 2px;
