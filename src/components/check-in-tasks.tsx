@@ -56,6 +56,58 @@ function taskActionHint(task: CheckInTask) {
   return "This check-in can be completed on or after its due date.";
 }
 
+const reviewReasonCopy: Record<string, { title: string; detail: string; nextStep: string }> = {
+  historic_cutover: {
+    title: "Historic milestone",
+    detail: "This reminder was created from an existing employee record during the check-in rollout.",
+    nextStep: "HR should review the record before deciding whether to queue a catch-up reminder.",
+  },
+  not_enrolled: {
+    title: "Automatic reminders are not enabled",
+    detail: "This employee has not been enrolled in the automatic check-in reminder schedule.",
+    nextStep: "HR needs to enable reminders for this employee before an email can be sent.",
+  },
+  missing_manager_email: {
+    title: "Manager work email is missing",
+    detail: "The system could not find a work email for the employee's current manager.",
+    nextStep: "Add the manager's work email to their profile, then refresh the task list.",
+  },
+  start_date_changed_after_delivery: {
+    title: "Start date changed after delivery",
+    detail: "The employee's start date changed after a reminder had already been delivered.",
+    nextStep: "Review the new milestone dates and confirm whether another reminder is needed.",
+  },
+  context_changed: {
+    title: "Employee details changed",
+    detail: "The employee or reporting line changed while this reminder was scheduled.",
+    nextStep: "Review the employee's current manager and milestone schedule before sending anything.",
+  },
+  retry_exhausted: {
+    title: "Delivery retry limit reached",
+    detail: "The reminder could not be delivered after the configured retry attempts.",
+    nextStep: "Check the delivery setup and ask HR to queue a catch-up once it is ready.",
+  },
+  missed_delivery: {
+    title: "Scheduled notification date has passed",
+    detail: "The automatic reminder was not sent on its scheduled notification date.",
+    nextStep: "HR should review the missed reminder and queue a catch-up if appropriate.",
+  },
+};
+
+function reviewReasonCopyFor(task: CheckInTask) {
+  return task.needsReviewReason
+    ? reviewReasonCopy[task.needsReviewReason] ?? {
+      title: "Manual review required",
+      detail: "Automatic delivery is paused because the reminder needs an authorised review.",
+      nextStep: "Ask HR to review the employee record and reminder schedule.",
+    }
+    : {
+      title: "Manual review required",
+      detail: "Automatic delivery is paused, but no specific reason was recorded for this reminder.",
+      nextStep: "Ask HR to review the employee record and reminder schedule.",
+    };
+}
+
 /**
  * Current-user-scoped manager task list. It has no HR register fields and the
  * Server Actions/database RPCs independently re-check each caller’s scope.
@@ -66,6 +118,7 @@ export function CheckInTasks({ previewPersonId, readOnly = false }: { previewPer
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pendingReminderId, setPendingReminderId] = useState("");
+  const [reviewReminderId, setReviewReminderId] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -140,6 +193,8 @@ export function CheckInTasks({ previewPersonId, readOnly = false }: { previewPer
     {!loading && data?.tasks.length ? <div className={styles.list}>
       {data.tasks.map((task) => {
         const pending = pendingReminderId === task.reminderId;
+        const reviewOpen = reviewReminderId === task.reminderId;
+        const reviewCopy = reviewReasonCopyFor(task);
         return <article className={styles.task} key={task.reminderId}>
           <div className={styles.person}>
             <strong>{task.employeeName}</strong>
@@ -149,10 +204,17 @@ export function CheckInTasks({ previewPersonId, readOnly = false }: { previewPer
             <strong>{milestoneLabel(task.milestone)}</strong>
             <span>Due {formatDate(task.dueDate)}</span>
           </div>
-          <span className={styles.status} data-status={task.status}>
-            {task.status === "needs_review" ? <CircleAlert size={14} aria-hidden="true" /> : null}
+          {task.status === "needs_review" ? <button
+            className={`${styles.status} ${styles.statusButton}`}
+            data-status={task.status}
+            type="button"
+            aria-expanded={reviewOpen}
+            aria-controls={`review-${task.reminderId}`}
+            onClick={() => setReviewReminderId(reviewOpen ? "" : task.reminderId)}
+          >
+            <CircleAlert size={14} aria-hidden="true" />
             {statusLabel(task.status)}
-          </span>
+          </button> : <span className={styles.status} data-status={task.status}>{statusLabel(task.status)}</span>}
           {!readOnly ? <button
               className={styles.complete}
               type="button"
@@ -163,6 +225,11 @@ export function CheckInTasks({ previewPersonId, readOnly = false }: { previewPer
               <CheckCircle2 size={16} aria-hidden="true" />
               {pending ? "Saving…" : "Mark complete"}
             </button> : null}
+          {reviewOpen ? <div className={styles.reviewPanel} id={`review-${task.reminderId}`} role="region" aria-label={`Why ${task.employeeName}'s check-in needs review`}>
+            <strong>{reviewCopy.title}</strong>
+            <p>{reviewCopy.detail}</p>
+            <small>{reviewCopy.nextStep}</small>
+          </div> : null}
         </article>;
       })}
     </div> : null}

@@ -12,6 +12,7 @@ type CheckInTaskReminderRpcRow = {
   sequence?: unknown;
   dueDate?: unknown;
   status?: unknown;
+  needsReviewReason?: unknown;
 };
 
 type CheckInTaskRpcRow = {
@@ -128,6 +129,7 @@ function tasksForRow(row: CheckInTaskRpcRow): CheckInTask[] {
       dueDate,
       milestone: milestone(reminder.milestone),
       status: taskStatus,
+      needsReviewReason: optionalText(reminder.needsReviewReason) || null,
       canComplete: canCompleteTask(dueDate, taskStatus),
     }];
   });
