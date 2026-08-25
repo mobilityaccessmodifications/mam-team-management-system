@@ -3171,7 +3171,14 @@ export function OrganisationTree({
                     const key = `${profile.name}\u0000${profile.position}\u0000${profile.company}`;
                     const duplicate = (duplicateManagerLabels.get(key) ?? 0) > 1;
                     const position = profile.position ? ` — ${profile.position}` : "";
-                    const identifier = duplicate ? ` · ${profile.id}` : "";
+                    const duplicateIndex = duplicate
+                      ? managerOptions.filter((candidate) => (
+                        candidate.name === profile.name
+                        && candidate.position === profile.position
+                        && candidate.company === profile.company
+                      )).findIndex((candidate) => candidate.id === profile.id) + 1
+                      : null;
+                    const identifier = duplicateIndex ? ` · ${duplicateIndex}` : "";
                     return (
                       <option key={profile.id} value={profile.id}>
                         {profile.name}
