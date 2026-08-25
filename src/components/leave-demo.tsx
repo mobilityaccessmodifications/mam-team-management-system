@@ -65,7 +65,7 @@ import { CheckInRegister } from "@/components/check-in-register";
 import { CheckInWorkspace } from "@/components/check-in-workspace";
 import { CheckInTasks } from "@/components/check-in-tasks";
 import { EmployeeDirectory } from "@/components/employee-directory";
-import { ReadOnlyDirectory } from "@/components/read-only-directory";
+import { ManagerEmployeeDirectory } from "@/components/manager-employee-directory";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   SelfProfileMenu,
@@ -1606,7 +1606,16 @@ export function LeaveDemo({
                 onSelectedPersonId={setEmployeeDirectorySelectedPersonId}
                 refreshKey={employeeDirectoryRefreshKey}
                 selectedPersonId={employeeDirectorySelectedPersonId}
-              /> : showManagerDirectory ? <ReadOnlyDirectory people={organisationPeople} /> : undefined}
+              /> : showManagerDirectory ? <ManagerEmployeeDirectory
+                previewManagerPersonId={previewScopedManagerPersonId}
+                onRecordsChanged={async () => {
+                  // Refresh public organisation data after the manager-safe
+                  // record mutation. The manager directory itself never
+                  // receives HR-private detail rows.
+                  await loadOrganisation();
+                }}
+                refreshKey={employeeDirectoryRefreshKey}
+              /> : undefined}
               renderCheckInRegister={showHrWorkspace
                 ? <CheckInRegister
                     onRecordsChanged={() => void refreshLeaveWorkspace()}

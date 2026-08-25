@@ -69,3 +69,45 @@ export type UpdateEmployeeDirectoryInput = EmployeeDirectoryDraft & {
 export type EmployeeDirectoryMutationResult = {
   record: EmployeeDirectoryRecord;
 };
+
+/**
+ * Work-directory record available to a manager for their own active team
+ * only. It deliberately excludes private contact details, employment
+ * lifecycle data and equipment/asset fields.
+ */
+export type ManagedEmployeeDirectoryRecord = {
+  personId: string;
+  personVersion: number;
+  detailVersion: number;
+  company: EmployeeDirectoryCompany;
+  isActive: true;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  positionTitle: string;
+  teamName: string;
+  managerName: string;
+  workEmail: string;
+};
+
+/** Only these operational work-directory fields may be changed by a manager. */
+export type ManagedEmployeeDirectoryDraft = Pick<
+  ManagedEmployeeDirectoryRecord,
+  "firstName" | "lastName" | "workEmail" | "positionTitle" | "teamName"
+>;
+
+export type UpdateManagedEmployeeDirectoryInput = ManagedEmployeeDirectoryDraft & {
+  personId: string;
+  personVersion: number;
+  detailVersion: number;
+  /**
+   * A System Admin may safely exercise the selected manager's scope through
+   * Change profile. The server ignores this unless the caller is a System
+   * Admin and the selected profile is an active manager.
+   */
+  previewManagerPersonId?: string;
+};
+
+export type ManagedEmployeeDirectoryMutationResult = {
+  record: ManagedEmployeeDirectoryRecord;
+};
