@@ -1235,6 +1235,51 @@ export async function cancelMyApprovedLeaveRequest(input: CancelLeaveInput) {
   }
 }
 
+/**
+ * Super Admin Change Profile cancellation. The target person is resolved by
+ * the database from its active employee/account link; the browser never sends
+ * an Auth user ID and the real System Admin remains the audit actor.
+ */
+export async function cancelSelectedEmployeeApprovedLeaveRequest(
+  personId: string,
+  input: CancelLeaveInput,
+) {
+  try {
+    const checkedPersonId = selectedPersonId(personId);
+    const checked = normaliseCancelInput(input);
+    const supabase = await requireLeaveSession();
+    const { data, error } = await supabase.rpc("cancel_selected_employee_approved_leave_request", {
+      p_person_id: checkedPersonId,
+      p_request_id: checked.requestId,
+    });
+
+    if (error) {
+      console.warn("Selected employee leave cancellation RPC failed.", {
+        code: error.code,
+        message: error.message,
+      });
+      return { ok: false, message: CANCEL_ERROR } satisfies CancelLeaveResult;
+    }
+
+    const result = toCancellationResult(data);
+    if (result.status !== "Cancelled") {
+      console.warn("Selected employee leave cancellation RPC returned an unexpected status.", {
+        status: result.status,
+      });
+      return { ok: false, message: CANCEL_ERROR } satisfies CancelLeaveResult;
+    }
+
+    await deliverLeaveNotification(supabase, "leave-cancelled", result.id, { status: "Cancelled" });
+    revalidatePath("/");
+    return { ok: true, id: result.id, status: "Cancelled" } satisfies CancelLeaveResult;
+  } catch (error) {
+    console.warn("Selected employee leave cancellation action failed.", {
+      message: error instanceof Error ? error.message : "unknown",
+    });
+    return { ok: false, message: CANCEL_ERROR } satisfies CancelLeaveResult;
+  }
+}
+
 export async function prepareLeaveRequestAttachmentUpload(input: PrepareLeaveAttachmentInput) {
   const checked = normalisePrepareAttachmentInput(input);
   const supabase = await requireLeaveSession();

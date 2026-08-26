@@ -43,6 +43,7 @@ import {
 } from "@/app/accounts/actions";
 import {
   cancelMyApprovedLeaveRequest,
+  cancelSelectedEmployeeApprovedLeaveRequest,
   completeLeaveRequestAttachmentUpload,
   decideLeaveRequest,
   discardLeaveRequestAttachmentUpload,
@@ -1496,7 +1497,9 @@ export function LeaveDemo({
     setIsMutating(true);
     setCancellationError("");
     try {
-      const cancelled = await cancelMyApprovedLeaveRequest({ requestId });
+      const cancelled = isPreviewingEmployeeAccess && previewProfile
+        ? await cancelSelectedEmployeeApprovedLeaveRequest(previewProfile.id, { requestId })
+        : await cancelMyApprovedLeaveRequest({ requestId });
       if (!cancelled.ok) {
         setCancellationError(cancelled.message);
         return;
@@ -1506,7 +1509,9 @@ export function LeaveDemo({
       setCancelledRequestId(cancelled.id);
       await refreshLeaveWorkspace();
       setSelectedRequestId(requestId);
-      announce("Your future leave was cancelled. It has been removed from the team calendar; the approval history is kept.");
+      announce(isPreviewingEmployeeAccess
+        ? "The selected employee's future leave was cancelled. It has been removed from the team calendar; the approval history is kept."
+        : "Your future leave was cancelled. It has been removed from the team calendar; the approval history is kept.");
     } catch (error) {
       setCancellationError(error instanceof Error ? error.message : "The leave could not be cancelled. Refresh and try again.");
     } finally {
