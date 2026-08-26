@@ -1128,3 +1128,24 @@
     transition: none;
   }
 }
+
+@media (max-width: 720px) {
+  .primaryButton,
+  .secondaryButton,
+  .dangerButton,
+  .textButton,
+  .iconButton,
+  .pageControls button {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .header p,
+  .securityNote {
+    display: none;
+  }
+
+  .accountRow {
+    gap: 10px;
+  }
+}

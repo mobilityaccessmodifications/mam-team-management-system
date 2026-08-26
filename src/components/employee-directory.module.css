@@ -913,3 +913,29 @@
     width: 100%;
   }
 }
+
+@media (max-width: 640px) {
+  .primaryButton,
+  .secondaryButton,
+  .dangerButton,
+  .textButton,
+  .iconButton,
+  .paginationButton {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .securityNote,
+  .header p {
+    display: none;
+  }
+
+  .directoryList {
+    max-height: 300px;
+  }
+
+  .recordRow {
+    min-height: 64px;
+    touch-action: manipulation;
+  }
+}
