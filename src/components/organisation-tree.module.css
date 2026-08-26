@@ -1462,7 +1462,7 @@
 
 .confirmationLayer {
   position: fixed;
-  z-index: 100;
+  z-index: 130;
   inset: 0;
   display: grid;
   place-items: center;
@@ -1484,7 +1484,10 @@
   z-index: 1;
   display: grid;
   width: min(390px, 100%);
+  max-height: calc(100dvh - 48px);
   gap: 9px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--line);
   border-top: 5px solid var(--mam);
   border-radius: var(--radius-lg, 16px);
