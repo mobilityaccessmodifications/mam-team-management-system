@@ -977,6 +977,11 @@ export function LeaveDemo({
     : undefined;
   const isPreviewingEmployeeAccess = Boolean(previewProfile);
   const activeProfile = previewProfile ?? adminProfile;
+  // Change profile must reflect the selected employee's workspace, not the
+  // System Admin session behind it. Until the profile role arrives, fail
+  // closed; only manager and HR previews may access the team calendar.
+  const canViewActiveWorkspaceCalendar = canViewTeamCalendar
+    && (!isPreviewingEmployeeAccess || activeProfile.accessRole !== "employee");
   // Change profile changes what the System Admin sees, not their real server
   // authority. Returning to their own profile restores the complete admin
   // workspace. Server Actions and RPCs still re-authorise the real session.
@@ -1216,6 +1221,7 @@ export function LeaveDemo({
     setCancelledRequestId(null);
     setSelectedRequestId("");
     setLeaveSection("requests");
+    setActiveView("home");
 
     if (nextProfile) {
       announce(`Viewing ${nextProfile.name}'s profile. System Admin permissions remain active.`);
@@ -1241,7 +1247,7 @@ export function LeaveDemo({
   }
 
   function navigate(view: AppView, section?: LeaveSection) {
-    if (view === "calendar" && !canViewTeamCalendar) {
+    if (view === "calendar" && !canViewActiveWorkspaceCalendar) {
       setActiveView("home");
       scrollPageToTop();
       return;
@@ -1479,7 +1485,7 @@ export function LeaveDemo({
   const navItems = [
     { id: "home" as AppView, label: "Home", icon: LayoutDashboard },
     { id: "leave" as AppView, label: "Leave", icon: ClipboardList, badge: canReviewLeave ? approvalQueue.length : undefined },
-    ...(canViewTeamCalendar ? [{ id: "calendar" as AppView, label: "Calendar", icon: CalendarDays }] : []),
+    ...(canViewActiveWorkspaceCalendar ? [{ id: "calendar" as AppView, label: "Calendar", icon: CalendarDays }] : []),
     { id: "people" as AppView, label: "People", icon: UsersRound },
   ];
 
@@ -1596,7 +1602,7 @@ export function LeaveDemo({
           {organisationAccessError && activeView === "people" ? <div className={styles.loadErrorAction} role="alert"><span>{organisationAccessError}</span><button type="button" onClick={() => void loadOrganisation()}>Retry permissions</button></div> : null}
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} canReview={canReviewLeave} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
           {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
-          {activeView === "calendar" && canViewTeamCalendar ? <CalendarView birthdays={calendarBirthdays} checkIns={calendarCheckIns} requests={calendarRequests} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
+          {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <CalendarView birthdays={calendarBirthdays} checkIns={calendarCheckIns} requests={calendarRequests} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
               key={`${activeProfile.accessRole}:${isPreviewingEmployeeAccess ? activeProfile.id : "signed-in"}`}
