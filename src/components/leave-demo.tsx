@@ -61,11 +61,13 @@ import {
   AccountManagement,
   type AccountDto,
 } from "@/components/account-management";
+import { getOrganisationPersonWorkEmail } from "@/app/people/actions";
 import { CheckInRegister } from "@/components/check-in-register";
 import { CheckInWorkspace } from "@/components/check-in-workspace";
 import { CheckInTasks } from "@/components/check-in-tasks";
 import { EmployeeDirectory } from "@/components/employee-directory";
 import { ManagerEmployeeDirectory } from "@/components/manager-employee-directory";
+import { ReadOnlyDirectory } from "@/components/read-only-directory";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   SelfProfileMenu,
@@ -977,6 +979,24 @@ export function LeaveDemo({
     : undefined;
   const isPreviewingEmployeeAccess = Boolean(previewProfile);
   const activeProfile = previewProfile ?? adminProfile;
+  const employeeTeamDirectory = (() => {
+    if (activeProfile.accessRole !== "employee") return [];
+    const byId = new Map(organisationPeople.map((person) => [person.id, person]));
+    const self = byId.get(activeProfile.id);
+    const rootId = self?.reportsTo ?? activeProfile.id;
+    const included = new Set([rootId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const person of organisationPeople) {
+        if (person.reportsTo && included.has(person.reportsTo) && !included.has(person.id)) {
+          included.add(person.id);
+          changed = true;
+        }
+      }
+    }
+    return organisationPeople.filter((person) => included.has(person.id));
+  })();
   // Change profile must reflect the selected employee's workspace, not the
   // System Admin session behind it. Until the profile role arrives, fail
   // closed; only manager and HR previews may access the team calendar.
@@ -1636,6 +1656,9 @@ export function LeaveDemo({
                   await loadOrganisation();
                 }}
                 refreshKey={employeeDirectoryRefreshKey}
+              /> : activeProfile.accessRole === "employee" ? <ReadOnlyDirectory
+                people={employeeTeamDirectory}
+                onRequestWorkEmail={getOrganisationPersonWorkEmail}
               /> : undefined}
               renderCheckInRegister={showHrWorkspace
                 ? <CheckInRegister

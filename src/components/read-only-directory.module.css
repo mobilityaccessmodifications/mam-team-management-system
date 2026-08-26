@@ -55,7 +55,7 @@
 
 .list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
   margin: 0;
   padding: 10px;
   list-style: none;
@@ -117,6 +117,56 @@
   font-weight: 800;
 }
 
+.manager,
+.workEmail {
+  display: grid;
+  min-width: 150px;
+  gap: 3px;
+  color: #6e7d78;
+  font-size: 11px;
+}
+
+.manager strong {
+  overflow: hidden;
+  color: var(--ink, #1f2e2b);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workEmail {
+  min-width: 178px;
+  margin-left: auto;
+}
+
+.workEmail button,
+.workEmail a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: #53625e;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 0;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workEmail button:hover,
+.workEmail a:hover {
+  color: var(--accent, #f56d25);
+}
+
+.workEmail button:disabled {
+  cursor: default;
+  opacity: .65;
+}
+
 .equipsy {
   color: #1473a7;
 }
@@ -138,5 +188,19 @@
 
   .search {
     width: 100%;
+  }
+
+  .list {
+    grid-template-columns: 1fr;
+  }
+
+  .list li {
+    align-items: start;
+    flex-wrap: wrap;
+  }
+
+  .manager,
+  .workEmail {
+    margin-left: 45px;
   }
 }
