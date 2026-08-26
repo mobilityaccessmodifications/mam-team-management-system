@@ -594,7 +594,9 @@ function notificationEmailList(value: unknown) {
 
 function leaveNotificationCcEmails(event: LeaveNotificationEvent) {
   const addresses = [HR_LEAVE_CC_EMAIL];
-  if (event === "leave-approved") addresses.push(MAM_ACCOUNTS_LEAVE_CC_EMAIL);
+  if (event === "leave-approved" || event === "leave-cancelled") {
+    addresses.push(MAM_ACCOUNTS_LEAVE_CC_EMAIL);
+  }
   return addresses;
 }
 
@@ -717,7 +719,7 @@ async function deliverLeaveNotification(
     employeePersonalEmail: employeeRecipients.personalEmail ?? null,
     // The n8n receiver should map ccEmails to the email provider's CC field.
     // HR is included on every leave notification; MAM Accounts is included
-    // only when a leave request has been approved.
+    // when a leave request is approved or cancelled.
     ccEmails,
     ccEmail: ccEmails.join(","),
   };
