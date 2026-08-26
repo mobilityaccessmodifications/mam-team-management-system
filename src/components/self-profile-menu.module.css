@@ -449,6 +449,7 @@
 
   .panel {
     position: fixed;
+    z-index: 170;
     top: 76px;
     right: 12px;
     left: 12px;
