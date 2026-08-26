@@ -363,6 +363,98 @@
   color: var(--equipsy-dark);
 }
 
+.filterMenu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.filterButton {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs, 0 1px 2px rgb(24 36 33 / 0.05));
+  color: var(--text-secondary, #53625e);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  padding: 0 12px;
+}
+
+.filterButton:hover,
+.filterButton[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--mam) 38%, var(--line));
+  background: var(--surface-warm);
+  color: var(--mam-dark);
+}
+
+.filterBadge {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--mam);
+  color: #fff;
+  font-size: 10px;
+}
+
+.filterCard {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  width: 174px;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface) 98%, transparent);
+  box-shadow: var(--shadow-md, 0 20px 48px rgb(24 36 33 / 0.1));
+  padding: 7px;
+  backdrop-filter: blur(18px);
+}
+
+.filterHeading {
+  color: var(--text-tertiary, #75817d);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  padding: 5px 8px 4px;
+  text-transform: uppercase;
+}
+
+.filterOption {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary, #53625e);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 0 8px;
+  text-align: left;
+}
+
+.filterOption:hover,
+.filterOption[data-active="true"] {
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+.filterOption[data-active="true"] {
+  color: var(--mam-dark);
+  font-weight: 800;
+}
+
 .focusBar {
   --focus: var(--mam);
   display: flex;

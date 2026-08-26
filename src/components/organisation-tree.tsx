@@ -1,11 +1,13 @@
 "use client";
 
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   Columns3,
   Download,
   Focus,
+  ListFilter,
   GripVertical,
   Link2,
   Link2Off,
@@ -19,7 +21,6 @@ import {
   Plus,
   Rows3,
   Search,
-  UnfoldVertical,
   Undo2,
   UserPlus,
   WandSparkles,
@@ -80,6 +81,7 @@ export type OrganisationTreeProps = {
 };
 
 type CompanyFilter = "all" | OrganisationCompany;
+type OrganisationFilter = CompanyFilter | "major" | "minor" | "warehouse";
 type TreeNode = OrganisationPerson & { children: TreeNode[] };
 type EditorState =
   | { mode: "create" }
@@ -152,6 +154,15 @@ type ChartLayout = {
 const companyLabels: Record<OrganisationCompany, string> = {
   mam: "MAM",
   equipsy: "Equipsy",
+};
+
+const organisationFilterLabels: Record<OrganisationFilter, string> = {
+  all: "All companies",
+  mam: "MAM",
+  equipsy: "Equipsy",
+  major: "Major",
+  minor: "Minor",
+  warehouse: "Warehouse",
 };
 
 function escapeExportMarkup(value: string) {
@@ -826,7 +837,8 @@ export function OrganisationTree({
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
-  const [companyFilter, setCompanyFilter] = useState<CompanyFilter>("all");
+  const [companyFilter, setCompanyFilter] = useState<OrganisationFilter>("all");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [focusedRootId, setFocusedRootId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
@@ -1083,14 +1095,24 @@ export function OrganisationTree({
   );
 
   const companyScopeIds = useMemo(() => {
-    const ids = new Set(
-      orderedProfiles
-        .filter(
-          (profile) =>
-            companyFilter === "all" || profile.company === companyFilter,
-        )
-        .map((profile) => profile.id),
-    );
+    const matches = orderedProfiles.filter((profile) => {
+      if (companyFilter === "all") return true;
+      if (companyFilter === "mam" || companyFilter === "equipsy") {
+        return profile.company === companyFilter;
+      }
+      const searchable = normalise(`${profile.name} ${profile.position}`);
+      return searchable.includes(companyFilter);
+    });
+    const ids = new Set(matches.map((profile) => profile.id));
+    // Team filters represent a whole reporting branch. Keep the selected
+    // leader's descendants visible, then add ancestors for chart context.
+    if (companyFilter === "major" || companyFilter === "minor" || companyFilter === "warehouse") {
+      for (const profile of matches) {
+        for (const descendantId of getDescendantIds(profile.id, orderedProfiles)) {
+          ids.add(descendantId);
+        }
+      }
+    }
     // Preserve cross-company reporting context, such as Steven → Equipsy.
     return addAncestorIds(ids, profileById);
   }, [companyFilter, orderedProfiles, profileById]);
@@ -1256,22 +1278,6 @@ export function OrganisationTree({
     return counts;
   }, [managerOptions]);
 
-  const branchIds = useMemo(
-    () =>
-      new Set(
-        orderedProfiles
-          .filter((profile) =>
-            orderedProfiles.some(
-              (candidate) =>
-                visibleIds.has(candidate.id) &&
-                candidate.reportsTo === profile.id,
-            ),
-          )
-          .map((profile) => profile.id),
-      ),
-    [orderedProfiles, visibleIds],
-  );
-
   const visiblePersonCount = orderedProfiles.filter(
     (profile) => isPerson(profile) && visibleIds.has(profile.id),
   ).length;
@@ -1418,10 +1424,7 @@ export function OrganisationTree({
       // usable even in browsers that do not permit changing its opener.
     }
 
-    const companyScope =
-      companyFilter === "all"
-        ? "All companies"
-        : `${companyLabels[companyFilter]} company`;
+    const companyScope = organisationFilterLabels[companyFilter];
     const scopePrefix = [
       activeFocus ? `${activeFocus.name}'s team` : "",
       normalise(query) ? `Search: ${query.trim()}` : "",
@@ -1477,18 +1480,6 @@ export function OrganisationTree({
         : nextLayout === "vertical"
           ? "Reports are now arranged in one vertical stack."
           : "Reports are now arranged side by side.",
-    );
-  };
-
-  const toggleAllBranches = () => {
-    const allCollapsed =
-      branchIds.size > 0 &&
-      [...branchIds].every((id) => effectiveCollapsedIds.has(id));
-    setCollapsedIds(allCollapsed ? new Set() : new Set(branchIds));
-    setInteractionMessage(
-      allCollapsed
-        ? "All reporting lines expanded."
-        : "All reporting lines collapsed.",
     );
   };
 
@@ -2032,7 +2023,7 @@ export function OrganisationTree({
   const openCreate = (
     reportsTo: string | null = null,
     company: OrganisationCompany =
-      companyFilter === "all" ? "mam" : companyFilter,
+      companyFilter === "mam" || companyFilter === "equipsy" ? companyFilter : "mam",
   ) => {
     if (!canUseLegacyTreeEditor) return;
     setDraft({ ...emptyDraft, company, reportsTo });
@@ -2382,26 +2373,52 @@ export function OrganisationTree({
             ) : null}
           </div>
 
-          <div aria-label="Filter by company" className={styles.filters}>
-            {(["all", "mam", "equipsy"] as const).map((filter) => (
-              <button
-                aria-pressed={companyFilter === filter}
-                data-active={companyFilter === filter}
-                data-company={filter}
-                key={filter}
-                onClick={() => {
-                  setCompanyFilter(filter);
-                  setFocusedRootId(null);
-                  setQuery("");
-                  setSelectedId(null);
-                  workContactRequestRef.current += 1;
-                  setWorkContact(null);
-                }}
-                type="button"
-              >
-                {filter === "all" ? "All" : companyLabels[filter]}
-              </button>
-            ))}
+          <div className={styles.filterMenu}>
+            <button
+              aria-expanded={filterOpen}
+              aria-haspopup="menu"
+              className={styles.filterButton}
+              onClick={() => setFilterOpen((current) => !current)}
+              type="button"
+            >
+              <ListFilter aria-hidden="true" size={15} />
+              Filter
+              {companyFilter !== "all" ? <span className={styles.filterBadge}>1</span> : null}
+            </button>
+            {filterOpen ? (
+              <div aria-label="Organisation filters" className={styles.filterCard} role="menu">
+                <span className={styles.filterHeading}>Show teams</span>
+                {([
+                  ["all", "All"],
+                  ["mam", "MAM"],
+                  ["equipsy", "Equipsy"],
+                  ["major", "Major"],
+                  ["minor", "Minor"],
+                  ["warehouse", "Warehouse"],
+                ] as const).map(([filter, label]) => (
+                  <button
+                    aria-checked={companyFilter === filter}
+                    className={styles.filterOption}
+                    data-active={companyFilter === filter}
+                    onClick={() => {
+                      setCompanyFilter(filter);
+                      setFilterOpen(false);
+                      setFocusedRootId(null);
+                      setQuery("");
+                      setSelectedId(null);
+                      workContactRequestRef.current += 1;
+                      setWorkContact(null);
+                    }}
+                    key={filter}
+                    role="menuitemradio"
+                    type="button"
+                  >
+                    <span>{label}</span>
+                    {companyFilter === filter ? <Check aria-hidden="true" size={14} /> : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -2494,13 +2511,6 @@ export function OrganisationTree({
               >
                 <LocateFixed aria-hidden="true" size={15} />
                 <span>Fit</span>
-              </button>
-              <button
-                aria-label="Expand or collapse all reporting lines"
-                onClick={toggleAllBranches}
-                type="button"
-              >
-                <UnfoldVertical aria-hidden="true" size={15} />
               </button>
               <button aria-label="Reset chart view" onClick={resetView} type="button">
                 <Focus aria-hidden="true" size={15} />
