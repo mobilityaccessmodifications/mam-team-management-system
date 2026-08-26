@@ -68,9 +68,15 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const section = firstValue(params.section);
   const requestId = firstValue(params.request);
   // Preserve previously shared About-me demo links by opening the merged People profile view.
-  const resolvedView = view === "about"
+  const requestedView = view === "about"
     ? "people"
     : view === "leave" || view === "calendar" || view === "people" ? view : "home";
+  // The team calendar is a manager/System Admin workspace. Resolve unauthorised
+  // deep links on the server so an employee never lands on its client view.
+  const canViewTeamCalendar = isAdmin || canViewCheckIns;
+  const resolvedView = requestedView === "calendar" && !canViewTeamCalendar
+    ? "home"
+    : requestedView;
 
   return <LeaveDemo
     isAdmin={isAdmin}
@@ -79,6 +85,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     canViewEmployeeDirectory={canViewEmployeeDirectory}
     canChangeEmployeeView={canChangeEmployeeView}
     canViewOwnTasks={canViewOwnTasks}
+    canViewTeamCalendar={canViewTeamCalendar}
     checkInResources={checkInResources}
     initialNavigation={{
     view: resolvedView,
