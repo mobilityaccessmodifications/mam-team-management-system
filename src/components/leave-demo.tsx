@@ -23,7 +23,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { FormEvent, type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, type CSSProperties, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import {
@@ -576,6 +576,7 @@ export function LeaveDemo({
   const leaveRequestInitialFocusRef = useRef<HTMLSelectElement>(null);
   const closeProfilePicker = useCallback(() => setProfilePickerOpen(false), []);
   const closeLeaveRequestForm = useCallback(() => setShowRequestForm(false), []);
+  const closeMobileRequestDetail = useCallback(() => setMobileRequestDetailOpen(false), []);
 
   useDialogFocus(
     profilePickerOpen,
@@ -1088,8 +1089,12 @@ export function LeaveDemo({
   const filteredRequests = visibleRequests.filter((request) => {
     return statusFilter === "All" || request.status === statusFilter;
   });
-  const selectedRegisterRequest = filteredRequests.find((request) => request.id === selectedRequestId) ?? filteredRequests[0];
-  const selectedApprovalRequest = approvalQueue.find((request) => request.id === selectedRequestId) ?? approvalQueue[0];
+  const selectedRegisterRequest = selectedRequestId
+    ? filteredRequests.find((request) => request.id === selectedRequestId)
+    : filteredRequests[0];
+  const selectedApprovalRequest = selectedRequestId
+    ? approvalQueue.find((request) => request.id === selectedRequestId)
+    : approvalQueue[0];
   const selectedRequest = leaveSection === "approvals" ? selectedApprovalRequest : selectedRegisterRequest;
   const attachmentsByRequestId = new Map<string, LeaveAttachment[]>();
   leaveAttachments.forEach((attachment) => {
@@ -1286,6 +1291,7 @@ export function LeaveDemo({
 
   function changeLeaveStatusFilter(filter: "All" | RequestStatus) {
     setStatusFilter(filter);
+    setSelectedRequestId("");
     setMobileRequestDetailOpen(false);
     setCancellationRequestId(null);
     setCancellationFocusRequestId(null);
@@ -1300,7 +1306,9 @@ export function LeaveDemo({
 
   function selectRequest(id: string, section: LeaveSection = "requests") {
     setSelectedRequestId(id);
-    setMobileRequestDetailOpen(true);
+    setMobileRequestDetailOpen(
+      typeof window !== "undefined" && window.matchMedia("(max-width: 680px)").matches,
+    );
     setManagerNote("");
     setCancellationRequestId(null);
     setCancellationFocusRequestId(null);
@@ -1626,7 +1634,7 @@ export function LeaveDemo({
           {selectedEmployeeProfileError && isPreviewingEmployeeAccess ? <div className={styles.loadErrorAction} role="alert"><span>{selectedEmployeeProfileError}</span><button type="button" onClick={() => setSelectedEmployeeProfileReloadKey((current) => current + 1)}>Retry profile</button></div> : null}
           {organisationAccessError && activeView === "people" ? <div className={styles.loadErrorAction} role="alert"><span>{organisationAccessError}</span><button type="button" onClick={() => void loadOrganisation()}>Retry permissions</button></div> : null}
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} canReview={canReviewLeave} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
-          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={() => setMobileRequestDetailOpen(false)} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
+          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
           {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <CalendarView birthdays={calendarBirthdays} checkIns={calendarCheckIns} requests={calendarRequests} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
@@ -1857,27 +1865,48 @@ function LeaveView({ profile, section, requests, allRequests, selected, filter, 
 function RequestsView({ profile, requests, allRequests, selected, filter, canReview, attachmentsByRequestId, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onCloseMobileDetail, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; attachmentsByRequestId: Map<string, LeaveAttachment[]>; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   const filters: ("All" | RequestStatus)[] = ["All", "Pending", "Approved", "Declined", "Cancelled"];
   const isEmployee = !canReview;
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const mobileDetailDialogRef = useRef<HTMLElement>(null);
+  const mobileDetailCloseButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 680px)");
+    const updateViewport = () => setIsMobileViewport(mediaQuery.matches);
+    updateViewport();
+    mediaQuery.addEventListener("change", updateViewport);
+    return () => mediaQuery.removeEventListener("change", updateViewport);
+  }, []);
+
+  const mobileDetailDialogOpen = Boolean(mobileDetailOpen && isMobileViewport && selected);
+  useDialogFocus(
+    mobileDetailDialogOpen,
+    mobileDetailDialogRef,
+    mobileDetailCloseButtonRef,
+    onCloseMobileDetail,
+  );
+
   return (
     <section className={styles.recordsWorkspace}>
       <div className={styles.viewToolbar}>
-        <div className={styles.filterTabs}>{filters.map((item) => <button aria-pressed={filter === item} className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => request.status === item).length}</span></button>)}</div>
+        <div className={styles.filterTabs} role="group" aria-label="Leave request status">{filters.map((item) => <button aria-pressed={filter === item} className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => request.status === item).length}</span></button>)}</div>
       </div>
-      <div className={`${styles.recordsGrid} ${isEmployee ? styles.employeeRecordsGrid : ""} ${!selected ? styles.recordsGridNoDetail : ""}`}>
+      <div className={`${styles.recordsGrid} ${isEmployee ? styles.employeeRecordsGrid : ""} ${!selected ? styles.recordsGridNoDetail : ""} ${mobileDetailDialogOpen ? styles.recordsGridMobileDetailOpen : ""}`}>
         <div className={styles.recordsTable} role="table" aria-label="Leave requests">
           <div className={`${styles.tableHead} ${isEmployee ? styles.employeeTableRow : ""}`} role="row">{!isEmployee ? <span>Employee</span> : null}<span>Leave</span><span>Dates</span><span>Duration</span><span>Status</span><span /></div>
           {requests.map((request) => <button className={`${styles.tableRow} ${isEmployee ? styles.employeeTableRow : ""} ${selected?.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} role="row" key={request.id}>{!isEmployee ? <span><i>{request.initials}</i><b>{request.personId === profile.id ? "You" : request.employee}<small>{request.team}</small></b></span> : null}<span><b>{request.leaveType}</b></span><span>{request.dateLabel}</span><span>{formatDuration(request)}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} /></button>)}
           {!requests.length ? <div className={styles.emptyState}><Search size={23} /><strong>{allRequests.length ? "No requests match this status" : "No leave requests yet"}</strong><span>{allRequests.length ? "Choose another status." : isEmployee ? "Use “New leave request” when you need time away." : "Employee leave requests appear here once they are submitted."}</span></div> : null}
         </div>
         {selected ? <>
-          {mobileDetailOpen ? <button className={styles.mobileDetailBackdrop} type="button" aria-label="Close leave details" onClick={onCloseMobileDetail} /> : null}
-          <RequestDetail profile={profile} request={selected} attachments={attachmentsByRequestId.get(selected.id) ?? []} canReview={canReview} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} mobileOpen={mobileDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancellationSucceeded={cancelledRequestId === selected.id} busy={busy} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} />
+          {mobileDetailDialogOpen ? <button className={styles.mobileDetailBackdrop} type="button" aria-label="Close leave details" onClick={onCloseMobileDetail} /> : null}
+          <RequestDetail profile={profile} request={selected} attachments={attachmentsByRequestId.get(selected.id) ?? []} canReview={canReview} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} mobileOpen={mobileDetailDialogOpen} mobileDialogRef={mobileDetailDialogRef} mobileCloseButtonRef={mobileDetailCloseButtonRef} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancellationSucceeded={cancelledRequestId === selected.id} busy={busy} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} />
         </> : null}
       </div>
     </section>
   );
 }
 
-function RequestDetail({ profile, request, attachments, canReview, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, mobileOpen, cancellationRequestId, cancellationError, cancellationSucceeded, busy, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; request: LeaveRequest; attachments: LeaveAttachment[]; canReview: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; mobileOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancellationSucceeded: boolean; busy: boolean; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function RequestDetail({ profile, request, attachments, canReview, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, mobileOpen, mobileDialogRef, mobileCloseButtonRef, cancellationRequestId, cancellationError, cancellationSucceeded, busy, onCloseMobileDetail, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; request: LeaveRequest; attachments: LeaveAttachment[]; canReview: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; mobileOpen: boolean; mobileDialogRef: RefObject<HTMLElement | null>; mobileCloseButtonRef: RefObject<HTMLButtonElement | null>; cancellationRequestId: string | null; cancellationError: string; cancellationSucceeded: boolean; busy: boolean; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+  const detailTitleId = useId();
   const showEmployee = canReview && request.personId !== profile.id;
   const isApprovedLeave = request.status === "Approved";
   const isConfirmingCancellation = cancellationRequestId === request.id;
@@ -1888,15 +1917,24 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
     && isApprovedLeave
     && request.canCancel === true;
   const canAddAttachments = !readOnly && request.canAttach === true;
-  return <aside className={`${styles.detailPanel} ${mobileOpen ? styles.mobileDetailPanelOpen : styles.mobileDetailPanelClosed}`} role="dialog" aria-label={`${request.leaveType} leave details`}>
+  return <aside
+    aria-label={mobileOpen ? undefined : `${request.leaveType} leave details`}
+    aria-labelledby={mobileOpen ? detailTitleId : undefined}
+    aria-modal={mobileOpen || undefined}
+    className={`${styles.detailPanel} ${mobileOpen ? styles.mobileDetailPanelOpen : styles.mobileDetailPanelClosed}`}
+    ref={mobileDialogRef}
+    role={mobileOpen ? "dialog" : undefined}
+    tabIndex={mobileOpen ? -1 : undefined}
+  >
+    {mobileOpen ? <button className={styles.mobileDetailClose} type="button" aria-label="Close leave details" onClick={onCloseMobileDetail} ref={mobileCloseButtonRef}><X aria-hidden="true" size={18} /></button> : null}
     {showEmployee ? <>
       <header>
         <span className={styles.avatarOrange}>{request.initials}</span>
-        <span><h2>{request.employee}</h2><p>{request.team}</p></span>
+        <span><h2 id={detailTitleId}>{request.employee}</h2><p>{request.team}</p></span>
       </header>
       <StatusPill status={request.status} />
     </> : null}
-    {!showEmployee ? <div className={styles.mobileDetailHeading}><span><strong>{request.leaveType}</strong><small>{request.dateLabel}</small></span><StatusPill status={request.status} /></div> : null}
+    {!showEmployee ? <div className={styles.mobileDetailHeading}><span><h2 id={detailTitleId}>{request.leaveType}</h2><small>{request.dateLabel}</small></span><StatusPill status={request.status} /></div> : null}
     <dl>
       {showEmployee ? <div><dt>Leave type</dt><dd>{request.leaveType}</dd></div> : null}
       <div><dt>When</dt><dd>{request.dateLabel}</dd></div>
@@ -2036,6 +2074,7 @@ function CalendarView({
 
   return (
     <section className={`${styles.panel} ${styles.calendarPanel}`}>
+      <p className={styles.calendarScrollHint}><ChevronRight aria-hidden="true" size={14} /> Swipe sideways to see the full week.</p>
       <div className={styles.calendarToolbar}>
         <div className={styles.calendarMonthControls}>
           <button type="button" onClick={onPreviousMonth} aria-label="Previous month" title="Previous month"><ChevronLeft size={17} /></button>

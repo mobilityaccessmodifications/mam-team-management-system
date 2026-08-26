@@ -1246,6 +1246,10 @@
   pointer-events: none;
 }
 
+.inspectorBackdrop {
+  display: none;
+}
+
 .inspector {
   position: absolute;
   top: clamp(240px, 24dvh, 300px);
@@ -1889,6 +1893,40 @@
     max-height: min(76dvh, 620px);
     border-width: 1px 0 0;
     border-radius: 20px 20px 0 0;
+  }
+
+  .inspectorLayer {
+    z-index: 110;
+    display: grid;
+    align-items: end;
+    pointer-events: auto;
+  }
+
+  .inspectorBackdrop {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: rgb(16 30 27 / 56%);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .inspector {
+    z-index: 1;
+    overscroll-behavior: contain;
+  }
+
+  .inspectorHeader button {
+    width: 44px;
+    height: 44px;
+    touch-action: manipulation;
+  }
+
+  .inspectorActions {
+    padding-bottom: calc(13px + env(safe-area-inset-bottom));
   }
 
   .drawerLayer {

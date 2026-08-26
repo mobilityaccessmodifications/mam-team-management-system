@@ -284,6 +284,12 @@
     max-height: 300px;
   }
 
+  .employeeRows {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .employeeRow {
     min-height: 64px;
     padding: 10px 12px;

@@ -841,6 +841,7 @@ export function OrganisationTree({
   const [filterOpen, setFilterOpen] = useState(false);
   const [focusedRootId, setFocusedRootId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [openNodeActionsId, setOpenNodeActionsId] = useState<string | null>(
     null,
@@ -871,10 +872,13 @@ export function OrganisationTree({
   } | null>(null);
   const titleId = useId();
   const descriptionId = useId();
+  const inspectorTitleId = useId();
   const searchResultsId = useId();
   const markerPrefix = useId().replaceAll(":", "");
   const rootRef = useRef<HTMLElement>(null);
   const editorDialogRef = useRef<HTMLElement>(null);
+  const inspectorDialogRef = useRef<HTMLElement>(null);
+  const inspectorCloseButtonRef = useRef<HTMLButtonElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const chartWorldRef = useRef<HTMLDivElement>(null);
   const initialViewportRef = useRef(false);
@@ -913,6 +917,11 @@ export function OrganisationTree({
   const closeEditor = useCallback(() => {
     if (!saving) setEditor(null);
   }, [saving]);
+  const closeInspector = useCallback(() => {
+    workContactRequestRef.current += 1;
+    setWorkContact(null);
+    setSelectedId(null);
+  }, []);
   useDialogFocus(Boolean(editor), editorDialogRef, null, closeEditor);
   const profileLayoutKey = useMemo(
     () =>
@@ -930,6 +939,14 @@ export function OrganisationTree({
   }, [arrangeMode]);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 900px)");
+    const updateViewport = () => setIsMobileViewport(mediaQuery.matches);
+    updateViewport();
+    mediaQuery.addEventListener("change", updateViewport);
+    return () => mediaQuery.removeEventListener("change", updateViewport);
+  }, []);
+
+  useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (linkGuideActive) {
@@ -945,11 +962,7 @@ export function OrganisationTree({
       } else if (pendingDisconnect) setPendingDisconnect(null);
       else if (openNodeActionsId) setOpenNodeActionsId(null);
       else if (editor && !saving) setEditor(null);
-      else if (selectedId) {
-        workContactRequestRef.current += 1;
-        setWorkContact(null);
-        setSelectedId(null);
-      }
+      else if (selectedId) closeInspector();
     };
     const handleFullscreen = () => {
       const active = document.fullscreenElement === rootRef.current;
@@ -995,7 +1008,7 @@ export function OrganisationTree({
       window.removeEventListener("keydown", handleKeydown);
       document.removeEventListener("fullscreenchange", handleFullscreen);
     };
-  }, [canArrange, editor, linkGuideActive, openNodeActionsId, pendingDisconnect, saving, selectedId]);
+  }, [canArrange, closeInspector, editor, linkGuideActive, openNodeActionsId, pendingDisconnect, saving, selectedId]);
 
   useEffect(() => {
     return () => {
@@ -1191,6 +1204,13 @@ export function OrganisationTree({
   );
 
   const selectedProfile = selectedId ? profileById.get(selectedId) : undefined;
+  const mobileInspectorOpen = Boolean(selectedProfile && isMobileViewport);
+  useDialogFocus(
+    mobileInspectorOpen,
+    inspectorDialogRef,
+    inspectorCloseButtonRef,
+    closeInspector,
+  );
   const selectedManager = selectedProfile?.reportsTo
     ? profileById.get(selectedProfile.reportsTo)
     : undefined;
@@ -2026,6 +2046,7 @@ export function OrganisationTree({
       companyFilter === "mam" || companyFilter === "equipsy" ? companyFilter : "mam",
   ) => {
     if (!canUseLegacyTreeEditor) return;
+    if (isMobileViewport) closeInspector();
     setDraft({ ...emptyDraft, company, reportsTo });
     setError("");
     setEditor({ mode: "create" });
@@ -2033,6 +2054,7 @@ export function OrganisationTree({
 
   const openUpdate = (profile: OrganisationPerson) => {
     if ((!canUseLegacyTreeEditor && !canUseRelationshipEditor) || !isPerson(profile)) return;
+    if (isMobileViewport) closeInspector();
     setDraft({
       name: profile.name,
       position: profile.position,
@@ -2898,19 +2920,25 @@ export function OrganisationTree({
 
       {selectedProfile ? (
         <div className={styles.inspectorLayer}>
-          <aside aria-label={`${selectedProfile.name} details`} className={styles.inspector}>
+          {mobileInspectorOpen ? <button aria-label="Close person details" className={styles.inspectorBackdrop} onClick={closeInspector} type="button" /> : null}
+          <aside
+            aria-label={mobileInspectorOpen ? undefined : `${selectedProfile.name} details`}
+            aria-labelledby={mobileInspectorOpen ? inspectorTitleId : undefined}
+            aria-modal={mobileInspectorOpen || undefined}
+            className={styles.inspector}
+            ref={inspectorDialogRef}
+            role={mobileInspectorOpen ? "dialog" : undefined}
+            tabIndex={mobileInspectorOpen ? -1 : undefined}
+          >
             <header className={styles.inspectorHeader} data-company={selectedProfile.company}>
               <div>
                 <span>{selectedProfile.position || companyLabels[selectedProfile.company]}</span>
-                <strong>{selectedProfile.name}</strong>
+                <strong id={inspectorTitleId}>{selectedProfile.name}</strong>
               </div>
               <button
                 aria-label="Close person details"
-                onClick={() => {
-                  workContactRequestRef.current += 1;
-                  setWorkContact(null);
-                  setSelectedId(null);
-                }}
+                onClick={closeInspector}
+                ref={inspectorCloseButtonRef}
                 type="button"
               >
                 <X aria-hidden="true" size={18} />

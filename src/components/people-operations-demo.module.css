@@ -286,17 +286,23 @@
   }
 
   .modalBackdrop {
-    padding-bottom: env(safe-area-inset-bottom);
+    align-items: end;
+    padding: max(24px, env(safe-area-inset-top)) 0 0;
   }
 
   .modal {
-    max-height: 94dvh;
+    width: 100%;
+    max-height: min(88dvh, 720px);
     border-radius: 20px 20px 0 0;
   }
 
   .modal > header,
   .modal form {
     padding-inline: 16px;
+  }
+
+  .modal form {
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
   }
 
   .modal > header button,
