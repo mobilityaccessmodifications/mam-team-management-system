@@ -1991,6 +1991,10 @@
   border-bottom: 1px solid var(--line);
 }
 
+.approvalHeader > span:nth-child(2) {
+  min-width: 0;
+}
+
 .approvalHeader small,
 .approvalHeader h2,
 .approvalHeader p {
@@ -2008,12 +2012,14 @@
 
 .approvalHeader h2 {
   font-size: 18px;
+  overflow-wrap: anywhere;
 }
 
 .approvalHeader p {
   margin-top: 3px;
   color: var(--muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .factGrid {
@@ -3965,7 +3971,7 @@
   }
 
   .detailPanel > header,
-  .detailPanel > .statusPill {
+  .detailPanel > .status {
     display: none;
   }
 
@@ -6017,7 +6023,7 @@
   }
 }
 
-@media (max-width: 360px) {
+@media (max-width: 430px) {
   .filterTabs button span {
     display: none;
   }
@@ -6121,6 +6127,7 @@
     min-height: min(320px, 68dvh);
     overflow-y: auto;
     overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     padding: 20px 16px calc(26px + env(safe-area-inset-bottom));
     border: 1px solid var(--surface-border-strong);
     border-bottom: 0;
@@ -6164,19 +6171,22 @@
 
   .detailPanel.mobileDetailPanelOpen > header {
     display: grid;
+    padding-right: 54px;
     margin-bottom: 14px;
   }
 
-  .detailPanel.mobileDetailPanelOpen > .statusPill {
+  .detailPanel.mobileDetailPanelOpen > .status {
     display: inline-flex;
-    margin-bottom: 4px;
+    width: fit-content;
+    margin: 0 0 14px;
   }
 
   .mobileDetailHeading {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
+    gap: 8px;
+    padding-right: 54px;
     margin-bottom: 14px;
   }
 
@@ -6203,8 +6213,16 @@
     font-size: 12px;
   }
 
-  .mobileDetailHeading > .statusPill {
-    flex: 0 0 auto;
+  .mobileDetailHeading > .status {
+    justify-self: start;
+  }
+
+  /* These wrappers animate with a transform on larger screens. A transformed
+     ancestor would contain a fixed sheet, so keep mobile sheets viewport-bound. */
+  .leaveDesk,
+  .recordsWorkspace {
+    animation: none;
+    transform: none;
   }
 }
 

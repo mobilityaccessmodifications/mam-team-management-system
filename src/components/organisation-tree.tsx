@@ -877,6 +877,8 @@ export function OrganisationTree({
   const markerPrefix = useId().replaceAll(":", "");
   const rootRef = useRef<HTMLElement>(null);
   const editorDialogRef = useRef<HTMLElement>(null);
+  const disconnectDialogRef = useRef<HTMLDivElement>(null);
+  const disconnectKeepButtonRef = useRef<HTMLButtonElement>(null);
   const inspectorDialogRef = useRef<HTMLElement>(null);
   const inspectorCloseButtonRef = useRef<HTMLButtonElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -917,12 +919,21 @@ export function OrganisationTree({
   const closeEditor = useCallback(() => {
     if (!saving) setEditor(null);
   }, [saving]);
+  const closeDisconnect = useCallback(() => {
+    if (!saving) setPendingDisconnect(null);
+  }, [saving]);
   const closeInspector = useCallback(() => {
     workContactRequestRef.current += 1;
     setWorkContact(null);
     setSelectedId(null);
   }, []);
   useDialogFocus(Boolean(editor), editorDialogRef, null, closeEditor);
+  useDialogFocus(
+    Boolean(pendingDisconnect),
+    disconnectDialogRef,
+    disconnectKeepButtonRef,
+    closeDisconnect,
+  );
   const profileLayoutKey = useMemo(
     () =>
       profiles
@@ -959,7 +970,7 @@ export function OrganisationTree({
         dropTargetRef.current = null;
         setDropTarget(null);
         setInteractionMessage("Add line cancelled.");
-      } else if (pendingDisconnect) setPendingDisconnect(null);
+      } else if (pendingDisconnect) closeDisconnect();
       else if (openNodeActionsId) setOpenNodeActionsId(null);
       else if (editor && !saving) setEditor(null);
       else if (selectedId) closeInspector();
@@ -1008,7 +1019,7 @@ export function OrganisationTree({
       window.removeEventListener("keydown", handleKeydown);
       document.removeEventListener("fullscreenchange", handleFullscreen);
     };
-  }, [canArrange, closeInspector, editor, linkGuideActive, openNodeActionsId, pendingDisconnect, saving, selectedId]);
+  }, [canArrange, closeDisconnect, closeInspector, editor, linkGuideActive, openNodeActionsId, pendingDisconnect, saving, selectedId]);
 
   useEffect(() => {
     return () => {
@@ -3072,12 +3083,16 @@ export function OrganisationTree({
           aria-labelledby={`${titleId}-disconnect-title`}
           aria-modal="true"
           className={styles.confirmationLayer}
+          ref={disconnectDialogRef}
           role="dialog"
+          tabIndex={-1}
         >
           <button
             aria-label="Cancel disconnect confirmation"
             className={styles.confirmationBackdrop}
-            onClick={() => setPendingDisconnect(null)}
+            disabled={saving}
+            onClick={closeDisconnect}
+            tabIndex={-1}
             type="button"
           />
           <div className={styles.confirmationCard}>
@@ -3089,7 +3104,9 @@ export function OrganisationTree({
             <div className={styles.confirmationActions}>
               <button
                 className={styles.secondaryAction}
-                onClick={() => setPendingDisconnect(null)}
+                disabled={saving}
+                onClick={closeDisconnect}
+                ref={disconnectKeepButtonRef}
                 type="button"
               >
                 Keep link

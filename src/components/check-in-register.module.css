@@ -284,6 +284,15 @@
     max-height: 300px;
   }
 
+  .pagination {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+  }
+
+  .pagination button {
+    width: 44px;
+    height: 44px;
+  }
+
   .employeeRows {
     overflow-y: auto;
     overscroll-behavior: contain;
