@@ -170,7 +170,8 @@
 
 .toolbar {
   position: relative;
-  z-index: 1;
+  /* Keep the filter popover above the canvas' docked controls. */
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -405,7 +406,7 @@
 
 .filterCard {
   position: absolute;
-  z-index: 30;
+  z-index: 40;
   top: calc(100% + 8px);
   right: 0;
   display: grid;
