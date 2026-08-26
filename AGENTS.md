@@ -27,6 +27,59 @@ This is the internal team-management portal for Mobility Access Modifications (M
 - Full verification: `npm run check`
 - Discover Supabase CLI commands: `npx supabase@latest --help`
 
+## Account targets
+
+- GitHub owner/repository: `mobilityaccessmodifications/mam-team-management-system`.
+  Always run GitHub commands with the MAM-scoped profile:
+  `env GH_CONFIG_DIR='/Users/nixon/.github-profiles/mam' gh <command>`.
+  Before any write, `gh auth status` must report the active account
+  `mobilityaccessmodifications`.
+- Vercel project: `ai-7033s-projects/mam-team-management-system`. Always use
+  `npx vercel --global-config '/Users/nixon/.vercel-profiles/mam' <command>`.
+- Supabase organization/project: `fwlmbmospuwoaosffvmw` /
+  `xtwlrjqbusadghavchqm`. Use the native Supabase CLI profile `mam`, for
+  example `npx --yes supabase@latest projects list --profile mam
+  --output-format json`, and verify this project ID before reads, migrations,
+  Auth changes, or other operations. Never run an unprofiled Supabase command.
+
+### GitHub and Vercel write preflight (mandatory)
+
+GitHub login and the Git author are separate identities. Complete every check
+below before creating a branch, committing, pushing, opening or merging a PR,
+or releasing to production. If any check fails, stop and correct it before a
+write.
+
+1. Confirm the remote is exactly
+   `https://github.com/mobilityaccessmodifications/mam-team-management-system.git`:
+   `git remote get-url origin`.
+2. Confirm the MAM-scoped GitHub account:
+   `env GH_CONFIG_DIR='/Users/nixon/.github-profiles/mam' gh auth status`.
+   Never rely on the default/global `gh` profile.
+3. Set and verify this repository's local commit identity (never a global
+   identity):
+   `git config --local user.name mobilityaccessmodifications`
+   `git config --local user.email
+   '310802599+mobilityaccessmodifications@users.noreply.github.com'`.
+   Then verify both values with `git config --local --get`.
+4. Inspect the author before pushing:
+   `git show -s --format='%an <%ae>' HEAD`.
+   It must be the MAM identity above. Never push commits authored as
+   `forgerealestate`, Forge, Insider Leads, a personal account, or another
+   project identity. A correct `gh auth status` does not fix a wrong commit
+   author.
+5. Verify the branch and PR target are `main`; inspect PR metadata with
+   `env GH_CONFIG_DIR='/Users/nixon/.github-profiles/mam' gh pr view <number>
+   --json baseRefName,headRefName,author,mergeCommit`.
+6. Treat any Vercel author/access or project mismatch as a hard stop. Fix the
+   commit identity or target project instead of bypassing the integration.
+7. Before a production release, verify the MAM Vercel project with
+   `npx vercel --global-config '/Users/nixon/.vercel-profiles/mam' project inspect
+   mam-team-management-system`.
+
+Never use Forge, Insider Leads, or another project's GitHub/Vercel/Supabase
+profile for this repository. The checked-in `.mcp.json` scopes Codex to this
+project in read-only mode; keep it read-only for inspection.
+
 ## Architecture
 
 - Next.js 16 App Router with TypeScript.
