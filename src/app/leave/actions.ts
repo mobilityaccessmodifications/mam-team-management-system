@@ -229,6 +229,8 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^(?:(?:0[6-9]|1[0-7]):(?:00|15|30|45)|18:00)$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const HR_LEAVE_CC_EMAIL = "hr@mobilityaccess.com.au";
+const MAM_ACCOUNTS_LEAVE_CC_EMAIL = "accounts@mobilityaccess.com.au";
 const ATTACHMENT_STORAGE_PATH_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:pdf|heic|heif|jpg|png|webp)$/i;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const LEAVE_TYPES = new Set([
@@ -590,6 +592,12 @@ function notificationEmailList(value: unknown) {
   return [...new Set(values.map(normaliseNotificationEmail).filter((email): email is string => Boolean(email)))];
 }
 
+function leaveNotificationCcEmails(event: LeaveNotificationEvent) {
+  const addresses = [HR_LEAVE_CC_EMAIL];
+  if (event === "leave-approved") addresses.push(MAM_ACCOUNTS_LEAVE_CC_EMAIL);
+  return addresses;
+}
+
 /**
  * Resolve the employee's HR-recorded work and personal emails on the server.
  * Both addresses are included only in the signed n8n delivery payload; they
@@ -669,6 +677,7 @@ async function deliverLeaveNotification(
   const managerEmail = await resolveLeaveManagerEmail(requestId);
   const employeeRecipients = await resolveLeaveEmployeeRecipients(requestId);
   const employeeEmail = employeeRecipients.emails.join(",");
+  const ccEmails = leaveNotificationCcEmails(event);
 
   const payload = {
     version: 1,
@@ -683,6 +692,7 @@ async function deliverLeaveNotification(
       managerEmail: managerEmail ?? fallback.managerEmail ?? "",
       employeeEmail: employeeEmail ?? "",
       employeeEmails: employeeRecipients.emails,
+      ccEmails,
     })).digest("hex").slice(0, 24)}`,
     requestId,
     employeeName: request?.employee ?? "Employee",
@@ -705,6 +715,11 @@ async function deliverLeaveNotification(
     employeeEmails: employeeRecipients.emails,
     employeeWorkEmail: employeeRecipients.workEmail ?? null,
     employeePersonalEmail: employeeRecipients.personalEmail ?? null,
+    // The n8n receiver should map ccEmails to the email provider's CC field.
+    // HR is included on every leave notification; MAM Accounts is included
+    // only when a leave request has been approved.
+    ccEmails,
+    ccEmail: ccEmails.join(","),
   };
 
   const controller = new AbortController();
