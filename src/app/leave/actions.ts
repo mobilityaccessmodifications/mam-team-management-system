@@ -544,6 +544,18 @@ type LeaveNotificationManagerRow = {
   manager_email: string | null;
 };
 
+type LeaveNotificationEmployeeRow = {
+  employee_work_email?: unknown;
+  employee_personal_email?: unknown;
+  employee_emails?: unknown;
+};
+
+type LeaveNotificationEmployeeRecipients = {
+  workEmail?: string;
+  personalEmail?: string;
+  emails: string[];
+};
+
 /**
  * Resolve the employee's nearest active reporting manager on the server. The
  * notification recipient is the HR-recorded work email, never the portal
@@ -567,25 +579,54 @@ async function resolveLeaveManagerEmail(requestId: string) {
   }
 }
 
+function normaliseNotificationEmail(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  const email = value.trim().toLowerCase();
+  return EMAIL_PATTERN.test(email) ? email : undefined;
+}
+
+function notificationEmailList(value: unknown) {
+  const values = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[;,]/) : [];
+  return [...new Set(values.map(normaliseNotificationEmail).filter((email): email is string => Boolean(email)))];
+}
+
 /**
- * Resolve the employee's HR-recorded work email on the server. The address is
- * included only in the signed n8n delivery payload; it is never returned to
- * the browser or accepted from the leave form.
+ * Resolve the employee's HR-recorded work and personal emails on the server.
+ * Both addresses are included only in the signed n8n delivery payload; they
+ * are never returned to the browser or accepted from the leave form. The
+ * legacy resolver remains a compatibility fallback until the new production
+ * migration is applied.
  */
-async function resolveLeaveEmployeeEmail(requestId: string) {
+async function resolveLeaveEmployeeRecipients(requestId: string): Promise<LeaveNotificationEmployeeRecipients> {
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin.rpc("resolve_leave_notification_employee", {
+    const { data, error } = await admin.rpc("resolve_leave_notification_employee_recipients", {
       p_request_id: requestId,
     });
-    if (error || !Array.isArray(data) || data.length !== 1) return undefined;
+    if (!error && Array.isArray(data) && data.length === 1) {
+      const row = data[0] as LeaveNotificationEmployeeRow;
+      const workEmail = normaliseNotificationEmail(row.employee_work_email);
+      const personalEmail = normaliseNotificationEmail(row.employee_personal_email);
+      const emails = notificationEmailList(row.employee_emails);
+      return {
+        workEmail,
+        personalEmail,
+        emails: emails.length ? emails : [...new Set([workEmail, personalEmail].filter((email): email is string => Boolean(email)))],
+      };
+    }
 
-    const email = (data[0] as { employee_email?: unknown })?.employee_email;
-    return typeof email === "string" && EMAIL_PATTERN.test(email.trim().toLowerCase())
-      ? email.trim().toLowerCase()
+    // Older production databases expose only the work-email resolver. Keep
+    // notifications functional during a rolling migration rather than
+    // failing the leave action after Supabase has already saved the request.
+    const legacy = await admin.rpc("resolve_leave_notification_employee", {
+      p_request_id: requestId,
+    });
+    const workEmail = !legacy.error && Array.isArray(legacy.data) && legacy.data.length === 1
+      ? normaliseNotificationEmail((legacy.data[0] as { employee_email?: unknown })?.employee_email)
       : undefined;
+    return { workEmail, emails: workEmail ? [workEmail] : [] };
   } catch {
-    return undefined;
+    return { emails: [] };
   }
 }
 
@@ -626,7 +667,8 @@ async function deliverLeaveNotification(
   }
 
   const managerEmail = await resolveLeaveManagerEmail(requestId);
-  const employeeEmail = await resolveLeaveEmployeeEmail(requestId);
+  const employeeRecipients = await resolveLeaveEmployeeRecipients(requestId);
+  const employeeEmail = employeeRecipients.emails.join(",");
 
   const payload = {
     version: 1,
@@ -640,6 +682,7 @@ async function deliverLeaveNotification(
       managerNote: request?.managerNote ?? fallback.managerNote ?? "",
       managerEmail: managerEmail ?? fallback.managerEmail ?? "",
       employeeEmail: employeeEmail ?? "",
+      employeeEmails: employeeRecipients.emails,
     })).digest("hex").slice(0, 24)}`,
     requestId,
     employeeName: request?.employee ?? "Employee",
@@ -655,7 +698,13 @@ async function deliverLeaveNotification(
     employeeNote: request?.employeeNote ?? fallback.employeeNote ?? null,
     managerNote: request?.managerNote ?? fallback.managerNote ?? null,
     managerEmail: managerEmail ?? fallback.managerEmail ?? null,
-    employeeEmail: employeeEmail ?? null,
+    // Keep employeeEmail as a comma-separated value for the existing n8n
+    // Outlook node, while also exposing typed fields for a receiver that
+    // prefers an explicit list or separate work/personal mappings.
+    employeeEmail: employeeEmail || null,
+    employeeEmails: employeeRecipients.emails,
+    employeeWorkEmail: employeeRecipients.workEmail ?? null,
+    employeePersonalEmail: employeeRecipients.personalEmail ?? null,
   };
 
   const controller = new AbortController();
@@ -669,12 +718,18 @@ async function deliverLeaveNotification(
       signal: controller.signal,
     });
     const text = await response.text();
-    const result = text.length <= 4096 ? JSON.parse(text) as { ok?: boolean; sent?: boolean; alreadySent?: boolean; actualRecipient?: string } : {};
-    const expectedRecipient = event === "leave-submitted" || event === "leave-cancelled"
-      ? managerEmail ?? ""
-      : employeeEmail ?? "";
-    if (!response.ok || result.ok !== true || (result.sent !== true && result.alreadySent !== true) || result.actualRecipient !== expectedRecipient) {
-      console.warn("Leave notification delivery was not confirmed.", { event, requestId, status: response.status, expectedRecipient });
+    const result = text.length <= 4096
+      ? JSON.parse(text) as { ok?: boolean; sent?: boolean; alreadySent?: boolean; actualRecipient?: unknown; actualRecipients?: unknown }
+      : {};
+    const expectedRecipients = event === "leave-submitted" || event === "leave-cancelled"
+      ? managerEmail ? [managerEmail] : []
+      : employeeRecipients.emails;
+    const actualRecipients = notificationEmailList(result.actualRecipients ?? result.actualRecipient);
+    const recipientsMatch = actualRecipients.length > 0
+      ? actualRecipients.length === expectedRecipients.length && actualRecipients.every((email) => expectedRecipients.includes(email))
+      : expectedRecipients.length === 0;
+    if (!response.ok || result.ok !== true || (result.sent !== true && result.alreadySent !== true) || !recipientsMatch) {
+      console.warn("Leave notification delivery was not confirmed.", { event, requestId, status: response.status, expectedRecipients });
     }
   } catch {
     console.warn("Leave notification delivery failed after the leave mutation.", { event, requestId });
