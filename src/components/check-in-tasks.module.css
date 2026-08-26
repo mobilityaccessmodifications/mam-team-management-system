@@ -324,3 +324,41 @@
     transform: none;
   }
 }
+
+@media (max-width: 680px) {
+  .workspace {
+    gap: 11px;
+  }
+
+  .header h2 {
+    font-size: 30px;
+  }
+
+  .refresh,
+  .complete,
+  .statusButton {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .list {
+    gap: 6px;
+    padding: 5px;
+  }
+
+  .task {
+    min-height: 0;
+    gap: 10px 12px;
+    padding: 13px 12px;
+  }
+
+  /* Role/company is useful on desktop but duplicates the surrounding People
+     context on a phone; the employee and due milestone remain visible. */
+  .person span {
+    display: none;
+  }
+
+  .reviewPanel {
+    padding: 10px 11px;
+  }
+}

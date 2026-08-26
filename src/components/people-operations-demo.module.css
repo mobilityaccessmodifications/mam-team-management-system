@@ -194,3 +194,131 @@
     transform: none;
   }
 }
+
+/* Mobile layout: keep the People sections scannable without changing which
+   sections, records or actions the current profile can access. */
+@media (max-width: 680px) {
+  .workspace {
+    gap: 12px;
+  }
+
+  .pageHeader {
+    min-height: 0;
+    gap: 12px;
+  }
+
+  .pageHeader > div > span {
+    display: none;
+  }
+
+  .pageHeader h1 {
+    font-size: 34px;
+  }
+
+  .pageHeader p {
+    font-size: 12px;
+  }
+
+  .sectionSwitch,
+  .taskSwitch {
+    width: 100%;
+  }
+
+  .workflowList,
+  .personList {
+    max-height: 270px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .workflowList > button,
+  .personList button {
+    min-height: 64px;
+    touch-action: manipulation;
+  }
+
+  .workflowDetail,
+  .checkInDetail {
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .detailHeader h2,
+  .checkInDetail h2 {
+    font-size: 19px;
+  }
+
+  .readiness > div,
+  .checkInMeta > div {
+    padding: 11px 12px;
+  }
+
+  .taskBoard > header > small {
+    display: none;
+  }
+
+  .taskRow {
+    min-height: 64px;
+    padding: 11px 12px;
+  }
+
+  .taskActions label,
+  .taskActions button,
+  .assetRow button,
+  .accessRow button,
+  .reminderActions button,
+  .detailToggle {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .assetRow,
+  .accessRow,
+  .reminderTimeline article {
+    padding: 12px;
+  }
+
+  .checkInMeta a,
+  .primaryAction,
+  .previewButton {
+    min-height: 46px;
+    touch-action: manipulation;
+  }
+
+  .modalBackdrop {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .modal {
+    max-height: 94dvh;
+    border-radius: 20px 20px 0 0;
+  }
+
+  .modal > header,
+  .modal form {
+    padding-inline: 16px;
+  }
+
+  .modal > header button,
+  .cancelButton,
+  .modal footer button {
+    min-width: 44px;
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+}
+
+@media (max-width: 480px) {
+  .pageHeader h1 {
+    font-size: 31px;
+  }
+
+  .taskSwitch {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .taskSwitch button {
+    min-height: 44px;
+  }
+}

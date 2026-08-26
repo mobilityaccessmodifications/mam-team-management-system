@@ -246,3 +246,73 @@
     transform: none;
   }
 }
+
+@media (max-width: 620px) {
+  .workspace {
+    gap: 12px;
+  }
+
+  .header h2 {
+    font-size: 31px;
+  }
+
+  .header p {
+    display: none;
+  }
+
+  .primaryAction,
+  .secondaryAction,
+  .toolbar button,
+  .listToolbar select,
+  .pagination button,
+  .timeline button {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .resources small {
+    display: none;
+  }
+
+  .resources a {
+    min-height: 44px;
+    padding-inline: 12px;
+    touch-action: manipulation;
+  }
+
+  .employeeList {
+    max-height: 300px;
+  }
+
+  .employeeRow {
+    min-height: 64px;
+    padding: 10px 12px;
+    touch-action: manipulation;
+  }
+
+  .detail {
+    padding: 12px;
+  }
+
+  .personHeader h3 {
+    font-size: 20px;
+  }
+
+  .summaryGrid {
+    gap: 8px;
+  }
+
+  .info {
+    padding: 10px;
+  }
+
+  .privateDetails summary {
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .reminderActions button {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+}
