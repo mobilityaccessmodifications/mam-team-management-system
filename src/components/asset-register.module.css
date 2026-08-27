@@ -23,26 +23,31 @@
 
 .header,
 .tools,
-.header > div,
-.securityNote,
-.searchField,
+  .header > div,
+  .securityNote,
+  .notice,
+  .searchField,
 .loadingState,
 .errorState,
 .emptyState,
 .assetRow,
-.assetIdentity,
-.assetCode,
-.assetSerial,
-.rowActions,
+  .assetIdentity,
+  .assetCode,
+  .assetSerial,
+  .assetCustodian,
+  .rowActions,
 .modal header,
 .labelModal header,
 .labelPreview,
 .labelPreview > div,
 .modal footer,
-.labelModal footer,
-.labelModal footer > div,
-.formHelp,
-.inlineError {
+  .labelModal footer,
+  .labelModal footer > div,
+  .formHelp,
+  .currentCustodian,
+  .currentCustodian > div,
+  .modalFooter,
+  .inlineError {
   display: flex;
   align-items: center;
 }
@@ -63,8 +68,10 @@
 .modal header > div > span,
 .labelModal header > div > span,
 .labelPreview > div > span,
-.assetCode > span,
-.assetSerial > span {
+  .assetCode > span,
+  .assetSerial > span,
+  .assetCustodian > span,
+  .currentCustodian span {
   color: var(--asset-muted);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10px;
@@ -139,6 +146,7 @@
 
 .primaryAction:focus-visible,
 .secondaryAction:focus-visible,
+.dangerAction:focus-visible,
 .rowActions button:focus-visible,
 .modal header > button:focus-visible,
 .labelModal header > button:focus-visible,
@@ -151,6 +159,7 @@
 
 .primaryAction:disabled,
 .secondaryAction:disabled,
+.dangerAction:disabled,
 .rowActions button:disabled,
 .modal header > button:disabled,
 .labelModal header > button:disabled {
@@ -170,6 +179,31 @@
 
 .securityNote svg { flex: 0 0 auto; color: #39725b; }
 .securityNote span { font-size: 12px; line-height: 1.45; }
+
+.notice {
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid #c9ded4;
+  border-radius: var(--radius-md);
+  background: #eff8f3;
+  color: #28745b;
+  padding: 9px 12px;
+}
+
+.notice span { font-size: 12px; font-weight: 700; line-height: 1.4; }
+
+.notice button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  margin-left: auto;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
 
 .tools {
   justify-content: space-between;
@@ -224,7 +258,7 @@
 
 .assetRow {
   display: grid;
-  grid-template-columns: 42px minmax(155px, 1.2fr) minmax(135px, .9fr) minmax(140px, 1fr) auto auto;
+  grid-template-columns: 42px minmax(150px, 1.1fr) minmax(128px, .86fr) minmax(130px, .95fr) minmax(160px, 1fr) auto auto;
   gap: 14px;
   min-height: 82px;
   border-bottom: 1px solid var(--surface-border);
@@ -248,7 +282,8 @@
 
 .assetIdentity,
 .assetCode,
-.assetSerial {
+.assetSerial,
+.assetCustodian {
   min-width: 0;
   align-items: flex-start;
   flex-direction: column;
@@ -256,7 +291,8 @@
 
 .assetIdentity strong,
 .assetCode strong,
-.assetSerial strong {
+.assetSerial strong,
+.assetCustodian strong {
   display: block;
   max-width: 100%;
   overflow: hidden;
@@ -278,6 +314,8 @@
 
 .assetCode strong { color: var(--asset-accent-deep); font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; letter-spacing: .025em; }
 .assetSerial strong { color: var(--text-secondary); font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; }
+.assetCustodian strong { color: var(--text-secondary); font-size: 12px; }
+.assetCustodian[data-missing="true"] strong { color: #a85c27; }
 
 .status {
   min-width: 72px;
@@ -295,8 +333,9 @@
 .status[data-status="assigned"] { border-color: #cbddec; background: #f0f7fd; color: #287093; }
 .status[data-status="repair"] { border-color: #ead6ae; background: #fff8ea; color: #956211; }
 .status[data-status="retired"] { border-color: #d8dfde; background: #f2f4f3; color: #61706e; }
+.status[data-status="requires_assignment"] { border-color: #ecd1a9; background: #fff8eb; color: #96611e; }
 
-.rowActions { gap: 6px; justify-content: flex-end; }
+.rowActions { flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 
 .rowActions button {
   min-height: 34px;
@@ -304,6 +343,20 @@
   background: var(--surface-raised);
   color: var(--text-secondary);
   padding: 6px 9px;
+}
+
+.rowActions .removeAction,
+.dangerAction {
+  border-color: #e5b3ab;
+  background: #fff7f6;
+  color: #a7463f;
+}
+
+.rowActions .removeAction:hover:not(:disabled),
+.dangerAction:hover:not(:disabled) {
+  border-color: #ca746a;
+  background: #fdecea;
+  color: #963d35;
 }
 
 .loadingState,
@@ -390,6 +443,19 @@
 
 .modal form { display: grid; gap: 15px; padding: 21px 22px 22px; }
 
+.modalBody {
+  display: grid;
+  gap: 14px;
+  padding: 21px 22px 4px;
+}
+
+.modalBody > p {
+  margin: 0;
+  color: var(--asset-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .modal label {
   display: grid;
   gap: 7px;
@@ -426,12 +492,46 @@
 
 .formHelp svg { flex: 0 0 auto; margin-top: 1px; color: var(--asset-accent-deep); }
 
+.currentCustodian {
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid #d8e1df;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-muted) 55%, var(--surface-raised));
+  color: var(--asset-accent-deep);
+  padding: 10px 11px;
+}
+
+.currentCustodian svg { flex: 0 0 auto; margin-top: 1px; }
+.currentCustodian > div { align-items: flex-start; flex-direction: column; gap: 3px; }
+.currentCustodian strong { color: var(--asset-ink); font-size: 12px; line-height: 1.35; }
+
 .modal footer,
 .labelModal footer {
   justify-content: space-between;
   gap: 9px;
   padding: 0;
 }
+
+.modalFooter { justify-content: flex-end !important; padding: 17px 22px 22px !important; }
+
+.dangerAction {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 8px 12px;
+}
+
+.dangerAction:disabled { cursor: not-allowed; opacity: .56; }
 
 .labelModal > .labelPreview,
 .labelModal > .labelPrivacy,
@@ -482,8 +582,9 @@
 @keyframes asset-register-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 1000px) {
-  .assetRow { grid-template-columns: 42px minmax(150px, 1.3fr) minmax(135px, .85fr) auto; }
-  .assetSerial { display: none; }
+  .assetRow { grid-template-columns: 42px minmax(150px, 1.25fr) minmax(135px, .9fr) auto; }
+  .assetSerial,
+  .assetCustodian { display: none; }
   .rowActions { grid-column: 2 / -1; justify-content: flex-start; }
 }
 
@@ -508,6 +609,8 @@
   .labelModal footer > div > button,
   .labelModal footer > .secondaryAction,
   .modal footer > button { flex: 1; }
+
+  .modalFooter { padding: 17px 22px 22px !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

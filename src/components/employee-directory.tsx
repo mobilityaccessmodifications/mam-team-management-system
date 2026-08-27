@@ -31,6 +31,7 @@ import {
   listEmployeeDirectoryRecords,
   updateEmployeeDirectoryRecord,
 } from "@/app/people/actions";
+import { EmployeeDeviceAssignments } from "@/components/employee-device-assignments";
 import styles from "@/components/employee-directory.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
@@ -804,7 +805,7 @@ function EmployeeEditor({
       </fieldset>
 
       <fieldset>
-        <legend>Equipment and assets</legend>
+        <legend>Equipment and assets <small>Legacy notes</small></legend>
         <div className={styles.formGrid}>
           <Field label="Laptop supplied">
             <select value={editor.draft.laptopSupplied} onChange={(event) => onChange("laptopSupplied", event.target.value)}>
@@ -833,6 +834,12 @@ function EmployeeEditor({
           </Field>
         </div>
       </fieldset>
+
+      {!isCreate && currentRecord ? <EmployeeDeviceAssignments
+        key={currentRecord.personId}
+        personId={currentRecord.personId}
+        personName={currentRecord.fullName}
+      /> : null}
 
       <footer className={styles.formFooter}>
         <div>

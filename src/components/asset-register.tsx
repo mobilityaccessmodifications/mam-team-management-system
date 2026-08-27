@@ -10,6 +10,9 @@ import {
   Printer,
   RefreshCw,
   Search,
+  Pencil,
+  Trash2,
+  UsersRound,
   X,
 } from "lucide-react";
 import {
@@ -21,13 +24,20 @@ import {
   useState,
 } from "react";
 
-import { createItAsset, listItAssets } from "@/app/assets/actions";
+import {
+  createItAsset,
+  listItAssetAssignees,
+  listItAssets,
+  reassignItAsset,
+  retireItAsset,
+} from "@/app/assets/actions";
 import styles from "@/components/asset-register.module.css";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   IT_ASSET_TYPES,
   type CreateItAssetInput,
   type ItAsset,
+  type ItAssetAssignee,
   type ItAssetType,
 } from "@/lib/it-asset-types";
 
@@ -54,6 +64,19 @@ function assetTypeLabel(type: ItAssetType) {
 function assetDescription(asset: ItAsset) {
   const model = [asset.manufacturer, asset.model].filter(Boolean).join(" · ");
   return model || assetTypeLabel(asset.assetType);
+}
+
+function custodianDescription(asset: ItAsset) {
+  if (!asset.assignedTo) return "Assignment required";
+  return asset.assignedTo.positionTitle
+    ? `${asset.assignedTo.fullName} · ${asset.assignedTo.positionTitle}`
+    : asset.assignedTo.fullName;
+}
+
+function assigneeDescription(assignee: ItAssetAssignee) {
+  return [assignee.fullName, assignee.positionTitle, assignee.teamName]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function safeFileName(assetCode: string) {
@@ -218,7 +241,7 @@ function AssetLabelModal({
         <button type="button" onClick={onClose} aria-label="Close barcode label"><X size={19} /></button>
       </header>
       <div className={styles.labelPreview}>
-        <div><span>MAM IT asset</span><strong>{asset.assetCode}</strong><small>{assetTypeLabel(asset.assetType)} · {asset.status}</small></div>
+        <div><span>MAM IT asset</span><strong>{asset.assetCode}</strong><small>{assetTypeLabel(asset.assetType)} · {asset.assignedTo?.fullName ?? "Assignment required"}</small></div>
         <BarcodePreview value={asset.barcodeValue} />
       </div>
       <p className={styles.labelPrivacy}>This label encodes only the MAM asset number. It does not contain staff, account or recovery details.</p>
@@ -241,34 +264,44 @@ function AssetLabelModal({
 }
 
 function AddDeviceModal({
+  assignees,
   onClose,
   onCreated,
 }: {
+  assignees: ItAssetAssignee[];
   onClose: () => void;
   onCreated: (asset: ItAsset) => void;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
+  const assigneeRef = useRef<HTMLSelectElement>(null);
   const typeRef = useRef<HTMLSelectElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const closeWhenReady = useCallback(() => {
     if (!saving) onClose();
   }, [onClose, saving]);
-  useDialogFocus(true, dialogRef, typeRef, closeWhenReady);
+  useDialogFocus(true, dialogRef, assigneeRef, closeWhenReady);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
     const data = new FormData(event.currentTarget);
     const assetType = String(data.get("assetType") ?? "");
+    const assignedPersonId = String(data.get("assignedPersonId") ?? "");
     if (!IT_ASSET_TYPES.includes(assetType as ItAssetType)) {
       setError("Choose the type of device you are adding.");
       typeRef.current?.focus();
       return;
     }
+    if (!assignees.some((assignee) => assignee.personId === assignedPersonId)) {
+      setError("Choose the employee responsible for this device.");
+      assigneeRef.current?.focus();
+      return;
+    }
 
     const input: CreateItAssetInput = {
       assetType: assetType as ItAssetType,
+      assignedPersonId,
       manufacturer: String(data.get("manufacturer") ?? ""),
       model: String(data.get("model") ?? ""),
       serialNumber: String(data.get("serialNumber") ?? ""),
@@ -287,10 +320,17 @@ function AddDeviceModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="add-device-title" tabIndex={-1}>
       <header>
-        <div><span>IT asset register</span><h2 id="add-device-title">Add device</h2><p>Create the device record first; MAM generates its permanent barcode number.</p></div>
+        <div><span>IT asset register</span><h2 id="add-device-title">Add device</h2><p>Record the accountable employee first; MAM then generates the permanent barcode number.</p></div>
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close add device"><X size={19} /></button>
       </header>
       <form onSubmit={submit}>
+        <label>
+          <span>Assigned to <b aria-hidden="true">*</b></span>
+          <select name="assignedPersonId" ref={assigneeRef} required defaultValue="" disabled={!assignees.length}>
+            <option value="" disabled>{assignees.length ? "Select employee" : "No active employees available"}</option>
+            {assignees.map((assignee) => <option key={assignee.personId} value={assignee.personId}>{assigneeDescription(assignee)}</option>)}
+          </select>
+        </label>
         <label>
           <span>Device type <b aria-hidden="true">*</b></span>
           <select name="assetType" ref={typeRef} required defaultValue="">
@@ -307,7 +347,7 @@ function AddDeviceModal({
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         <footer>
           <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
-          <button className={styles.primaryAction} type="submit" disabled={saving}>
+          <button className={styles.primaryAction} type="submit" disabled={saving || !assignees.length}>
             {saving ? <LoaderCircle className={styles.spinner} size={16} /> : <PackagePlus size={16} />}
             {saving ? "Creating barcode…" : "Create device"}
           </button>
@@ -317,20 +357,160 @@ function AddDeviceModal({
   </div>;
 }
 
+function ChangeDeviceOwnerModal({
+  asset,
+  assignees,
+  onClose,
+  onSaved,
+}: {
+  asset: ItAsset;
+  assignees: ItAssetAssignee[];
+  onClose: () => void;
+  onSaved: (asset: ItAsset) => void;
+}) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const assigneeRef = useRef<HTMLSelectElement>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const closeWhenReady = useCallback(() => {
+    if (!saving) onClose();
+  }, [onClose, saving]);
+  useDialogFocus(true, dialogRef, assigneeRef, closeWhenReady);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    const assignedPersonId = String(new FormData(event.currentTarget).get("assignedPersonId") ?? "");
+    if (!assignees.some((assignee) => assignee.personId === assignedPersonId)) {
+      setError("Choose the employee responsible for this device.");
+      assigneeRef.current?.focus();
+      return;
+    }
+    if (assignedPersonId === asset.assignedTo?.personId) {
+      onClose();
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      onSaved(await reassignItAsset({
+        assetId: asset.id,
+        assignedPersonId,
+        version: asset.version,
+      }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The device owner could not be changed. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
+    <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="change-device-owner-title" tabIndex={-1}>
+      <header>
+        <div><span>Device custody</span><h2 id="change-device-owner-title">Change device owner</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close change device owner"><X size={19} /></button>
+      </header>
+      <form onSubmit={submit}>
+        <div className={styles.currentCustodian}><UsersRound size={16} /><div><span>Currently assigned to</span><strong>{asset.assignedTo ? custodianDescription(asset) : "Assignment required"}</strong></div></div>
+        <label>
+          <span>Assigned to <b aria-hidden="true">*</b></span>
+          <select name="assignedPersonId" ref={assigneeRef} required defaultValue={asset.assignedTo?.personId ?? ""} disabled={!assignees.length}>
+            <option value="" disabled>Select employee</option>
+            {assignees.map((assignee) => <option key={assignee.personId} value={assignee.personId}>{assigneeDescription(assignee)}</option>)}
+          </select>
+        </label>
+        <p className={styles.formHelp}><Pencil size={15} /> Changing the employee transfers accountability for this device. The barcode number and audit history stay unchanged.</p>
+        {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
+        <footer>
+          <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
+          <button className={styles.primaryAction} type="submit" disabled={saving || !assignees.length}>
+            {saving ? <LoaderCircle className={styles.spinner} size={16} /> : <Pencil size={16} />}
+            {saving ? "Updating…" : "Save owner"}
+          </button>
+        </footer>
+      </form>
+    </section>
+  </div>;
+}
+
+function RemoveDeviceModal({
+  asset,
+  onClose,
+  onRemoved,
+}: {
+  asset: ItAsset;
+  onClose: () => void;
+  onRemoved: (asset: ItAsset) => void;
+}) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const closeWhenReady = useCallback(() => {
+    if (!saving) onClose();
+  }, [onClose, saving]);
+  useDialogFocus(true, dialogRef, cancelRef, closeWhenReady);
+
+  async function removeDevice() {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      onRemoved(await retireItAsset({ assetId: asset.id, version: asset.version }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The device could not be removed. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
+    <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="remove-device-title" tabIndex={-1}>
+      <header>
+        <div><span>Remove device</span><h2 id="remove-device-title">Remove this device?</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close remove device"><X size={19} /></button>
+      </header>
+      <div className={styles.modalBody}>
+        <p>This removes the device from the active register. Its barcode and assignment audit remain safely retained for record keeping.</p>
+        <div className={styles.currentCustodian}><UsersRound size={16} /><div><span>Last assigned to</span><strong>{asset.assignedTo ? custodianDescription(asset) : "Assignment required"}</strong></div></div>
+        {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
+      </div>
+      <footer className={styles.modalFooter}>
+        <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving} ref={cancelRef}>Keep device</button>
+        <button className={styles.dangerAction} type="button" onClick={() => void removeDevice()} disabled={saving}>
+          {saving ? <LoaderCircle className={styles.spinner} size={16} /> : <Trash2 size={16} />}
+          {saving ? "Removing…" : "Yes, remove device"}
+        </button>
+      </footer>
+    </section>
+  </div>;
+}
+
 export function AssetRegister() {
   const [assets, setAssets] = useState<ItAsset[]>([]);
+  const [assignees, setAssignees] = useState<ItAssetAssignee[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [newAsset, setNewAsset] = useState<ItAsset | null>(null);
+  const [assignmentTarget, setAssignmentTarget] = useState<ItAsset | null>(null);
+  const [removalTarget, setRemovalTarget] = useState<ItAsset | null>(null);
   const [query, setQuery] = useState("");
   const [barcodeAction, setBarcodeAction] = useState<{ id: string; action: BarcodeAction } | null>(null);
   const [rowError, setRowError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const loadAssets = useCallback(async () => {
     setLoading(true);
     try {
-      setAssets(await listItAssets());
+      const [nextAssets, nextAssignees] = await Promise.all([
+        listItAssets(),
+        listItAssetAssignees(),
+      ]);
+      setAssets(nextAssets);
+      setAssignees(nextAssignees);
       setLoadError("");
     } catch (reason) {
       setAssets([]);
@@ -355,6 +535,9 @@ export function AssetRegister() {
       asset.model,
       asset.serialNumber,
       asset.status,
+      asset.assignedTo?.fullName,
+      asset.assignedTo?.positionTitle,
+      asset.assignedTo?.teamName,
     ].join(" ").toLocaleLowerCase().includes(needle));
   }, [assets, query]);
 
@@ -362,6 +545,19 @@ export function AssetRegister() {
     setAssets((current) => [asset, ...current]);
     setShowAddDevice(false);
     setNewAsset(asset);
+    setNotice(`Device assigned to ${asset.assignedTo?.fullName ?? "the selected employee"}.`);
+  }
+
+  function assetOwnerChanged(asset: ItAsset) {
+    setAssets((current) => current.map((candidate) => candidate.id === asset.id ? asset : candidate));
+    setAssignmentTarget(null);
+    setNotice(`${asset.assetCode} is now assigned to ${asset.assignedTo?.fullName ?? "the selected employee"}.`);
+  }
+
+  function assetRemoved(asset: ItAsset) {
+    setAssets((current) => current.filter((candidate) => candidate.id !== asset.id));
+    setRemovalTarget(null);
+    setNotice(`${asset.assetCode} was removed from the active register.`);
   }
 
   async function downloadFromRow(asset: ItAsset) {
@@ -400,6 +596,8 @@ export function AssetRegister() {
 
     <div className={styles.securityNote}><Barcode size={16} /><span>Labels contain only the unique MAM asset number. Credentials, recovery details and employee data are never encoded.</span></div>
 
+    {notice ? <div className={styles.notice} role="status"><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={15} /></button></div> : null}
+
     <div className={styles.tools}>
       <label className={styles.searchField}>
         <Search size={17} aria-hidden="true" />
@@ -412,7 +610,7 @@ export function AssetRegister() {
     {rowError ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{rowError}</p> : null}
     {loading ? <div className={styles.loadingState}><LoaderCircle className={styles.spinner} size={21} /><span>Loading IT assets…</span></div> : null}
     {!loading && loadError ? <div className={styles.errorState} role="alert"><AlertCircle size={20} aria-hidden="true" /><div><strong>IT assets could not be loaded</strong><span>{loadError}</span></div><button className={styles.secondaryAction} type="button" onClick={() => void loadAssets()} disabled={loading}><RefreshCw size={16} aria-hidden="true" /> Retry</button></div> : null}
-    {!loading && !loadError && !visibleAssets.length ? <div className={styles.emptyState}><Laptop size={28} /><strong>{assets.length ? "No matching devices" : "No devices recorded yet"}</strong><span>{assets.length ? "Try another search." : "Add the first MAM device to generate its barcode label."}</span>{!assets.length ? <button className={styles.secondaryAction} type="button" onClick={() => setShowAddDevice(true)}><PackagePlus size={16} /> Add device</button> : null}</div> : null}
+    {!loading && !loadError && !visibleAssets.length ? <div className={styles.emptyState}><Laptop size={28} /><strong>{assets.length ? "No matching devices" : "No devices recorded yet"}</strong><span>{assets.length ? "Try another search." : "Add the first MAM device to assign it and generate its barcode label."}</span>{!assets.length ? <button className={styles.secondaryAction} type="button" onClick={() => setShowAddDevice(true)}><PackagePlus size={16} /> Add device</button> : null}</div> : null}
     {!loading && !loadError && visibleAssets.length ? <div className={styles.assetList} role="list" aria-label="IT assets">
       {visibleAssets.map((asset) => {
         const activeAction = barcodeAction?.id === asset.id ? barcodeAction.action : null;
@@ -421,20 +619,31 @@ export function AssetRegister() {
           <div className={styles.assetIdentity}><strong>{assetTypeLabel(asset.assetType)}</strong><span>{assetDescription(asset)}</span></div>
           <div className={styles.assetCode}><span>Asset number</span><strong>{asset.assetCode}</strong></div>
           <div className={styles.assetSerial}><span>Serial number</span><strong>{asset.serialNumber || "Not recorded"}</strong></div>
-          <span className={styles.status} data-status={asset.status}>{asset.status}</span>
+          <div className={styles.assetCustodian} data-missing={!asset.assignedTo}>
+            <span>Assigned to</span><strong>{custodianDescription(asset)}</strong>
+          </div>
+          <span className={styles.status} data-status={asset.assignedTo ? asset.status : "requires_assignment"}>{asset.assignedTo ? asset.status : "assign owner"}</span>
           <div className={styles.rowActions}>
+            <button type="button" onClick={() => setAssignmentTarget(asset)} disabled={activeAction !== null} aria-label={`Change ${asset.assetCode} owner`}>
+              <Pencil size={15} /><span>{asset.assignedTo ? "Owner" : "Assign"}</span>
+            </button>
             <button type="button" onClick={() => void downloadFromRow(asset)} disabled={activeAction !== null} aria-label={`Download ${asset.assetCode} barcode`}>
               {activeAction === "download" ? <LoaderCircle className={styles.spinner} size={15} /> : <Download size={15} />}<span>Download</span>
             </button>
             <button type="button" onClick={() => void printFromRow(asset)} disabled={activeAction !== null} aria-label={`Open ${asset.assetCode} barcode label`}>
               <Printer size={15} /><span>Label</span>
             </button>
+            <button type="button" className={styles.removeAction} onClick={() => setRemovalTarget(asset)} disabled={activeAction !== null} aria-label={`Remove ${asset.assetCode} device`}>
+              <Trash2 size={15} /><span>Remove</span>
+            </button>
           </div>
         </article>;
       })}
     </div> : null}
 
-    {showAddDevice ? <AddDeviceModal onClose={() => setShowAddDevice(false)} onCreated={assetCreated} /> : null}
+    {showAddDevice ? <AddDeviceModal assignees={assignees} onClose={() => setShowAddDevice(false)} onCreated={assetCreated} /> : null}
     {newAsset ? <AssetLabelModal asset={newAsset} onClose={() => setNewAsset(null)} onAddAnother={() => { setNewAsset(null); setShowAddDevice(true); }} /> : null}
+    {assignmentTarget ? <ChangeDeviceOwnerModal asset={assignmentTarget} assignees={assignees} onClose={() => setAssignmentTarget(null)} onSaved={assetOwnerChanged} /> : null}
+    {removalTarget ? <RemoveDeviceModal asset={removalTarget} onClose={() => setRemovalTarget(null)} onRemoved={assetRemoved} /> : null}
   </section>;
 }
