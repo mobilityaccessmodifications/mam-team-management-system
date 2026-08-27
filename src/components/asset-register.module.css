@@ -24,7 +24,6 @@
 .header,
 .tools,
   .header > div,
-  .securityNote,
   .notice,
   .searchField,
 .loadingState,
@@ -89,7 +88,6 @@
 
 .header h2 { font-size: clamp(24px, 2.2vw, 31px); }
 
-.header p,
 .modal header p {
   max-width: 62ch;
   margin: 6px 0 0;
@@ -166,19 +164,6 @@
   cursor: not-allowed;
   opacity: .56;
 }
-
-.securityNote {
-  gap: 8px;
-  min-height: 42px;
-  border: 1px solid #d5e4dd;
-  border-radius: var(--radius-md);
-  background: #f5faf7;
-  color: #476259;
-  padding: 10px 13px;
-}
-
-.securityNote svg { flex: 0 0 auto; color: #39725b; }
-.securityNote span { font-size: 12px; line-height: 1.45; }
 
 .notice {
   gap: 8px;

@@ -589,12 +589,9 @@ export function AssetRegister() {
       <div>
         <span>IT asset register</span>
         <h2 id="asset-register-title">Devices and labels</h2>
-        <p>Record each MAM device once, then print or download its scannable barcode label.</p>
       </div>
       <button className={styles.primaryAction} type="button" onClick={() => setShowAddDevice(true)}><PackagePlus size={17} /> Add device</button>
     </header>
-
-    <div className={styles.securityNote}><Barcode size={16} /><span>Labels contain only the unique MAM asset number. Credentials, recovery details and employee data are never encoded.</span></div>
 
     {notice ? <div className={styles.notice} role="status"><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={15} /></button></div> : null}
 
