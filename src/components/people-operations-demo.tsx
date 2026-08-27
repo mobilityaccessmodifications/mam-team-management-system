@@ -38,7 +38,7 @@ import {
 import styles from "@/components/people-operations-demo.module.css";
 
 type AccessRole = "hr" | "manager" | "employee";
-type PeopleSection = "profile" | "directory" | "organisation" | "tasks" | "checkins" | "accounts";
+type PeopleSection = "profile" | "directory" | "organisation" | "tasks" | "checkins" | "accounts" | "assets";
 type PeopleTaskSection = "onboarding" | "offboarding" | "checkins";
 type WorkflowKind = "onboarding" | "offboarding";
 type TaskOwner = "HR" | "Team Leader" | "IT" | "Accounts" | "Analyst" | "Warehouse" | "Employee";
@@ -280,6 +280,7 @@ export function PeopleOperationsDemo({
   renderCheckInRegister,
   renderCheckInTasks,
   renderAccounts,
+  renderAssetRegister,
   showProfile = true,
   showTasks,
   isAccessPreview = false,
@@ -302,6 +303,8 @@ export function PeopleOperationsDemo({
   /** Opens the selected safe tree node in the HR-only directory detail drawer. */
   onOpenEmployeeDirectoryRecord?: (personId: string) => void;
   renderAccounts?: ReactNode;
+  /** System-admin asset register. The component rechecks its own server capability. */
+  renderAssetRegister?: ReactNode;
   /** Lets a constrained employee workspace omit the legacy Profile tab. */
   showProfile?: boolean;
   /** Exposes the self-only task surface when a scoped manager task list is unavailable. */
@@ -318,7 +321,8 @@ export function PeopleOperationsDemo({
     ...(renderCheckInRegister ? ["checkins" as const] : []),
     ...(hasTasks ? ["tasks" as const] : []),
     ...(renderAccounts ? ["accounts" as const] : []),
-  ], [hasTasks, renderAccounts, renderCheckInRegister, renderEmployeeDirectory, showProfile]);
+    ...(renderAssetRegister ? ["assets" as const] : []),
+  ], [hasTasks, renderAccounts, renderAssetRegister, renderCheckInRegister, renderEmployeeDirectory, showProfile]);
   const [section, setSection] = useState<PeopleSection>(() => availableSections[0] ?? "organisation");
   const [taskSection, setTaskSection] = useState<PeopleTaskSection>(
     renderCheckInRegister ? "onboarding" : "checkins",
@@ -496,6 +500,7 @@ export function PeopleOperationsDemo({
     if (value === "organisation") return { value, label: "Organisation", icon: <Network size={16} /> };
     if (value === "checkins") return { value, label: "Check-ins", icon: <CalendarClock size={16} /> };
     if (value === "tasks") return { value, label: "Tasks", icon: <ListChecks size={16} /> };
+    if (value === "assets") return { value, label: "Assets", icon: <Laptop size={16} /> };
     return { value, label: "Accounts", icon: <KeyRound size={16} /> };
   });
 
@@ -520,6 +525,7 @@ export function PeopleOperationsDemo({
       setSection("directory");
     } : undefined} /> : null}
     {visibleSection === "accounts" ? renderAccounts : null}
+    {visibleSection === "assets" ? renderAssetRegister : null}
     {visibleSection === "tasks" && hasRealCheckInTasks ? renderCheckInTasks?.(taskAction) : null}
     {visibleSection === "tasks" && !hasRealCheckInTasks ? <nav className={styles.taskSwitch} aria-label="Task type">
       {!isEmployee || employeeLifecycleSection === "onboarding" ? <button type="button" aria-pressed={visibleTaskSection === "onboarding"} onClick={() => setTaskSection("onboarding")}>Onboarding</button> : null}

@@ -11,6 +11,7 @@
     "check": "npm run lint && npm run typecheck && npm run build"
   },
   "dependencies": {
+    "@bwip-js/browser": "^4.11.4",
     "@supabase/ssr": "0.12.4",
     "@supabase/supabase-js": "2.111.0",
     "lucide-react": "1.28.0",

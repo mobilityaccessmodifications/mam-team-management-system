@@ -62,6 +62,7 @@ import {
   AccountManagement,
   type AccountDto,
 } from "@/components/account-management";
+import { AssetRegister } from "@/components/asset-register";
 import { getOrganisationPersonWorkEmail } from "@/app/people/actions";
 import { CheckInRegister } from "@/components/check-in-register";
 import { CheckInWorkspace } from "@/components/check-in-workspace";
@@ -1710,6 +1711,9 @@ export function LeaveDemo({
                     onResetPassword={resetPortalPassword}
                     onToggleEnabled={togglePortalAccount}
                   />
+                : undefined}
+              renderAssetRegister={showHrWorkspace && !isPreviewingEmployeeAccess
+                ? <AssetRegister />
                 : undefined}
             />
           </div>
