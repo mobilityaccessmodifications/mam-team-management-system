@@ -11,7 +11,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { OrganisationPerson } from "@/components/organisation-tree";
 import type { EmployeeItAsset, ItAssetType } from "@/lib/it-asset-types";
@@ -74,7 +74,7 @@ export function EmployeeTeamDirectory({
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [emailState, setEmailState] = useState<Record<string, EmailState>>({});
   const [deviceState, setDeviceState] = useState<DeviceState>({ state: "idle", assets: [] });
-  const previousSelectedPersonId = useRef<string | null>(null);
+  const [deviceLoadAttempt, setDeviceLoadAttempt] = useState(0);
 
   const activePeople = useMemo(
     () => people.filter((person) => person.kind !== "org_unit" && person.isActive !== false),
@@ -92,46 +92,43 @@ export function EmployeeTeamDirectory({
   const selectedPersonIsSelf = Boolean(selectedPerson && currentPersonId && selectedPerson.id === currentPersonId);
 
   useEffect(() => {
-    if (previousSelectedPersonId.current === selectedPersonId) return;
-    previousSelectedPersonId.current = selectedPersonId;
-    setDeviceState({ state: "idle", assets: [] });
-  }, [selectedPersonId]);
+    if (!selectedPersonIsSelf || !onLoadMyDevices) return;
 
-  useEffect(() => {
-    if (!selectedPersonIsSelf || !onLoadMyDevices || deviceState.state !== "idle") return;
     let cancelled = false;
-    const timer = window.setTimeout(() => {
+    let settled = false;
+    let timeout: number | undefined;
+
+    const finish = (nextState: DeviceState) => {
+      if (cancelled || settled) return;
+      settled = true;
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      setDeviceState(nextState);
+    };
+
+    // The request begins after the effect commits. Device state is
+    // intentionally not an effect dependency: changing it to "loading" must
+    // not cancel the request that is meant to settle that state.
+    const request = window.setTimeout(() => {
       if (cancelled) return;
-      let settled = false;
       setDeviceState({ state: "loading", assets: [] });
-      const timeout = window.setTimeout(() => {
-        if (cancelled || settled) return;
-        settled = true;
-        setDeviceState({ state: "error", assets: [] });
+      timeout = window.setTimeout(() => {
+        finish({ state: "error", assets: [] });
       }, deviceLoadTimeoutMs);
 
       // Start through a promise so a synchronous action/serialization failure
       // follows the same error path as a rejected server request.
       void Promise.resolve()
         .then(() => onLoadMyDevices())
-        .then((assets) => {
-          if (cancelled || settled) return;
-          settled = true;
-          setDeviceState({ state: "ready", assets });
-        })
-        .catch(() => {
-          if (cancelled || settled) return;
-          settled = true;
-          setDeviceState({ state: "error", assets: [] });
-        })
-        .finally(() => window.clearTimeout(timeout));
+        .then((assets) => finish({ state: "ready", assets }))
+        .catch(() => finish({ state: "error", assets: [] }));
     }, 0);
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      window.clearTimeout(request);
+      if (timeout !== undefined) window.clearTimeout(timeout);
     };
-  }, [deviceState.state, onLoadMyDevices, selectedPersonIsSelf]);
+  }, [deviceLoadAttempt, onLoadMyDevices, selectedPersonId, selectedPersonIsSelf]);
 
   const revealWorkEmail = useCallback(async (personId: string) => {
     if (!onRequestWorkEmail || emailState[personId]?.state === "loading") return;
@@ -169,7 +166,7 @@ export function EmployeeTeamDirectory({
         emailState={emailState[selectedPerson.id]}
         onRevealWorkEmail={() => void revealWorkEmail(selectedPerson.id)}
         deviceState={deviceState}
-        onRetryDevices={() => setDeviceState({ state: "idle", assets: [] })}
+        onRetryDevices={() => setDeviceLoadAttempt((current) => current + 1)}
         canLoadDevices={Boolean(onLoadMyDevices)}
         onClose={() => setSelectedPersonId(null)}
       /> : <section className={styles.emptyDetail} aria-live="polite"><UsersRound size={28} aria-hidden="true" /><h3>Select a team member</h3><p>Choose a person to view their work details and reporting line.</p></section>}
