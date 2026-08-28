@@ -104,8 +104,8 @@ export async function listMyItAssets(): Promise<EmployeeItAsset[]> {
 /**
  * Returns the same safe device projection an employee sees for a person
  * selected in the Super Admin Change profile preview. The database rechecks
- * the real Change profile capability and the selected active employee before
- * returning any rows; this action never exposes the admin asset-custody DTO.
+ * the real System Admin capability and selected active employee in one RPC;
+ * this action never exposes the admin asset-custody DTO.
  */
 export async function listItAssetsForEmployeePreview(personId: string): Promise<EmployeeItAsset[]> {
   const checkedPersonId = previewPersonId(personId);
@@ -115,16 +115,7 @@ export async function listItAssetsForEmployeePreview(personId: string): Promise<
     throw new Error("Your session has expired. Sign in again.");
   }
 
-  const { data: canPreview, error: previewError } = await supabase.rpc("can_change_employee_view");
-  if (previewError || canPreview !== true) throw new Error(GENERIC_PREVIEW_LOAD_ERROR);
-
-  const { error: targetError } = await supabase.rpc(
-    "get_selected_employee_profile_access_role_for_preview",
-    { p_person_id: checkedPersonId },
-  );
-  if (targetError) throw new Error(GENERIC_PREVIEW_LOAD_ERROR);
-
-  const { data, error } = await supabase.rpc("list_it_assets_for_employee", {
+  const { data, error } = await supabase.rpc("list_employee_it_assets_for_preview", {
     p_person_id: checkedPersonId,
   });
   if (error || !Array.isArray(data)) throw new Error(GENERIC_PREVIEW_LOAD_ERROR);

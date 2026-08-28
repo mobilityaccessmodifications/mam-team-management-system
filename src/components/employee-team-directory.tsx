@@ -11,13 +11,14 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { OrganisationPerson } from "@/components/organisation-tree";
 import type { EmployeeItAsset, ItAssetType } from "@/lib/it-asset-types";
 import styles from "@/components/employee-team-directory.module.css";
 
 const recordsPerPage = 8;
+const deviceLoadTimeoutMs = 12_000;
 const assetTypeLabels: Record<ItAssetType, string> = {
   laptop: "Laptop",
   desktop: "Desktop computer",
@@ -73,6 +74,7 @@ export function EmployeeTeamDirectory({
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [emailState, setEmailState] = useState<Record<string, EmailState>>({});
   const [deviceState, setDeviceState] = useState<DeviceState>({ state: "idle", assets: [] });
+  const previousSelectedPersonId = useRef<string | null>(null);
 
   const activePeople = useMemo(
     () => people.filter((person) => person.kind !== "org_unit" && person.isActive !== false),
@@ -90,15 +92,45 @@ export function EmployeeTeamDirectory({
   const selectedPersonIsSelf = Boolean(selectedPerson && currentPersonId && selectedPerson.id === currentPersonId);
 
   useEffect(() => {
+    if (previousSelectedPersonId.current === selectedPersonId) return;
+    previousSelectedPersonId.current = selectedPersonId;
+    setDeviceState({ state: "idle", assets: [] });
+  }, [selectedPersonId]);
+
+  useEffect(() => {
     if (!selectedPersonIsSelf || !onLoadMyDevices || deviceState.state !== "idle") return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      let settled = false;
       setDeviceState({ state: "loading", assets: [] });
-      void onLoadMyDevices()
-        .then((assets) => { if (!cancelled) setDeviceState({ state: "ready", assets }); })
-        .catch(() => { if (!cancelled) setDeviceState({ state: "error", assets: [] }); });
+      const timeout = window.setTimeout(() => {
+        if (cancelled || settled) return;
+        settled = true;
+        setDeviceState({ state: "error", assets: [] });
+      }, deviceLoadTimeoutMs);
+
+      // Start through a promise so a synchronous action/serialization failure
+      // follows the same error path as a rejected server request.
+      void Promise.resolve()
+        .then(() => onLoadMyDevices())
+        .then((assets) => {
+          if (cancelled || settled) return;
+          settled = true;
+          setDeviceState({ state: "ready", assets });
+        })
+        .catch(() => {
+          if (cancelled || settled) return;
+          settled = true;
+          setDeviceState({ state: "error", assets: [] });
+        })
+        .finally(() => window.clearTimeout(timeout));
     }, 0);
-    return () => { cancelled = true; window.clearTimeout(timer); };
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [deviceState.state, onLoadMyDevices, selectedPersonIsSelf]);
 
   const revealWorkEmail = useCallback(async (personId: string) => {
