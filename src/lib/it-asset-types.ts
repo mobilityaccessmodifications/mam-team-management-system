@@ -46,6 +46,23 @@ export type ItAsset = {
   version: number;
 };
 
+/**
+ * Safe self-service device projection for an employee's own directory view.
+ * It intentionally omits assignee metadata and every credential/private field.
+ */
+export type EmployeeItAsset = {
+  id: string;
+  assetCode: string;
+  barcodeValue: string;
+  assetType: ItAssetType;
+  manufacturer: string;
+  model: string;
+  serialNumber: string;
+  status: Exclude<ItAssetStatus, "retired">;
+  createdAt: string;
+  version: number;
+};
+
 export type CreateItAssetInput = {
   assetType: ItAssetType;
   assignedPersonId: string;

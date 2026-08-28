@@ -41,6 +41,7 @@ import {
   togglePortalAccount,
   updatePortalLogin,
 } from "@/app/accounts/actions";
+import { listMyItAssets } from "@/app/assets/employee-actions";
 import {
   cancelMyApprovedLeaveRequest,
   cancelSelectedEmployeeApprovedLeaveRequest,
@@ -68,8 +69,8 @@ import { CheckInRegister } from "@/components/check-in-register";
 import { CheckInWorkspace } from "@/components/check-in-workspace";
 import { CheckInTasks } from "@/components/check-in-tasks";
 import { EmployeeDirectory } from "@/components/employee-directory";
+import { EmployeeTeamDirectory } from "@/components/employee-team-directory";
 import { ManagerEmployeeDirectory } from "@/components/manager-employee-directory";
-import { ReadOnlyDirectory } from "@/components/read-only-directory";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   SelfProfileMenu,
@@ -1001,6 +1002,12 @@ export function LeaveDemo({
     }
     return organisationPeople.filter((person) => included.has(person.id));
   })();
+  // The employee device action derives its person id from auth.uid(). Never
+  // pass the selected preview person into this callback: an administrator
+  // preview is not an employee session and must not load the admin's devices.
+  const canLoadOwnDevices = !isPreviewingEmployeeAccess
+    && activeProfile.accessRole === "employee"
+    && Boolean(currentPersonId && activeProfile.id === currentPersonId);
   // Change profile must reflect the selected employee's workspace, not the
   // System Admin session behind it. Until the profile role arrives, fail
   // closed; only manager and HR previews may access the team calendar.
@@ -1675,9 +1682,11 @@ export function LeaveDemo({
                   await loadOrganisation();
                 }}
                 refreshKey={employeeDirectoryRefreshKey}
-              /> : activeProfile.accessRole === "employee" ? <ReadOnlyDirectory
+              /> : activeProfile.accessRole === "employee" ? <EmployeeTeamDirectory
                 people={employeeTeamDirectory}
+                currentPersonId={activeProfile.id}
                 onRequestWorkEmail={getOrganisationPersonWorkEmail}
+                onLoadMyDevices={canLoadOwnDevices ? listMyItAssets : undefined}
               /> : undefined}
               renderCheckInRegister={showHrWorkspace
                 ? <CheckInRegister
