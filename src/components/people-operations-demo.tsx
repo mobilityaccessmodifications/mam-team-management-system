@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleDot,
   ContactRound,
+  CreditCard,
   FileCheck2,
   KeyRound,
   Laptop,
@@ -38,7 +39,7 @@ import {
 import styles from "@/components/people-operations-demo.module.css";
 
 type AccessRole = "hr" | "manager" | "employee";
-type PeopleSection = "profile" | "directory" | "organisation" | "tasks" | "checkins" | "accounts" | "assets";
+type PeopleSection = "profile" | "directory" | "organisation" | "tasks" | "checkins" | "accounts" | "assets" | "subscriptions";
 type PeopleTaskSection = "onboarding" | "offboarding" | "checkins";
 type WorkflowKind = "onboarding" | "offboarding";
 type TaskOwner = "HR" | "Team Leader" | "IT" | "Accounts" | "Analyst" | "Warehouse" | "Employee";
@@ -281,6 +282,7 @@ export function PeopleOperationsDemo({
   renderCheckInTasks,
   renderAccounts,
   renderAssetRegister,
+  renderSubscriptionRegister,
   showProfile = true,
   showTasks,
   isAccessPreview = false,
@@ -305,6 +307,8 @@ export function PeopleOperationsDemo({
   renderAccounts?: ReactNode;
   /** System-admin asset register. The component rechecks its own server capability. */
   renderAssetRegister?: ReactNode;
+  /** System Admin-managed subscription register; managers receive its read-only projection. */
+  renderSubscriptionRegister?: ReactNode;
   /** Lets a constrained employee workspace omit the legacy Profile tab. */
   showProfile?: boolean;
   /** Exposes the self-only task surface when a scoped manager task list is unavailable. */
@@ -322,7 +326,8 @@ export function PeopleOperationsDemo({
     ...(hasTasks ? ["tasks" as const] : []),
     ...(renderAccounts ? ["accounts" as const] : []),
     ...(renderAssetRegister ? ["assets" as const] : []),
-  ], [hasTasks, renderAccounts, renderAssetRegister, renderCheckInRegister, renderEmployeeDirectory, showProfile]);
+    ...(renderSubscriptionRegister ? ["subscriptions" as const] : []),
+  ], [hasTasks, renderAccounts, renderAssetRegister, renderCheckInRegister, renderEmployeeDirectory, renderSubscriptionRegister, showProfile]);
   const [section, setSection] = useState<PeopleSection>(() => availableSections[0] ?? "organisation");
   const [taskSection, setTaskSection] = useState<PeopleTaskSection>(
     renderCheckInRegister ? "onboarding" : "checkins",
@@ -501,6 +506,7 @@ export function PeopleOperationsDemo({
     if (value === "checkins") return { value, label: "Check-ins", icon: <CalendarClock size={16} /> };
     if (value === "tasks") return { value, label: "Tasks", icon: <ListChecks size={16} /> };
     if (value === "assets") return { value, label: "Assets", icon: <Laptop size={16} /> };
+    if (value === "subscriptions") return { value, label: "Subscriptions", icon: <CreditCard size={16} /> };
     return { value, label: "Accounts", icon: <KeyRound size={16} /> };
   });
 
@@ -526,6 +532,7 @@ export function PeopleOperationsDemo({
     } : undefined} /> : null}
     {visibleSection === "accounts" ? renderAccounts : null}
     {visibleSection === "assets" ? renderAssetRegister : null}
+    {visibleSection === "subscriptions" ? renderSubscriptionRegister : null}
     {visibleSection === "tasks" && hasRealCheckInTasks ? renderCheckInTasks?.(taskAction) : null}
     {visibleSection === "tasks" && !hasRealCheckInTasks ? <nav className={styles.taskSwitch} aria-label="Task type">
       {!isEmployee || employeeLifecycleSection === "onboarding" ? <button type="button" aria-pressed={visibleTaskSection === "onboarding"} onClick={() => setTaskSection("onboarding")}>Onboarding</button> : null}

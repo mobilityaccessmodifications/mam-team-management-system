@@ -46,6 +46,10 @@ import {
   listMyItAssets,
 } from "@/app/assets/employee-actions";
 import {
+  listEmployeeSubscriptionsForPreview,
+  listMySubscriptions,
+} from "@/app/subscriptions/employee-actions";
+import {
   cancelMyApprovedLeaveRequest,
   cancelSelectedEmployeeApprovedLeaveRequest,
   completeLeaveRequestAttachmentUpload,
@@ -74,6 +78,7 @@ import { CheckInTasks } from "@/components/check-in-tasks";
 import { EmployeeDirectory } from "@/components/employee-directory";
 import { EmployeeTeamDirectory } from "@/components/employee-team-directory";
 import { ManagerEmployeeDirectory } from "@/components/manager-employee-directory";
+import { SubscriptionRegister } from "@/components/subscription-register";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   SelfProfileMenu,
@@ -497,6 +502,8 @@ export function LeaveDemo({
   isNonRosterSystemAdmin = false,
   canViewEmployeeDirectory = false,
   canChangeEmployeeView = false,
+  canViewSubscriptions = false,
+  canAccessOwnSubscriptions = false,
   canViewOwnTasks = false,
   canViewTeamCalendar = false,
   checkInResources,
@@ -513,6 +520,10 @@ export function LeaveDemo({
   /** Server-issued manager/System Admin capability for the safe directory projection. */
   canViewEmployeeDirectory?: boolean;
   canChangeEmployeeView?: boolean;
+  /** System-derived manager/System Admin access to the credential-free subscription register. */
+  canViewSubscriptions?: boolean;
+  /** System-derived self-service access to the current employee's own subscriptions. */
+  canAccessOwnSubscriptions?: boolean;
   /** An active employee can see the self-only Tasks tab even without manager scope. */
   canViewOwnTasks?: boolean;
   /** Server-issued manager/System Admin capability for the team calendar. */
@@ -578,6 +589,10 @@ export function LeaveDemo({
   // action rechecks the real System Admin capability and active target.
   const loadPreviewEmployeeDevices = useCallback(
     () => listItAssetsForEmployeePreview(previewPersonId),
+    [previewPersonId],
+  );
+  const loadPreviewEmployeeSubscriptions = useCallback(
+    () => listEmployeeSubscriptionsForPreview(previewPersonId),
     [previewPersonId],
   );
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
@@ -1026,6 +1041,15 @@ export function LeaveDemo({
         ? listMyItAssets
         : undefined
     : undefined;
+  const employeeDirectorySubscriptionLoader = activeProfile.accessRole === "employee"
+    ? isPreviewingEmployeeAccess && selectedPreviewPersonId
+      ? canViewSubscriptions
+        ? loadPreviewEmployeeSubscriptions
+        : undefined
+      : canAccessOwnSubscriptions
+        ? listMySubscriptions
+        : undefined
+    : undefined;
   // Change profile must reflect the selected employee's workspace, not the
   // System Admin session behind it. Until the profile role arrives, fail
   // closed; only manager and HR previews may access the team calendar.
@@ -1045,6 +1069,8 @@ export function LeaveDemo({
     && hasManagerPeopleWorkspace;
   const showManagerTasks = activeProfile.accessRole === "manager"
     && hasManagerPeopleWorkspace;
+  const showSubscriptionRegister = canViewSubscriptions
+    && activeProfile.accessRole !== "employee";
   const previewScopedManagerPersonId = isPreviewingEmployeeAccess
     && activeProfile.accessRole === "manager"
     ? previewProfile?.id
@@ -1705,6 +1731,7 @@ export function LeaveDemo({
                 currentPersonId={activeProfile.id}
                 onRequestWorkEmail={getOrganisationPersonWorkEmail}
                 onLoadMyDevices={employeeDirectoryDeviceLoader}
+                onLoadMySubscriptions={employeeDirectorySubscriptionLoader}
               /> : undefined}
               renderCheckInRegister={showHrWorkspace
                 ? <CheckInRegister
@@ -1741,6 +1768,9 @@ export function LeaveDemo({
                 : undefined}
               renderAssetRegister={showHrWorkspace && !isPreviewingEmployeeAccess
                 ? <AssetRegister />
+                : undefined}
+              renderSubscriptionRegister={showSubscriptionRegister
+                ? <SubscriptionRegister readOnly={!showHrWorkspace} />
                 : undefined}
             />
           </div>

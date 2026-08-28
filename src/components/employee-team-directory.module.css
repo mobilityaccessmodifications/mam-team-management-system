@@ -95,7 +95,8 @@
 .detailItem strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 
 .contactCard,
-.devices { display: grid; gap: 11px; padding: 15px; border: 1px solid #dfe7e3; border-radius: 14px; background: var(--surface-raised, #fff); }
+.devices,
+.subscriptions { display: grid; gap: 11px; padding: 15px; border: 1px solid #dfe7e3; border-radius: 14px; background: var(--surface-raised, #fff); }
 .cardHeading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .cardHeading > svg { color: var(--directory-accent); }
 .cardHeading h4 { margin: 4px 0 0; font-size: 14px; }
@@ -128,6 +129,22 @@
 .deviceMeta strong { color: var(--directory-accent-deep); font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; }
 .deviceStatus { border: 1px solid #c7ddd2; border-radius: 999px; background: #eff8f3; color: #28745b; font-size: 10px; font-weight: 800; padding: 4px 7px; white-space: nowrap; }
 .deviceStatus[data-status="repair"] { border-color: #ead2ab; background: #fff8e9; color: #95621b; }
+.subscriptionList { overflow: hidden; border: 1px solid #dbe3e0; border-radius: 11px; }
+.subscriptionCard { display: grid; grid-template-columns: 36px minmax(140px, 1.2fr) minmax(180px, 1fr) auto; align-items: center; gap: 10px; min-height: 64px; padding: 10px 11px; border-bottom: 1px solid #edf0ef; }
+.subscriptionCard:last-child { border-bottom: 0; }
+.subscriptionIcon { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid #efd8c9; border-radius: 9px; background: #fff6f1; color: var(--directory-accent-deep); }
+.subscriptionCopy,
+.subscriptionMeta { display: grid; min-width: 0; gap: 3px; }
+.subscriptionCopy strong,
+.subscriptionCopy span,
+.subscriptionMeta span,
+.subscriptionMeta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subscriptionCopy strong { font-size: 12px; }
+.subscriptionCopy span,
+.subscriptionMeta span { color: var(--directory-muted); font-size: 11px; }
+.subscriptionMeta strong { color: var(--text-secondary, #53625e); font-size: 11px; }
+.subscriptionStatus { border: 1px solid #c7ddd2; border-radius: 999px; background: #eff8f3; color: #28745b; font-size: 10px; font-weight: 800; padding: 4px 7px; text-transform: capitalize; white-space: nowrap; }
+.subscriptionStatus[data-status="paused"] { border-color: #ead2ab; background: #fff8e9; color: #95621b; }
 
 @media (max-width: 900px) {
   .directoryDesk { grid-template-columns: 1fr; }
@@ -143,4 +160,7 @@
   .deviceCard { grid-template-columns: 34px minmax(0, 1fr) auto; }
   .deviceMeta:nth-of-type(3) { display: none; }
   .deviceStatus { grid-column: 2 / -1; justify-self: start; }
+  .subscriptionCard { grid-template-columns: 34px minmax(0, 1fr) auto; }
+  .subscriptionMeta { grid-column: 2; }
+  .subscriptionStatus { grid-column: 2 / -1; justify-self: start; }
 }

@@ -17,6 +17,8 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   let canViewCheckIns = false;
   let canViewEmployeeDirectory = false;
   let canChangeEmployeeView = false;
+  let canViewSubscriptions = false;
+  let canAccessOwnSubscriptions = false;
   let canViewOwnTasks = false;
   let checkInResources: ReturnType<typeof getCheckInResourceLinks> | undefined;
   if (isSupabaseConfigured()) {
@@ -31,6 +33,8 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       { data: canViewCheckInWorkspace },
       { data: canViewEmployeeDirectoryCapability },
       { data: canChangeEmployeeViewCapability },
+      { data: canViewSubscriptionsCapability },
+      { data: canAccessOwnSubscriptionsCapability },
     ] = await Promise.all([
       supabase.rpc("can_manage_portal_accounts"),
       supabase.rpc("current_portal_account"),
@@ -38,6 +42,8 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       supabase.rpc("can_view_employee_check_in_workspace"),
       supabase.rpc("can_view_employee_directory"),
       supabase.rpc("can_change_employee_view"),
+      supabase.rpc("can_view_subscription_register"),
+      supabase.rpc("can_access_own_subscriptions"),
     ]);
     const current = Array.isArray(account) ? account[0] : null;
     isAdmin = canManageAccounts === true;
@@ -47,6 +53,8 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     canViewEmployeeDirectory = canViewEmployeeDirectoryCapability === true;
     checkInResources = canViewCheckIns ? getCheckInResourceLinks() : undefined;
     canChangeEmployeeView = canChangeEmployeeViewCapability === true;
+    canViewSubscriptions = canViewSubscriptionsCapability === true;
+    canAccessOwnSubscriptions = canAccessOwnSubscriptionsCapability === true;
     // Every active linked employee may open their own task surface. Its
     // contents remain limited by the dedicated task data source; this flag
     // only controls whether the tab itself is available.
@@ -84,6 +92,8 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     isNonRosterSystemAdmin={isNonRosterSystemAdmin}
     canViewEmployeeDirectory={canViewEmployeeDirectory}
     canChangeEmployeeView={canChangeEmployeeView}
+    canViewSubscriptions={canViewSubscriptions}
+    canAccessOwnSubscriptions={canAccessOwnSubscriptions}
     canViewOwnTasks={canViewOwnTasks}
     canViewTeamCalendar={canViewTeamCalendar}
     checkInResources={checkInResources}
