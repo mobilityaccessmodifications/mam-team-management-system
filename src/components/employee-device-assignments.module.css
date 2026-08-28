@@ -255,6 +255,8 @@
   box-shadow: var(--shadow-md);
 }
 
+.modalWithPicker { overflow: visible; }
+
 .modal header {
   align-items: flex-start;
   justify-content: space-between;

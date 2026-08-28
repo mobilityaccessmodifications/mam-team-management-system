@@ -1,0 +1,172 @@
+"use client";
+
+import { ChevronDown, Search, X } from "lucide-react";
+import {
+  type ChangeEvent,
+  type KeyboardEvent,
+  type RefObject,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import styles from "@/components/employee-picker.module.css";
+import type { ItAssetAssignee } from "@/lib/it-asset-types";
+
+function assigneeDescription(assignee: ItAssetAssignee) {
+  return [assignee.positionTitle, assignee.teamName]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function assigneeSearchText(assignee: ItAssetAssignee) {
+  return [
+    assignee.fullName,
+    assignee.positionTitle,
+    assignee.teamName,
+    assignee.company === "mam" ? "MAM" : "Equipsy",
+  ].filter(Boolean).join(" ").toLocaleLowerCase();
+}
+
+export function EmployeePicker({
+  assignees,
+  defaultValue = "",
+  disabled = false,
+  inputRef,
+  name = "assignedPersonId",
+}: {
+  assignees: ItAssetAssignee[];
+  defaultValue?: string;
+  disabled?: boolean;
+  inputRef?: RefObject<HTMLInputElement | null>;
+  name?: string;
+}) {
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const ownInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = inputRef ?? ownInputRef;
+  const listboxId = useId();
+  const [selectedId, setSelectedId] = useState(defaultValue);
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const selected = assignees.find((assignee) => assignee.personId === selectedId) ?? null;
+
+  const filteredAssignees = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) return assignees;
+    return assignees.filter((assignee) => assigneeSearchText(assignee).includes(query));
+  }, [assignees, search]);
+
+  useEffect(() => {
+    if (!open) return;
+    function closeWhenOutside(event: PointerEvent) {
+      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", closeWhenOutside);
+    return () => document.removeEventListener("pointerdown", closeWhenOutside);
+  }, [open]);
+
+  function openPicker() {
+    if (disabled) return;
+    setOpen(true);
+    setSearch("");
+    setHighlightedIndex(0);
+  }
+
+  function choose(assignee: ItAssetAssignee) {
+    setSelectedId(assignee.personId);
+    setSearch("");
+    setOpen(false);
+    setHighlightedIndex(0);
+  }
+
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    setSearch(event.currentTarget.value);
+    setOpen(true);
+    setHighlightedIndex(0);
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (!open) {
+        openPicker();
+        return;
+      }
+      setHighlightedIndex((index) => Math.min(index + 1, Math.max(filteredAssignees.length - 1, 0)));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightedIndex((index) => Math.max(index - 1, 0));
+      return;
+    }
+    if (event.key === "Enter" && open && filteredAssignees.length) {
+      event.preventDefault();
+      choose(filteredAssignees[highlightedIndex] ?? filteredAssignees[0]);
+      return;
+    }
+    if (event.key === "Escape" && open) {
+      event.preventDefault();
+      setOpen(false);
+      setSearch("");
+      setHighlightedIndex(0);
+    }
+  }
+
+  const inputValue = open ? search : (selected?.fullName ?? "");
+
+  return <div className={styles.picker} ref={pickerRef}>
+    <input type="hidden" name={name} value={selectedId} />
+    <div className={styles.control} data-open={open}>
+      <Search className={styles.searchIcon} size={16} aria-hidden="true" />
+      <input
+        aria-activedescendant={open && filteredAssignees.length ? `${listboxId}-option-${highlightedIndex}` : undefined}
+        aria-autocomplete="list"
+        aria-controls={open ? listboxId : undefined}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label="Search employees"
+        aria-required="true"
+        autoComplete="off"
+        className={styles.input}
+        disabled={disabled}
+        onChange={handleChange}
+        onClick={() => { if (!open) openPicker(); }}
+        onFocus={openPicker}
+        onKeyDown={handleKeyDown}
+        placeholder="Search by name, role or team"
+        ref={searchInputRef}
+        role="combobox"
+        type="text"
+        value={inputValue}
+      />
+      {selected && open ? <button
+        aria-label="Clear employee selection"
+        className={styles.clearButton}
+        onClick={() => setSelectedId("")}
+        type="button"
+      ><X size={15} /></button> : null}
+      <ChevronDown className={styles.chevron} data-open={open} size={16} aria-hidden="true" />
+    </div>
+    {open ? <div className={styles.listbox} id={listboxId} role="listbox" aria-label="Employees">
+      <div className={styles.resultCount}>{filteredAssignees.length} {filteredAssignees.length === 1 ? "employee" : "employees"}</div>
+      {filteredAssignees.length ? filteredAssignees.map((assignee, index) => <button
+        aria-selected={assignee.personId === selectedId}
+        className={styles.option}
+        data-highlighted={index === highlightedIndex}
+        id={`${listboxId}-option-${index}`}
+        key={assignee.personId}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => choose(assignee)}
+        role="option"
+        type="button"
+      >
+        <span className={styles.optionName}>{assignee.fullName}</span>
+        <span className={styles.optionMeta}>{assigneeDescription(assignee)}</span>
+      </button>) : <p className={styles.empty}>No employees match that search.</p>}
+    </div> : null}
+  </div>;
+}

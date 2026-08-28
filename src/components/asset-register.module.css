@@ -406,6 +406,8 @@
   box-shadow: 0 24px 65px rgba(16, 31, 29, .28);
 }
 
+.modalWithPicker { overflow: visible; }
+
 .modal header,
 .labelModal header {
   align-items: flex-start;

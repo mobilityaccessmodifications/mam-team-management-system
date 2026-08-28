@@ -23,6 +23,7 @@ import {
   retireItAsset,
 } from "@/app/assets/actions";
 import styles from "@/components/employee-device-assignments.module.css";
+import { EmployeePicker } from "@/components/employee-picker";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import type { ItAsset, ItAssetAssignee, ItAssetType } from "@/lib/it-asset-types";
 
@@ -49,12 +50,6 @@ function assetDescription(asset: ItAsset) {
   return model || assetTypeLabel(asset.assetType);
 }
 
-function assigneeDescription(assignee: ItAssetAssignee) {
-  return [assignee.fullName, assignee.positionTitle, assignee.teamName]
-    .filter(Boolean)
-    .join(" · ");
-}
-
 function ChangeOwnerModal({
   asset,
   assignees,
@@ -67,7 +62,7 @@ function ChangeOwnerModal({
   onSaved: (asset: ItAsset) => void;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
-  const assigneeRef = useRef<HTMLSelectElement>(null);
+  const assigneeRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const closeWhenReady = useCallback(() => {
@@ -105,7 +100,7 @@ function ChangeOwnerModal({
   }
 
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
-    <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="directory-device-owner-title" tabIndex={-1}>
+    <section className={`${styles.modal} ${styles.modalWithPicker}`} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="directory-device-owner-title" tabIndex={-1}>
       <header>
         <div><span>Device custody</span><h4 id="directory-device-owner-title">Change device owner</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close change device owner"><X size={17} /></button>
@@ -113,10 +108,7 @@ function ChangeOwnerModal({
       <form onSubmit={submit}>
         <label>
           <span>Assigned to <b aria-hidden="true">*</b></span>
-          <select name="assignedPersonId" ref={assigneeRef} required defaultValue={asset.assignedTo?.personId ?? ""} disabled={!assignees.length}>
-            <option value="" disabled>Select employee</option>
-            {assignees.map((assignee) => <option key={assignee.personId} value={assignee.personId}>{assigneeDescription(assignee)}</option>)}
-          </select>
+          <EmployeePicker assignees={assignees} defaultValue={asset.assignedTo?.personId ?? ""} disabled={!assignees.length} inputRef={assigneeRef} />
         </label>
         <p className={styles.modalHelp}>Changing the employee transfers accountability for this device. The asset number, barcode and audit record stay unchanged.</p>
         {error ? <p className={styles.modalError} role="alert"><AlertCircle size={15} />{error}</p> : null}
