@@ -235,7 +235,7 @@ export function EmployeeDeviceAssignments({
 
   return <fieldset className={styles.section}>
     <legend>Registered devices <small>Live IT asset register</small></legend>
-    <p className={styles.intro}>Devices linked here are managed separately from the historical equipment notes above. Each active device has one accountable employee.</p>
+    <p className={styles.intro}>Devices linked here are managed in the IT asset register. Each active device has one accountable employee.</p>
 
     {notice ? <div className={styles.notice} role="status"><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={14} /></button></div> : null}
     {loading ? <div className={styles.loadingState}><LoaderCircle className={styles.spinner} size={16} /> Loading devices…</div> : null}

@@ -804,37 +804,6 @@ function EmployeeEditor({
         </div>
       </fieldset>
 
-      <fieldset>
-        <legend>Equipment and assets <small>Legacy notes</small></legend>
-        <div className={styles.formGrid}>
-          <Field label="Laptop supplied">
-            <select value={editor.draft.laptopSupplied} onChange={(event) => onChange("laptopSupplied", event.target.value)}>
-              <option value="">Not recorded</option>
-              <option value="own_laptop">Own laptop</option>
-              <option value="mam_laptop">MAM laptop</option>
-            </select>
-          </Field>
-          <Field label="Laptop ID" required={editor.draft.laptopSupplied === "mam_laptop"}>
-            <input value={editor.draft.laptopId} onChange={(event) => onChange("laptopId", event.target.value)} required={editor.draft.laptopSupplied === "mam_laptop"} maxLength={120} />
-          </Field>
-          <Field label="Mouse ID">
-            <input value={editor.draft.mouseId} onChange={(event) => onChange("mouseId", event.target.value)} maxLength={120} />
-          </Field>
-          <Field label="Keyboard ID">
-            <input value={editor.draft.keyboardId} onChange={(event) => onChange("keyboardId", event.target.value)} maxLength={120} />
-          </Field>
-          <Field label="Asset tags" className={styles.fullSpan}>
-            <textarea
-              value={editor.draft.assetTags.join(", ")}
-              onChange={(event) => onChange("assetTags", event.target.value.split(/[,;\n]/).map((tag) => tag.trim()).filter(Boolean))}
-              rows={2}
-              maxLength={1943}
-              placeholder="Separate tags with commas"
-            />
-          </Field>
-        </div>
-      </fieldset>
-
       {!isCreate && currentRecord ? <EmployeeDeviceAssignments
         key={currentRecord.personId}
         personId={currentRecord.personId}
