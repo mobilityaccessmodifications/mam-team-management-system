@@ -11,6 +11,7 @@ import {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ASSET_CODE_PATTERN = /^MAM-IT-\d{6,}$/;
 const GENERIC_LOAD_ERROR = "Your devices could not be loaded. Refresh and try again.";
+const GENERIC_PREVIEW_LOAD_ERROR = "Employee devices could not be loaded in this preview. Refresh and try again.";
 const VALID_TYPES = new Set<string>(IT_ASSET_TYPES);
 const VALID_STATUSES = new Set<ItAssetStatus>(["available", "assigned", "repair"]);
 
@@ -71,6 +72,13 @@ function mapEmployeeItAsset(row: unknown): EmployeeItAsset {
   };
 }
 
+function previewPersonId(value: unknown) {
+  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
+    throw new Error(GENERIC_PREVIEW_LOAD_ERROR);
+  }
+  return value;
+}
+
 /**
  * Returns only active devices assigned to the authenticated employee. The
  * server action accepts no person id; the database RPC derives the owner from
@@ -90,5 +98,40 @@ export async function listMyItAssets(): Promise<EmployeeItAsset[]> {
     return data.map(mapEmployeeItAsset);
   } catch {
     throw new Error(GENERIC_LOAD_ERROR);
+  }
+}
+
+/**
+ * Returns the same safe device projection an employee sees for a person
+ * selected in the Super Admin Change profile preview. The database rechecks
+ * the real Change profile capability and the selected active employee before
+ * returning any rows; this action never exposes the admin asset-custody DTO.
+ */
+export async function listItAssetsForEmployeePreview(personId: string): Promise<EmployeeItAsset[]> {
+  const checkedPersonId = previewPersonId(personId);
+  const supabase = await createClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    throw new Error("Your session has expired. Sign in again.");
+  }
+
+  const { data: canPreview, error: previewError } = await supabase.rpc("can_change_employee_view");
+  if (previewError || canPreview !== true) throw new Error(GENERIC_PREVIEW_LOAD_ERROR);
+
+  const { error: targetError } = await supabase.rpc(
+    "get_selected_employee_profile_access_role_for_preview",
+    { p_person_id: checkedPersonId },
+  );
+  if (targetError) throw new Error(GENERIC_PREVIEW_LOAD_ERROR);
+
+  const { data, error } = await supabase.rpc("list_it_assets_for_employee", {
+    p_person_id: checkedPersonId,
+  });
+  if (error || !Array.isArray(data)) throw new Error(GENERIC_PREVIEW_LOAD_ERROR);
+
+  try {
+    return data.map(mapEmployeeItAsset);
+  } catch {
+    throw new Error(GENERIC_PREVIEW_LOAD_ERROR);
   }
 }

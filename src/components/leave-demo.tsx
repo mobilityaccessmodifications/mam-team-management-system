@@ -41,7 +41,10 @@ import {
   togglePortalAccount,
   updatePortalLogin,
 } from "@/app/accounts/actions";
-import { listMyItAssets } from "@/app/assets/employee-actions";
+import {
+  listItAssetsForEmployeePreview,
+  listMyItAssets,
+} from "@/app/assets/employee-actions";
 import {
   cancelMyApprovedLeaveRequest,
   cancelSelectedEmployeeApprovedLeaveRequest,
@@ -570,6 +573,13 @@ export function LeaveDemo({
   // This is intentionally UI-only. It never changes the authenticated user or
   // the capability checks that protect HR records and organisation writes.
   const [previewPersonId, setPreviewPersonId] = useState("");
+  // The preview loader is a stable no-argument callback for the employee
+  // directory component. It carries only the selected preview id; the server
+  // action rechecks the real System Admin capability and active target.
+  const loadPreviewEmployeeDevices = useCallback(
+    () => listItAssetsForEmployeePreview(previewPersonId),
+    [previewPersonId],
+  );
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [profilePickerQuery, setProfilePickerQuery] = useState("");
   const leaveRefreshSequence = useRef(0);
@@ -1002,12 +1012,20 @@ export function LeaveDemo({
     }
     return organisationPeople.filter((person) => included.has(person.id));
   })();
-  // The employee device action derives its person id from auth.uid(). Never
-  // pass the selected preview person into this callback: an administrator
-  // preview is not an employee session and must not load the admin's devices.
+  // Real employees use the no-argument self-service action, which derives the
+  // owner from auth.uid(). A Super Admin preview uses a separate read-only
+  // target action that checks the Change profile capability and returns the
+  // same safe DTO the selected employee would see.
   const canLoadOwnDevices = !isPreviewingEmployeeAccess
     && activeProfile.accessRole === "employee"
     && Boolean(currentPersonId && activeProfile.id === currentPersonId);
+  const employeeDirectoryDeviceLoader = activeProfile.accessRole === "employee"
+    ? isPreviewingEmployeeAccess && selectedPreviewPersonId
+      ? loadPreviewEmployeeDevices
+      : canLoadOwnDevices
+        ? listMyItAssets
+        : undefined
+    : undefined;
   // Change profile must reflect the selected employee's workspace, not the
   // System Admin session behind it. Until the profile role arrives, fail
   // closed; only manager and HR previews may access the team calendar.
@@ -1686,7 +1704,7 @@ export function LeaveDemo({
                 people={employeeTeamDirectory}
                 currentPersonId={activeProfile.id}
                 onRequestWorkEmail={getOrganisationPersonWorkEmail}
-                onLoadMyDevices={canLoadOwnDevices ? listMyItAssets : undefined}
+                onLoadMyDevices={employeeDirectoryDeviceLoader}
               /> : undefined}
               renderCheckInRegister={showHrWorkspace
                 ? <CheckInRegister
