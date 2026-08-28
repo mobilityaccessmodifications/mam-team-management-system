@@ -17,14 +17,31 @@
 }
 
 .control[data-open="true"] {
-  border-color: color-mix(in srgb, var(--mam-orange) 65%, var(--surface-border-strong));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mam-orange) 13%, transparent);
+  border-color: var(--surface-border-strong);
+  box-shadow: none;
 }
 
 .control:focus-within {
-  border-color: color-mix(in srgb, var(--mam-orange) 65%, var(--surface-border-strong));
-  outline: 3px solid color-mix(in srgb, var(--mam-orange) 20%, transparent);
-  outline-offset: 1px;
+  border-color: var(--surface-border-strong);
+  outline: 0;
+}
+
+.control .input {
+  min-height: 0;
+  height: 41px;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+}
+
+.control .input:focus,
+.control .input:focus-visible {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
 }
 
 .searchIcon {

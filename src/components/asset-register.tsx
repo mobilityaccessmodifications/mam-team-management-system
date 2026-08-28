@@ -608,7 +608,6 @@ export function AssetRegister() {
           <div className={styles.assetCustodian} data-missing={!asset.assignedTo}>
             <span>Assigned to</span><strong>{custodianDescription(asset)}</strong>
           </div>
-          <span className={styles.status} data-status={asset.assignedTo ? asset.status : "requires_assignment"}>{asset.assignedTo ? asset.status : "assign owner"}</span>
           <div className={styles.rowActions}>
             <button type="button" onClick={() => setAssignmentTarget(asset)} disabled={activeAction !== null} aria-label={`Change ${asset.assetCode} owner`}>
               <Pencil size={15} /><span>{asset.assignedTo ? "Owner" : "Assign"}</span>

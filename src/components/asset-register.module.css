@@ -149,8 +149,7 @@
 .modal header > button:focus-visible,
 .labelModal header > button:focus-visible,
 .modal input:focus-visible,
-.modal select:focus-visible,
-.searchField:focus-within {
+.modal select:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--asset-accent) 28%, transparent);
   outline-offset: 2px;
 }
@@ -225,6 +224,11 @@
 
 .searchField input::placeholder { color: #899599; }
 
+.searchField:focus-within {
+  border-color: var(--surface-border-strong);
+  outline: 0;
+}
+
 .assetCount {
   flex: 0 0 auto;
   color: var(--asset-muted);
@@ -243,7 +247,7 @@
 
 .assetRow {
   display: grid;
-  grid-template-columns: 42px minmax(150px, 1.1fr) minmax(128px, .86fr) minmax(130px, .95fr) minmax(160px, 1fr) auto auto;
+  grid-template-columns: 42px minmax(150px, 1.1fr) minmax(128px, .86fr) minmax(130px, .95fr) minmax(160px, 1fr) auto;
   gap: 14px;
   min-height: 82px;
   border-bottom: 1px solid var(--surface-border);
@@ -301,24 +305,6 @@
 .assetSerial strong { color: var(--text-secondary); font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; }
 .assetCustodian strong { color: var(--text-secondary); font-size: 12px; }
 .assetCustodian[data-missing="true"] strong { color: #a85c27; }
-
-.status {
-  min-width: 72px;
-  border: 1px solid #c9ded4;
-  border-radius: 999px;
-  background: #eff8f3;
-  color: #28745b;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 25px;
-  text-align: center;
-  text-transform: capitalize;
-}
-
-.status[data-status="assigned"] { border-color: #cbddec; background: #f0f7fd; color: #287093; }
-.status[data-status="repair"] { border-color: #ead6ae; background: #fff8ea; color: #956211; }
-.status[data-status="retired"] { border-color: #d8dfde; background: #f2f4f3; color: #61706e; }
-.status[data-status="requires_assignment"] { border-color: #ecd1a9; background: #fff8eb; color: #96611e; }
 
 .rowActions { flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 
@@ -588,7 +574,6 @@
   .assetIcon { width: 34px; height: 34px; }
   .assetCode { grid-column: 2 / 3; }
   .rowActions { grid-column: 2 / -1; }
-  .status { min-width: 64px; font-size: 10px; }
   .formGrid { grid-template-columns: 1fr; }
   .labelPreview { align-items: flex-start; flex-direction: column; }
   .labelPreview > div { flex-basis: auto; }
