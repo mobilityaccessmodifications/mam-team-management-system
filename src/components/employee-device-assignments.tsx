@@ -2,10 +2,12 @@
 
 import {
   AlertCircle,
+  CalendarCheck2,
   Laptop,
   LoaderCircle,
   Pencil,
   Trash2,
+  Undo2,
   X,
 } from "lucide-react";
 import {
@@ -20,6 +22,7 @@ import {
   listItAssetAssignees,
   listItAssetsForEmployee,
   reassignItAsset,
+  returnItAsset,
   retireItAsset,
 } from "@/app/assets/actions";
 import styles from "@/components/employee-device-assignments.module.css";
@@ -48,6 +51,27 @@ function assetTypeLabel(type: ItAssetType) {
 function assetDescription(asset: ItAsset) {
   const model = [asset.manufacturer, asset.model].filter(Boolean).join(" · ");
   return model || assetTypeLabel(asset.assetType);
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "Not recorded";
+  return new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Melbourne",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${value}T00:00:00.000Z`));
+}
+
+function melbourneToday() {
+  const parts = new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Melbourne",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 function ChangeOwnerModal({
@@ -124,6 +148,76 @@ function ChangeOwnerModal({
   </div>;
 }
 
+function ReturnDeviceModal({
+  asset,
+  personName,
+  onClose,
+  onReturned,
+}: {
+  asset: ItAsset;
+  personName: string;
+  onClose: () => void;
+  onReturned: (asset: ItAsset, returnedOn: string) => void;
+}) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const returnedOnRef = useRef<HTMLInputElement>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const closeWhenReady = useCallback(() => {
+    if (!saving) onClose();
+  }, [onClose, saving]);
+  useDialogFocus(true, dialogRef, returnedOnRef, closeWhenReady);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    const returnedOn = String(new FormData(event.currentTarget).get("returnedOn") ?? "");
+    if (!returnedOn) {
+      setError("Choose the date the hardware was returned.");
+      returnedOnRef.current?.focus();
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      onReturned(await returnItAsset({
+        assetId: asset.id,
+        version: asset.version,
+        returnedOn,
+      }), returnedOn);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The hardware return could not be recorded. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
+    <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="directory-return-device-title" tabIndex={-1}>
+      <header>
+        <div><span>Hardware return</span><h4 id="directory-return-device-title">Record device return</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close record device return"><X size={17} /></button>
+      </header>
+      <form onSubmit={submit}>
+        <p className={styles.modalHelp}>Use this after {personName} has returned the hardware to MAM. The device stays in the register and its owner history is retained.</p>
+        <label>
+          <span>Hardware returned on <b aria-hidden="true">*</b></span>
+          <input ref={returnedOnRef} name="returnedOn" type="date" defaultValue={melbourneToday()} max={melbourneToday()} required />
+        </label>
+        <p className={styles.modalHelp}><CalendarCheck2 size={15} /> Once recorded, this device no longer blocks end employment for this employee.</p>
+        {error ? <p className={styles.modalError} role="alert"><AlertCircle size={15} />{error}</p> : null}
+        <footer>
+          <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
+          <button className={styles.primaryAction} type="submit" disabled={saving}>
+            {saving ? <LoaderCircle className={styles.spinner} size={15} /> : <Undo2 size={15} />}
+            {saving ? "Recording…" : "Record return"}
+          </button>
+        </footer>
+      </form>
+    </section>
+  </div>;
+}
+
 function RemoveDeviceModal({
   asset,
   onClose,
@@ -158,18 +252,18 @@ function RemoveDeviceModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="directory-remove-device-title" tabIndex={-1}>
       <header>
-        <div><span>Remove device</span><h4 id="directory-remove-device-title">Remove this device?</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <div><span>Incorrect entry</span><h4 id="directory-remove-device-title">Remove incorrect entry?</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close remove device"><X size={17} /></button>
       </header>
       <div className={styles.modalBody}>
-        <p>This removes the device from the active register. Its barcode and assignment audit remain safely retained for record keeping.</p>
+        <p>Use this only for a duplicate or mistaken record. For an employee leaving or handing hardware back, record a hardware return instead so the custody timeline stays complete.</p>
         {error ? <p className={styles.modalError} role="alert"><AlertCircle size={15} />{error}</p> : null}
       </div>
       <footer className={styles.modalFooter}>
         <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving} ref={cancelRef}>Keep device</button>
         <button className={styles.dangerAction} type="button" onClick={() => void removeDevice()} disabled={saving}>
           {saving ? <LoaderCircle className={styles.spinner} size={15} /> : <Trash2 size={15} />}
-          {saving ? "Removing…" : "Yes, remove device"}
+          {saving ? "Removing…" : "Remove incorrect entry"}
         </button>
       </footer>
     </section>
@@ -194,6 +288,7 @@ export function EmployeeDeviceAssignments({
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
   const [assignmentTarget, setAssignmentTarget] = useState<ItAsset | null>(null);
+  const [returnTarget, setReturnTarget] = useState<ItAsset | null>(null);
   const [removalTarget, setRemovalTarget] = useState<ItAsset | null>(null);
 
   const load = useCallback(async () => {
@@ -233,6 +328,12 @@ export function EmployeeDeviceAssignments({
     setNotice(`${asset.assetCode} was removed from the active register.`);
   }
 
+  function assetReturned(asset: ItAsset, returnedOn: string) {
+    setReturnTarget(null);
+    setAssets((current) => current.filter((candidate) => candidate.id !== asset.id));
+    setNotice(`${asset.assetCode} was returned on ${formatDate(returnedOn)} and remains in the asset register.`);
+  }
+
   return <fieldset className={styles.section}>
     <legend>Registered devices <small>Live IT asset register</small></legend>
     <p className={styles.intro}>Devices linked here are managed in the IT asset register. Each active device has one accountable employee.</p>
@@ -247,14 +348,17 @@ export function EmployeeDeviceAssignments({
         <div className={styles.deviceCopy}><strong>{assetTypeLabel(asset.assetType)}</strong><span>{assetDescription(asset)}</span></div>
         <div className={styles.deviceCode}><span>Asset no.</span><strong>{asset.assetCode}</strong></div>
         <div className={styles.deviceSerial}><span>Serial</span><strong>{asset.serialNumber || "Not recorded"}</strong></div>
+        <div className={styles.deviceAssigned}><span>Assigned on</span><strong>{formatDate(asset.assignedOn)}</strong></div>
         <div className={styles.deviceActions}>
+          <button className={styles.secondaryAction} type="button" onClick={() => setReturnTarget(asset)}><Undo2 size={14} /> Record return</button>
           <button className={styles.secondaryAction} type="button" onClick={() => setAssignmentTarget(asset)}><Pencil size={14} /> Change owner</button>
-          <button className={styles.dangerAction} type="button" onClick={() => setRemovalTarget(asset)}><Trash2 size={14} /> Remove</button>
+          <button className={styles.dangerAction} type="button" onClick={() => setRemovalTarget(asset)}><Trash2 size={14} /> Remove incorrect entry</button>
         </div>
       </article>)}
     </div> : null}
 
     {assignmentTarget ? <ChangeOwnerModal asset={assignmentTarget} assignees={assignees} onClose={() => setAssignmentTarget(null)} onSaved={ownerChanged} /> : null}
+    {returnTarget ? <ReturnDeviceModal asset={returnTarget} personName={personName} onClose={() => setReturnTarget(null)} onReturned={assetReturned} /> : null}
     {removalTarget ? <RemoveDeviceModal asset={removalTarget} onClose={() => setRemovalTarget(null)} onRemoved={assetRemoved} /> : null}
   </fieldset>;
 }

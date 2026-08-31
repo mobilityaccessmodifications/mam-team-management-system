@@ -283,6 +283,9 @@ export async function archiveEmployeeDirectoryRecord(input: {
     });
     if (error) {
       const message = error.message?.toLocaleLowerCase() ?? "";
+      if (message.includes("return of this employee") || message.includes("active it devices")) {
+        return { ok: false, message: "Record the employee’s hardware return date in Registered devices before ending employment." };
+      }
       if (message.includes("reporting") || message.includes("account") || message.includes("manager") || message.includes("end date")) {
         return { ok: false, message: error.message };
       }

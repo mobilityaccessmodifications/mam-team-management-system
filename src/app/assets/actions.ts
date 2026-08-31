@@ -8,14 +8,17 @@ import {
   type CreateItAssetInput,
   type ItAsset,
   type ItAssetAssignee,
+  type ItAssetCustodyHistory,
   type ItAssetStatus,
   type ItAssetType,
   type ReassignItAssetInput,
+  type ReturnItAssetInput,
   type RetireItAssetInput,
 } from "@/lib/it-asset-types";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ASSET_CODE_PATTERN = /^MAM-IT-\d{6,}$/;
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const GENERIC_LOAD_ERROR = "IT assets could not be loaded. Refresh and try again.";
 const GENERIC_SAVE_ERROR = "The device could not be saved. Refresh and try again.";
 const VALID_TYPES = new Set<string>(IT_ASSET_TYPES);
@@ -35,8 +38,26 @@ type ItAssetRpcRow = {
   assigned_person_name: string | null;
   assigned_person_title: string | null;
   assigned_person_team: string | null;
+  assigned_on?: string | null;
+  last_returned_on?: string | null;
   created_at: string;
   version: number | string;
+};
+
+type ItAssetCustodyHistoryRpcRow = {
+  custody_id: string;
+  asset_id: string;
+  asset_code: string;
+  asset_type: string;
+  manufacturer: string | null;
+  model: string | null;
+  serial_number: string | null;
+  person_id: string;
+  person_name: string;
+  person_title: string;
+  person_team: string | null;
+  assigned_on: string;
+  returned_on: string | null;
 };
 
 type ItAssetAssigneeRpcRow = {
@@ -108,6 +129,24 @@ function validateRetirementInput(input: unknown) {
   };
 }
 
+function validIsoDate(value: unknown, message: string) {
+  const date = requiredString(value);
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  if (!ISO_DATE_PATTERN.test(date) || Number.isNaN(parsed.valueOf()) || parsed.toISOString().slice(0, 10) !== date) {
+    throw new Error(message);
+  }
+  return date;
+}
+
+function validateReturnInput(input: unknown) {
+  const value = inputObject(input);
+  return {
+    p_asset_id: requiredUuid(value.assetId, "The device record is invalid."),
+    p_expected_version: version(value.version),
+    p_returned_on: validIsoDate(value.returnedOn, "Choose the date the hardware was returned."),
+  };
+}
+
 function requiredString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -115,6 +154,11 @@ function requiredString(value: unknown) {
 function nullableString(value: unknown) {
   const cleaned = requiredString(value);
   return cleaned || null;
+}
+
+function nullableIsoDate(value: unknown, message: string) {
+  if (value === undefined || value === null || value === "") return null;
+  return validIsoDate(value, message);
 }
 
 function version(value: unknown) {
@@ -154,6 +198,8 @@ function mapItAsset(row: unknown): ItAsset {
   const assignedPersonId = nullableString(value?.assigned_person_id);
   const assignedPersonName = nullableString(value?.assigned_person_name);
   const assignedPersonTitle = nullableString(value?.assigned_person_title);
+  const assignedOn = nullableIsoDate(value?.assigned_on, GENERIC_LOAD_ERROR);
+  const lastReturnedOn = nullableIsoDate(value?.last_returned_on, GENERIC_LOAD_ERROR);
 
   if (
     !UUID_PATTERN.test(id)
@@ -164,6 +210,8 @@ function mapItAsset(row: unknown): ItAsset {
     || !createdAt
     || (assignedPersonId !== null && (!assignedPersonName || !assignedPersonTitle))
     || (assignedPersonId === null && (assignedPersonName || assignedPersonTitle))
+    || (status === "assigned" && (assignedPersonId === null || assignedOn === null))
+    || (status !== "assigned" && assignedPersonId !== null)
   ) {
     throw new Error(GENERIC_LOAD_ERROR);
   }
@@ -183,8 +231,53 @@ function mapItAsset(row: unknown): ItAsset {
       positionTitle: assignedPersonTitle!,
       teamName: requiredString(value?.assigned_person_team),
     },
+    assignedOn,
+    lastReturnedOn,
     createdAt,
     version: version(value?.version),
+  };
+}
+
+function mapItAssetCustodyHistory(row: unknown): ItAssetCustodyHistory {
+  const value = row as Partial<ItAssetCustodyHistoryRpcRow> | null;
+  const id = requiredString(value?.custody_id);
+  const assetId = requiredString(value?.asset_id);
+  const assetCode = requiredString(value?.asset_code);
+  const assetType = requiredString(value?.asset_type);
+  const personId = requiredString(value?.person_id);
+  const personName = requiredString(value?.person_name);
+  const personTitle = requiredString(value?.person_title);
+  const assignedOn = validIsoDate(value?.assigned_on, GENERIC_LOAD_ERROR);
+  const returnedOn = nullableIsoDate(value?.returned_on, GENERIC_LOAD_ERROR);
+
+  if (
+    !UUID_PATTERN.test(id)
+    || !UUID_PATTERN.test(assetId)
+    || !ASSET_CODE_PATTERN.test(assetCode)
+    || !VALID_TYPES.has(assetType)
+    || !UUID_PATTERN.test(personId)
+    || !personName
+    || !personTitle
+  ) {
+    throw new Error(GENERIC_LOAD_ERROR);
+  }
+
+  return {
+    id,
+    assetId,
+    assetCode,
+    assetType: assetType as ItAssetType,
+    manufacturer: requiredString(value?.manufacturer),
+    model: requiredString(value?.model),
+    serialNumber: requiredString(value?.serial_number),
+    person: {
+      personId,
+      fullName: personName,
+      positionTitle: personTitle,
+      teamName: requiredString(value?.person_team),
+    },
+    assignedOn,
+    returnedOn,
   };
 }
 
@@ -203,6 +296,12 @@ function mutationError(error: { message?: string } | null, fallback = GENERIC_SA
   if (message.includes("removed device") || message.includes("already been removed")) {
     return new Error("This device has already been removed. Refresh the register.");
   }
+  if (message.includes("returned date") || message.includes("hardware was returned")) {
+    return new Error(rawMessage || "Choose the date the hardware was returned.");
+  }
+  if (message.includes("not currently assigned")) {
+    return new Error("This device is not currently assigned. Refresh the register.");
+  }
   if (message.includes("device type") || message.includes("manufacturer") || message.includes("model")) {
     return new Error(rawMessage);
   }
@@ -212,7 +311,7 @@ function mutationError(error: { message?: string } | null, fallback = GENERIC_SA
 /** Returns the System Admin-only inventory projection; never a secret store. */
 export async function listItAssets(): Promise<ItAsset[]> {
   const supabase = await requireItAssetAdministrator();
-  const { data, error } = await supabase.rpc("list_it_assets");
+  const { data, error } = await supabase.rpc("list_it_assets_with_custody");
   if (error || !Array.isArray(data)) throw new Error(GENERIC_LOAD_ERROR);
   return data.map(mapItAsset);
 }
@@ -229,11 +328,30 @@ export async function listItAssetAssignees(): Promise<ItAssetAssignee[]> {
 export async function listItAssetsForEmployee(personId: string): Promise<ItAsset[]> {
   const supabase = await requireItAssetAdministrator();
   const validPersonId = requiredUuid(personId, "The employee record is invalid.");
-  const { data, error } = await supabase.rpc("list_it_assets_for_employee", {
+  const { data, error } = await supabase.rpc("list_it_assets_for_employee_with_custody", {
     p_person_id: validPersonId,
   });
   if (error || !Array.isArray(data)) throw new Error(GENERIC_LOAD_ERROR);
   return data.map(mapItAsset);
+}
+
+/** Returns the durable, System Admin-only owner timeline for one device. */
+export async function listItAssetCustodyHistory(assetId: string): Promise<ItAssetCustodyHistory[]> {
+  const supabase = await requireItAssetAdministrator();
+  const validAssetId = requiredUuid(assetId, "The device record is invalid.");
+  const { data, error } = await supabase.rpc("list_it_asset_custody_history", {
+    p_asset_id: validAssetId,
+  });
+  if (error || !Array.isArray(data)) throw new Error(GENERIC_LOAD_ERROR);
+  return data.map(mapItAssetCustodyHistory);
+}
+
+async function loadItAssetById(supabase: Awaited<ReturnType<typeof createClient>>, assetId: string) {
+  const { data, error } = await supabase.rpc("list_it_assets_with_custody");
+  if (error || !Array.isArray(data)) throw new Error(GENERIC_LOAD_ERROR);
+  const asset = data.map(mapItAsset).find((candidate) => candidate.id === assetId);
+  if (!asset) throw new Error(GENERIC_LOAD_ERROR);
+  return asset;
 }
 
 /** Generates the database-owned unique MAM asset code and records its custodian. */
@@ -242,7 +360,8 @@ export async function createItAsset(input: CreateItAssetInput): Promise<ItAsset>
   const values = validateCreateInput(input);
   const { data, error } = await supabase.rpc("create_it_asset", values);
   if (error || !Array.isArray(data)) throw mutationError(error, "The device could not be added. Refresh and try again.");
-  const asset = mapItAsset(data[0]);
+  const assetId = requiredUuid((data[0] as Partial<ItAssetRpcRow> | undefined)?.asset_id, GENERIC_SAVE_ERROR);
+  const asset = await loadItAssetById(supabase, assetId);
   revalidatePath("/");
   return asset;
 }
@@ -253,12 +372,26 @@ export async function reassignItAsset(input: ReassignItAssetInput): Promise<ItAs
   const values = validateReassignmentInput(input);
   const { data, error } = await supabase.rpc("reassign_it_asset", values);
   if (error || !Array.isArray(data)) throw mutationError(error);
+  const assetId = requiredUuid((data[0] as Partial<ItAssetRpcRow> | undefined)?.asset_id, GENERIC_SAVE_ERROR);
+  const asset = await loadItAssetById(supabase, assetId);
+  revalidatePath("/");
+  return asset;
+}
+
+/** Closes the current custody period without deleting the asset or its history. */
+export async function returnItAsset(input: ReturnItAssetInput): Promise<ItAsset> {
+  const supabase = await requireItAssetAdministrator();
+  const values = validateReturnInput(input);
+  const { data, error } = await supabase.rpc("return_it_asset", values);
+  if (error || !Array.isArray(data)) {
+    throw mutationError(error, "The hardware return could not be recorded. Refresh and try again.");
+  }
   const asset = mapItAsset(data[0]);
   revalidatePath("/");
   return asset;
 }
 
-/** Removes a device from the active register while retaining its barcode audit history. */
+/** Hides an incorrect entry from the active register while retaining its audit history. */
 export async function retireItAsset(input: RetireItAssetInput): Promise<ItAsset> {
   const supabase = await requireItAssetAdministrator();
   const values = validateRetirementInput(input);

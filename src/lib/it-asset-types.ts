@@ -40,10 +40,28 @@ export type ItAsset = {
   model: string;
   serialNumber: string;
   status: ItAssetStatus;
-  /** The current accountable employee. Legacy pre-assignment records can be null until explicitly assigned. */
+  /** The current accountable employee. Available hardware has no current owner. */
   assignedTo: ItAssetCustodian | null;
+  /** Database-owned date that the current custody period began. */
+  assignedOn: string | null;
+  /** Most recent date the hardware was physically returned to MAM. */
+  lastReturnedOn: string | null;
   createdAt: string;
   version: number;
+};
+
+/** System Admin-only custody history used for audit and register exports. */
+export type ItAssetCustodyHistory = {
+  id: string;
+  assetId: string;
+  assetCode: string;
+  assetType: ItAssetType;
+  manufacturer: string;
+  model: string;
+  serialNumber: string;
+  person: ItAssetCustodian;
+  assignedOn: string;
+  returnedOn: string | null;
 };
 
 /**
@@ -75,6 +93,13 @@ export type ReassignItAssetInput = {
   assetId: string;
   assignedPersonId: string;
   version: number;
+};
+
+export type ReturnItAssetInput = {
+  assetId: string;
+  version: number;
+  /** ISO calendar date of the physical hardware return. */
+  returnedOn: string;
 };
 
 export type RetireItAssetInput = {

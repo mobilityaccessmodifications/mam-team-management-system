@@ -3,6 +3,8 @@
 import {
   AlertCircle,
   Barcode,
+  CalendarCheck2,
+  ClipboardClock,
   Download,
   Laptop,
   LoaderCircle,
@@ -12,6 +14,7 @@ import {
   Search,
   Pencil,
   Trash2,
+  Undo2,
   UsersRound,
   X,
 } from "lucide-react";
@@ -27,8 +30,10 @@ import {
 import {
   createItAsset,
   listItAssetAssignees,
+  listItAssetCustodyHistory,
   listItAssets,
   reassignItAsset,
+  returnItAsset,
   retireItAsset,
 } from "@/app/assets/actions";
 import styles from "@/components/asset-register.module.css";
@@ -39,6 +44,7 @@ import {
   type CreateItAssetInput,
   type ItAsset,
   type ItAssetAssignee,
+  type ItAssetCustodyHistory,
   type ItAssetType,
 } from "@/lib/it-asset-types";
 
@@ -72,6 +78,27 @@ function custodianDescription(asset: ItAsset) {
   return asset.assignedTo.positionTitle
     ? `${asset.assignedTo.fullName} · ${asset.assignedTo.positionTitle}`
     : asset.assignedTo.fullName;
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "Not recorded";
+  return new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Melbourne",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${value}T00:00:00.000Z`));
+}
+
+function melbourneToday() {
+  const parts = new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Melbourne",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 function safeFileName(assetCode: string) {
@@ -424,6 +451,132 @@ function ChangeDeviceOwnerModal({
   </div>;
 }
 
+function ReturnDeviceModal({
+  asset,
+  onClose,
+  onReturned,
+}: {
+  asset: ItAsset;
+  onClose: () => void;
+  onReturned: (asset: ItAsset, returnedOn: string) => void;
+}) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const returnedOnRef = useRef<HTMLInputElement>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const closeWhenReady = useCallback(() => {
+    if (!saving) onClose();
+  }, [onClose, saving]);
+  useDialogFocus(true, dialogRef, returnedOnRef, closeWhenReady);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    const returnedOn = String(new FormData(event.currentTarget).get("returnedOn") ?? "");
+    if (!returnedOn) {
+      setError("Choose the date the hardware was returned.");
+      returnedOnRef.current?.focus();
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      onReturned(await returnItAsset({
+        assetId: asset.id,
+        version: asset.version,
+        returnedOn,
+      }), returnedOn);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The hardware return could not be recorded. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
+    <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="return-device-title" tabIndex={-1}>
+      <header>
+        <div><span>Hardware return</span><h2 id="return-device-title">Record device return</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close record device return"><X size={19} /></button>
+      </header>
+      <form onSubmit={submit}>
+        <div className={styles.currentCustodian}><UsersRound size={16} /><div><span>Returning from</span><strong>{custodianDescription(asset)}</strong></div></div>
+        <label>
+          <span>Hardware returned on <b aria-hidden="true">*</b></span>
+          <input ref={returnedOnRef} name="returnedOn" type="date" defaultValue={melbourneToday()} max={melbourneToday()} required />
+        </label>
+        <p className={styles.formHelp}><CalendarCheck2 size={15} /> This closes the current custody period and keeps the device, barcode and owner history in the register for future reassignment.</p>
+        {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
+        <footer>
+          <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
+          <button className={styles.primaryAction} type="submit" disabled={saving}>
+            {saving ? <LoaderCircle className={styles.spinner} size={16} /> : <Undo2 size={16} />}
+            {saving ? "Recording…" : "Record return"}
+          </button>
+        </footer>
+      </form>
+    </section>
+  </div>;
+}
+
+function CustodyHistoryModal({
+  asset,
+  onClose,
+}: {
+  asset: ItAsset;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const [history, setHistory] = useState<ItAssetCustodyHistory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useDialogFocus(true, dialogRef, closeRef, onClose);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listItAssetCustodyHistory(asset.id)
+      .then((entries) => {
+        if (cancelled) return;
+        setHistory(entries);
+        setError("");
+      })
+      .catch((reason) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "The device history could not be loaded.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [asset.id]);
+
+  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="device-history-title" tabIndex={-1}>
+      <header>
+        <div><span>Device custody</span><h2 id="device-history-title">Ownership history</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <button type="button" onClick={onClose} aria-label="Close device ownership history"><X size={19} /></button>
+      </header>
+      <div className={styles.modalBody}>
+        {loading ? <div className={styles.historyLoading}><LoaderCircle className={styles.spinner} size={16} /> Loading ownership history…</div> : null}
+        {!loading && error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
+        {!loading && !error && !history.length ? <p className={styles.historyEmpty}>No custody history is recorded for this device yet.</p> : null}
+        {!loading && !error && history.length ? <ol className={styles.historyTimeline}>
+          {history.map((entry) => <li key={entry.id}>
+            <ClipboardClock size={16} aria-hidden="true" />
+            <div><strong>{entry.person.fullName}</strong><span>{[entry.person.positionTitle, entry.person.teamName].filter(Boolean).join(" · ")}</span><small>{formatDate(entry.assignedOn)} – {entry.returnedOn ? formatDate(entry.returnedOn) : "Currently assigned"}</small></div>
+          </li>)}
+        </ol> : null}
+      </div>
+      <footer className={styles.modalFooter}>
+        <button className={styles.secondaryAction} type="button" onClick={onClose} ref={closeRef}>Close</button>
+      </footer>
+    </section>
+  </div>;
+}
+
 function RemoveDeviceModal({
   asset,
   onClose,
@@ -458,19 +611,19 @@ function RemoveDeviceModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="remove-device-title" tabIndex={-1}>
       <header>
-        <div><span>Remove device</span><h2 id="remove-device-title">Remove this device?</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <div><span>Incorrect entry</span><h2 id="remove-device-title">Remove incorrect entry?</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close remove device"><X size={19} /></button>
       </header>
       <div className={styles.modalBody}>
-        <p>This removes the device from the active register. Its barcode and assignment audit remain safely retained for record keeping.</p>
-        <div className={styles.currentCustodian}><UsersRound size={16} /><div><span>Last assigned to</span><strong>{asset.assignedTo ? custodianDescription(asset) : "Assignment required"}</strong></div></div>
+        <p>Use this only for a duplicate or mistaken record. For an employee leaving or handing hardware back, record a hardware return instead so the custody timeline stays complete.</p>
+        <div className={styles.currentCustodian}><UsersRound size={16} /><div><span>Current owner</span><strong>{asset.assignedTo ? custodianDescription(asset) : "No current owner"}</strong></div></div>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
       </div>
       <footer className={styles.modalFooter}>
         <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving} ref={cancelRef}>Keep device</button>
         <button className={styles.dangerAction} type="button" onClick={() => void removeDevice()} disabled={saving}>
           {saving ? <LoaderCircle className={styles.spinner} size={16} /> : <Trash2 size={16} />}
-          {saving ? "Removing…" : "Yes, remove device"}
+          {saving ? "Removing…" : "Remove incorrect entry"}
         </button>
       </footer>
     </section>
@@ -485,6 +638,8 @@ export function AssetRegister() {
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [newAsset, setNewAsset] = useState<ItAsset | null>(null);
   const [assignmentTarget, setAssignmentTarget] = useState<ItAsset | null>(null);
+  const [returnTarget, setReturnTarget] = useState<ItAsset | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<ItAsset | null>(null);
   const [removalTarget, setRemovalTarget] = useState<ItAsset | null>(null);
   const [query, setQuery] = useState("");
   const [barcodeAction, setBarcodeAction] = useState<{ id: string; action: BarcodeAction } | null>(null);
@@ -543,6 +698,12 @@ export function AssetRegister() {
     setNotice(`${asset.assetCode} is now assigned to ${asset.assignedTo?.fullName ?? "the selected employee"}.`);
   }
 
+  function assetReturned(asset: ItAsset, returnedOn: string) {
+    setAssets((current) => current.map((candidate) => candidate.id === asset.id ? asset : candidate));
+    setReturnTarget(null);
+    setNotice(`${asset.assetCode} was returned on ${formatDate(returnedOn)} and is ready to reassign.`);
+  }
+
   function assetRemoved(asset: ItAsset) {
     setAssets((current) => current.filter((candidate) => candidate.id !== asset.id));
     setRemovalTarget(null);
@@ -579,7 +740,11 @@ export function AssetRegister() {
         <span>IT asset register</span>
         <h2 id="asset-register-title">Devices and labels</h2>
       </div>
-      <button className={styles.primaryAction} type="button" onClick={() => setShowAddDevice(true)}><PackagePlus size={17} /> Add device</button>
+      <div className={styles.headerActions}>
+        <a className={styles.secondaryAction} href="/assets/export?format=csv"><Download size={16} /> Export CSV</a>
+        <a className={styles.secondaryAction} href="/assets/export?format=xlsx"><Download size={16} /> Export Excel</a>
+        <button className={styles.primaryAction} type="button" onClick={() => setShowAddDevice(true)}><PackagePlus size={17} /> Add device</button>
+      </div>
     </header>
 
     {notice ? <div className={styles.notice} role="status"><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={15} /></button></div> : null}
@@ -606,11 +771,20 @@ export function AssetRegister() {
           <div className={styles.assetCode}><span>Asset number</span><strong>{asset.assetCode}</strong></div>
           <div className={styles.assetSerial}><span>Serial number</span><strong>{asset.serialNumber || "Not recorded"}</strong></div>
           <div className={styles.assetCustodian} data-missing={!asset.assignedTo}>
-            <span>Assigned to</span><strong>{custodianDescription(asset)}</strong>
+            <span>{asset.assignedTo ? "Assigned to" : "Available"}</span><strong>{asset.assignedTo ? custodianDescription(asset) : "Ready to assign"}</strong>
+          </div>
+          <div className={styles.assetTiming}>
+            <span>{asset.assignedTo ? "Assigned on" : "Last returned"}</span><strong>{formatDate(asset.assignedTo ? asset.assignedOn : asset.lastReturnedOn)}</strong>
           </div>
           <div className={styles.rowActions}>
+            {asset.assignedTo ? <button type="button" onClick={() => setReturnTarget(asset)} disabled={activeAction !== null} aria-label={`Record ${asset.assetCode} hardware return`}>
+              <Undo2 size={15} /><span>Return</span>
+            </button> : null}
             <button type="button" onClick={() => setAssignmentTarget(asset)} disabled={activeAction !== null} aria-label={`Change ${asset.assetCode} owner`}>
               <Pencil size={15} /><span>{asset.assignedTo ? "Owner" : "Assign"}</span>
+            </button>
+            <button type="button" onClick={() => setHistoryTarget(asset)} disabled={activeAction !== null} aria-label={`View ${asset.assetCode} ownership history`}>
+              <ClipboardClock size={15} /><span>History</span>
             </button>
             <button type="button" onClick={() => void downloadFromRow(asset)} disabled={activeAction !== null} aria-label={`Download ${asset.assetCode} barcode`}>
               {activeAction === "download" ? <LoaderCircle className={styles.spinner} size={15} /> : <Download size={15} />}<span>Download</span>
@@ -618,7 +792,7 @@ export function AssetRegister() {
             <button type="button" onClick={() => void printFromRow(asset)} disabled={activeAction !== null} aria-label={`Open ${asset.assetCode} barcode label`}>
               <Printer size={15} /><span>Label</span>
             </button>
-            <button type="button" className={styles.removeAction} onClick={() => setRemovalTarget(asset)} disabled={activeAction !== null} aria-label={`Remove ${asset.assetCode} device`}>
+            <button type="button" className={styles.removeAction} onClick={() => setRemovalTarget(asset)} disabled={activeAction !== null} aria-label={`Remove incorrect ${asset.assetCode} device entry`}>
               <Trash2 size={15} /><span>Remove</span>
             </button>
           </div>
@@ -629,6 +803,8 @@ export function AssetRegister() {
     {showAddDevice ? <AddDeviceModal assignees={assignees} onClose={() => setShowAddDevice(false)} onCreated={assetCreated} /> : null}
     {newAsset ? <AssetLabelModal asset={newAsset} onClose={() => setNewAsset(null)} onAddAnother={() => { setNewAsset(null); setShowAddDevice(true); }} /> : null}
     {assignmentTarget ? <ChangeDeviceOwnerModal asset={assignmentTarget} assignees={assignees} onClose={() => setAssignmentTarget(null)} onSaved={assetOwnerChanged} /> : null}
+    {returnTarget ? <ReturnDeviceModal asset={returnTarget} onClose={() => setReturnTarget(null)} onReturned={assetReturned} /> : null}
+    {historyTarget ? <CustodyHistoryModal asset={historyTarget} onClose={() => setHistoryTarget(null)} /> : null}
     {removalTarget ? <RemoveDeviceModal asset={removalTarget} onClose={() => setRemovalTarget(null)} onRemoved={assetRemoved} /> : null}
   </section>;
 }

@@ -35,6 +35,7 @@
 .deviceCopy,
 .deviceCode,
 .deviceSerial,
+.deviceAssigned,
 .deviceActions,
 .modal header,
 .modal footer,
@@ -101,7 +102,7 @@
 
 .deviceCard {
   display: grid;
-  grid-template-columns: 36px minmax(120px, 1fr) minmax(115px, .8fr) minmax(110px, .8fr) auto;
+  grid-template-columns: 36px minmax(120px, 1fr) minmax(115px, .8fr) minmax(110px, .8fr) minmax(110px, .76fr) auto;
   gap: 11px;
   min-height: 64px;
   border-bottom: 1px solid #edf0ef;
@@ -124,7 +125,8 @@
 
 .deviceCopy,
 .deviceCode,
-.deviceSerial {
+.deviceSerial,
+.deviceAssigned {
   min-width: 0;
   align-items: flex-start;
   flex-direction: column;
@@ -133,7 +135,8 @@
 
 .deviceCopy strong,
 .deviceCode strong,
-.deviceSerial strong {
+.deviceSerial strong,
+.deviceAssigned strong {
   display: block;
   max-width: 100%;
   overflow: hidden;
@@ -154,7 +157,8 @@
 }
 
 .deviceCode span,
-.deviceSerial span {
+.deviceSerial span,
+.deviceAssigned span {
   color: var(--text-tertiary);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 9px;
@@ -170,6 +174,7 @@
 }
 
 .deviceSerial strong { font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; }
+.deviceAssigned strong { color: var(--text-secondary); font-size: 11px; }
 
 .deviceActions {
   flex-wrap: wrap;
@@ -329,6 +334,14 @@
   line-height: 1.45;
 }
 
+.modalHelp {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.modalHelp svg { flex: 0 0 auto; margin-top: 1px; color: var(--mam-orange-dark); }
+
 .modalError {
   align-items: flex-start;
   gap: 7px;
@@ -356,7 +369,8 @@
 
 @media (max-width: 900px) {
   .deviceCard { grid-template-columns: 36px minmax(120px, 1fr) minmax(115px, .85fr) auto; }
-  .deviceSerial { display: none; }
+  .deviceSerial,
+  .deviceAssigned { display: none; }
   .deviceActions { grid-column: 2 / -1; justify-content: flex-start; }
 }
 
