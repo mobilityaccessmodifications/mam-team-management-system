@@ -1014,7 +1014,12 @@ export function LeaveDemo({
     const byId = new Map(organisationPeople.map((person) => [person.id, person]));
     const self = byId.get(activeProfile.id);
     const rootId = self?.reportsTo ?? activeProfile.id;
-    const included = new Set([rootId]);
+    // The team directory is scoped to the selected employee's reporting
+    // branch, but the selected employee is also part of that directory.  A
+    // person normally reports to the team/group node, so starting only from
+    // `rootId` omitted them from their own list (and made their self-only
+    // device/subscription cards unreachable).
+    const included = new Set([rootId, self?.id ?? activeProfile.id]);
     let changed = true;
     while (changed) {
       changed = false;
@@ -1727,6 +1732,7 @@ export function LeaveDemo({
                 }}
                 refreshKey={employeeDirectoryRefreshKey}
               /> : activeProfile.accessRole === "employee" ? <EmployeeTeamDirectory
+                key={activeProfile.id}
                 people={employeeTeamDirectory}
                 currentPersonId={activeProfile.id}
                 onRequestWorkEmail={getOrganisationPersonWorkEmail}

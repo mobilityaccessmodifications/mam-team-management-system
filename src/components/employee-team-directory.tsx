@@ -94,7 +94,11 @@ export function EmployeeTeamDirectory({
   onLoadMySubscriptions?: () => Promise<EmployeeSubscription[]>;
 }) {
   const [query, setQuery] = useState("");
-  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  // Start on the signed-in employee so their own device and subscription
+  // cards are immediately reachable. The parent remounts this component
+  // when Change profile switches employees, so a previous card selection
+  // cannot leak into the new employee view.
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(currentPersonId ?? null);
   const [emailState, setEmailState] = useState<Record<string, EmailState>>({});
   const [deviceState, setDeviceState] = useState<DeviceState>({ state: "idle", assets: [] });
   const [deviceLoadAttempt, setDeviceLoadAttempt] = useState(0);
