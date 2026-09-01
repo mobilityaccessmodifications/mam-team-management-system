@@ -1740,6 +1740,7 @@ export function LeaveDemo({
                 selectedPersonId={employeeDirectorySelectedPersonId}
               /> : showManagerDirectory ? <ManagerEmployeeDirectory
                 previewManagerPersonId={previewScopedManagerPersonId}
+                managerPersonId={previewScopedManagerPersonId ?? currentPersonId}
                 onRecordsChanged={async () => {
                   // Refresh public organisation data after the manager-safe
                   // record mutation. The manager directory itself never

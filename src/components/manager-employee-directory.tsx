@@ -34,6 +34,8 @@ const recordsPerPage = 8;
 export type ManagerEmployeeDirectoryProps = {
   /** System Admin-only Change profile test scope; verified again by every RPC. */
   previewManagerPersonId?: string;
+  /** The active manager profile shown alongside their scoped team. */
+  managerPersonId?: string;
   /** Refreshes safe organisation data after a manager changes a work record. */
   onRecordsChanged?: () => void | Promise<void>;
   /** Incremented after a safe Realtime directory invalidation. */
@@ -81,6 +83,7 @@ function Field({
 
 export function ManagerEmployeeDirectory({
   previewManagerPersonId,
+  managerPersonId,
   onRecordsChanged,
   refreshKey,
 }: ManagerEmployeeDirectoryProps) {
@@ -130,6 +133,7 @@ export function ManagerEmployeeDirectory({
   }, [loadAttempt, loadRecords, refreshKey]);
 
   const selectedRecord = records.find((record) => record.personId === selectedPersonId) ?? null;
+  const selectedRecordIsManager = selectedRecord?.personId === managerPersonId;
   const filteredRecords = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
     return records.filter((record) => !term || [
@@ -226,6 +230,7 @@ export function ManagerEmployeeDirectory({
       {selectedRecord && draft ? <ManagerEmployeeEditor
         record={selectedRecord}
         draft={draft}
+        readOnly={selectedRecordIsManager}
         saving={saving}
         error={saveError}
         onChange={updateDraft}
@@ -288,6 +293,7 @@ function ManagerRecordList({
 function ManagerEmployeeEditor({
   record,
   draft,
+  readOnly,
   saving,
   error,
   onChange,
@@ -296,13 +302,14 @@ function ManagerEmployeeEditor({
 }: {
   record: ManagedEmployeeDirectoryRecord;
   draft: ManagedEmployeeDirectoryDraft;
+  readOnly: boolean;
   saving: boolean;
   error: string;
   onChange: (key: keyof ManagedEmployeeDirectoryDraft, value: string) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
-  return <section className={styles.editor} aria-label="Edit team employee record">
+  return <section className={styles.editor} aria-label={readOnly ? "View your work directory record" : "Edit team employee record"}>
     <header className={styles.editorHeader}>
       <div>
         <span>Team employee</span>
@@ -314,7 +321,7 @@ function ManagerEmployeeEditor({
 
     <form onSubmit={onSubmit}>
       {error ? <div className={styles.formError} role="alert"><AlertCircle size={16} /><span>{error}</span></div> : null}
-      <fieldset>
+      <fieldset disabled={readOnly}>
         <legend>Work directory details</legend>
         <div className={styles.formGrid}>
           <Field label="First name" required><input value={draft.firstName} onChange={(event) => onChange("firstName", event.target.value)} autoComplete="given-name" required maxLength={80} /></Field>
@@ -327,8 +334,8 @@ function ManagerEmployeeEditor({
         </div>
       </fieldset>
       <footer className={styles.formFooter}>
-        <div className={styles.formFooterLeft}><p><Mail size={14} /> Reporting line, employment status and private HR details are managed by Admin.</p></div>
-        <div><button type="button" className={styles.secondaryAction} onClick={onClose} disabled={saving}>Cancel</button><button type="submit" className={styles.primaryAction} disabled={saving}>{saving ? "Saving…" : "Save changes"}</button></div>
+        <div className={styles.formFooterLeft}><p><Mail size={14} /> {readOnly ? "This is your own work directory record. Work details are managed by Admin." : "Reporting line, employment status and private HR details are managed by Admin."}</p></div>
+        <div>{readOnly ? <button type="button" className={styles.secondaryAction} onClick={onClose}>Close</button> : <><button type="button" className={styles.secondaryAction} onClick={onClose} disabled={saving}>Cancel</button><button type="submit" className={styles.primaryAction} disabled={saving}>{saving ? "Saving…" : "Save changes"}</button></>}</div>
       </footer>
     </form>
   </section>;
