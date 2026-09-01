@@ -250,7 +250,7 @@
 }
 
 .assetList {
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--surface-border);
   border-radius: var(--radius-xl);
   background: var(--surface-raised);
@@ -258,6 +258,7 @@
 }
 
 .assetRow {
+  position: relative;
   display: grid;
   grid-template-columns: 42px minmax(150px, 1.08fr) minmax(124px, .84fr) minmax(126px, .9fr) minmax(150px, .98fr) minmax(124px, .78fr) auto;
   gap: 14px;
@@ -269,6 +270,7 @@
 .assetRow:last-child { border-bottom: 0; }
 
 .assetRow:hover { background: color-mix(in srgb, var(--surface-warm) 40%, var(--surface-raised)); }
+.assetRow:focus-within { z-index: 2; }
 
 .assetIcon {
   display: grid;
@@ -329,6 +331,49 @@
   background: var(--surface-raised);
   color: var(--text-secondary);
   padding: 6px 9px;
+}
+
+.moreActions {
+  position: relative;
+  display: flex;
+}
+
+.rowActions .moreButton {
+  width: 34px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px;
+}
+
+.moreMenu {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  min-width: 160px;
+  gap: 3px;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-md);
+  padding: 5px;
+}
+
+.moreMenu button {
+  width: 100%;
+  min-height: 44px;
+  justify-content: flex-start;
+  border-color: transparent;
+  background: transparent;
+  padding: 8px 9px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.moreMenu button:hover:not(:disabled) {
+  border-color: var(--surface-border);
+  background: var(--surface-warm);
 }
 
 .rowActions .removeAction,
@@ -634,6 +679,7 @@
   .assetIcon { width: 34px; height: 34px; }
   .assetCode { grid-column: 2 / 3; }
   .rowActions { grid-column: 2 / -1; }
+  .rowActions button { min-height: 44px; }
   .formGrid { grid-template-columns: 1fr; }
   .labelPreview { align-items: flex-start; flex-direction: column; }
   .labelPreview > div { flex-basis: auto; }

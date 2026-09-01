@@ -8,6 +8,7 @@ import {
   Download,
   Laptop,
   LoaderCircle,
+  MoreHorizontal,
   PackagePlus,
   Printer,
   RefreshCw,
@@ -643,8 +644,30 @@ export function AssetRegister() {
   const [removalTarget, setRemovalTarget] = useState<ItAsset | null>(null);
   const [query, setQuery] = useState("");
   const [barcodeAction, setBarcodeAction] = useState<{ id: string; action: BarcodeAction } | null>(null);
+  const [expandedActionsId, setExpandedActionsId] = useState<string | null>(null);
   const [rowError, setRowError] = useState("");
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    if (!expandedActionsId) return;
+
+    function closeOnOutsidePointer(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-asset-actions]")) return;
+      setExpandedActionsId(null);
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setExpandedActionsId(null);
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [expandedActionsId]);
 
   const loadAssets = useCallback(async () => {
     setLoading(true);
@@ -776,25 +799,40 @@ export function AssetRegister() {
           <div className={styles.assetTiming}>
             <span>{asset.assignedTo ? "Assigned on" : "Last returned"}</span><strong>{formatDate(asset.assignedTo ? asset.assignedOn : asset.lastReturnedOn)}</strong>
           </div>
-          <div className={styles.rowActions}>
-            {asset.assignedTo ? <button type="button" onClick={() => setReturnTarget(asset)} disabled={activeAction !== null} aria-label={`Record ${asset.assetCode} hardware return`}>
+          <div className={styles.rowActions} data-asset-actions>
+            {asset.assignedTo ? <button type="button" onClick={() => { setExpandedActionsId(null); setReturnTarget(asset); }} disabled={activeAction !== null} aria-label={`Record ${asset.assetCode} hardware return`}>
               <Undo2 size={15} /><span>Return</span>
             </button> : null}
-            <button type="button" onClick={() => setAssignmentTarget(asset)} disabled={activeAction !== null} aria-label={`Change ${asset.assetCode} owner`}>
+            <button type="button" onClick={() => { setExpandedActionsId(null); setAssignmentTarget(asset); }} disabled={activeAction !== null} aria-label={`Change ${asset.assetCode} owner`}>
               <Pencil size={15} /><span>{asset.assignedTo ? "Owner" : "Assign"}</span>
             </button>
-            <button type="button" onClick={() => setHistoryTarget(asset)} disabled={activeAction !== null} aria-label={`View ${asset.assetCode} ownership history`}>
+            <button type="button" onClick={() => { setExpandedActionsId(null); setHistoryTarget(asset); }} disabled={activeAction !== null} aria-label={`View ${asset.assetCode} ownership history`}>
               <ClipboardClock size={15} /><span>History</span>
             </button>
-            <button type="button" onClick={() => void downloadFromRow(asset)} disabled={activeAction !== null} aria-label={`Download ${asset.assetCode} barcode`}>
-              {activeAction === "download" ? <LoaderCircle className={styles.spinner} size={15} /> : <Download size={15} />}<span>Download</span>
-            </button>
-            <button type="button" onClick={() => void printFromRow(asset)} disabled={activeAction !== null} aria-label={`Open ${asset.assetCode} barcode label`}>
-              <Printer size={15} /><span>Label</span>
-            </button>
-            <button type="button" className={styles.removeAction} onClick={() => setRemovalTarget(asset)} disabled={activeAction !== null} aria-label={`Remove incorrect ${asset.assetCode} device entry`}>
-              <Trash2 size={15} /><span>Remove</span>
-            </button>
+            <div className={styles.moreActions}>
+              <button
+                type="button"
+                className={styles.moreButton}
+                onClick={() => setExpandedActionsId((current) => current === asset.id ? null : asset.id)}
+                disabled={activeAction !== null}
+                aria-label={`More actions for ${asset.assetCode}`}
+                aria-haspopup="menu"
+                aria-expanded={expandedActionsId === asset.id}
+              >
+                <MoreHorizontal size={17} aria-hidden="true" />
+              </button>
+              {expandedActionsId === asset.id ? <div className={styles.moreMenu} role="menu" aria-label={`More actions for ${asset.assetCode}`}>
+                <button type="button" role="menuitem" onClick={() => { setExpandedActionsId(null); void downloadFromRow(asset); }} disabled={activeAction !== null}>
+                  {activeAction === "download" ? <LoaderCircle className={styles.spinner} size={15} /> : <Download size={15} />}<span>Download</span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setExpandedActionsId(null); void printFromRow(asset); }} disabled={activeAction !== null}>
+                  <Printer size={15} /><span>Label</span>
+                </button>
+                <button type="button" role="menuitem" className={styles.removeAction} onClick={() => { setExpandedActionsId(null); setRemovalTarget(asset); }} disabled={activeAction !== null}>
+                  <Trash2 size={15} /><span>Remove</span>
+                </button>
+              </div> : null}
+            </div>
           </div>
         </article>;
       })}
