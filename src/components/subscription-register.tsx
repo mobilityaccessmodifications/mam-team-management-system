@@ -116,11 +116,26 @@ function billingFilterValue(subscription: Subscription) {
   return subscription.pricingModel === "free" ? "free" : subscription.billingCycle ?? "other";
 }
 
+function hasQuarterlyReview(subscription?: Subscription) {
+  return subscription?.pricingModel === "paid" && subscription.status !== "cancelled";
+}
+
 function reviewFilterValue(subscription: Subscription) {
+  if (!hasQuarterlyReview(subscription)) return "notScheduled";
   if (isReviewDue(subscription)) return "due";
   const inThirtyDays = new Date();
   inThirtyDays.setDate(inThirtyDays.getDate() + 30);
   return subscription.nextReviewOn <= inThirtyDays.toISOString().slice(0, 10) ? "next30" : "later";
+}
+
+function reviewSortValue(subscription: Subscription) {
+  return hasQuarterlyReview(subscription) ? subscription.nextReviewOn : "9999-12-31";
+}
+
+function quarterlyReviewHint(subscription?: Subscription) {
+  return hasQuarterlyReview(subscription)
+    ? "Paid subscription reviews appear on the responsible person’s calendar."
+    : "Free and cancelled subscriptions do not have a quarterly review scheduled.";
 }
 
 function subscriptionSearchText(subscription: Subscription) {
@@ -134,7 +149,7 @@ function subscriptionSearchText(subscription: Subscription) {
 }
 
 function isReviewDue(subscription: Subscription) {
-  return subscription.status !== "cancelled" && subscription.nextReviewOn <= new Date().toISOString().slice(0, 10);
+  return hasQuarterlyReview(subscription) && subscription.nextReviewOn <= new Date().toISOString().slice(0, 10);
 }
 
 function amountToCents(value: string) {
@@ -290,6 +305,7 @@ export function SubscriptionRegister({
         { value: "due", label: "Due now" },
         { value: "next30", label: "Next 30 days" },
         { value: "later", label: "Later" },
+        { value: "notScheduled", label: "Not scheduled" },
       ].filter((option) => subscriptions.some((subscription) => reviewFilterValue(subscription) === option.value)),
       responsible: Array.from(new Map(subscriptions.map((subscription) => [subscription.responsible.personId, subscription.responsible.fullName])).entries())
         .sort(([, first], [, second]) => compareSubscriptionText(first, second))
@@ -325,7 +341,7 @@ export function SubscriptionRegister({
           );
           break;
         case "nextReview":
-          result = compareSubscriptionText(first.nextReviewOn, second.nextReviewOn);
+          result = compareSubscriptionText(reviewSortValue(first), reviewSortValue(second));
           break;
         case "responsible":
           result = compareSubscriptionText(first.responsible.fullName, second.responsible.fullName);
@@ -373,10 +389,12 @@ export function SubscriptionRegister({
       subscriptions: [next],
     } : {
       state: "ready",
-      subscriptions: [...current.subscriptions, next].sort((first, second) => first.nextReviewOn.localeCompare(second.nextReviewOn)),
+      subscriptions: [...current.subscriptions, next].sort((first, second) => reviewSortValue(first).localeCompare(reviewSortValue(second))),
     });
     setShowAdd(false);
-    setNotice(`${next.serviceName} has been added. Its first review is ${formatDate(next.nextReviewOn)}.`);
+    setNotice(hasQuarterlyReview(next)
+      ? `${next.serviceName} has been added. Its first quarterly review is ${formatDate(next.nextReviewOn)}.`
+      : `${next.serviceName} has been added. Free subscriptions do not have a quarterly review schedule.`);
     onRecordsChanged?.();
   }
 
@@ -430,7 +448,7 @@ export function SubscriptionRegister({
             <div className={styles.subscriptionIdentity}><strong>{subscription.serviceName}</strong>{subscription.planName ? <span title={subscription.planName}>{subscription.planName}</span> : null}</div>
           </div>
           <div className={`${styles.sheetCell} ${styles.monthlyCell}`} role="cell" data-label="Monthly"><strong>{monthlyCostLabel(subscription)}</strong></div>
-          <div className={`${styles.sheetCell} ${styles.reviewCell}`} role="cell" data-label="Next review" data-due={isReviewDue(subscription)}><strong>{formatDate(subscription.nextReviewOn)}</strong></div>
+          <div className={`${styles.sheetCell} ${styles.reviewCell}`} role="cell" data-label="Next review" data-due={isReviewDue(subscription)}><strong>{hasQuarterlyReview(subscription) ? formatDate(subscription.nextReviewOn) : <><span aria-hidden="true">—</span><span className={styles.visuallyHidden}>No quarterly review scheduled</span></>}</strong></div>
           <div className={`${styles.sheetCell} ${styles.responsibleCell}`} role="cell" data-label="Responsible"><strong>{subscription.responsible.fullName}</strong></div>
           <div className={`${styles.sheetCell} ${styles.statusCell}`} role="cell" data-label="Status"><span data-status={subscription.status}>{subscription.status}</span></div>
           <div className={`${styles.sheetCell} ${styles.membersCell}`} role="cell" data-label="Access"><strong title={`${subscription.memberNames.length} ${subscription.memberNames.length === 1 ? "person" : "people"} assigned`}>{subscription.memberNames.length || "—"}</strong></div>
@@ -523,7 +541,7 @@ function SubscriptionModal({
 
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="subscription-dialog-title" tabIndex={-1}>
-      <header><div><span>Subscription register</span><h2 id="subscription-dialog-title">{isEditing ? "Edit subscription" : "Add subscription"}</h2><p>{isEditing ? `${subscription?.subscriptionCode} · Review dates appear on the responsible person’s calendar.` : "Add the service, responsible person and employees who use it."}</p></div><button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close subscription form"><X size={19} /></button></header>
+      <header><div><span>Subscription register</span><h2 id="subscription-dialog-title">{isEditing ? "Edit subscription" : "Add subscription"}</h2><p>{isEditing ? `${subscription?.subscriptionCode} · ${quarterlyReviewHint(subscription)}` : "Add the service, responsible person and employees who use it."}</p></div><button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close subscription form"><X size={19} /></button></header>
       <form onSubmit={submit}>
         <div className={styles.formGrid}>
           <label><span>Service name <b aria-hidden="true">*</b></span><input name="serviceName" ref={initialFocusRef} required maxLength={160} defaultValue={subscription?.serviceName ?? ""} placeholder="Microsoft 365, Adobe Creative Cloud…" /></label>
@@ -536,9 +554,9 @@ function SubscriptionModal({
           <label><span>Responsible person <b aria-hidden="true">*</b></span><EmployeePicker assignees={people} defaultValue={subscription?.responsible.personId ?? ""} name="responsiblePersonId" disabled={!people.length} /></label>
         </div>
         <SubscriptionMemberPicker people={people} selectedIds={memberPersonIds} onChange={setMemberPersonIds} />
-        <p className={styles.formHelp}><CalendarClock size={15} /> Reviews are scheduled every three months and always move to the next weekday when needed.</p>
+        <p className={styles.formHelp}><CalendarClock size={15} /> All paid subscriptions are reviewed together on the first weekday (Monday–Friday) of each calendar quarter.</p>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
-        <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>{isEditing && onReview && subscription?.status !== "cancelled" ? <button className={styles.secondaryAction} type="button" onClick={() => void reviewNow()} disabled={saving}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CalendarClock size={16} />}{saving ? "Saving…" : "Mark review complete"}</button> : null}<button className={styles.primaryAction} type="submit" disabled={saving || !people.length}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CreditCard size={16} />}{saving ? "Saving…" : isEditing ? "Save changes" : "Add subscription"}</button></footer>
+        <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>{isEditing && onReview && subscription && hasQuarterlyReview(subscription) ? <button className={styles.secondaryAction} type="button" onClick={() => void reviewNow()} disabled={saving}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CalendarClock size={16} />}{saving ? "Saving…" : "Mark review complete"}</button> : null}<button className={styles.primaryAction} type="submit" disabled={saving || !people.length}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CreditCard size={16} />}{saving ? "Saving…" : isEditing ? "Save changes" : "Add subscription"}</button></footer>
       </form>
     </section>
   </div>;

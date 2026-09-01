@@ -2204,6 +2204,7 @@ function CalendarView({
             .filter((entry) => entry.dueDate === day.iso)
             .map((entry) => [`${entry.personId}:${entry.milestone}:${entry.dueDate}`, entry])).values());
           const reviewEvents = subscriptionReviews.filter((entry) => entry.dueDate === day.iso);
+          const showReviewSummary = reviewEvents.length > 3;
           // Birthdays and open check-ins are never hidden. Leave entries use
           // any remaining compact slots and keep their existing overflow row.
           const shownLeaveEvents = leaveEvents.slice(0, Math.max(0, 3 - birthdayEvents.length - checkInEvents.length));
@@ -2223,7 +2224,10 @@ function CalendarView({
                   <b>{entry.employee}<small>{checkInMilestoneLabel(entry.milestone)}</small></b>
                 </article>
               ))}
-              {reviewEvents.map((entry) => (
+              {showReviewSummary ? <article className={styles.eventSubscriptionReview} aria-label={`${reviewEvents.length} paid subscription reviews due`} title={reviewEvents.map((entry) => entry.serviceName).join(", ")}>
+                <i aria-hidden="true">SR</i>
+                <b>{reviewEvents.length} paid subscriptions<small>Quarterly review</small></b>
+              </article> : reviewEvents.map((entry) => (
                 <article className={styles.eventSubscriptionReview} key={`subscription-review:${entry.subscriptionId}`}>
                   <i aria-hidden="true">SR</i>
                   <b>{entry.serviceName}<small>Subscription review</small></b>
