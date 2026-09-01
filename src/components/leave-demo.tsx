@@ -1046,17 +1046,19 @@ export function LeaveDemo({
   // owner from auth.uid(). A Super Admin preview uses a separate read-only
   // target action that checks the Change profile capability and returns the
   // same safe DTO the selected employee would see.
+  const hasSelfResourceDirectory = activeProfile.accessRole === "employee"
+    || activeProfile.accessRole === "manager";
   const canLoadOwnDevices = !isPreviewingEmployeeAccess
-    && activeProfile.accessRole === "employee"
+    && hasSelfResourceDirectory
     && Boolean(currentPersonId && activeProfile.id === currentPersonId);
-  const employeeDirectoryDeviceLoader = activeProfile.accessRole === "employee"
+  const employeeDirectoryDeviceLoader = hasSelfResourceDirectory
     ? isPreviewingEmployeeAccess && selectedPreviewPersonId
       ? loadPreviewEmployeeDevices
       : canLoadOwnDevices
         ? listMyItAssets
         : undefined
     : undefined;
-  const employeeDirectorySubscriptionLoader = activeProfile.accessRole === "employee"
+  const employeeDirectorySubscriptionLoader = hasSelfResourceDirectory
     ? isPreviewingEmployeeAccess && selectedPreviewPersonId
       ? canViewSubscriptions
         ? loadPreviewEmployeeSubscriptions
@@ -1741,6 +1743,8 @@ export function LeaveDemo({
               /> : showManagerDirectory ? <ManagerEmployeeDirectory
                 previewManagerPersonId={previewScopedManagerPersonId}
                 managerPersonId={previewScopedManagerPersonId ?? currentPersonId}
+                onLoadMyDevices={employeeDirectoryDeviceLoader}
+                onLoadMySubscriptions={employeeDirectorySubscriptionLoader}
                 onRecordsChanged={async () => {
                   // Refresh public organisation data after the manager-safe
                   // record mutation. The manager directory itself never

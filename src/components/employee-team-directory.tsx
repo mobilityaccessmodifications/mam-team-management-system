@@ -76,6 +76,113 @@ function formatSubscriptionDate(value: string | null) {
 }
 
 /**
+ * Renders the safe, self-service resource data shared by employee and manager
+ * directory views. The loaders deliberately accept no person id: their server
+ * actions derive the authenticated employee, while the Change profile preview
+ * supplies an independently-authorised safe projection.
+ */
+export function EmployeeSelfResources({
+  personId,
+  personName,
+  onLoadMyDevices,
+  onLoadMySubscriptions,
+}: {
+  personId: string;
+  personName: string;
+  onLoadMyDevices?: () => Promise<EmployeeItAsset[]>;
+  onLoadMySubscriptions?: () => Promise<EmployeeSubscription[]>;
+}) {
+  const [deviceState, setDeviceState] = useState<DeviceState>({ state: "idle", assets: [] });
+  const [deviceLoadAttempt, setDeviceLoadAttempt] = useState(0);
+  const [subscriptionState, setSubscriptionState] = useState<SubscriptionState>({ state: "idle", subscriptions: [] });
+  const [subscriptionLoadAttempt, setSubscriptionLoadAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!onLoadMyDevices) return;
+
+    let cancelled = false;
+    let settled = false;
+    let timeout: number | undefined;
+
+    const finish = (nextState: DeviceState) => {
+      if (cancelled || settled) return;
+      settled = true;
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      setDeviceState(nextState);
+    };
+
+    const request = window.setTimeout(() => {
+      if (cancelled) return;
+      setDeviceState({ state: "loading", assets: [] });
+      timeout = window.setTimeout(() => finish({ state: "error", assets: [] }), deviceLoadTimeoutMs);
+      void Promise.resolve()
+        .then(() => onLoadMyDevices())
+        .then((assets) => finish({ state: "ready", assets }))
+        .catch(() => finish({ state: "error", assets: [] }));
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(request);
+      if (timeout !== undefined) window.clearTimeout(timeout);
+    };
+  }, [deviceLoadAttempt, onLoadMyDevices]);
+
+  useEffect(() => {
+    if (!onLoadMySubscriptions) return;
+
+    let cancelled = false;
+    let settled = false;
+    let timeout: number | undefined;
+
+    const finish = (nextState: SubscriptionState) => {
+      if (cancelled || settled) return;
+      settled = true;
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      setSubscriptionState(nextState);
+    };
+
+    const request = window.setTimeout(() => {
+      if (cancelled) return;
+      setSubscriptionState({ state: "loading", subscriptions: [] });
+      timeout = window.setTimeout(() => finish({ state: "error", subscriptions: [] }), subscriptionLoadTimeoutMs);
+      void Promise.resolve()
+        .then(() => onLoadMySubscriptions())
+        .then((subscriptions) => finish({ state: "ready", subscriptions }))
+        .catch(() => finish({ state: "error", subscriptions: [] }));
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(request);
+      if (timeout !== undefined) window.clearTimeout(timeout);
+    };
+  }, [onLoadMySubscriptions, subscriptionLoadAttempt]);
+
+  return <>
+    <section className={styles.devices} aria-labelledby={`my-devices-${personId}`}>
+      <div className={styles.cardHeading}><div><span>My equipment</span><h4 id={`my-devices-${personId}`}>Assigned devices</h4></div><Laptop size={18} aria-hidden="true" /></div>
+      <p className={styles.cardIntro}>Active devices assigned to your employee record.</p>
+      {!onLoadMyDevices ? <div className={styles.deviceState}><ShieldCheck size={17} aria-hidden="true" /><span>Device details are unavailable in this preview.</span></div> : null}
+      {onLoadMyDevices && deviceState.state === "loading" ? <div className={styles.deviceState}><span className={styles.spinner} aria-hidden="true" />Loading your devices…</div> : null}
+      {onLoadMyDevices && deviceState.state === "error" ? <div className={styles.deviceState} data-error="true"><AlertCircle size={17} aria-hidden="true" /><span>Your devices could not be loaded.</span><button type="button" onClick={() => setDeviceLoadAttempt((current) => current + 1)}>Retry</button></div> : null}
+      {onLoadMyDevices && deviceState.state === "ready" && !deviceState.assets.length ? <div className={styles.deviceState}><Laptop size={17} aria-hidden="true" /><span>No devices are currently assigned to you.</span></div> : null}
+      {onLoadMyDevices && deviceState.state === "ready" && deviceState.assets.length ? <div className={styles.deviceList} role="list" aria-label={`${personName}'s assigned devices`}>{deviceState.assets.map((asset) => <article className={styles.deviceCard} key={asset.id} role="listitem"><div className={styles.deviceIcon}><Laptop size={17} aria-hidden="true" /></div><div className={styles.deviceCopy}><strong>{assetTypeLabels[asset.assetType]}</strong><span>{assetDescription(asset)}</span></div><div className={styles.deviceMeta}><span>Asset no.</span><strong>{asset.assetCode}</strong></div><div className={styles.deviceMeta}><span>Serial</span><strong>{asset.serialNumber || "Not recorded"}</strong></div><span className={styles.deviceStatus} data-status={asset.status}>{assetStatusLabel(asset.status)}</span></article>)}</div> : null}
+    </section>
+
+    <section className={styles.subscriptions} aria-labelledby={`my-subscriptions-${personId}`}>
+      <div className={styles.cardHeading}><div><span>My access</span><h4 id={`my-subscriptions-${personId}`}>Subscriptions</h4></div><CreditCard size={18} aria-hidden="true" /></div>
+      <p className={styles.cardIntro}>Subscriptions assigned to your employee record. Cost and ownership details remain private.</p>
+      {!onLoadMySubscriptions ? <div className={styles.deviceState}><ShieldCheck size={17} aria-hidden="true" /><span>Subscription details are unavailable in this preview.</span></div> : null}
+      {onLoadMySubscriptions && subscriptionState.state === "loading" ? <div className={styles.deviceState}><span className={styles.spinner} aria-hidden="true" />Loading your subscriptions…</div> : null}
+      {onLoadMySubscriptions && subscriptionState.state === "error" ? <div className={styles.deviceState} data-error="true"><AlertCircle size={17} aria-hidden="true" /><span>Your subscriptions could not be loaded.</span><button type="button" onClick={() => setSubscriptionLoadAttempt((current) => current + 1)}>Retry</button></div> : null}
+      {onLoadMySubscriptions && subscriptionState.state === "ready" && !subscriptionState.subscriptions.length ? <div className={styles.deviceState}><CreditCard size={17} aria-hidden="true" /><span>No subscriptions are currently assigned to you.</span></div> : null}
+      {onLoadMySubscriptions && subscriptionState.state === "ready" && subscriptionState.subscriptions.length ? <div className={styles.subscriptionList} role="list" aria-label={`${personName}'s assigned subscriptions`}>{subscriptionState.subscriptions.map((subscription) => <article className={styles.subscriptionCard} key={subscription.id} role="listitem"><div className={styles.subscriptionIcon}><CreditCard size={17} aria-hidden="true" /></div><div className={styles.subscriptionCopy}><strong>{subscription.serviceName}</strong><span>{subscription.planName || "Plan not recorded"}</span></div><div className={styles.subscriptionMeta}><span>{subscription.pricingModel === "free" ? "Free" : subscription.billingCycle ? billingCycleLabels[subscription.billingCycle] : "Paid"}</span><strong>{subscription.renewalDate ? `Renews ${formatSubscriptionDate(subscription.renewalDate)}` : "Renewal not recorded"}</strong></div><span className={styles.subscriptionStatus} data-status={subscription.status}>{subscription.status}</span></article>)}</div> : null}
+    </section>
+  </>;
+}
+
+/**
  * Employee-safe directory. The parent supplies a team-scoped public list;
  * this component never edits records and only loads the current employee's
  * own devices and subscriptions through no-argument, server-authorised actions.
@@ -100,10 +207,6 @@ export function EmployeeTeamDirectory({
   // cannot leak into the new employee view.
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(currentPersonId ?? null);
   const [emailState, setEmailState] = useState<Record<string, EmailState>>({});
-  const [deviceState, setDeviceState] = useState<DeviceState>({ state: "idle", assets: [] });
-  const [deviceLoadAttempt, setDeviceLoadAttempt] = useState(0);
-  const [subscriptionState, setSubscriptionState] = useState<SubscriptionState>({ state: "idle", subscriptions: [] });
-  const [subscriptionLoadAttempt, setSubscriptionLoadAttempt] = useState(0);
 
   const activePeople = useMemo(
     () => people.filter((person) => person.kind !== "org_unit" && person.isActive !== false),
@@ -119,81 +222,6 @@ export function EmployeeTeamDirectory({
   const selectedPerson = activePeople.find((person) => person.id === selectedPersonId) ?? null;
   const selectedManagerName = selectedPerson?.reportsTo ? personById.get(selectedPerson.reportsTo)?.name ?? "Not assigned" : "Not assigned";
   const selectedPersonIsSelf = Boolean(selectedPerson && currentPersonId && selectedPerson.id === currentPersonId);
-
-  useEffect(() => {
-    if (!selectedPersonIsSelf || !onLoadMyDevices) return;
-
-    let cancelled = false;
-    let settled = false;
-    let timeout: number | undefined;
-
-    const finish = (nextState: DeviceState) => {
-      if (cancelled || settled) return;
-      settled = true;
-      if (timeout !== undefined) window.clearTimeout(timeout);
-      setDeviceState(nextState);
-    };
-
-    // The request begins after the effect commits. Device state is
-    // intentionally not an effect dependency: changing it to "loading" must
-    // not cancel the request that is meant to settle that state.
-    const request = window.setTimeout(() => {
-      if (cancelled) return;
-      setDeviceState({ state: "loading", assets: [] });
-      timeout = window.setTimeout(() => {
-        finish({ state: "error", assets: [] });
-      }, deviceLoadTimeoutMs);
-
-      // Start through a promise so a synchronous action/serialization failure
-      // follows the same error path as a rejected server request.
-      void Promise.resolve()
-        .then(() => onLoadMyDevices())
-        .then((assets) => finish({ state: "ready", assets }))
-        .catch(() => finish({ state: "error", assets: [] }));
-    }, 0);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(request);
-      if (timeout !== undefined) window.clearTimeout(timeout);
-    };
-  }, [deviceLoadAttempt, onLoadMyDevices, selectedPersonId, selectedPersonIsSelf]);
-
-  useEffect(() => {
-    if (!selectedPersonIsSelf || !onLoadMySubscriptions) return;
-
-    let cancelled = false;
-    let settled = false;
-    let timeout: number | undefined;
-
-    const finish = (nextState: SubscriptionState) => {
-      if (cancelled || settled) return;
-      settled = true;
-      if (timeout !== undefined) window.clearTimeout(timeout);
-      setSubscriptionState(nextState);
-    };
-
-    // Keep request state out of the dependency list: moving to loading must
-    // not cancel the request that is meant to settle this self-only view.
-    const request = window.setTimeout(() => {
-      if (cancelled) return;
-      setSubscriptionState({ state: "loading", subscriptions: [] });
-      timeout = window.setTimeout(() => {
-        finish({ state: "error", subscriptions: [] });
-      }, subscriptionLoadTimeoutMs);
-
-      void Promise.resolve()
-        .then(() => onLoadMySubscriptions())
-        .then((subscriptions) => finish({ state: "ready", subscriptions }))
-        .catch(() => finish({ state: "error", subscriptions: [] }));
-    }, 0);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(request);
-      if (timeout !== undefined) window.clearTimeout(timeout);
-    };
-  }, [onLoadMySubscriptions, selectedPersonId, selectedPersonIsSelf, subscriptionLoadAttempt]);
 
   const revealWorkEmail = useCallback(async (personId: string) => {
     if (!onRequestWorkEmail || emailState[personId]?.state === "loading") return;
@@ -230,12 +258,8 @@ export function EmployeeTeamDirectory({
         isSelf={selectedPersonIsSelf}
         emailState={emailState[selectedPerson.id]}
         onRevealWorkEmail={() => void revealWorkEmail(selectedPerson.id)}
-        deviceState={deviceState}
-        onRetryDevices={() => setDeviceLoadAttempt((current) => current + 1)}
-        canLoadDevices={Boolean(onLoadMyDevices)}
-        subscriptionState={subscriptionState}
-        onRetrySubscriptions={() => setSubscriptionLoadAttempt((current) => current + 1)}
-        canLoadSubscriptions={Boolean(onLoadMySubscriptions)}
+        onLoadMyDevices={onLoadMyDevices}
+        onLoadMySubscriptions={onLoadMySubscriptions}
         onClose={() => setSelectedPersonId(null)}
       /> : <section className={styles.emptyDetail} aria-live="polite"><UsersRound size={28} aria-hidden="true" /><h3>Select a team member</h3><p>Choose a person to view their work details and reporting line.</p></section>}
     </div>
@@ -274,12 +298,8 @@ function EmployeeDetails({
   isSelf,
   emailState,
   onRevealWorkEmail,
-  deviceState,
-  onRetryDevices,
-  canLoadDevices,
-  subscriptionState,
-  onRetrySubscriptions,
-  canLoadSubscriptions,
+  onLoadMyDevices,
+  onLoadMySubscriptions,
   onClose,
 }: {
   person: OrganisationPerson;
@@ -287,12 +307,8 @@ function EmployeeDetails({
   isSelf: boolean;
   emailState?: EmailState;
   onRevealWorkEmail: () => void;
-  deviceState: DeviceState;
-  onRetryDevices: () => void;
-  canLoadDevices: boolean;
-  subscriptionState: SubscriptionState;
-  onRetrySubscriptions: () => void;
-  canLoadSubscriptions: boolean;
+  onLoadMyDevices?: () => Promise<EmployeeItAsset[]>;
+  onLoadMySubscriptions?: () => Promise<EmployeeSubscription[]>;
   onClose: () => void;
 }) {
   return <section className={styles.detail} aria-label={`${person.name} directory details`}>
@@ -302,10 +318,7 @@ function EmployeeDetails({
 
       <section className={styles.contactCard} aria-labelledby={`work-contact-${person.id}`}><div className={styles.cardHeading}><div><span>Contact</span><h4 id={`work-contact-${person.id}`}>Work email</h4></div><Mail size={17} aria-hidden="true" /></div>{emailState?.state === "ready" ? emailState.email ? <a className={styles.emailLink} href={`mailto:${emailState.email}`}><Mail size={15} aria-hidden="true" />{emailState.email}</a> : <p className={styles.mutedValue}>No work email recorded.</p> : <button className={styles.emailButton} type="button" onClick={onRevealWorkEmail} disabled={emailState?.state === "loading"}><Mail size={15} aria-hidden="true" />{emailState?.state === "loading" ? "Loading…" : emailState?.state === "error" ? "Retry work email" : "Show work email"}</button>}</section>
 
-      {isSelf ? <>
-        <section className={styles.devices} aria-labelledby={`my-devices-${person.id}`}><div className={styles.cardHeading}><div><span>My equipment</span><h4 id={`my-devices-${person.id}`}>Assigned devices</h4></div><Laptop size={18} aria-hidden="true" /></div><p className={styles.cardIntro}>Active devices assigned to your employee record.</p>{!canLoadDevices ? <div className={styles.deviceState}><ShieldCheck size={17} aria-hidden="true" /><span>Device details are unavailable in this preview.</span></div> : null}{canLoadDevices && deviceState.state === "loading" ? <div className={styles.deviceState}><span className={styles.spinner} aria-hidden="true" />Loading your devices…</div> : null}{canLoadDevices && deviceState.state === "error" ? <div className={styles.deviceState} data-error="true"><AlertCircle size={17} aria-hidden="true" /><span>Your devices could not be loaded.</span><button type="button" onClick={onRetryDevices}>Retry</button></div> : null}{canLoadDevices && deviceState.state === "ready" && !deviceState.assets.length ? <div className={styles.deviceState}><Laptop size={17} aria-hidden="true" /><span>No devices are currently assigned to you.</span></div> : null}{canLoadDevices && deviceState.state === "ready" && deviceState.assets.length ? <div className={styles.deviceList} role="list" aria-label={`${person.name}'s assigned devices`}>{deviceState.assets.map((asset) => <article className={styles.deviceCard} key={asset.id} role="listitem"><div className={styles.deviceIcon}><Laptop size={17} aria-hidden="true" /></div><div className={styles.deviceCopy}><strong>{assetTypeLabels[asset.assetType]}</strong><span>{assetDescription(asset)}</span></div><div className={styles.deviceMeta}><span>Asset no.</span><strong>{asset.assetCode}</strong></div><div className={styles.deviceMeta}><span>Serial</span><strong>{asset.serialNumber || "Not recorded"}</strong></div><span className={styles.deviceStatus} data-status={asset.status}>{assetStatusLabel(asset.status)}</span></article>)}</div> : null}</section>
-        <section className={styles.subscriptions} aria-labelledby={`my-subscriptions-${person.id}`}><div className={styles.cardHeading}><div><span>My access</span><h4 id={`my-subscriptions-${person.id}`}>Subscriptions</h4></div><CreditCard size={18} aria-hidden="true" /></div><p className={styles.cardIntro}>Subscriptions assigned to your employee record. Cost and ownership details remain private.</p>{!canLoadSubscriptions ? <div className={styles.deviceState}><ShieldCheck size={17} aria-hidden="true" /><span>Subscription details are unavailable in this preview.</span></div> : null}{canLoadSubscriptions && subscriptionState.state === "loading" ? <div className={styles.deviceState}><span className={styles.spinner} aria-hidden="true" />Loading your subscriptions…</div> : null}{canLoadSubscriptions && subscriptionState.state === "error" ? <div className={styles.deviceState} data-error="true"><AlertCircle size={17} aria-hidden="true" /><span>Your subscriptions could not be loaded.</span><button type="button" onClick={onRetrySubscriptions}>Retry</button></div> : null}{canLoadSubscriptions && subscriptionState.state === "ready" && !subscriptionState.subscriptions.length ? <div className={styles.deviceState}><CreditCard size={17} aria-hidden="true" /><span>No subscriptions are currently assigned to you.</span></div> : null}{canLoadSubscriptions && subscriptionState.state === "ready" && subscriptionState.subscriptions.length ? <div className={styles.subscriptionList} role="list" aria-label={`${person.name}'s assigned subscriptions`}>{subscriptionState.subscriptions.map((subscription) => <article className={styles.subscriptionCard} key={subscription.id} role="listitem"><div className={styles.subscriptionIcon}><CreditCard size={17} aria-hidden="true" /></div><div className={styles.subscriptionCopy}><strong>{subscription.serviceName}</strong><span>{subscription.planName || "Plan not recorded"}</span></div><div className={styles.subscriptionMeta}><span>{subscription.pricingModel === "free" ? "Free" : subscription.billingCycle ? billingCycleLabels[subscription.billingCycle] : "Paid"}</span><strong>{subscription.renewalDate ? `Renews ${formatSubscriptionDate(subscription.renewalDate)}` : "Renewal not recorded"}</strong></div><span className={styles.subscriptionStatus} data-status={subscription.status}>{subscription.status}</span></article>)}</div> : null}</section>
-      </> : <div className={styles.accessNote}><ShieldCheck size={17} aria-hidden="true" /><span>Device and subscription details are shown only for your own assigned records.</span></div>}
+      {isSelf ? <EmployeeSelfResources key={person.id} personId={person.id} personName={person.name} onLoadMyDevices={onLoadMyDevices} onLoadMySubscriptions={onLoadMySubscriptions} /> : <div className={styles.accessNote}><ShieldCheck size={17} aria-hidden="true" /><span>Device and subscription details are shown only for your own assigned records.</span></div>}
     </div>
   </section>;
 }

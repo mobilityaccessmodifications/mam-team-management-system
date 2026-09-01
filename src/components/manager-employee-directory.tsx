@@ -22,12 +22,15 @@ import {
   listManagedEmployeeDirectoryRecordsAction,
   updateManagedEmployeeDirectoryRecord,
 } from "@/app/people/manager-actions";
+import { EmployeeSelfResources } from "@/components/employee-team-directory";
 import styles from "@/components/employee-directory.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
 import type {
   ManagedEmployeeDirectoryDraft,
   ManagedEmployeeDirectoryRecord,
 } from "@/lib/employee-directory-types";
+import type { EmployeeItAsset } from "@/lib/it-asset-types";
+import type { EmployeeSubscription } from "@/lib/subscription-types";
 
 const recordsPerPage = 8;
 
@@ -40,6 +43,10 @@ export type ManagerEmployeeDirectoryProps = {
   onRecordsChanged?: () => void | Promise<void>;
   /** Incremented after a safe Realtime directory invalidation. */
   refreshKey?: number;
+  /** Safe no-argument self-service loader; never used for a report's records. */
+  onLoadMyDevices?: () => Promise<EmployeeItAsset[]>;
+  /** Safe no-argument self-service loader; never used for a report's records. */
+  onLoadMySubscriptions?: () => Promise<EmployeeSubscription[]>;
 };
 
 function initials(name: string) {
@@ -86,6 +93,8 @@ export function ManagerEmployeeDirectory({
   managerPersonId,
   onRecordsChanged,
   refreshKey,
+  onLoadMyDevices,
+  onLoadMySubscriptions,
 }: ManagerEmployeeDirectoryProps) {
   const [records, setRecords] = useState<ManagedEmployeeDirectoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -233,6 +242,8 @@ export function ManagerEmployeeDirectory({
         readOnly={selectedRecordIsManager}
         saving={saving}
         error={saveError}
+        onLoadMyDevices={onLoadMyDevices}
+        onLoadMySubscriptions={onLoadMySubscriptions}
         onChange={updateDraft}
         onClose={closeRecord}
         onSubmit={saveRecord}
@@ -296,6 +307,8 @@ function ManagerEmployeeEditor({
   readOnly,
   saving,
   error,
+  onLoadMyDevices,
+  onLoadMySubscriptions,
   onChange,
   onClose,
   onSubmit,
@@ -305,6 +318,8 @@ function ManagerEmployeeEditor({
   readOnly: boolean;
   saving: boolean;
   error: string;
+  onLoadMyDevices?: () => Promise<EmployeeItAsset[]>;
+  onLoadMySubscriptions?: () => Promise<EmployeeSubscription[]>;
   onChange: (key: keyof ManagedEmployeeDirectoryDraft, value: string) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -333,6 +348,13 @@ function ManagerEmployeeEditor({
           <Field label="Company"><input value={companyLabel(record.company)} readOnly aria-readonly="true" /></Field>
         </div>
       </fieldset>
+      {readOnly ? <EmployeeSelfResources
+        key={record.personId}
+        personId={record.personId}
+        personName={record.fullName}
+        onLoadMyDevices={onLoadMyDevices}
+        onLoadMySubscriptions={onLoadMySubscriptions}
+      /> : null}
       <footer className={styles.formFooter}>
         <div className={styles.formFooterLeft}><p><Mail size={14} /> {readOnly ? "This is your own work directory record. Work details are managed by Admin." : "Reporting line, employment status and private HR details are managed by Admin."}</p></div>
         <div>{readOnly ? <button type="button" className={styles.secondaryAction} onClick={onClose}>Close</button> : <><button type="button" className={styles.secondaryAction} onClick={onClose} disabled={saving}>Cancel</button><button type="submit" className={styles.primaryAction} disabled={saving}>{saving ? "Saving…" : "Save changes"}</button></>}</div>
