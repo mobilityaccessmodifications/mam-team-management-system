@@ -2,10 +2,12 @@
 
 import {
   AlertCircle,
+  ArrowDownUp,
   CalendarClock,
   CheckCircle2,
   CircleDollarSign,
   CreditCard,
+  Filter,
   LoaderCircle,
   Pencil,
   Plus,
@@ -49,6 +51,20 @@ type RegisterState =
   | { state: "ready"; subscriptions: Subscription[] }
   | { state: "error"; message: string };
 
+type SortDirection = "ascending" | "descending";
+type SubscriptionSortKey = "service" | "monthly" | "nextReview" | "responsible" | "status" | "members";
+type SubscriptionFilterKey = "billing" | "nextReview" | "responsible" | "status";
+
+type SubscriptionSort = {
+  key: SubscriptionSortKey;
+  direction: SortDirection;
+};
+
+type FilterOption = {
+  value: string;
+  label: string;
+};
+
 const billingCycleLabels: Record<SubscriptionBillingCycle, string> = {
   monthly: "Monthly",
   quarterly: "Quarterly",
@@ -73,6 +89,44 @@ function formatCurrency(amountCents: number | null) {
     currency: "AUD",
     minimumFractionDigits: 2,
   }).format(amountCents / 100);
+}
+
+function compareSubscriptionText(left: string | null | undefined, right: string | null | undefined) {
+  if (!left && !right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  return left.localeCompare(right, "en-AU", { numeric: true, sensitivity: "base" });
+}
+
+function monthlyEquivalentCents(subscription: Subscription) {
+  if (subscription.pricingModel !== "paid" || subscription.amountCents === null) return null;
+  if (subscription.billingCycle === "monthly") return subscription.amountCents;
+  if (subscription.billingCycle === "quarterly") return Math.round(subscription.amountCents / 3);
+  if (subscription.billingCycle === "annual") return Math.round(subscription.amountCents / 12);
+  return null;
+}
+
+function monthlyCostLabel(subscription: Subscription) {
+  if (subscription.pricingModel === "free") return "Free";
+  const monthlyCents = monthlyEquivalentCents(subscription);
+  return monthlyCents === null ? "Not recorded" : `${formatCurrency(monthlyCents)} / mo`;
+}
+
+function billingLabel(subscription: Subscription) {
+  if (subscription.pricingModel === "free") return "No paid billing";
+  if (!subscription.billingCycle || subscription.amountCents === null) return "Billing not recorded";
+  return `${formatCurrency(subscription.amountCents)} · ${billingCycleLabels[subscription.billingCycle]}`;
+}
+
+function billingFilterValue(subscription: Subscription) {
+  return subscription.pricingModel === "free" ? "free" : subscription.billingCycle ?? "other";
+}
+
+function reviewFilterValue(subscription: Subscription) {
+  if (isReviewDue(subscription)) return "due";
+  const inThirtyDays = new Date();
+  inThirtyDays.setDate(inThirtyDays.getDate() + 30);
+  return subscription.nextReviewOn <= inThirtyDays.toISOString().slice(0, 10) ? "next30" : "later";
 }
 
 function subscriptionSearchText(subscription: Subscription) {
@@ -101,11 +155,76 @@ function centsToAmount(value: number | null) {
   return value === null ? "" : (value / 100).toFixed(2);
 }
 
+function SubscriptionSheetHeader({
+  label,
+  sortKey,
+  activeSort,
+  onSort,
+  filterKey,
+  filterOptions = [],
+  filterValue = "",
+  isFilterOpen = false,
+  onToggleFilter,
+  onFilter,
+}: {
+  label: string;
+  sortKey?: SubscriptionSortKey;
+  activeSort: SubscriptionSort | null;
+  onSort?: (key: SubscriptionSortKey) => void;
+  filterKey?: SubscriptionFilterKey;
+  filterOptions?: FilterOption[];
+  filterValue?: string;
+  isFilterOpen?: boolean;
+  onToggleFilter?: (key: SubscriptionFilterKey) => void;
+  onFilter?: (key: SubscriptionFilterKey, value: string) => void;
+}) {
+  const sortIsActive = sortKey !== undefined && activeSort?.key === sortKey;
+  const sortDirection = sortIsActive ? activeSort.direction : undefined;
+  const filterIsActive = Boolean(filterValue);
+
+  return <div className={styles.sheetHeaderCell} role="columnheader" aria-sort={sortKey ? (sortIsActive ? sortDirection : "none") : undefined} data-subscription-filter={filterKey ? "true" : undefined}>
+    <span>{label}</span>
+    {(sortKey || filterKey) ? <span className={styles.sheetHeaderTools}>
+      {sortKey && onSort ? <button
+        type="button"
+        className={styles.sheetHeaderButton}
+        data-active={sortIsActive || undefined}
+        onClick={() => onSort(sortKey)}
+        aria-label={`Sort subscriptions by ${label}${sortDirection ? `, currently ${sortDirection}` : ""}`}
+        aria-pressed={sortIsActive}
+        title={`Sort by ${label}`}
+      ><ArrowDownUp size={13} aria-hidden="true" /></button> : null}
+      {filterKey && onToggleFilter ? <button
+        type="button"
+        className={styles.sheetHeaderButton}
+        data-active={filterIsActive || undefined}
+        onClick={() => onToggleFilter(filterKey)}
+        aria-label={`Filter subscriptions by ${label}`}
+        aria-expanded={isFilterOpen}
+        aria-haspopup="menu"
+        title={`Filter by ${label}`}
+      ><Filter size={13} aria-hidden="true" /></button> : null}
+    </span> : null}
+    {filterKey && onFilter && isFilterOpen ? <div className={styles.sheetFilterMenu} role="menu" aria-label={`Filter subscriptions by ${label}`}>
+      <button type="button" role="menuitemradio" aria-checked={!filterValue} onClick={() => onFilter(filterKey, "")}>All</button>
+      {filterOptions.map((option) => <button key={option.value} type="button" role="menuitemradio" aria-checked={filterValue === option.value} onClick={() => onFilter(filterKey, option.value)}>{option.label}</button>)}
+    </div> : null}
+  </div>;
+}
+
 /** System Admin can manage; managers receive this exact register read-only. */
 export function SubscriptionRegister({ readOnly = false }: { readOnly?: boolean }) {
   const [registerState, setRegisterState] = useState<RegisterState>({ state: "loading" });
   const [people, setPeople] = useState<SubscriptionPerson[]>([]);
   const [query, setQuery] = useState("");
+  const [subscriptionSort, setSubscriptionSort] = useState<SubscriptionSort | null>(null);
+  const [activeSubscriptionFilter, setActiveSubscriptionFilter] = useState<SubscriptionFilterKey | null>(null);
+  const [subscriptionFilters, setSubscriptionFilters] = useState<Record<SubscriptionFilterKey, string>>({
+    billing: "",
+    nextReview: "",
+    responsible: "",
+    status: "",
+  });
   const [showAdd, setShowAdd] = useState(false);
   const [editTarget, setEditTarget] = useState<Subscription | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -138,11 +257,105 @@ export function SubscriptionRegister({ readOnly = false }: { readOnly?: boolean 
     return () => window.clearTimeout(loadTimer);
   }, [load]);
 
+  useEffect(() => {
+    if (!activeSubscriptionFilter) return;
+
+    function closeOnOutsidePointer(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-subscription-filter]")) return;
+      setActiveSubscriptionFilter(null);
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setActiveSubscriptionFilter(null);
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [activeSubscriptionFilter]);
+
+  const subscriptionFilterOptions = useMemo<Record<SubscriptionFilterKey, FilterOption[]>>(() => {
+    const subscriptions = registerState.state === "ready" ? registerState.subscriptions : [];
+    return {
+      billing: [
+        { value: "free", label: "Free" },
+        ...SUBSCRIPTION_BILLING_CYCLES.filter((cycle) => subscriptions.some((subscription) => billingFilterValue(subscription) === cycle)).map((value) => ({ value, label: billingCycleLabels[value] })),
+      ].filter((option) => subscriptions.some((subscription) => billingFilterValue(subscription) === option.value)),
+      nextReview: [
+        { value: "due", label: "Due now" },
+        { value: "next30", label: "Next 30 days" },
+        { value: "later", label: "Later" },
+      ].filter((option) => subscriptions.some((subscription) => reviewFilterValue(subscription) === option.value)),
+      responsible: Array.from(new Map(subscriptions.map((subscription) => [subscription.responsible.personId, subscription.responsible.fullName])).entries())
+        .sort(([, first], [, second]) => compareSubscriptionText(first, second))
+        .map(([value, label]) => ({ value, label })),
+      status: ["active", "paused", "cancelled"].filter((value) => subscriptions.some((subscription) => subscription.status === value)).map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) })),
+    };
+  }, [registerState]);
+
   const filteredSubscriptions = useMemo(() => {
     if (registerState.state !== "ready") return [];
     const term = query.trim().toLocaleLowerCase();
-    return registerState.subscriptions.filter((subscription) => !term || subscriptionSearchText(subscription).includes(term));
-  }, [query, registerState]);
+    const nextSubscriptions = registerState.subscriptions.filter((subscription) => {
+      if (term && !subscriptionSearchText(subscription).includes(term)) return false;
+      if (subscriptionFilters.billing && billingFilterValue(subscription) !== subscriptionFilters.billing) return false;
+      if (subscriptionFilters.nextReview && reviewFilterValue(subscription) !== subscriptionFilters.nextReview) return false;
+      if (subscriptionFilters.responsible && subscription.responsible.personId !== subscriptionFilters.responsible) return false;
+      if (subscriptionFilters.status && subscription.status !== subscriptionFilters.status) return false;
+      return true;
+    });
+
+    if (!subscriptionSort) return nextSubscriptions;
+    const direction = subscriptionSort.direction === "ascending" ? 1 : -1;
+    return [...nextSubscriptions].sort((first, second) => {
+      let result = 0;
+      switch (subscriptionSort.key) {
+        case "service":
+          result = compareSubscriptionText(first.serviceName, second.serviceName);
+          break;
+        case "monthly":
+          result = compareSubscriptionText(
+            monthlyEquivalentCents(first) === null ? null : String(monthlyEquivalentCents(first)).padStart(18, "0"),
+            monthlyEquivalentCents(second) === null ? null : String(monthlyEquivalentCents(second)).padStart(18, "0"),
+          );
+          break;
+        case "nextReview":
+          result = compareSubscriptionText(first.nextReviewOn, second.nextReviewOn);
+          break;
+        case "responsible":
+          result = compareSubscriptionText(first.responsible.fullName, second.responsible.fullName);
+          break;
+        case "status":
+          result = compareSubscriptionText(first.status, second.status);
+          break;
+        case "members":
+          result = first.memberNames.length - second.memberNames.length;
+          break;
+      }
+      return result * direction;
+    });
+  }, [query, registerState, subscriptionFilters, subscriptionSort]);
+
+  const hasSubscriptionFilters = Object.values(subscriptionFilters).some(Boolean);
+
+  function toggleSubscriptionSort(key: SubscriptionSortKey) {
+    setSubscriptionSort((current) => current?.key === key
+      ? { key, direction: current.direction === "ascending" ? "descending" : "ascending" }
+      : { key, direction: "ascending" });
+  }
+
+  function setSubscriptionFilter(key: SubscriptionFilterKey, value: string) {
+    setSubscriptionFilters((current) => ({ ...current, [key]: value }));
+    setActiveSubscriptionFilter(null);
+  }
+
+  function toggleSubscriptionFilter(key: SubscriptionFilterKey) {
+    setActiveSubscriptionFilter((current) => current === key ? null : key);
+  }
 
   function replaceSubscription(next: Subscription, message: string) {
     setRegisterState((current) => current.state !== "ready" ? current : {
@@ -190,24 +403,41 @@ export function SubscriptionRegister({ readOnly = false }: { readOnly?: boolean 
 
     <div className={styles.tools}>
       <label className={styles.searchField}><Search size={17} aria-hidden="true" /><span className={styles.visuallyHidden}>Search subscriptions</span><input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search service, owner or employee" /></label>
-      {registerState.state === "ready" ? <span className={styles.count}>{filteredSubscriptions.length} {filteredSubscriptions.length === 1 ? "subscription" : "subscriptions"}</span> : null}
+      {registerState.state === "ready" ? <div className={styles.toolSummary}>
+        {hasSubscriptionFilters ? <button className={styles.clearFilters} type="button" onClick={() => setSubscriptionFilters({ billing: "", nextReview: "", responsible: "", status: "" })}>Clear filters</button> : null}
+        <span className={styles.count}>{filteredSubscriptions.length === registerState.subscriptions.length ? `${registerState.subscriptions.length} ${registerState.subscriptions.length === 1 ? "subscription" : "subscriptions"}` : `${filteredSubscriptions.length} of ${registerState.subscriptions.length} subscriptions`}</span>
+      </div> : null}
     </div>
 
     {registerState.state === "loading" ? <div className={styles.loadingState}><LoaderCircle className={styles.spinner} size={22} aria-hidden="true" /><span>Loading subscriptions…</span></div> : null}
     {registerState.state === "error" ? <div className={styles.errorState} role="alert"><AlertCircle size={19} aria-hidden="true" /><div><strong>Subscriptions could not be loaded</strong><span>{registerState.message}</span></div><button className={styles.secondaryAction} type="button" onClick={() => void load()}><RefreshCw size={15} /> Retry</button></div> : null}
-    {registerState.state === "ready" && !filteredSubscriptions.length ? <div className={styles.emptyState}><CreditCard size={25} aria-hidden="true" /><strong>{query ? "No subscriptions match that search" : "No subscriptions have been added"}</strong><span>{readOnly ? "Subscription records will appear here when they are created by a System Admin." : "Start with the systems your staff use, then assign their owner and access."}</span>{!readOnly && !query ? <button className={styles.secondaryAction} type="button" onClick={() => setShowAdd(true)}><Plus size={15} /> Add subscription</button> : null}</div> : null}
-    {registerState.state === "ready" && filteredSubscriptions.length ? <div className={styles.subscriptionList} role="list">
-      {filteredSubscriptions.map((subscription) => <article className={styles.subscriptionRow} key={subscription.id} role="listitem">
-        <div className={styles.subscriptionIcon}><CreditCard size={18} aria-hidden="true" /></div>
-        <div className={styles.subscriptionIdentity}><strong>{subscription.serviceName}</strong><span>{subscription.planName || "Plan not recorded"}</span><code>{subscription.subscriptionCode}</code></div>
-        <div className={styles.subscriptionTerms}><span>{subscription.pricingModel === "free" ? "Free" : `${formatCurrency(subscription.amountCents)} · ${subscription.billingCycle ? billingCycleLabels[subscription.billingCycle] : "Paid"}`}</span><strong data-status={subscription.status}>{subscription.status}</strong></div>
-        <div className={styles.responsible}><span>Responsible</span><strong>{subscription.responsible.fullName}</strong><small>{subscription.responsible.positionTitle}</small></div>
-        <div className={styles.reviewDate} data-due={isReviewDue(subscription)}><span>Next review</span><strong>{formatDate(subscription.nextReviewOn)}</strong><small>{subscription.memberNames.length} {subscription.memberNames.length === 1 ? "person" : "people"} assigned</small></div>
-        {!readOnly ? <div className={styles.rowActions}>
-          <button type="button" onClick={() => setEditTarget(subscription)} disabled={reviewingId !== null}><Pencil size={15} /> Edit</button>
-          <button type="button" onClick={() => void completeReview(subscription)} disabled={reviewingId !== null || subscription.status === "cancelled"} title={subscription.status === "cancelled" ? "Cancelled subscriptions do not need review" : undefined}>{reviewingId === subscription.id ? <LoaderCircle className={styles.spinner} size={15} /> : <CalendarClock size={15} />} {reviewingId === subscription.id ? "Saving…" : "Review"}</button>
-        </div> : null}
-      </article>)}
+    {registerState.state === "ready" && !filteredSubscriptions.length ? <div className={styles.emptyState}><CreditCard size={25} aria-hidden="true" /><strong>{query || hasSubscriptionFilters ? "No subscriptions match those filters" : "No subscriptions have been added"}</strong><span>{readOnly ? "Subscription records will appear here when they are created by a System Admin." : "Start with the systems your staff use, then assign their owner and access."}</span>{!readOnly && !query && !hasSubscriptionFilters ? <button className={styles.secondaryAction} type="button" onClick={() => setShowAdd(true)}><Plus size={15} /> Add subscription</button> : null}</div> : null}
+    {registerState.state === "ready" && filteredSubscriptions.length ? <div className={styles.sheetViewport}>
+      <div className={styles.subscriptionSheet} role="table" aria-label="Subscriptions">
+        <div className={`${styles.subscriptionSheetRow} ${styles.subscriptionSheetHeader}`} role="row">
+          <SubscriptionSheetHeader label="Service" sortKey="service" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
+          <SubscriptionSheetHeader label="Monthly" sortKey="monthly" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="billing" filterOptions={subscriptionFilterOptions.billing} filterValue={subscriptionFilters.billing} isFilterOpen={activeSubscriptionFilter === "billing"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
+          <SubscriptionSheetHeader label="Next review" sortKey="nextReview" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="nextReview" filterOptions={subscriptionFilterOptions.nextReview} filterValue={subscriptionFilters.nextReview} isFilterOpen={activeSubscriptionFilter === "nextReview"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
+          <SubscriptionSheetHeader label="Responsible" sortKey="responsible" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="responsible" filterOptions={subscriptionFilterOptions.responsible} filterValue={subscriptionFilters.responsible} isFilterOpen={activeSubscriptionFilter === "responsible"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
+          <SubscriptionSheetHeader label="Status" sortKey="status" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="status" filterOptions={subscriptionFilterOptions.status} filterValue={subscriptionFilters.status} isFilterOpen={activeSubscriptionFilter === "status"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
+          <SubscriptionSheetHeader label="Access" sortKey="members" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
+          <div className={styles.sheetHeaderCell} role="columnheader"><span>Actions</span></div>
+        </div>
+        {filteredSubscriptions.map((subscription) => <div className={styles.subscriptionSheetRow} key={subscription.id} role="row">
+          <div className={`${styles.sheetCell} ${styles.serviceCell}`} role="cell" data-label="Service">
+            <div className={styles.subscriptionIcon}><CreditCard size={18} aria-hidden="true" /></div>
+            <div className={styles.subscriptionIdentity}><strong>{subscription.serviceName}</strong><span title={subscription.planName || "Plan not recorded"}>{subscription.planName || "Plan not recorded"}</span><code>{subscription.subscriptionCode}</code></div>
+          </div>
+          <div className={`${styles.sheetCell} ${styles.monthlyCell}`} role="cell" data-label="Monthly"><strong>{monthlyCostLabel(subscription)}</strong><small>{billingLabel(subscription)}</small></div>
+          <div className={`${styles.sheetCell} ${styles.reviewCell}`} role="cell" data-label="Next review" data-due={isReviewDue(subscription)}><strong>{formatDate(subscription.nextReviewOn)}</strong><small>{isReviewDue(subscription) ? "Review due" : "Quarterly review"}</small></div>
+          <div className={`${styles.sheetCell} ${styles.responsibleCell}`} role="cell" data-label="Responsible"><strong>{subscription.responsible.fullName}</strong><small>{subscription.responsible.positionTitle}</small></div>
+          <div className={`${styles.sheetCell} ${styles.statusCell}`} role="cell" data-label="Status"><span data-status={subscription.status}>{subscription.status}</span></div>
+          <div className={`${styles.sheetCell} ${styles.membersCell}`} role="cell" data-label="Access"><strong>{subscription.memberNames.length} {subscription.memberNames.length === 1 ? "person" : "people"}</strong><small>{subscription.memberNames.length ? subscription.memberNames.join(", ") : "No one assigned"}</small></div>
+          <div className={`${styles.sheetCell} ${styles.subscriptionActions}`} role="cell" data-label="Actions">
+            {!readOnly ? <><button type="button" onClick={() => setEditTarget(subscription)} disabled={reviewingId !== null}><Pencil size={15} /> Edit</button><button type="button" onClick={() => void completeReview(subscription)} disabled={reviewingId !== null || subscription.status === "cancelled"} title={subscription.status === "cancelled" ? "Cancelled subscriptions do not need review" : undefined}>{reviewingId === subscription.id ? <LoaderCircle className={styles.spinner} size={15} /> : <CalendarClock size={15} />} {reviewingId === subscription.id ? "Saving…" : "Review"}</button></> : <span className={styles.readOnlyCell}>View only</span>}
+          </div>
+        </div>)}
+      </div>
     </div> : null}
 
     {showAdd ? <SubscriptionModal people={people} onClose={() => setShowAdd(false)} onCreated={subscriptionCreated} /> : null}

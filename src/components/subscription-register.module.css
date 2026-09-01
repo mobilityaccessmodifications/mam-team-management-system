@@ -207,6 +207,258 @@
 .rowActions { justify-content: flex-end; gap: 6px; }
 .rowActions button { min-height: 36px; border: 1px solid var(--surface-border-strong, #cbd7d2); background: var(--surface-raised, #fff); color: var(--text-secondary, #53625e); padding: 6px 9px; white-space: nowrap; }
 
+.toolSummary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.clearFilters {
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--subscription-accent-deep);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  padding: 5px 7px;
+}
+
+.clearFilters:hover,
+.clearFilters:focus-visible {
+  background: #fff3ec;
+  outline: 0;
+}
+
+.sheetViewport {
+  max-height: min(66vh, 700px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--subscription-line);
+  border-radius: var(--radius-xl, 16px);
+  background: var(--surface-raised, #fff);
+  box-shadow: 0 12px 30px rgb(26 45 39 / 5%);
+}
+
+.subscriptionSheet { min-width: 1140px; }
+
+.subscriptionSheetRow {
+  display: grid;
+  grid-template-columns: minmax(232px, 1.32fr) minmax(150px, .8fr) minmax(152px, .82fr) minmax(172px, .94fr) minmax(105px, .56fr) minmax(120px, .64fr) minmax(154px, auto);
+  align-items: stretch;
+  border-bottom: 1px solid #edf0ef;
+  background: var(--surface-raised, #fff);
+}
+
+.subscriptionSheetRow:last-child { border-bottom: 0; }
+.subscriptionSheetRow:not(.subscriptionSheetHeader):hover { background: #fffaf7; }
+.subscriptionSheetRow:focus-within { position: relative; z-index: 2; }
+
+.subscriptionSheetHeader {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  min-height: 48px;
+  border-bottom-color: var(--surface-border-strong, #cbd7d2);
+  background: color-mix(in srgb, var(--surface-muted, #f4f7f5) 78%, var(--surface-raised, #fff));
+  box-shadow: 0 1px 0 var(--surface-border-strong, #cbd7d2), 0 6px 14px rgb(28 46 42 / 4%);
+}
+
+.sheetHeaderCell {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  border-right: 1px solid color-mix(in srgb, var(--subscription-line) 72%, transparent);
+  color: var(--subscription-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .09em;
+  line-height: 1.25;
+  padding: 8px 10px 8px 14px;
+  text-transform: uppercase;
+}
+
+.sheetHeaderCell:last-child { border-right: 0; }
+.sheetHeaderCell > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheetHeaderTools { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 2px; margin-left: auto; }
+
+.sheetHeaderButton {
+  display: inline-grid;
+  width: 28px;
+  min-height: 30px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--subscription-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.sheetHeaderButton:hover,
+.sheetHeaderButton:focus-visible,
+.sheetHeaderButton[data-active="true"] {
+  border-color: color-mix(in srgb, var(--subscription-accent) 26%, var(--surface-border-strong, #cbd7d2));
+  background: #fffaf7;
+  color: var(--subscription-accent-deep);
+  outline: 0;
+}
+
+.sheetFilterMenu {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% - 1px);
+  left: 6px;
+  display: grid;
+  width: max-content;
+  min-width: 174px;
+  max-width: 260px;
+  max-height: 250px;
+  overflow-y: auto;
+  border: 1px solid var(--surface-border-strong, #cbd7d2);
+  border-radius: 10px;
+  background: var(--surface-raised, #fff);
+  box-shadow: 0 12px 26px rgb(26 45 39 / 15%);
+  padding: 5px;
+}
+
+.sheetFilterMenu button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--subscription-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.sheetFilterMenu button:hover,
+.sheetFilterMenu button[aria-checked="true"] {
+  background: #fff3ec;
+  color: var(--subscription-accent-deep);
+}
+
+.sheetCell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  border-right: 1px solid color-mix(in srgb, var(--subscription-line) 54%, transparent);
+  padding: 11px 14px;
+}
+
+.sheetCell:last-child { border-right: 0; }
+
+.serviceCell { gap: 10px; }
+.serviceCell .subscriptionIcon { flex: 0 0 auto; }
+.serviceCell .subscriptionIdentity { display: grid; min-width: 0; gap: 3px; }
+.serviceCell .subscriptionIdentity strong,
+.serviceCell .subscriptionIdentity span,
+.serviceCell .subscriptionIdentity code,
+.monthlyCell strong,
+.monthlyCell small,
+.reviewCell strong,
+.reviewCell small,
+.responsibleCell strong,
+.responsibleCell small,
+.membersCell strong,
+.membersCell small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.serviceCell .subscriptionIdentity strong { color: var(--subscription-ink); font-size: 13px; }
+.serviceCell .subscriptionIdentity span,
+.monthlyCell small,
+.reviewCell small,
+.responsibleCell small,
+.membersCell small { color: var(--subscription-muted); font-size: 11px; }
+.serviceCell .subscriptionIdentity code { color: var(--subscription-accent-deep); font-size: 9px; }
+
+.monthlyCell,
+.reviewCell,
+.responsibleCell,
+.membersCell { display: grid; align-content: center; gap: 3px; }
+.monthlyCell strong,
+.reviewCell strong,
+.responsibleCell strong,
+.membersCell strong { color: var(--text-secondary, #53625e); font-size: 12px; }
+.reviewCell[data-due="true"] strong,
+.reviewCell[data-due="true"] small { color: #b54b20; }
+
+.statusCell { justify-content: flex-start; }
+.statusCell > span {
+  width: fit-content;
+  border: 1px solid #c8ddd3;
+  border-radius: 999px;
+  background: #eff8f3;
+  color: #28745b;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 8px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.statusCell > span[data-status="paused"] { border-color: #ead2ab; background: #fff8e9; color: #95621b; }
+.statusCell > span[data-status="cancelled"] { border-color: #ddd6d4; background: #f6f5f4; color: #706865; }
+
+.subscriptionActions {
+  justify-content: flex-end;
+  gap: 6px;
+  background: inherit;
+  white-space: nowrap;
+}
+
+.subscriptionActions button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--surface-border-strong, #cbd7d2);
+  border-radius: var(--radius-md, 10px);
+  background: var(--surface-raised, #fff);
+  color: var(--text-secondary, #53625e);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  padding: 6px 9px;
+}
+
+.subscriptionActions button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--subscription-accent) 54%, var(--surface-border-strong, #cbd7d2));
+  background: #fff7f2;
+  color: var(--subscription-accent-deep);
+}
+
+.subscriptionActions button:focus-visible { outline: 3px solid color-mix(in srgb, var(--subscription-accent) 28%, transparent); outline-offset: 2px; }
+.subscriptionActions button:disabled { cursor: not-allowed; opacity: .56; }
+.readOnlyCell { color: var(--subscription-muted); font-size: 12px; font-weight: 700; }
+
+.subscriptionSheetHeader .sheetHeaderCell:last-child,
+.subscriptionActions {
+  position: sticky;
+  z-index: 3;
+  right: 0;
+  box-shadow: -8px 0 12px rgb(29 46 42 / 3%);
+}
+
+.subscriptionSheetHeader .sheetHeaderCell:last-child { z-index: 6; background: color-mix(in srgb, var(--surface-muted, #f4f7f5) 78%, var(--surface-raised, #fff)); }
+.subscriptionSheetRow:not(.subscriptionSheetHeader):hover .subscriptionActions { background: #fffaf7; }
+
 .modalBackdrop { position: fixed; z-index: 70; inset: 0; display: grid; place-items: center; padding: 24px; background: rgb(15 28 25 / 58%); backdrop-filter: blur(3px); }
 .modal { width: min(720px, 100%); max-height: min(88vh, 860px); overflow-y: auto; border: 1px solid color-mix(in srgb, var(--subscription-accent) 52%, #fff); border-radius: 18px; background: var(--surface-raised, #fff); box-shadow: 0 22px 60px rgb(0 0 0 / 25%); }
 .modal header { align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px; border-bottom: 1px solid var(--subscription-line); background: linear-gradient(135deg, #fff9f5, var(--surface-raised, #fff) 56%); }
@@ -265,4 +517,55 @@
   .modal { max-height: 94vh; }
   .modal header,
   .modal form { padding-left: 16px; padding-right: 16px; }
+}
+
+@media (max-width: 760px) {
+  .toolSummary { width: 100%; justify-content: space-between; }
+  .sheetViewport { max-height: none; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .subscriptionSheet { display: grid; min-width: 0; gap: 10px; }
+  .subscriptionSheetHeader { display: none; }
+  .subscriptionSheetRow:not(.subscriptionSheetHeader) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 12px;
+    border: 1px solid var(--subscription-line);
+    border-radius: 14px;
+    box-shadow: 0 3px 10px rgb(26 45 39 / 4%);
+    padding: 13px;
+  }
+
+  .sheetCell { min-width: 0; border: 0; padding: 0; }
+  .sheetCell[data-label]::before {
+    display: block;
+    color: var(--subscription-muted);
+    content: attr(data-label);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .09em;
+    line-height: 1.25;
+    margin-bottom: 3px;
+    text-transform: uppercase;
+  }
+
+  .serviceCell { grid-column: 1 / -1; gap: 10px; }
+  .serviceCell::before { display: none !important; }
+  .serviceCell .subscriptionIdentity span { white-space: normal; }
+  .monthlyCell { grid-column: 1; }
+  .reviewCell { grid-column: 2; }
+  .responsibleCell { grid-column: 1 / -1; }
+  .statusCell { grid-column: 1; align-self: end; }
+  .statusCell::before { display: none !important; }
+  .membersCell { grid-column: 2; }
+  .subscriptionActions {
+    position: static;
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    border-top: 1px solid var(--subscription-line);
+    box-shadow: none;
+    margin-top: 2px;
+    padding-top: 10px;
+  }
+
+  .subscriptionActions::before { display: none !important; }
+  .subscriptionActions button { min-height: 44px; }
 }
