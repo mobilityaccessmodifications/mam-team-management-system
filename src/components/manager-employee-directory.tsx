@@ -98,7 +98,15 @@ export function ManagerEmployeeDirectory({
   const loadRecords = useCallback(async () => {
     setLoading(true);
     try {
-      const nextRecords = await listManagedEmployeeDirectoryRecordsAction(previewManagerPersonId);
+      const result = await listManagedEmployeeDirectoryRecordsAction(previewManagerPersonId);
+      if (!result.ok) {
+        setRecords([]);
+        setSelectedPersonId(null);
+        setDraft(null);
+        setLoadError(result.message);
+        return;
+      }
+      const nextRecords = result.records;
       setRecords(nextRecords);
       setSelectedPersonId((current) => (
         current && nextRecords.some((record) => record.personId === current) ? current : null

@@ -49,9 +49,14 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       supabase.rpc("can_view_subscription_review_calendar"),
     ]);
     const current = Array.isArray(account) ? account[0] : null;
-    isAdmin = canManageAccounts === true;
-    currentPersonId = current?.person_id ?? undefined;
+    // A non-roster workspace is issued only to the active controlled System
+    // Admin. Treat it as the same administration capability in the UI, rather
+    // than falling through to the manager directory when its linked employee
+    // record is deliberately absent. Every write action and RPC still verifies
+    // the real System Admin session independently.
     isNonRosterSystemAdmin = canAccessNonRosterSystemAdminWorkspace === true;
+    isAdmin = canManageAccounts === true || isNonRosterSystemAdmin;
+    currentPersonId = current?.person_id ?? undefined;
     canViewCheckIns = canViewCheckInWorkspace === true;
     canViewEmployeeDirectory = canViewEmployeeDirectoryCapability === true;
     checkInResources = canViewCheckIns ? getCheckInResourceLinks() : undefined;
