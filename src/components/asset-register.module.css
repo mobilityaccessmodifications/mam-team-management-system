@@ -412,12 +412,13 @@
 }
 
 .assetSheet {
-  min-width: 1180px;
+  --asset-sheet-columns: minmax(214px, 1.32fr) minmax(128px, .78fr) minmax(134px, .82fr) minmax(164px, 1fr) minmax(126px, .74fr) minmax(108px, .6fr) 96px;
+  min-width: 1080px;
 }
 
 .assetSheetRow {
   display: grid;
-  grid-template-columns: minmax(230px, 1.35fr) minmax(138px, .76fr) minmax(148px, .82fr) minmax(175px, 1fr) minmax(132px, .72fr) minmax(108px, .58fr) minmax(242px, auto);
+  grid-template-columns: var(--asset-sheet-columns);
   align-items: stretch;
   border-bottom: 1px solid var(--surface-border);
   background: var(--surface-raised);
@@ -570,25 +571,22 @@
 .assetStatus > span[data-status="available"] { border-color: #c7d9e8; background: #f1f7fb; color: #316886; }
 
 .assetActionsCell {
-  justify-content: flex-end;
+  justify-content: center;
   gap: 6px;
   background: inherit;
   white-space: nowrap;
 }
 
-.assetSheetHeader .sheetHeaderCell:last-child,
-.assetActionsCell {
-  position: sticky;
-  z-index: 3;
-  right: 0;
-  box-shadow: -8px 0 12px rgb(29 46 42 / 3%);
-}
-
-.assetSheetHeader .sheetHeaderCell:last-child { z-index: 6; background: color-mix(in srgb, var(--surface-muted) 78%, var(--surface-raised)); }
-.assetSheetRow:not(.assetSheetHeader):hover .assetActionsCell { background: color-mix(in srgb, var(--surface-warm) 42%, var(--surface-raised)); }
+.assetSheetHeader .sheetHeaderCell:last-child { justify-content: center; padding-left: 6px; padding-right: 6px; }
 
 .assetActionsCell .moreActions { flex: 0 0 auto; }
 .assetActionsCell .moreMenu { z-index: 9; }
+
+.rowActions .editButton {
+  min-width: 76px;
+  min-height: 36px;
+  padding: 6px 10px;
+}
 
 .rowActions .removeAction,
 .dangerAction {

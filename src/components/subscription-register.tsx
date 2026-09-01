@@ -109,13 +109,7 @@ function monthlyEquivalentCents(subscription: Subscription) {
 function monthlyCostLabel(subscription: Subscription) {
   if (subscription.pricingModel === "free") return "Free";
   const monthlyCents = monthlyEquivalentCents(subscription);
-  return monthlyCents === null ? "Not recorded" : `${formatCurrency(monthlyCents)} / mo`;
-}
-
-function billingLabel(subscription: Subscription) {
-  if (subscription.pricingModel === "free") return "No paid billing";
-  if (!subscription.billingCycle || subscription.amountCents === null) return "Billing not recorded";
-  return `${formatCurrency(subscription.amountCents)} · ${billingCycleLabels[subscription.billingCycle]}`;
+  return monthlyCents === null ? "—" : `${formatCurrency(monthlyCents)} / mo`;
 }
 
 function billingFilterValue(subscription: Subscription) {
@@ -213,7 +207,14 @@ function SubscriptionSheetHeader({
 }
 
 /** System Admin can manage; managers receive this exact register read-only. */
-export function SubscriptionRegister({ readOnly = false }: { readOnly?: boolean }) {
+export function SubscriptionRegister({
+  readOnly = false,
+  onRecordsChanged,
+}: {
+  readOnly?: boolean;
+  /** Refreshes dependent calendar data after an owner, status or review changes. */
+  onRecordsChanged?: () => void;
+}) {
   const [registerState, setRegisterState] = useState<RegisterState>({ state: "loading" });
   const [people, setPeople] = useState<SubscriptionPerson[]>([]);
   const [query, setQuery] = useState("");
@@ -363,6 +364,7 @@ export function SubscriptionRegister({ readOnly = false }: { readOnly?: boolean 
       subscriptions: current.subscriptions.map((subscription) => subscription.id === next.id ? next : subscription),
     });
     setNotice(message);
+    onRecordsChanged?.();
   }
 
   function subscriptionCreated(next: Subscription) {
@@ -374,19 +376,18 @@ export function SubscriptionRegister({ readOnly = false }: { readOnly?: boolean 
       subscriptions: [...current.subscriptions, next].sort((first, second) => first.nextReviewOn.localeCompare(second.nextReviewOn)),
     });
     setShowAdd(false);
-    setNotice(`${next.serviceName} has been added. Its first quarterly review is ${formatDate(next.nextReviewOn)}.`);
+    setNotice(`${next.serviceName} has been added. Its first review is ${formatDate(next.nextReviewOn)}.`);
+    onRecordsChanged?.();
   }
 
-  async function completeReview(subscription: Subscription) {
-    if (reviewingId) return;
+  async function recordReview(subscription: Subscription) {
+    if (reviewingId) throw new Error("Another review is already being recorded.");
     setReviewingId(subscription.id);
     try {
       replaceSubscription(await markSubscriptionReviewed({
         subscriptionId: subscription.id,
         version: subscription.version,
       }), `Quarterly review recorded for ${subscription.serviceName}.`);
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "The review could not be recorded.");
     } finally {
       setReviewingId(null);
     }
@@ -426,22 +427,22 @@ export function SubscriptionRegister({ readOnly = false }: { readOnly?: boolean 
         {filteredSubscriptions.map((subscription) => <div className={styles.subscriptionSheetRow} key={subscription.id} role="row">
           <div className={`${styles.sheetCell} ${styles.serviceCell}`} role="cell" data-label="Service">
             <div className={styles.subscriptionIcon}><CreditCard size={18} aria-hidden="true" /></div>
-            <div className={styles.subscriptionIdentity}><strong>{subscription.serviceName}</strong><span title={subscription.planName || "Plan not recorded"}>{subscription.planName || "Plan not recorded"}</span><code>{subscription.subscriptionCode}</code></div>
+            <div className={styles.subscriptionIdentity}><strong>{subscription.serviceName}</strong>{subscription.planName ? <span title={subscription.planName}>{subscription.planName}</span> : null}</div>
           </div>
-          <div className={`${styles.sheetCell} ${styles.monthlyCell}`} role="cell" data-label="Monthly"><strong>{monthlyCostLabel(subscription)}</strong><small>{billingLabel(subscription)}</small></div>
-          <div className={`${styles.sheetCell} ${styles.reviewCell}`} role="cell" data-label="Next review" data-due={isReviewDue(subscription)}><strong>{formatDate(subscription.nextReviewOn)}</strong><small>{isReviewDue(subscription) ? "Review due" : "Quarterly review"}</small></div>
-          <div className={`${styles.sheetCell} ${styles.responsibleCell}`} role="cell" data-label="Responsible"><strong>{subscription.responsible.fullName}</strong><small>{subscription.responsible.positionTitle}</small></div>
+          <div className={`${styles.sheetCell} ${styles.monthlyCell}`} role="cell" data-label="Monthly"><strong>{monthlyCostLabel(subscription)}</strong></div>
+          <div className={`${styles.sheetCell} ${styles.reviewCell}`} role="cell" data-label="Next review" data-due={isReviewDue(subscription)}><strong>{formatDate(subscription.nextReviewOn)}</strong></div>
+          <div className={`${styles.sheetCell} ${styles.responsibleCell}`} role="cell" data-label="Responsible"><strong>{subscription.responsible.fullName}</strong></div>
           <div className={`${styles.sheetCell} ${styles.statusCell}`} role="cell" data-label="Status"><span data-status={subscription.status}>{subscription.status}</span></div>
-          <div className={`${styles.sheetCell} ${styles.membersCell}`} role="cell" data-label="Access"><strong>{subscription.memberNames.length} {subscription.memberNames.length === 1 ? "person" : "people"}</strong><small>{subscription.memberNames.length ? subscription.memberNames.join(", ") : "No one assigned"}</small></div>
+          <div className={`${styles.sheetCell} ${styles.membersCell}`} role="cell" data-label="Access"><strong title={`${subscription.memberNames.length} ${subscription.memberNames.length === 1 ? "person" : "people"} assigned`}>{subscription.memberNames.length || "—"}</strong></div>
           <div className={`${styles.sheetCell} ${styles.subscriptionActions}`} role="cell" data-label="Actions">
-            {!readOnly ? <><button type="button" onClick={() => setEditTarget(subscription)} disabled={reviewingId !== null}><Pencil size={15} /> Edit</button><button type="button" onClick={() => void completeReview(subscription)} disabled={reviewingId !== null || subscription.status === "cancelled"} title={subscription.status === "cancelled" ? "Cancelled subscriptions do not need review" : undefined}>{reviewingId === subscription.id ? <LoaderCircle className={styles.spinner} size={15} /> : <CalendarClock size={15} />} {reviewingId === subscription.id ? "Saving…" : "Review"}</button></> : <span className={styles.readOnlyCell}>View only</span>}
+            {!readOnly ? <button type="button" onClick={() => setEditTarget(subscription)} disabled={reviewingId !== null}><Pencil size={15} /> Edit</button> : <span className={styles.readOnlyCell} aria-label="Read only">—</span>}
           </div>
         </div>)}
       </div>
     </div> : null}
 
     {showAdd ? <SubscriptionModal people={people} onClose={() => setShowAdd(false)} onCreated={subscriptionCreated} /> : null}
-    {editTarget ? <SubscriptionModal people={people} subscription={editTarget} onClose={() => setEditTarget(null)} onUpdated={(next) => { replaceSubscription(next, `${next.serviceName} has been updated.`); setEditTarget(null); }} /> : null}
+    {editTarget ? <SubscriptionModal people={people} subscription={editTarget} onClose={() => setEditTarget(null)} onUpdated={(next) => { replaceSubscription(next, `${next.serviceName} has been updated.`); setEditTarget(null); }} onReview={() => recordReview(editTarget)} /> : null}
   </section>;
 }
 
@@ -451,12 +452,14 @@ function SubscriptionModal({
   onClose,
   onCreated,
   onUpdated,
+  onReview,
 }: {
   people: SubscriptionPerson[];
   subscription?: Subscription;
   onClose: () => void;
   onCreated?: (subscription: Subscription) => void;
   onUpdated?: (subscription: Subscription) => void;
+  onReview?: () => Promise<void>;
 }) {
   const isEditing = Boolean(subscription);
   const dialogRef = useRef<HTMLElement>(null);
@@ -504,9 +507,23 @@ function SubscriptionModal({
     }
   }
 
+  async function reviewNow() {
+    if (!onReview || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onReview();
+      onClose();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The review could not be recorded. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="subscription-dialog-title" tabIndex={-1}>
-      <header><div><span>Subscription register</span><h2 id="subscription-dialog-title">{isEditing ? "Edit subscription" : "Add subscription"}</h2><p>{isEditing ? `${subscription?.subscriptionCode} · Quarterly reviews remain database scheduled.` : "Add the service, responsible person and employees who use it."}</p></div><button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close subscription form"><X size={19} /></button></header>
+      <header><div><span>Subscription register</span><h2 id="subscription-dialog-title">{isEditing ? "Edit subscription" : "Add subscription"}</h2><p>{isEditing ? `${subscription?.subscriptionCode} · Review dates appear on the responsible person’s calendar.` : "Add the service, responsible person and employees who use it."}</p></div><button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close subscription form"><X size={19} /></button></header>
       <form onSubmit={submit}>
         <div className={styles.formGrid}>
           <label><span>Service name <b aria-hidden="true">*</b></span><input name="serviceName" ref={initialFocusRef} required maxLength={160} defaultValue={subscription?.serviceName ?? ""} placeholder="Microsoft 365, Adobe Creative Cloud…" /></label>
@@ -519,9 +536,9 @@ function SubscriptionModal({
           <label><span>Responsible person <b aria-hidden="true">*</b></span><EmployeePicker assignees={people} defaultValue={subscription?.responsible.personId ?? ""} name="responsiblePersonId" disabled={!people.length} /></label>
         </div>
         <SubscriptionMemberPicker people={people} selectedIds={memberPersonIds} onChange={setMemberPersonIds} />
-        <p className={styles.formHelp}><CalendarClock size={15} /> The first review is automatically set three months from today. Marking a review complete schedules the next quarterly review.</p>
+        <p className={styles.formHelp}><CalendarClock size={15} /> Reviews are scheduled every three months and always move to the next weekday when needed.</p>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
-        <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button><button className={styles.primaryAction} type="submit" disabled={saving || !people.length}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CreditCard size={16} />}{saving ? "Saving…" : isEditing ? "Save changes" : "Add subscription"}</button></footer>
+        <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>{isEditing && onReview && subscription?.status !== "cancelled" ? <button className={styles.secondaryAction} type="button" onClick={() => void reviewNow()} disabled={saving}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CalendarClock size={16} />}{saving ? "Saving…" : "Mark review complete"}</button> : null}<button className={styles.primaryAction} type="submit" disabled={saving || !people.length}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CreditCard size={16} />}{saving ? "Saving…" : isEditing ? "Save changes" : "Add subscription"}</button></footer>
       </form>
     </section>
   </div>;

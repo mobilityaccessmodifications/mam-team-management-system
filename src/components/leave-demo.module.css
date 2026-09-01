@@ -2662,6 +2662,10 @@
   background: #805aa6;
 }
 
+.legendSubscriptionReview {
+  background: #397286;
+}
+
 .calendarWeek,
 .calendarGrid {
   display: grid;
@@ -2778,6 +2782,12 @@
   border-color: #9a75bc;
   background: #f4eff9;
   color: #654183;
+}
+
+.eventSubscriptionReview {
+  border-color: #b7d4dd;
+  background: #eef8fa;
+  color: #2d6171;
 }
 
 .calendarPrivacy {
@@ -5211,6 +5221,11 @@
 .eventCheckIn {
   border-color: #c8e4f0 !important;
   background: var(--blue-soft) !important;
+}
+
+.eventSubscriptionReview {
+  border-color: #b7d4dd !important;
+  background: #eef8fa !important;
 }
 
 .calendarPrivacy {

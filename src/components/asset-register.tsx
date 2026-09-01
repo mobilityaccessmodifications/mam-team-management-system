@@ -10,7 +10,6 @@ import {
   Filter,
   Laptop,
   LoaderCircle,
-  MoreHorizontal,
   PackagePlus,
   Printer,
   RefreshCw,
@@ -93,8 +92,7 @@ function assetTypeLabel(type: ItAssetType) {
 }
 
 function assetDescription(asset: ItAsset) {
-  const model = [asset.manufacturer, asset.model].filter(Boolean).join(" · ");
-  return model || assetTypeLabel(asset.assetType);
+  return [asset.manufacturer, asset.model].filter(Boolean).join(" · ");
 }
 
 function assetStatusLabel(status: ItAssetStatus) {
@@ -972,39 +970,40 @@ export function AssetRegister() {
         </div>
         {visibleAssets.map((asset) => {
           const activeAction = barcodeAction?.id === asset.id ? barcodeAction.action : null;
+          const description = assetDescription(asset);
           return <div className={styles.assetSheetRow} key={asset.id} role="row">
             <div className={`${styles.sheetCell} ${styles.assetDeviceCell}`} role="cell" data-label="Device">
               <div className={styles.assetIcon}><Laptop size={18} /></div>
-              <div className={styles.assetIdentity}><strong>{assetTypeLabel(asset.assetType)}</strong><span title={assetDescription(asset)}>{assetDescription(asset)}</span></div>
+              <div className={styles.assetIdentity}><strong>{assetTypeLabel(asset.assetType)}</strong>{description ? <span title={description}>{description}</span> : null}</div>
             </div>
             <div className={`${styles.sheetCell} ${styles.assetCode}`} role="cell" data-label="Asset number"><strong title={asset.assetCode}>{asset.assetCode}</strong></div>
-            <div className={`${styles.sheetCell} ${styles.assetSerial}`} role="cell" data-label="Serial number"><strong title={asset.serialNumber || "Not recorded"}>{asset.serialNumber || "Not recorded"}</strong></div>
-            <div className={`${styles.sheetCell} ${styles.assetCustodian}`} role="cell" data-label="Assigned to" data-missing={!asset.assignedTo}><strong title={asset.assignedTo ? custodianDescription(asset) : "Ready to assign"}>{asset.assignedTo ? custodianDescription(asset) : "Ready to assign"}</strong></div>
-            <div className={`${styles.sheetCell} ${styles.assetTiming}`} role="cell" data-label={asset.assignedTo ? "Assigned on" : "Last returned"}><strong>{formatDate(assetTimingValue(asset))}</strong></div>
+            <div className={`${styles.sheetCell} ${styles.assetSerial}`} role="cell" data-label="Serial number"><strong title={asset.serialNumber || "No serial number"}>{asset.serialNumber || "—"}</strong></div>
+            <div className={`${styles.sheetCell} ${styles.assetCustodian}`} role="cell" data-label="Assigned to" data-missing={!asset.assignedTo}><strong title={asset.assignedTo?.fullName || "Ready to assign"}>{asset.assignedTo?.fullName || "Ready to assign"}</strong></div>
+            <div className={`${styles.sheetCell} ${styles.assetTiming}`} role="cell" data-label={asset.assignedTo ? "Assigned on" : "Last returned"}><strong>{assetTimingValue(asset) ? formatDate(assetTimingValue(asset)) : "—"}</strong></div>
             <div className={`${styles.sheetCell} ${styles.assetStatus}`} role="cell" data-label="Status"><span data-status={asset.status}>{assetStatusLabel(asset.status)}</span></div>
             <div className={`${styles.sheetCell} ${styles.assetActionsCell} ${styles.rowActions}`} role="cell" data-label="Actions" data-asset-actions>
-              {asset.assignedTo ? <button type="button" onClick={() => { setExpandedActionsId(null); setReturnTarget(asset); }} disabled={activeAction !== null} aria-label={`Record ${asset.assetCode} hardware return`}>
-                <Undo2 size={15} /><span>Return</span>
-              </button> : null}
-              <button type="button" onClick={() => { setExpandedActionsId(null); setAssignmentTarget(asset); }} disabled={activeAction !== null} aria-label={`Change ${asset.assetCode} owner`}>
-                <Pencil size={15} /><span>{asset.assignedTo ? "Owner" : "Assign"}</span>
-              </button>
-              <button type="button" onClick={() => { setExpandedActionsId(null); setHistoryTarget(asset); }} disabled={activeAction !== null} aria-label={`View ${asset.assetCode} ownership history`}>
-                <ClipboardClock size={15} /><span>History</span>
-              </button>
               <div className={styles.moreActions}>
                 <button
                   type="button"
-                  className={styles.moreButton}
+                  className={styles.editButton}
                   onClick={() => setExpandedActionsId((current) => current === asset.id ? null : asset.id)}
                   disabled={activeAction !== null}
-                  aria-label={`More actions for ${asset.assetCode}`}
+                  aria-label={`Edit ${asset.assetCode}`}
                   aria-haspopup="menu"
                   aria-expanded={expandedActionsId === asset.id}
                 >
-                  <MoreHorizontal size={17} aria-hidden="true" />
+                  <Pencil size={15} aria-hidden="true" /><span>Edit</span>
                 </button>
-                {expandedActionsId === asset.id ? <div className={styles.moreMenu} role="menu" aria-label={`More actions for ${asset.assetCode}`}>
+                {expandedActionsId === asset.id ? <div className={styles.moreMenu} role="menu" aria-label={`Edit actions for ${asset.assetCode}`}>
+                  {asset.assignedTo ? <button type="button" role="menuitem" onClick={() => { setExpandedActionsId(null); setReturnTarget(asset); }} disabled={activeAction !== null}>
+                    <Undo2 size={15} /><span>Record return</span>
+                  </button> : null}
+                  <button type="button" role="menuitem" onClick={() => { setExpandedActionsId(null); setAssignmentTarget(asset); }} disabled={activeAction !== null}>
+                    <Pencil size={15} /><span>{asset.assignedTo ? "Change owner" : "Assign owner"}</span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setExpandedActionsId(null); setHistoryTarget(asset); }} disabled={activeAction !== null}>
+                    <ClipboardClock size={15} /><span>View history</span>
+                  </button>
                   <button type="button" role="menuitem" onClick={() => { setExpandedActionsId(null); void downloadFromRow(asset); }} disabled={activeAction !== null}>
                     {activeAction === "download" ? <LoaderCircle className={styles.spinner} size={15} /> : <Download size={15} />}<span>Download</span>
                   </button>

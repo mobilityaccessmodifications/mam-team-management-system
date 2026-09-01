@@ -19,6 +19,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   let canChangeEmployeeView = false;
   let canViewSubscriptions = false;
   let canAccessOwnSubscriptions = false;
+  let canViewSubscriptionReviewCalendar = false;
   let canViewOwnTasks = false;
   let checkInResources: ReturnType<typeof getCheckInResourceLinks> | undefined;
   if (isSupabaseConfigured()) {
@@ -35,6 +36,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       { data: canChangeEmployeeViewCapability },
       { data: canViewSubscriptionsCapability },
       { data: canAccessOwnSubscriptionsCapability },
+      { data: canViewSubscriptionReviewCalendarCapability },
     ] = await Promise.all([
       supabase.rpc("can_manage_portal_accounts"),
       supabase.rpc("current_portal_account"),
@@ -44,6 +46,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       supabase.rpc("can_change_employee_view"),
       supabase.rpc("can_view_subscription_register"),
       supabase.rpc("can_access_own_subscriptions"),
+      supabase.rpc("can_view_subscription_review_calendar"),
     ]);
     const current = Array.isArray(account) ? account[0] : null;
     isAdmin = canManageAccounts === true;
@@ -55,6 +58,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     canChangeEmployeeView = canChangeEmployeeViewCapability === true;
     canViewSubscriptions = canViewSubscriptionsCapability === true;
     canAccessOwnSubscriptions = canAccessOwnSubscriptionsCapability === true;
+    canViewSubscriptionReviewCalendar = canViewSubscriptionReviewCalendarCapability === true;
     // Every active linked employee may open their own task surface. Its
     // contents remain limited by the dedicated task data source; this flag
     // only controls whether the tab itself is available.
@@ -79,10 +83,11 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const requestedView = view === "about"
     ? "people"
     : view === "leave" || view === "calendar" || view === "people" ? view : "home";
-  // The team calendar is a manager/System Admin workspace. Resolve unauthorised
-  // deep links on the server so an employee never lands on its client view.
+  // Team calendars are manager/System Admin workspaces. A responsible person
+  // may additionally open an owner-scoped review calendar, which never
+  // contains team leave, birthdays or check-ins.
   const canViewTeamCalendar = isAdmin || canViewCheckIns;
-  const resolvedView = requestedView === "calendar" && !canViewTeamCalendar
+  const resolvedView = requestedView === "calendar" && !(canViewTeamCalendar || canViewSubscriptionReviewCalendar)
     ? "home"
     : requestedView;
 
@@ -94,6 +99,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     canChangeEmployeeView={canChangeEmployeeView}
     canViewSubscriptions={canViewSubscriptions}
     canAccessOwnSubscriptions={canAccessOwnSubscriptions}
+    canViewSubscriptionReviewCalendar={canViewSubscriptionReviewCalendar}
     canViewOwnTasks={canViewOwnTasks}
     canViewTeamCalendar={canViewTeamCalendar}
     checkInResources={checkInResources}

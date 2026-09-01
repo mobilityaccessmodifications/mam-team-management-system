@@ -84,12 +84,26 @@ export type CheckInCalendarEntry = {
   status: "scheduled" | "claimed" | "delivered" | "completed" | "needs_review";
 };
 
+/**
+ * A minimal, owner-scoped subscription review reminder. The calendar never
+ * receives pricing, plan, access membership or credential information.
+ */
+export type SubscriptionReviewCalendarEntry = {
+  subscriptionId: string;
+  serviceName: string;
+  dueDate: string;
+  status: "active" | "paused";
+};
+
 export type LeaveWorkspaceData = {
   requests: LeaveWorkspaceRequest[];
   attachments: LeaveAttachment[];
   calendarEntries: LeaveCalendarEntry[];
   birthdayEntries: BirthdayCalendarEntry[];
   checkInEntries: CheckInCalendarEntry[];
+  subscriptionReviewEntries: SubscriptionReviewCalendarEntry[];
+  /** Current active profile may open the calendar for its own review dates. */
+  canViewSubscriptionReviewCalendar: boolean;
   /**
    * A capability asserted by the database for the authenticated session.
    * This intentionally remains separate from per-request `canDecide`, so an
@@ -200,6 +214,13 @@ type CheckInCalendarRpcRow = {
   employee_name: unknown;
   milestone: unknown;
   sequence: unknown;
+  due_date: unknown;
+  status: unknown;
+};
+
+type SubscriptionReviewCalendarRpcRow = {
+  subscription_id: unknown;
+  service_name: unknown;
   due_date: unknown;
   status: unknown;
 };
@@ -446,6 +467,20 @@ function toCheckInCalendarEntry(value: unknown): CheckInCalendarEntry {
     sequence: row.sequence,
     dueDate: requiredDate(row.due_date, LOAD_ERROR),
     status: row.status as CheckInCalendarEntry["status"],
+  };
+}
+
+function toSubscriptionReviewCalendarEntry(value: unknown): SubscriptionReviewCalendarEntry {
+  const row = value as SubscriptionReviewCalendarRpcRow;
+  const subscriptionId = requireText(row?.subscription_id, LOAD_ERROR);
+  if (!UUID_PATTERN.test(subscriptionId)) throw new Error(LOAD_ERROR);
+  if (row.status !== "active" && row.status !== "paused") throw new Error(LOAD_ERROR);
+
+  return {
+    subscriptionId,
+    serviceName: requireText(row.service_name, LOAD_ERROR),
+    dueDate: requiredDate(row.due_date, LOAD_ERROR),
+    status: row.status,
   };
 }
 
@@ -1042,22 +1077,40 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
   }
 
   if (checkedPreviewPersonId) {
-    const [preview, { data: birthdayData, error: birthdayError }, { data: checkInData, error: checkInError }] = await Promise.all([
-      getSelectedEmployeeLeaveWorkspacePreview(checkedPreviewPersonId),
-      supabase.rpc("list_calendar_birthdays"),
-      supabase.rpc("list_employee_check_in_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
+    const preview = await getSelectedEmployeeLeaveWorkspacePreview(checkedPreviewPersonId);
+    const canViewPreviewTeamCalendar = preview.canReviewLeave;
+    const [
+      { data: birthdayData, error: birthdayError },
+      { data: checkInData, error: checkInError },
+      { data: subscriptionReviewData, error: subscriptionReviewError },
+      { data: canViewSubscriptionReviewCalendar, error: subscriptionReviewCalendarPermissionError },
+    ] = await Promise.all([
+      canViewPreviewTeamCalendar
+        ? supabase.rpc("list_calendar_birthdays")
+        : Promise.resolve({ data: [], error: null }),
+      canViewPreviewTeamCalendar
+        ? supabase.rpc("list_employee_check_in_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId })
+        : Promise.resolve({ data: [], error: null }),
+      supabase.rpc("list_subscription_review_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
+      supabase.rpc("can_view_subscription_review_calendar_for_preview", { p_person_id: checkedPreviewPersonId }),
     ]);
     const birthdays = parseOptionalProjection(birthdayData, birthdayError, toBirthdayCalendarEntry);
     const checkIns = parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry);
+    const subscriptionReviews = parseOptionalProjection(subscriptionReviewData, subscriptionReviewError, toSubscriptionReviewCalendarEntry);
     const unavailable = [
       !birthdays.available ? "birthdays" : "",
       !checkIns.available ? "check-ins" : "",
+      !subscriptionReviews.available ? "subscription reviews" : "",
     ].filter(Boolean);
 
     return {
       ...preview,
       birthdayEntries: birthdays.rows,
       checkInEntries: checkIns.rows,
+      subscriptionReviewEntries: subscriptionReviews.rows,
+      canViewSubscriptionReviewCalendar: subscriptionReviewCalendarPermissionError
+        ? false
+        : canViewSubscriptionReviewCalendar === true,
       isProfilePreview: true,
       warning: unavailable.length
         ? `Some optional data is temporarily unavailable (${unavailable.join(", ")}). Leave requests remain available.`
@@ -1070,6 +1123,9 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
     { data: calendarData, error: calendarError },
     { data: birthdayData, error: birthdayError },
     { data: checkInData, error: checkInError },
+    { data: subscriptionReviewData, error: subscriptionReviewError },
+    { data: canViewSubscriptionReviewCalendar, error: subscriptionReviewCalendarPermissionError },
+    { data: canViewTeamCalendar, error: teamCalendarPermissionError },
     { data: canReviewLeave, error: canReviewError },
     { data: attachmentData, error: attachmentError },
   ] = await Promise.all([
@@ -1077,6 +1133,9 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
     supabase.rpc("list_leave_calendar_entries"),
     supabase.rpc("list_calendar_birthdays"),
     supabase.rpc("list_employee_check_in_calendar_entries"),
+    supabase.rpc("list_subscription_review_calendar_entries"),
+    supabase.rpc("can_view_subscription_review_calendar"),
+    supabase.rpc("can_view_employee_check_in_workspace"),
     supabase.rpc("can_review_leave_workspace"),
     supabase.rpc("list_leave_workspace_attachments"),
   ]);
@@ -1093,9 +1152,22 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
   }
 
   const attachments = parseOptionalProjection(attachmentData, attachmentError, toLeaveAttachment);
-  const calendar = parseOptionalProjection(calendarData, calendarError, toCalendarEntry);
-  const birthdays = parseOptionalProjection(birthdayData, birthdayError, toBirthdayCalendarEntry);
-  const checkIns = parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry);
+  // An employee who becomes responsible for a subscription must not receive
+  // team leave, birthdays or check-ins merely to view their own review date.
+  // The same database capability that the page uses for the team calendar
+  // governs which calendar DTOs can leave this server action.
+  const canViewTeamCalendarScope = !teamCalendarPermissionError
+    && canViewTeamCalendar === true;
+  const calendar = canViewTeamCalendarScope
+    ? parseOptionalProjection(calendarData, calendarError, toCalendarEntry)
+    : { available: true, rows: [] as LeaveCalendarEntry[] };
+  const birthdays = canViewTeamCalendarScope
+    ? parseOptionalProjection(birthdayData, birthdayError, toBirthdayCalendarEntry)
+    : { available: true, rows: [] as BirthdayCalendarEntry[] };
+  const checkIns = canViewTeamCalendarScope
+    ? parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry)
+    : { available: true, rows: [] as CheckInCalendarEntry[] };
+  const subscriptionReviews = parseOptionalProjection(subscriptionReviewData, subscriptionReviewError, toSubscriptionReviewCalendarEntry);
   // Supporting files are a Leave-detail capability, not a calendar projection.
   // Keep attachment capability failures out of the global notice so a missing
   // optional attachment RPC cannot make Calendar look unhealthy or block the
@@ -1104,6 +1176,7 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
     !calendar.available ? "leave calendar" : "",
     !birthdays.available ? "birthdays" : "",
     !checkIns.available ? "check-ins" : "",
+    !subscriptionReviews.available ? "subscription reviews" : "",
   ].filter(Boolean);
 
   return {
@@ -1112,6 +1185,10 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
     calendarEntries: calendar.rows,
     birthdayEntries: birthdays.rows,
     checkInEntries: checkIns.rows,
+    subscriptionReviewEntries: subscriptionReviews.rows,
+    canViewSubscriptionReviewCalendar: subscriptionReviewCalendarPermissionError
+      ? false
+      : canViewSubscriptionReviewCalendar === true,
     canReviewLeave,
     isProfilePreview: false,
     warning: unavailable.length

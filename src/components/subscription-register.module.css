@@ -243,11 +243,14 @@
   box-shadow: 0 12px 30px rgb(26 45 39 / 5%);
 }
 
-.subscriptionSheet { min-width: 1140px; }
+.subscriptionSheet {
+  --subscription-sheet-columns: minmax(214px, 1.3fr) minmax(122px, .74fr) minmax(142px, .8fr) minmax(152px, .9fr) minmax(102px, .56fr) minmax(78px, .38fr) 94px;
+  min-width: 1030px;
+}
 
 .subscriptionSheetRow {
   display: grid;
-  grid-template-columns: minmax(232px, 1.32fr) minmax(150px, .8fr) minmax(152px, .82fr) minmax(172px, .94fr) minmax(105px, .56fr) minmax(120px, .64fr) minmax(154px, auto);
+  grid-template-columns: var(--subscription-sheet-columns);
   align-items: stretch;
   border-bottom: 1px solid #edf0ef;
   background: var(--surface-raised, #fff);
@@ -415,7 +418,7 @@
 .statusCell > span[data-status="cancelled"] { border-color: #ddd6d4; background: #f6f5f4; color: #706865; }
 
 .subscriptionActions {
-  justify-content: flex-end;
+  justify-content: center;
   gap: 6px;
   background: inherit;
   white-space: nowrap;
@@ -448,16 +451,7 @@
 .subscriptionActions button:disabled { cursor: not-allowed; opacity: .56; }
 .readOnlyCell { color: var(--subscription-muted); font-size: 12px; font-weight: 700; }
 
-.subscriptionSheetHeader .sheetHeaderCell:last-child,
-.subscriptionActions {
-  position: sticky;
-  z-index: 3;
-  right: 0;
-  box-shadow: -8px 0 12px rgb(29 46 42 / 3%);
-}
-
-.subscriptionSheetHeader .sheetHeaderCell:last-child { z-index: 6; background: color-mix(in srgb, var(--surface-muted, #f4f7f5) 78%, var(--surface-raised, #fff)); }
-.subscriptionSheetRow:not(.subscriptionSheetHeader):hover .subscriptionActions { background: #fffaf7; }
+.subscriptionSheetHeader .sheetHeaderCell:last-child { justify-content: center; padding-left: 6px; padding-right: 6px; }
 
 .modalBackdrop { position: fixed; z-index: 70; inset: 0; display: grid; place-items: center; padding: 24px; background: rgb(15 28 25 / 58%); backdrop-filter: blur(3px); }
 .modal { width: min(720px, 100%); max-height: min(88vh, 860px); overflow-y: auto; border: 1px solid color-mix(in srgb, var(--subscription-accent) 52%, #fff); border-radius: 18px; background: var(--surface-raised, #fff); box-shadow: 0 22px 60px rgb(0 0 0 / 25%); }
