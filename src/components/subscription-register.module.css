@@ -258,7 +258,7 @@
 
 .subscriptionSheetRow:last-child { border-bottom: 0; }
 .subscriptionSheetRow:not(.subscriptionSheetHeader):hover { background: #fffaf7; }
-.subscriptionSheetRow:focus-within { position: relative; z-index: 2; }
+.subscriptionSheetRow:not(.subscriptionSheetHeader):focus-within { position: relative; z-index: 2; }
 
 .subscriptionSheetHeader {
   position: sticky;

@@ -426,7 +426,7 @@
 
 .assetSheetRow:last-child { border-bottom: 0; }
 .assetSheetRow:not(.assetSheetHeader):hover { background: color-mix(in srgb, var(--surface-warm) 42%, var(--surface-raised)); }
-.assetSheetRow:focus-within { position: relative; z-index: 2; }
+.assetSheetRow:not(.assetSheetHeader):focus-within { position: relative; z-index: 2; }
 
 .assetSheetHeader {
   position: sticky;
