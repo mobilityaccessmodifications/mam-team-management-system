@@ -10,10 +10,10 @@ Browser
        -> authenticated self-profile Server Actions
             -> controlled own-record database functions
             -> own phone, personal email and date of birth; read-only work email
-       -> HR-authorised employee-directory Server Actions and CSV route
+       -> System-Admin-authorised employee-directory Server Actions and CSV route
             -> controlled database functions
             -> private employee-detail records
-       -> HR-authorised account-management Server Actions
+       -> System-Admin-authorised account-management Server Actions
             -> server-only Supabase secret key
             -> Supabase Auth Admin API
        -> deployed authenticated leave Server Actions
@@ -66,7 +66,7 @@ Creating an HR Directory record is deliberately separate from creating a portal 
 
 `private.employee_directory_details` is a one-to-one extension of the safe organisation person record. It holds the approved employee fields that do not belong in the organisation tree: first and last name, work and personal contact details, team, country, date of birth, scheduled employment-end information and HR-only equipment allocation (laptop supply, laptop/mouse/keyboard IDs and asset tags). A separate narrow controlled response can provide a selected person’s work email to the organisation-tree inspector; it does not make the private table queryable by employees. The canonical start date, title, company and reporting parent remain on the organisation record so the tree and Directory cannot drift.
 
-Only a database-controlled HR, Super Admin, or approved global reviewer account may call the employee-directory list, create and update arbitrary employees or download the CSV. These functions use the signed-in session and controlled role checks; they do not use the Supabase Auth Admin secret. Returned employee-directory data is a deliberately narrow HR DTO, never a direct browser query of the private table. Non-authorised users receive neither the Directory list nor another employee’s private profile.
+Only an active database-controlled **System Admin** may call the employee-directory list, create and update arbitrary employees, access archived records or download the CSV. Leave-review grants and manager roles do not confer Directory access. These functions use the signed-in session and controlled role checks; they do not use the Supabase Auth Admin secret. Returned employee-directory data is a deliberately narrow private DTO, never a direct browser query of the private table. Non-authorised users receive neither the Directory list nor another employee’s private profile.
 
 The CSV route preserves the exact employee headers and order: First Name, Last Name, Work Email, Personal Email, Phone, Job Title, Team, Company, Manager, Country, Date of birth, Start date and Scheduled Employment End Date, then Laptop supplied, Laptop ID, Mouse ID, Keyboard ID and Asset Tags. It protects against spreadsheet formula injection and excludes portal-account data, Auth aliases and passwords. It is generated for the current HR session only; exports are not persisted by the application.
 
@@ -89,10 +89,10 @@ The leave calendar is an availability view, not a leave-balance or payroll ledge
 ## Durable employee check-ins
 
 - Active employees are enrolled automatically from their canonical start date. Milestone due dates on Saturday or Sunday move forward to the next Monday-to-Friday working day. Reminder lead time is calculated from that scheduled workday, then a resulting weekend advance-notification date moves back to the previous working day.
-- Calendar reads a controlled task projection: Todd/HR, Penny and Steven receive all employees; Kieran, Sujant and Serene receive only current organisation-tree descendants. The manager projection omits HR private fields.
+- Calendar reads a controlled task projection: an active **System Admin** receives all employees, while an active **manager** receives only current descendants in the authoritative organisation tree. The manager projection omits HR private fields; names and job titles are never authority.
 - Completion is durable. Reminders due before 1 July 2026 are migration-backfilled complete; no manual enable or catch-up queue is exposed.
 - The reminder scheduler claims only due, incomplete work and sends the approved manager message and resource links through the controlled delivery route.
-- Production scheduling is owned by the MAM n8n daily 08:00 Australia/Melbourne Schedule Trigger, which calls the server-only `CRON_SECRET`-protected route. The route claims at most two reminders per call and only during 08:00–16:59 Australia/Melbourne; Vercel Cron is intentionally not part of this deployment.
+- Production scheduling is owned by the MAM n8n daily 08:00 Australia/Melbourne Schedule Trigger, which calls the server-only `CRON_SECRET`-protected route. The route claims a bounded batch of at most ten reminders, delivers them concurrently, reports when a backlog is likely, and only runs during 08:00–16:59 Australia/Melbourne; Vercel Cron is intentionally not part of this deployment.
 - Before each outbound request, the database re-resolves the current employee and manager and returns a short-lived authorization snapshot. That claimed token is immutable through provider finalisation; later organisation changes apply to later deliveries, while an abandoned claim times out and must pass current-context validation again.
 
 Onboarding and offboarding remain separate review work. No People workflow creates a portal login or provisions or revokes an external system.

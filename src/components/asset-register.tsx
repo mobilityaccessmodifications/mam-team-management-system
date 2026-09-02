@@ -8,6 +8,7 @@ import {
   Download,
   Laptop,
   LoaderCircle,
+  MoreHorizontal,
   PackagePlus,
   Printer,
   RefreshCw,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import {
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -186,7 +188,7 @@ function AssetLabelModal({
 }: {
   asset: ItAsset;
   onClose: () => void;
-  onAddAnother: () => void;
+  onAddAnother?: () => void;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const initialFocusRef = useRef<HTMLButtonElement>(null);
@@ -259,7 +261,7 @@ function AssetLabelModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className={styles.labelModal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="asset-label-title" tabIndex={-1}>
       <header>
-        <div><span>Device added</span><h2 id="asset-label-title">Barcode label ready</h2></div>
+        <div><span>{onAddAnother ? "Device added" : "IT asset register"}</span><h2 id="asset-label-title">{onAddAnother ? "Barcode label ready" : "Barcode label"}</h2></div>
         <button type="button" onClick={onClose} aria-label="Close barcode label"><X size={19} /></button>
       </header>
       <div className={styles.labelPreview}>
@@ -269,7 +271,7 @@ function AssetLabelModal({
       <p className={styles.labelPrivacy}>This label encodes only the MAM asset number. It does not contain staff, account or recovery details.</p>
       {actionError ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{actionError}</p> : null}
       <footer>
-        <button className={styles.secondaryAction} type="button" onClick={onAddAnother}>Add another</button>
+        <button className={styles.secondaryAction} type="button" onClick={onAddAnother ?? onClose}>{onAddAnother ? "Add another" : "Close"}</button>
         <div>
           <button className={styles.secondaryAction} type="button" onClick={() => void printLabel()} disabled={busyAction !== null}>
             {busyAction === "print" ? <LoaderCircle className={styles.spinner} size={16} /> : <Printer size={16} />}
@@ -636,15 +638,44 @@ export function AssetRegister() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [showAddDevice, setShowAddDevice] = useState(false);
-  const [newAsset, setNewAsset] = useState<ItAsset | null>(null);
+  const [labelTarget, setLabelTarget] = useState<{ asset: ItAsset; isNew: boolean } | null>(null);
   const [assignmentTarget, setAssignmentTarget] = useState<ItAsset | null>(null);
   const [returnTarget, setReturnTarget] = useState<ItAsset | null>(null);
   const [historyTarget, setHistoryTarget] = useState<ItAsset | null>(null);
   const [removalTarget, setRemovalTarget] = useState<ItAsset | null>(null);
   const [query, setQuery] = useState("");
   const [barcodeAction, setBarcodeAction] = useState<{ id: string; action: BarcodeAction } | null>(null);
+  const [expandedActionsId, setExpandedActionsId] = useState<string | null>(null);
   const [rowError, setRowError] = useState("");
   const [notice, setNotice] = useState("");
+  const actionMenuRef = useRef<HTMLDivElement>(null);
+  const actionTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const actionMenuInitialFocus = useRef<"first" | "last">("first");
+
+  useEffect(() => {
+    if (!expandedActionsId) return;
+
+    function closeOnOutsidePointer(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-asset-actions]")) return;
+      setExpandedActionsId(null);
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [expandedActionsId]);
+
+  useEffect(() => {
+    if (!expandedActionsId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const items = actionMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)');
+      const target = actionMenuInitialFocus.current === "last" ? items?.item((items?.length ?? 1) - 1) : items?.item(0);
+      target?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [expandedActionsId]);
 
   const loadAssets = useCallback(async () => {
     setLoading(true);
@@ -688,7 +719,7 @@ export function AssetRegister() {
   function assetCreated(asset: ItAsset) {
     setAssets((current) => [asset, ...current]);
     setShowAddDevice(false);
-    setNewAsset(asset);
+    setLabelTarget({ asset, isNew: true });
     setNotice(`Device assigned to ${asset.assignedTo?.fullName ?? "the selected employee"}.`);
   }
 
@@ -727,11 +758,39 @@ export function AssetRegister() {
       setRowError("The barcode image could not be downloaded. Try again.");
     } finally {
       setBarcodeAction(null);
+      setExpandedActionsId(null);
+      window.setTimeout(() => actionTriggerRefs.current.get(asset.id)?.focus(), 0);
     }
   }
 
-  async function printFromRow(asset: ItAsset) {
-    setNewAsset(asset);
+  function showLabelFromRow(asset: ItAsset) {
+    setExpandedActionsId(null);
+    setLabelTarget({ asset, isNew: false });
+  }
+
+  function closeActionMenu(assetId: string, restoreFocus = false) {
+    setExpandedActionsId(null);
+    if (restoreFocus) window.setTimeout(() => actionTriggerRefs.current.get(assetId)?.focus(), 0);
+  }
+
+  function handleActionMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>, assetId: string) {
+    const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')];
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeActionMenu(assetId, true);
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) || items.length === 0) return;
+    event.preventDefault();
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? items.length - 1
+        : event.key === "ArrowDown"
+          ? (currentIndex + 1 + items.length) % items.length
+          : (currentIndex - 1 + items.length) % items.length;
+    items[nextIndex]?.focus();
   }
 
   return <section className={styles.workspace} aria-labelledby="asset-register-title">
@@ -776,32 +835,61 @@ export function AssetRegister() {
           <div className={styles.assetTiming}>
             <span>{asset.assignedTo ? "Assigned on" : "Last returned"}</span><strong>{formatDate(asset.assignedTo ? asset.assignedOn : asset.lastReturnedOn)}</strong>
           </div>
-          <div className={styles.rowActions}>
-            {asset.assignedTo ? <button type="button" onClick={() => setReturnTarget(asset)} disabled={activeAction !== null} aria-label={`Record ${asset.assetCode} hardware return`}>
+          <div className={styles.rowActions} data-asset-actions>
+            {asset.assignedTo ? <button type="button" onClick={() => { setExpandedActionsId(null); setReturnTarget(asset); }} disabled={activeAction !== null} aria-label={`Record ${asset.assetCode} hardware return`}>
               <Undo2 size={15} /><span>Return</span>
             </button> : null}
-            <button type="button" onClick={() => setAssignmentTarget(asset)} disabled={activeAction !== null} aria-label={`Change ${asset.assetCode} owner`}>
+            <button type="button" onClick={() => { setExpandedActionsId(null); setAssignmentTarget(asset); }} disabled={activeAction !== null} aria-label={`Change ${asset.assetCode} owner`}>
               <Pencil size={15} /><span>{asset.assignedTo ? "Owner" : "Assign"}</span>
             </button>
-            <button type="button" onClick={() => setHistoryTarget(asset)} disabled={activeAction !== null} aria-label={`View ${asset.assetCode} ownership history`}>
+            <button type="button" onClick={() => { setExpandedActionsId(null); setHistoryTarget(asset); }} disabled={activeAction !== null} aria-label={`View ${asset.assetCode} ownership history`}>
               <ClipboardClock size={15} /><span>History</span>
             </button>
-            <button type="button" onClick={() => void downloadFromRow(asset)} disabled={activeAction !== null} aria-label={`Download ${asset.assetCode} barcode`}>
-              {activeAction === "download" ? <LoaderCircle className={styles.spinner} size={15} /> : <Download size={15} />}<span>Download</span>
-            </button>
-            <button type="button" onClick={() => void printFromRow(asset)} disabled={activeAction !== null} aria-label={`Open ${asset.assetCode} barcode label`}>
-              <Printer size={15} /><span>Label</span>
-            </button>
-            <button type="button" className={styles.removeAction} onClick={() => setRemovalTarget(asset)} disabled={activeAction !== null} aria-label={`Remove incorrect ${asset.assetCode} device entry`}>
-              <Trash2 size={15} /><span>Remove</span>
-            </button>
+            <div className={styles.moreActions}>
+              <button
+                type="button"
+                className={styles.moreButton}
+                onClick={() => {
+                  actionMenuInitialFocus.current = "first";
+                  setExpandedActionsId((current) => current === asset.id ? null : asset.id);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+                  event.preventDefault();
+                  actionMenuInitialFocus.current = event.key === "ArrowUp" ? "last" : "first";
+                  setExpandedActionsId(asset.id);
+                }}
+                ref={(node) => {
+                  if (node) actionTriggerRefs.current.set(asset.id, node);
+                  else actionTriggerRefs.current.delete(asset.id);
+                }}
+                disabled={activeAction !== null}
+                aria-label={`More actions for ${asset.assetCode}`}
+                aria-haspopup="menu"
+                aria-expanded={expandedActionsId === asset.id}
+                aria-controls={expandedActionsId === asset.id ? `asset-actions-${asset.id}` : undefined}
+              >
+                <MoreHorizontal size={17} aria-hidden="true" />
+              </button>
+              {expandedActionsId === asset.id ? <div className={styles.moreMenu} id={`asset-actions-${asset.id}`} ref={actionMenuRef} role="menu" aria-label={`More actions for ${asset.assetCode}`} aria-busy={activeAction !== null} onKeyDown={(event) => handleActionMenuKeyDown(event, asset.id)}>
+                <button type="button" role="menuitem" onClick={() => void downloadFromRow(asset)} disabled={activeAction !== null}>
+                  {activeAction === "download" ? <LoaderCircle className={styles.spinner} size={15} /> : <Download size={15} />}<span>{activeAction === "download" ? "Downloading…" : "Download"}</span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => showLabelFromRow(asset)} disabled={activeAction !== null}>
+                  <Printer size={15} /><span>Label</span>
+                </button>
+                <button type="button" role="menuitem" className={styles.removeAction} onClick={() => { setExpandedActionsId(null); setRemovalTarget(asset); }} disabled={activeAction !== null}>
+                  <Trash2 size={15} /><span>Remove</span>
+                </button>
+              </div> : null}
+            </div>
           </div>
         </article>;
       })}
     </div> : null}
 
     {showAddDevice ? <AddDeviceModal assignees={assignees} onClose={() => setShowAddDevice(false)} onCreated={assetCreated} /> : null}
-    {newAsset ? <AssetLabelModal asset={newAsset} onClose={() => setNewAsset(null)} onAddAnother={() => { setNewAsset(null); setShowAddDevice(true); }} /> : null}
+    {labelTarget ? <AssetLabelModal asset={labelTarget.asset} onClose={() => setLabelTarget(null)} onAddAnother={labelTarget.isNew ? () => { setLabelTarget(null); setShowAddDevice(true); } : undefined} /> : null}
     {assignmentTarget ? <ChangeDeviceOwnerModal asset={assignmentTarget} assignees={assignees} onClose={() => setAssignmentTarget(null)} onSaved={assetOwnerChanged} /> : null}
     {returnTarget ? <ReturnDeviceModal asset={returnTarget} onClose={() => setReturnTarget(null)} onReturned={assetReturned} /> : null}
     {historyTarget ? <CustodyHistoryModal asset={historyTarget} onClose={() => setHistoryTarget(null)} /> : null}

@@ -26,41 +26,24 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData.user) redirect("/login");
 
-    const [
-      { data: canManageAccounts },
-      { data: account, error: accountError },
-      { data: canAccessNonRosterSystemAdminWorkspace },
-      { data: canViewCheckInWorkspace },
-      { data: canViewEmployeeDirectoryCapability },
-      { data: canChangeEmployeeViewCapability },
-      { data: canViewSubscriptionsCapability },
-      { data: canAccessOwnSubscriptionsCapability },
-    ] = await Promise.all([
-      supabase.rpc("can_manage_portal_accounts"),
-      supabase.rpc("current_portal_account"),
-      supabase.rpc("can_access_non_roster_system_admin_workspace"),
-      supabase.rpc("can_view_employee_check_in_workspace"),
-      supabase.rpc("can_view_employee_directory"),
-      supabase.rpc("can_change_employee_view"),
-      supabase.rpc("can_view_subscription_register"),
-      supabase.rpc("can_access_own_subscriptions"),
-    ]);
-    const current = Array.isArray(account) ? account[0] : null;
-    isAdmin = canManageAccounts === true;
+    const { data: capabilities, error: capabilitiesError } = await supabase
+      .rpc("get_portal_workspace_capabilities");
+    const current = Array.isArray(capabilities) ? capabilities[0] : null;
+    isAdmin = current?.can_manage_accounts === true;
     currentPersonId = current?.person_id ?? undefined;
-    isNonRosterSystemAdmin = canAccessNonRosterSystemAdminWorkspace === true;
-    canViewCheckIns = canViewCheckInWorkspace === true;
-    canViewEmployeeDirectory = canViewEmployeeDirectoryCapability === true;
+    isNonRosterSystemAdmin = current?.can_access_non_roster_system_admin_workspace === true;
+    canViewCheckIns = current?.can_view_check_in_workspace === true;
+    canViewEmployeeDirectory = current?.can_view_employee_directory === true;
     checkInResources = canViewCheckIns ? getCheckInResourceLinks() : undefined;
-    canChangeEmployeeView = canChangeEmployeeViewCapability === true;
-    canViewSubscriptions = canViewSubscriptionsCapability === true;
-    canAccessOwnSubscriptions = canAccessOwnSubscriptionsCapability === true;
+    canChangeEmployeeView = current?.can_change_employee_view === true;
+    canViewSubscriptions = current?.can_view_subscription_register === true;
+    canAccessOwnSubscriptions = current?.can_access_own_subscriptions === true;
     // Every active linked employee may open their own task surface. Its
     // contents remain limited by the dedicated task data source; this flag
     // only controls whether the tab itself is available.
     canViewOwnTasks = Boolean(currentPersonId);
     if (
-      accountError
+      capabilitiesError
       || (
         !isNonRosterSystemAdmin
         && (!current || current.account_status !== "active" || !currentPersonId)

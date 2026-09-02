@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DELIVERY_BATCH_LIMIT = 10;
 
 type ClaimedReminder = {
   reminder_id: string;
@@ -230,9 +231,10 @@ export async function GET(request: Request) {
 
   const supabase = createAdminClient();
   const { data: claimedData, error: claimError } = await supabase
-    // Two serial 15-second webhook attempts leave room for database work
-    // inside this route's strict 60-second Vercel execution budget.
-    .rpc("claim_due_employee_check_in_reminders", { p_limit: 2 });
+    // Deliver a bounded batch concurrently. Each claim is token-bound and the
+    // provider request is idempotent, so one slow receiver does not throttle
+    // every other reminder in the backlog.
+    .rpc("claim_due_employee_check_in_reminders", { p_limit: DELIVERY_BATCH_LIMIT });
   if (claimError || !Array.isArray(claimedData)) {
     return Response.json({ ok: false, code: "claim_failed" }, {
       status: 500,
@@ -244,10 +246,10 @@ export async function GET(request: Request) {
   let failed = 0;
   let acceptedPendingFinalisation = 0;
 
-  for (const candidate of claimedData) {
+  await Promise.all(claimedData.map(async (candidate) => {
     if (!isClaimedReminder(candidate)) {
       failed += 1;
-      continue;
+      return;
     }
 
     // Preparation re-resolves the latest manager and creates the immutable,
@@ -266,14 +268,14 @@ export async function GET(request: Request) {
       // allow-listed failure path rather than leaving it stranded for 30 min.
       await markFailed(supabase, candidate.reminder_id, candidate.claim_token, "configuration_error");
       failed += 1;
-      continue;
+      return;
     }
 
     const milestone = workflowMilestone(payload.milestone);
     if (!milestone || (payload.reminder_sequence !== "initial" && payload.reminder_sequence !== "final")) {
       await markFailed(supabase, payload.reminder_id, candidate.claim_token, "configuration_error");
       failed += 1;
-      continue;
+      return;
     }
 
     let response: Response;
@@ -315,13 +317,13 @@ export async function GET(request: Request) {
         : "network_error";
       await markFailed(supabase, payload.reminder_id, candidate.claim_token, code);
       failed += 1;
-      continue;
+      return;
     }
 
     if (!response.ok) {
       await markFailed(supabase, payload.reminder_id, candidate.claim_token, providerFailureCode(response));
       failed += 1;
-      continue;
+      return;
     }
 
     const responseBody = await response.json().catch(() => null) as unknown;
@@ -334,7 +336,7 @@ export async function GET(request: Request) {
     if (!accepted) {
       await markFailed(supabase, payload.reminder_id, candidate.claim_token, "invalid_response");
       failed += 1;
-      continue;
+      return;
     }
 
     const { data: completionData, error: completionError } = await supabase.rpc("complete_employee_check_in_reminder_delivery", {
@@ -351,7 +353,7 @@ export async function GET(request: Request) {
     } else {
       sent += 1;
     }
-  }
+  }));
 
   return Response.json({
     ok: true,
@@ -359,5 +361,6 @@ export async function GET(request: Request) {
     sent,
     failed,
     acceptedPendingFinalisation,
+    backlogLikely: claimedData.length === DELIVERY_BATCH_LIMIT,
   }, { headers: { "Cache-Control": "no-store" } });
 }

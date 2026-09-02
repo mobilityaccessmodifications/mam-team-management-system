@@ -45,8 +45,15 @@ type CheckInRegisterRpcRow = {
   reminders: unknown;
 };
 
-const LEGACY_CHECK_IN_FORMS_URL = "https://mobilityaccessmodifications.sharepoint.com/sites/MAMOffice/Shared%20Documents?id=%2Fsites%2FMAMOffice%2FShared%20Documents%2F16%2E%20Recruitment%2FPROJECTS%2FCheck%20Ins&viewid=05d1cd50%2Df371%2D41fa%2D860f%2D2565b11018f4";
 const LOAD_ERROR = "Employee check-in records could not be loaded. Refresh and try again.";
+const SESSION_ERROR = "Your session has expired. Sign in again.";
+
+async function requireAuthenticatedClient() {
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) throw new Error(SESSION_ERROR);
+  return supabase;
+}
 
 function text(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -147,16 +154,16 @@ function safeHttpsUrl(value: string | undefined) {
   }
 }
 
-function safeMAMSharePointUrl(value: string | undefined) {
+function safeUrlAtOrigin(value: string | undefined, origin: string | null) {
+  if (!origin) return null;
   const candidate = safeHttpsUrl(value);
   if (!candidate) return null;
   try {
     const url = new URL(candidate);
-    return url.hostname === "mobilityaccessmodifications.sharepoint.com"
+    return url.origin === origin
       && !url.username
       && !url.password
       && !url.port
-      && url.pathname.startsWith("/sites/MAMOffice/")
       ? candidate
       : null;
   } catch {
@@ -194,11 +201,13 @@ function configuredCheckInWebhook() {
 
 /** Safe HR-facing links; values are not secrets and remain access-controlled by SharePoint. */
 export function getCheckInResourceLinks(): CheckInResourceLinks {
-  // These direct links are emailed to managers, so only the MAM SharePoint
-  // tenant is accepted. HR must confirm group-restricted access before set-up.
-  const managerGuideUrl = safeMAMSharePointUrl(process.env.CHECK_IN_MANAGER_GUIDE_URL);
-  const checkInFormUrl = safeMAMSharePointUrl(process.env.CHECK_IN_FORM_URL);
-  const probationTemplatesUrl = safeMAMSharePointUrl(process.env.CHECK_IN_PROBATION_TEMPLATES_URL);
+  // These direct links are emailed to managers. The deployment supplies one
+  // exact trusted origin so tenant moves do not require a source-code change.
+  const resourceOrigin = safeExactHttpsOrigin(process.env.CHECK_IN_RESOURCE_ORIGIN);
+  const managerGuideUrl = safeUrlAtOrigin(process.env.CHECK_IN_MANAGER_GUIDE_URL, resourceOrigin);
+  const checkInFormUrl = safeUrlAtOrigin(process.env.CHECK_IN_FORM_URL, resourceOrigin);
+  const probationTemplatesUrl = safeUrlAtOrigin(process.env.CHECK_IN_PROBATION_TEMPLATES_URL, resourceOrigin);
+  const legacyFormsFolderUrl = safeUrlAtOrigin(process.env.CHECK_IN_LEGACY_FORMS_FOLDER_URL, resourceOrigin);
   const deliveryConfigured = Boolean(
     managerGuideUrl
     && checkInFormUrl
@@ -212,7 +221,7 @@ export function getCheckInResourceLinks(): CheckInResourceLinks {
     managerGuideUrl,
     checkInFormUrl,
     probationTemplatesUrl,
-    legacyFormsFolderUrl: LEGACY_CHECK_IN_FORMS_URL,
+    legacyFormsFolderUrl,
     deliveryConfigured,
   };
 }
@@ -237,7 +246,7 @@ export async function completeCheckInReminderForHr(reminderId: string) {
 }
 
 export async function getVisibleCheckInWorkspace(): Promise<CheckInWorkspaceData> {
-  const supabase = await createClient();
+  const supabase = await requireAuthenticatedClient();
   const { data, error } = await supabase.rpc("list_employee_check_in_workspace");
   if (error || !Array.isArray(data)) throw new Error(LOAD_ERROR);
 
@@ -258,7 +267,7 @@ export async function getVisibleCheckInWorkspace(): Promise<CheckInWorkspaceData
  * any later mutation is independently authorised as that System Admin.
  */
 export async function getVisibleCheckInWorkspaceForPreview(personId: string): Promise<CheckInWorkspaceData> {
-  const supabase = await createClient();
+  const supabase = await requireAuthenticatedClient();
   const { data, error } = await supabase.rpc("list_employee_check_in_workspace_for_preview", {
     p_person_id: personId,
   });
@@ -276,7 +285,7 @@ export async function getVisibleCheckInWorkspaceForPreview(personId: string): Pr
 }
 
 export async function completeVisibleCheckInReminder(reminderId: string) {
-  const supabase = await createClient();
+  const supabase = await requireAuthenticatedClient();
   const { error } = await supabase.rpc("complete_visible_employee_check_in_reminder", {
     p_reminder_id: reminderId,
   });

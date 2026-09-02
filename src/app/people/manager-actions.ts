@@ -15,7 +15,7 @@ import type {
   UpdateManagedEmployeeDirectoryInput,
 } from "@/lib/employee-directory-types";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENERIC_SAVE_ERROR = "This employee record could not be saved. Refresh and try again.";
 
 type MutationRpcRow = {

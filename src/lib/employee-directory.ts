@@ -38,6 +38,7 @@ type DirectoryRpcRow = {
 
 const GENERIC_ACCESS_ERROR = "You do not have permission to manage employee records.";
 const GENERIC_LOAD_ERROR = "Employee records could not be loaded. Refresh and try again.";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function optionalText(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -132,18 +133,9 @@ export async function listEmployeeDirectoryRecordsWithClient(
   const { data: archiveData, error: archiveError } = await supabase.rpc("list_employee_directory_records_with_archive_visibility", {
     p_include_archived: true,
   });
-  // Keep the active directory usable while production applies the additive
-  // archive migration. The legacy RPC never returns archived rows, but it is
-  // a safe compatibility projection and avoids turning a staged migration
-  // into a full Directory outage.
-  let data = archiveData;
-  if (archiveError || !Array.isArray(data)) {
-    const legacy = await supabase.rpc("list_employee_directory_records");
-    if (legacy.error || !Array.isArray(legacy.data)) throw new Error(GENERIC_LOAD_ERROR);
-    data = legacy.data;
-  }
+  if (archiveError || !Array.isArray(archiveData)) throw new Error(GENERIC_LOAD_ERROR);
 
-  return (data as DirectoryRpcRow[])
+  return (archiveData as DirectoryRpcRow[])
     .map(toRecord)
     .sort((first, second) => first.fullName.localeCompare(second.fullName));
 }
@@ -152,8 +144,10 @@ export async function findEmployeeDirectoryRecord(
   supabase: Awaited<ReturnType<typeof createClient>>,
   personId: string,
 ) {
-  const records = await listEmployeeDirectoryRecordsWithClient(supabase);
-  const record = records.find((candidate) => candidate.personId === personId);
-  if (!record) throw new Error(GENERIC_LOAD_ERROR);
-  return record;
+  if (!UUID_PATTERN.test(personId)) throw new Error(GENERIC_LOAD_ERROR);
+  const { data, error } = await supabase.rpc("get_employee_directory_record_with_archive_visibility", {
+    p_person_id: personId,
+  });
+  if (error || !Array.isArray(data) || data.length !== 1) throw new Error(GENERIC_LOAD_ERROR);
+  return toRecord(data[0] as DirectoryRpcRow);
 }

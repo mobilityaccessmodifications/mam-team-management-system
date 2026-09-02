@@ -11,6 +11,10 @@ type ZipFile = {
 };
 
 const textEncoder = new TextEncoder();
+// ZIP's DOS timestamp epoch is 1980-01-01. A zero date encodes month/day 0
+// and is rejected by strict archive readers even though Excel tolerates it.
+const ZIP_DOS_TIME = 0;
+const ZIP_DOS_DATE = (1 << 5) | 1;
 
 function encode(value: string) {
   return textEncoder.encode(value);
@@ -63,8 +67,8 @@ function zip(files: readonly ZipFile[]) {
       uint16(20),
       uint16(0),
       uint16(0),
-      uint16(0),
-      uint16(0),
+      uint16(ZIP_DOS_TIME),
+      uint16(ZIP_DOS_DATE),
       uint32(checksum),
       uint32(file.contents.length),
       uint32(file.contents.length),
@@ -80,8 +84,8 @@ function zip(files: readonly ZipFile[]) {
       uint16(20),
       uint16(0),
       uint16(0),
-      uint16(0),
-      uint16(0),
+      uint16(ZIP_DOS_TIME),
+      uint16(ZIP_DOS_DATE),
       uint32(checksum),
       uint32(file.contents.length),
       uint32(file.contents.length),

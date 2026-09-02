@@ -1009,24 +1009,6 @@ export function LeaveDemo({
     : undefined;
   const isPreviewingEmployeeAccess = Boolean(previewProfile);
   const activeProfile = previewProfile ?? adminProfile;
-  const employeeTeamDirectory = (() => {
-    if (activeProfile.accessRole !== "employee") return [];
-    const byId = new Map(organisationPeople.map((person) => [person.id, person]));
-    const self = byId.get(activeProfile.id);
-    const rootId = self?.reportsTo ?? activeProfile.id;
-    const included = new Set([rootId]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const person of organisationPeople) {
-        if (person.reportsTo && included.has(person.reportsTo) && !included.has(person.id)) {
-          included.add(person.id);
-          changed = true;
-        }
-      }
-    }
-    return organisationPeople.filter((person) => included.has(person.id));
-  })();
   // Real employees use the no-argument self-service action, which derives the
   // owner from auth.uid(). A Super Admin preview uses a separate read-only
   // target action that checks the Change profile capability and returns the
@@ -1703,6 +1685,7 @@ export function LeaveDemo({
               showProfile={false}
               showTasks={canViewOwnTasks || showHrWorkspace || showManagerTasks || (isPreviewingEmployeeAccess && activeProfile.accessRole === "employee")}
               isAccessPreview={isPreviewingEmployeeAccess}
+              legacyCheckInFormsUrl={checkInResources?.legacyFormsFolderUrl}
               onCreateOrganisationPerson={createOrganisationPerson}
               onUpdateOrganisationPerson={updateOrganisationPerson}
               onOpenEmployeeDirectoryRecord={showHrWorkspace ? setEmployeeDirectorySelectedPersonId : undefined}
@@ -1727,7 +1710,8 @@ export function LeaveDemo({
                 }}
                 refreshKey={employeeDirectoryRefreshKey}
               /> : activeProfile.accessRole === "employee" ? <EmployeeTeamDirectory
-                people={employeeTeamDirectory}
+                key={activeProfile.id}
+                people={organisationPeople}
                 currentPersonId={activeProfile.id}
                 onRequestWorkEmail={getOrganisationPersonWorkEmail}
                 onLoadMyDevices={employeeDirectoryDeviceLoader}

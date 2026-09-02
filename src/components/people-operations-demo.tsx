@@ -141,7 +141,6 @@ type CheckInReminder = {
 const initialWorkflows: PeopleWorkflow[] = [];
 const initialPeople: CheckInPerson[] = [];
 const initialReminders: CheckInReminder[] = [];
-const checkInFormsUrl = "https://mobilityaccessmodifications.sharepoint.com/sites/MAMOffice/Shared%20Documents?id=%2Fsites%2FMAMOffice%2FShared%20Documents%2F16%2E%20Recruitment%2FPROJECTS%2FCheck%20Ins&viewid=05d1cd50%2Df371%2D41fa%2D860f%2D2565b11018f4";
 const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function formatDate(value: string) {
@@ -283,6 +282,7 @@ export function PeopleOperationsDemo({
   renderAccounts,
   renderAssetRegister,
   renderSubscriptionRegister,
+  legacyCheckInFormsUrl,
   showProfile = true,
   showTasks,
   isAccessPreview = false,
@@ -309,6 +309,8 @@ export function PeopleOperationsDemo({
   renderAssetRegister?: ReactNode;
   /** System Admin-managed subscription register; managers receive its read-only projection. */
   renderSubscriptionRegister?: ReactNode;
+  /** Optional deployment-configured link used only by the legacy demo view. */
+  legacyCheckInFormsUrl?: string | null;
   /** Lets a constrained employee workspace omit the legacy Profile tab. */
   showProfile?: boolean;
   /** Exposes the self-only task surface when a scoped manager task list is unavailable. */
@@ -539,7 +541,7 @@ export function PeopleOperationsDemo({
       {!renderCheckInRegister ? <button type="button" aria-pressed={visibleTaskSection === "checkins"} onClick={() => setTaskSection("checkins")}>Check-ins</button> : null}
       {!isEmployee || employeeLifecycleSection === "offboarding" ? <button type="button" aria-pressed={visibleTaskSection === "offboarding"} onClick={() => setTaskSection("offboarding")}>Offboarding</button> : null}
     </nav> : null}
-    {visibleSection === "tasks" && !hasRealCheckInTasks && visibleTaskSection === "checkins" && !renderCheckInRegister ? <CheckInsView people={visiblePeople} reminders={visibleReminders} selectedPerson={selectedPerson} selectedPersonId={selectedPerson?.id} activeProfile={activeProfile} canManage={canManage} onSelectPerson={setSelectedPersonId} onComplete={completeCheckIn} onSnooze={snoozeCheckIn} /> : null}
+    {visibleSection === "tasks" && !hasRealCheckInTasks && visibleTaskSection === "checkins" && !renderCheckInRegister ? <CheckInsView people={visiblePeople} reminders={visibleReminders} selectedPerson={selectedPerson} selectedPersonId={selectedPerson?.id} activeProfile={activeProfile} canManage={canManage} formsUrl={legacyCheckInFormsUrl} onSelectPerson={setSelectedPersonId} onComplete={completeCheckIn} onSnooze={snoozeCheckIn} /> : null}
     {visibleSection === "tasks" && !hasRealCheckInTasks && (visibleTaskSection === "onboarding" || visibleTaskSection === "offboarding") ? <WorkflowsView workflows={activeWorkflows} selected={selectedWorkflow} selectedId={selectedWorkflow?.id} activeProfile={activeProfile} onSelect={setSelectedWorkflowId} onTaskUpdate={updateTask} onAttach={attachEvidence} onAssetUpdate={updateAsset} onAccessUpdate={updateAccess} isAccessPreview={isAccessPreview} /> : null}
 
     {showCreate ? <CreateCaseModal mode={createMode} profiles={organisationProfiles} onClose={() => setShowCreate(false)} onSubmit={createCase} /> : null}
@@ -587,13 +589,14 @@ function WorkflowsView({ workflows, selected, selectedId, activeProfile, onSelec
   </div>;
 }
 
-function CheckInsView({ people, reminders, selectedPerson, selectedPersonId, activeProfile, canManage, onSelectPerson, onComplete, onSnooze }: {
+function CheckInsView({ people, reminders, selectedPerson, selectedPersonId, activeProfile, canManage, formsUrl, onSelectPerson, onComplete, onSnooze }: {
   people: CheckInPerson[];
   reminders: CheckInReminder[];
   selectedPerson?: CheckInPerson;
   selectedPersonId?: string;
   activeProfile: PeopleOperationsProfile;
   canManage: boolean;
+  formsUrl?: string | null;
   onSelectPerson: (id: string) => void;
   onComplete: (id: string) => void;
   onSnooze: (id: string) => void;
@@ -605,7 +608,7 @@ function CheckInsView({ people, reminders, selectedPerson, selectedPersonId, act
 
   return <div className={styles.checkInDesk}><div className={`${styles.checkInLayout} ${!showPersonList ? styles.checkInLayoutSingle : ""}`}>
     {showPersonList ? <aside className={styles.personList} aria-label="Employee check-in register">{people.map((person) => <button type="button" key={person.id} className={person.id === selectedPersonId ? styles.personSelected : undefined} onClick={() => onSelectPerson(person.id)}><span className={styles.caseAvatar}>{initialsFor(person.name)}</span><span><strong>{person.name}</strong><small>{person.role} · Starts {formatDate(person.startDate)}</small></span><ChevronRight size={15} /></button>)}</aside> : null}
-    <article className={styles.checkInDetail}><header><div>{!isEmployee ? <span className={styles.caseAvatar}>{initialsFor(selectedPerson.name)}</span> : null}<span><small>Check-in record</small><h2>{isEmployee ? "My check-ins" : selectedPerson.name}</h2><p>{selectedPerson.role}{selectedPerson.manager ? ` · Manager: ${selectedPerson.manager}` : ""}</p></span></div></header><div className={styles.checkInMeta}><div><small>Start date</small><strong>{formatDate(selectedPerson.startDate)}</strong></div>{selectedPerson.manager ? <div><small>Manager</small><strong>{selectedPerson.manager}</strong></div> : null}{canManage ? <a href={checkInFormsUrl} target="_blank" rel="noreferrer"><ArrowUpRight size={15} /> Forms & templates</a> : null}</div>
+    <article className={styles.checkInDetail}><header><div>{!isEmployee ? <span className={styles.caseAvatar}>{initialsFor(selectedPerson.name)}</span> : null}<span><small>Check-in record</small><h2>{isEmployee ? "My check-ins" : selectedPerson.name}</h2><p>{selectedPerson.role}{selectedPerson.manager ? ` · Manager: ${selectedPerson.manager}` : ""}</p></span></div></header><div className={styles.checkInMeta}><div><small>Start date</small><strong>{formatDate(selectedPerson.startDate)}</strong></div>{selectedPerson.manager ? <div><small>Manager</small><strong>{selectedPerson.manager}</strong></div> : null}{canManage && formsUrl ? <a href={formsUrl} target="_blank" rel="noreferrer"><ArrowUpRight size={15} /> Forms & templates</a> : null}</div>
       <section className={styles.reminderTimeline}><header><span>Scheduled check-ins</span></header>{personReminders.map((reminder) => <article key={reminder.id}><span className={`${styles.timelineDot} ${statusClass(reminder.status)}`} /><div><strong>{reminder.milestone}{reminder.sequence === "Final" ? " · final reminder" : ""}</strong><p>Due {formatDate(reminder.checkInDate)} · reminder {formatDate(reminder.notifyDate)}</p>{reminder.snoozedUntil ? <small>Snoozed until {formatDate(reminder.snoozedUntil)}</small> : null}</div><span className={`${styles.statusPill} ${statusClass(reminder.status)}`}>{reminder.status}</span>{canManage && reminder.status !== "Completed" ? <span className={styles.reminderActions}><button type="button" onClick={() => onComplete(reminder.id)}>Complete</button><button type="button" onClick={() => onSnooze(reminder.id)}><RotateCcw size={13} /> Snooze</button></span> : null}</article>)}</section>
     </article>
   </div></div>;
