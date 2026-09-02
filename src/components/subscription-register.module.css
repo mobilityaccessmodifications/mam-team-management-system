@@ -24,7 +24,6 @@
 
 .header,
 .tools,
-.securityNote,
 .notice,
 .loadingState,
 .errorState,
@@ -47,6 +46,7 @@
   justify-content: space-between;
   gap: 18px;
 }
+.headerActionsOnly { justify-content: flex-end; }
 
 .header > div { min-width: 0; }
 .header > div > span,
@@ -128,7 +128,6 @@
   font-weight: 750;
 }
 
-.securityNote,
 .notice {
   gap: 8px;
   min-height: 42px;
@@ -138,7 +137,6 @@
   color: #28745b;
   padding: 9px 12px;
 }
-.securityNote span,
 .notice span { font-size: 12px; font-weight: 650; line-height: 1.45; }
 .notice button { display: grid; width: 28px; height: 28px; place-items: center; margin-left: auto; border: 0; border-radius: 7px; background: transparent; color: inherit; cursor: pointer; }
 

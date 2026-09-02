@@ -412,12 +412,10 @@ export function SubscriptionRegister({
   }
 
   return <section className={styles.workspace} aria-label="Subscription management">
-    <header className={styles.header}>
-      <div><span>Access register</span><h2>Subscriptions</h2><p>Track subscription ownership, access and quarterly review dates in one place.</p></div>
+    <header className={`${styles.header} ${styles.headerActionsOnly}`}>
       {!readOnly ? <button className={styles.primaryAction} type="button" onClick={() => setShowAdd(true)}><Plus size={16} /> Add subscription</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Management view</div>}
     </header>
 
-    <div className={styles.securityNote}><ShieldCheck size={16} aria-hidden="true" /><span>Passwords, recovery codes and device passcodes are managed in the approved password manager—not stored here.</span></div>
     {notice ? <div className={styles.notice} role="status"><CheckCircle2 size={16} aria-hidden="true" /><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={15} /></button></div> : null}
 
     <div className={styles.tools}>
