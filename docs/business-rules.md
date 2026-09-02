@@ -44,7 +44,7 @@
 8. What is the retention period for rejected/cancelled requests, evidence and event history?
 9. What counts as manager-ready versus all-staff-ready?
 10. Who may start, view and complete onboarding/offboarding work, including delegated owners and HR-only exit information?
-11. Which systems, assets and subscriptions are required for each role, who approves them, and what retention/audit period applies?
+11. Which systems, assets and subscriptions are required for each role, who approves them, and what retention/audit period applies? **Interim implementation pending confirmation/deployment:** only a System Admin receives the full asset and subscription registers (including costs and membership); employees retain their own minimised subscription/device projections, and managers receive no company-wide register until a scoped policy is approved.
 12. Should a cross-company reporting-line edit require an additional confirmation?
 13. What credential handover and forced-password-change process is required when an administrator creates or resets an account?
 14. Penny must identify the authoritative leave-balance source, ownership and calculation rules before the portal shows a leave balance or entitlement.

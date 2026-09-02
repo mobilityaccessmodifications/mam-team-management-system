@@ -112,8 +112,8 @@ project in read-only mode; keep it read-only for inspection.
 
 ## Business rules
 
-- Phase 1 is a foundation build. The dashboard currently renders synthetic preview data.
-- Before live leave submission or approval is enabled, confirm approvers, delegation, overlap visibility, leave categories, cancellation rules, notifications, and retention.
+- The portal uses durable, authenticated Supabase projections for its released directory, account, leave, check-in, asset and subscription surfaces; it does not use synthetic preview tables.
+- Before expanding live leave or People workflows, confirm the remaining delegation, overlap, category, retention, credential-handover and onboarding/offboarding decisions in `docs/business-rules.md`.
 - Employees must not see another employee's private leave reason by default.
 - A due date on the delivery project is not the same as a staff leave date.
 - The manager rollout date must be distinguished from the all-staff release date.

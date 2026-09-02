@@ -76,9 +76,9 @@ function formatSubscriptionDate(value: string | null) {
 }
 
 /**
- * Employee-safe directory. The parent supplies a team-scoped public list;
- * this component never edits records and only loads the current employee's
- * own devices and subscriptions through no-argument, server-authorised actions.
+ * Employee-safe directory. It scopes the public organisation projection to
+ * the current employee's reporting branch in one indexed walk, never edits
+ * records, and loads devices/subscriptions only through self-authorised actions.
  */
 export function EmployeeTeamDirectory({
   people,
@@ -105,11 +105,37 @@ export function EmployeeTeamDirectory({
   const [subscriptionState, setSubscriptionState] = useState<SubscriptionState>({ state: "idle", subscriptions: [] });
   const [subscriptionLoadAttempt, setSubscriptionLoadAttempt] = useState(0);
 
+  const teamPeople = useMemo(() => {
+    if (!currentPersonId) return [];
+    const byId = new Map(people.map((person) => [person.id, person]));
+    const self = byId.get(currentPersonId);
+    if (!self) return [];
+    const rootId = self.reportsTo ?? self.id;
+    const childrenByParent = new Map<string, OrganisationPerson[]>();
+    for (const person of people) {
+      if (!person.reportsTo) continue;
+      const siblings = childrenByParent.get(person.reportsTo) ?? [];
+      siblings.push(person);
+      childrenByParent.set(person.reportsTo, siblings);
+    }
+    const included = new Set([rootId, self.id]);
+    const pending = [rootId];
+    while (pending.length > 0) {
+      const parentId = pending.pop();
+      if (!parentId) continue;
+      for (const child of childrenByParent.get(parentId) ?? []) {
+        if (included.has(child.id)) continue;
+        included.add(child.id);
+        pending.push(child.id);
+      }
+    }
+    return people.filter((person) => included.has(person.id));
+  }, [currentPersonId, people]);
   const activePeople = useMemo(
-    () => people.filter((person) => person.kind !== "org_unit" && person.isActive !== false),
-    [people],
+    () => teamPeople.filter((person) => person.kind !== "org_unit" && person.isActive !== false),
+    [teamPeople],
   );
-  const personById = useMemo(() => new Map(people.map((person) => [person.id, person])), [people]);
+  const personById = useMemo(() => new Map(teamPeople.map((person) => [person.id, person])), [teamPeople]);
   const visiblePeople = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
     return activePeople

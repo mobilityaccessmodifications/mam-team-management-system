@@ -347,11 +347,11 @@ export async function listItAssetCustodyHistory(assetId: string): Promise<ItAsse
 }
 
 async function loadItAssetById(supabase: Awaited<ReturnType<typeof createClient>>, assetId: string) {
-  const { data, error } = await supabase.rpc("list_it_assets_with_custody");
-  if (error || !Array.isArray(data)) throw new Error(GENERIC_LOAD_ERROR);
-  const asset = data.map(mapItAsset).find((candidate) => candidate.id === assetId);
-  if (!asset) throw new Error(GENERIC_LOAD_ERROR);
-  return asset;
+  const { data, error } = await supabase.rpc("get_it_asset_with_custody", {
+    p_asset_id: assetId,
+  });
+  if (error || !Array.isArray(data) || data.length !== 1) throw new Error(GENERIC_LOAD_ERROR);
+  return mapItAsset(data[0]);
 }
 
 /** Generates the database-owned unique MAM asset code and records its custodian. */

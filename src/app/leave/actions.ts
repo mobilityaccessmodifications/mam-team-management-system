@@ -602,10 +602,8 @@ function leaveNotificationCcEmails(event: LeaveNotificationEvent) {
 
 /**
  * Resolve the employee's HR-recorded work and personal emails on the server.
- * Both addresses are included only in the signed n8n delivery payload; they
- * are never returned to the browser or accepted from the leave form. The
- * legacy resolver remains a compatibility fallback until the new production
- * migration is applied.
+ * Both addresses are included only in the signed notification payload; they
+ * are never returned to the browser or accepted from the leave form.
  */
 async function resolveLeaveEmployeeRecipients(requestId: string): Promise<LeaveNotificationEmployeeRecipients> {
   try {
@@ -613,28 +611,17 @@ async function resolveLeaveEmployeeRecipients(requestId: string): Promise<LeaveN
     const { data, error } = await admin.rpc("resolve_leave_notification_employee_recipients", {
       p_request_id: requestId,
     });
-    if (!error && Array.isArray(data) && data.length === 1) {
-      const row = data[0] as LeaveNotificationEmployeeRow;
-      const workEmail = normaliseNotificationEmail(row.employee_work_email);
-      const personalEmail = normaliseNotificationEmail(row.employee_personal_email);
-      const emails = notificationEmailList(row.employee_emails);
-      return {
-        workEmail,
-        personalEmail,
-        emails: emails.length ? emails : [...new Set([workEmail, personalEmail].filter((email): email is string => Boolean(email)))],
-      };
-    }
+    if (error || !Array.isArray(data) || data.length !== 1) return { emails: [] };
 
-    // Older production databases expose only the work-email resolver. Keep
-    // notifications functional during a rolling migration rather than
-    // failing the leave action after Supabase has already saved the request.
-    const legacy = await admin.rpc("resolve_leave_notification_employee", {
-      p_request_id: requestId,
-    });
-    const workEmail = !legacy.error && Array.isArray(legacy.data) && legacy.data.length === 1
-      ? normaliseNotificationEmail((legacy.data[0] as { employee_email?: unknown })?.employee_email)
-      : undefined;
-    return { workEmail, emails: workEmail ? [workEmail] : [] };
+    const row = data[0] as LeaveNotificationEmployeeRow;
+    const workEmail = normaliseNotificationEmail(row.employee_work_email);
+    const personalEmail = normaliseNotificationEmail(row.employee_personal_email);
+    const emails = notificationEmailList(row.employee_emails);
+    return {
+      workEmail,
+      personalEmail,
+      emails: emails.length ? emails : [...new Set([workEmail, personalEmail].filter((email): email is string => Boolean(email)))],
+    };
   } catch {
     return { emails: [] };
   }
@@ -653,16 +640,33 @@ async function deliverLeaveNotification(
   fallback: LeaveNotificationFallback = {},
 ) {
   const webhookUrl = process.env.MAM_N8N_LEAVE_WEBHOOK_URL?.trim();
+  const webhookOrigin = process.env.MAM_N8N_LEAVE_WEBHOOK_ORIGIN?.trim();
   const webhookSecret = process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET?.trim();
-  if (!webhookUrl || !webhookSecret) return;
+  if (!webhookUrl || !webhookOrigin || !webhookSecret) return;
 
   let url: URL;
+  let trustedOrigin: URL;
   try {
     url = new URL(webhookUrl);
+    trustedOrigin = new URL(webhookOrigin);
   } catch {
     return;
   }
-  if (url.protocol !== "https:" || url.hostname !== "n8n.srv1866578.hstgr.cloud" || url.pathname !== "/webhook/mam-people-system-leave-hr-v1") return;
+  if (
+    url.protocol !== "https:"
+    || trustedOrigin.protocol !== "https:"
+    || trustedOrigin.pathname !== "/"
+    || trustedOrigin.username
+    || trustedOrigin.password
+    || trustedOrigin.search
+    || trustedOrigin.hash
+    || url.origin !== trustedOrigin.origin
+    || url.username
+    || url.password
+    || url.search
+    || url.hash
+    || url.pathname === "/"
+  ) return;
 
   let request: LeaveWorkspaceRequest | undefined;
   try {
@@ -692,7 +696,7 @@ async function deliverLeaveNotification(
       endDate: request?.endDate ?? fallback.endDate ?? "",
       managerNote: request?.managerNote ?? fallback.managerNote ?? "",
       managerEmail: managerEmail ?? fallback.managerEmail ?? "",
-      employeeEmail: employeeEmail ?? "",
+      employeeEmail,
       employeeEmails: employeeRecipients.emails,
       ccEmails,
     })).digest("hex").slice(0, 24)}`,
@@ -732,12 +736,19 @@ async function deliverLeaveNotification(
       headers: { "Content-Type": "application/json", "X-MAM-Notification-Secret": webhookSecret },
       body: JSON.stringify(payload),
       cache: "no-store",
+      redirect: "error",
       signal: controller.signal,
     });
-    const text = await response.text();
-    const result = text.length <= 4096
-      ? JSON.parse(text) as { ok?: boolean; sent?: boolean; alreadySent?: boolean; actualRecipient?: unknown; actualRecipients?: unknown }
-      : {};
+    const responseText = await response.text();
+    let result: { ok?: boolean; sent?: boolean; alreadySent?: boolean; actualRecipient?: unknown; actualRecipients?: unknown } = {};
+    if (responseText && responseText.length <= 4096) {
+      try {
+        const parsed: unknown = JSON.parse(responseText);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) result = parsed;
+      } catch {
+        console.warn("Leave notification receiver returned invalid JSON.", { event, requestId, status: response.status });
+      }
+    }
     const expectedRecipients = event === "leave-submitted" || event === "leave-cancelled"
       ? managerEmail ? [managerEmail] : []
       : employeeRecipients.emails;
@@ -848,163 +859,40 @@ function parseOptionalProjection<T>(
 }
 
 /**
- * Builds the Leave workspace for Super Admin's Change Profile mode.
- *
- * This is intentionally server-side: the browser never decides who sits in a
- * manager's reporting scope. It also avoids borrowing the signed-in System
- * Admin's leave projection, which is the wrong data source when testing Todd
- * or Luke's account view. The selected profile sees its own request(s); a
- * manager sees their active reporting subtree; HR/System Admin sees the full
- * register. The real authenticated System Admin remains the actor for every
- * later guarded action and audit event.
+ * Builds the Leave workspace for System Admin's Change Profile mode from one
+ * authoritative database projection. PostgreSQL applies the selected user's
+ * live reviewer assignments, private-note visibility and date rules; the
+ * application only validates and maps the returned DTO.
  */
-async function getSelectedEmployeeLeaveWorkspacePreview(personId: string) {
-  const admin = createAdminClient();
-  const [peopleResult, profilesResult, requestsResult] = await Promise.all([
-    admin
-      .from("internal_org_people")
-      .select("id,node_kind,company_key,full_name,parent_id,is_active,auth_user_id"),
-    admin
-      .from("profiles")
-      .select("id,full_name,preferred_name,app_role,account_status,login_name"),
-    admin
-      .from("leave_requests")
-      .select("id,user_id,request_type_label,start_date,end_date,start_time,end_time,business_days,hours,approval_required,status,submitted_at,manager_name_snapshot,reason,manager_note,created_at")
-      .in("status", ["submitted", "approved", "rejected", "changes_requested", "cancelled"])
-      .order("start_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false }),
-  ]);
+async function getSelectedEmployeeLeaveWorkspacePreview(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  personId: string,
+) {
+  const { data, error } = await supabase.rpc("get_leave_workspace_for_preview", {
+    p_person_id: personId,
+  });
+  if (error || !data || typeof data !== "object" || Array.isArray(data)) throw new Error(LOAD_ERROR);
 
-  if (peopleResult.error || profilesResult.error || requestsResult.error) {
+  const payload = data as {
+    requests?: unknown;
+    attachments?: unknown;
+    can_review_leave?: unknown;
+    is_truncated?: unknown;
+  };
+  if (
+    !Array.isArray(payload.requests)
+    || !Array.isArray(payload.attachments)
+    || typeof payload.can_review_leave !== "boolean"
+    || typeof payload.is_truncated !== "boolean"
+  ) throw new Error(LOAD_ERROR);
+
+  let requests: LeaveWorkspaceRequest[];
+  let attachments: LeaveAttachment[];
+  try {
+    requests = payload.requests.map(toWorkspaceRequest);
+    attachments = payload.attachments.map((attachment) => toLeaveAttachment(attachment));
+  } catch {
     throw new Error(LOAD_ERROR);
-  }
-
-  const people = Array.isArray(peopleResult.data) ? peopleResult.data : [];
-  const profiles = Array.isArray(profilesResult.data) ? profilesResult.data : [];
-  const leaveRecords = Array.isArray(requestsResult.data) ? requestsResult.data : [];
-  const targetPerson = people.find((person) => (
-    person.id === personId
-    && person.node_kind === "person"
-    && person.is_active === true
-    && typeof person.auth_user_id === "string"
-  ));
-  if (!targetPerson) throw new Error(SELECTED_PROFILE_SUBMIT_ERROR);
-
-  const targetProfile = profiles.find((profile) => (
-    profile.id === targetPerson.auth_user_id
-    && profile.account_status === "active"
-    && typeof profile.login_name === "string"
-  ));
-  if (!targetProfile) throw new Error(SELECTED_PROFILE_SUBMIT_ERROR);
-
-  const activeChildrenByParent = new Map<string, typeof people>();
-  const personByUserId = new Map<string, (typeof people)[number]>();
-  people.forEach((person) => {
-    if (person.node_kind !== "person" || person.is_active !== true) return;
-    if (typeof person.auth_user_id === "string") personByUserId.set(person.auth_user_id, person);
-    if (!person.parent_id || typeof person.parent_id !== "string") return;
-    const children = activeChildrenByParent.get(person.parent_id) ?? [];
-    children.push(person);
-    activeChildrenByParent.set(person.parent_id, children);
-  });
-
-  // Include active intermediary org-unit nodes in the walk so a manager's
-  // scope remains correct if HR uses a department grouping in the tree.
-  people.forEach((person) => {
-    if (person.node_kind === "person" || person.is_active !== true || !person.parent_id || typeof person.parent_id !== "string") return;
-    const children = activeChildrenByParent.get(person.parent_id) ?? [];
-    children.push(person);
-    activeChildrenByParent.set(person.parent_id, children);
-  });
-
-  const allCompanyScope = targetProfile.app_role === "hr" || targetProfile.app_role === "system_admin";
-  const managerScope = targetProfile.app_role === "manager";
-  const visiblePersonIds = new Set<string>();
-  if (allCompanyScope) {
-    people.forEach((person) => {
-      if (person.node_kind === "person" && person.is_active === true) visiblePersonIds.add(person.id);
-    });
-  } else {
-    visiblePersonIds.add(personId);
-    if (managerScope) {
-      const pendingParents = [personId];
-      const visited = new Set<string>();
-      while (pendingParents.length > 0) {
-        const parentId = pendingParents.shift();
-        if (!parentId || visited.has(parentId)) continue;
-        visited.add(parentId);
-        for (const child of activeChildrenByParent.get(parentId) ?? []) {
-          pendingParents.push(child.id);
-          if (child.node_kind === "person") visiblePersonIds.add(child.id);
-        }
-      }
-    }
-  }
-
-  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
-  const workspaceRows: WorkspaceRpcRow[] = leaveRecords.flatMap((record) => {
-    if (typeof record.user_id !== "string") return [];
-    const employee = personByUserId.get(record.user_id);
-    if (!employee || !visiblePersonIds.has(employee.id)) return [];
-    const employeeProfile = profileById.get(record.user_id);
-    const employeeName = typeof employee.full_name === "string" && employee.full_name.trim()
-      ? employee.full_name
-      : employeeProfile?.preferred_name || employeeProfile?.full_name || "Employee";
-    const mappedStatus = record.status === "approved"
-      ? "Approved"
-      : record.status === "rejected"
-        ? "Declined"
-        : record.status === "cancelled"
-          ? "Cancelled"
-          : "Pending";
-
-    return [{
-      id: record.id,
-      person_id: employee.id,
-      employee_name: employeeName,
-      company_key: employee.company_key,
-      leave_type_label: record.request_type_label,
-      start_date: record.start_date,
-      end_date: record.end_date,
-      start_time: record.start_time,
-      end_time: record.end_time,
-      business_days: record.business_days,
-      hours: record.hours,
-      approval_required: record.approval_required,
-      status: mappedStatus,
-      submitted_at: record.submitted_at,
-      assigned_reviewer_label: record.manager_name_snapshot,
-      can_decide: (allCompanyScope || managerScope)
-        && record.user_id !== targetPerson.auth_user_id
-        && record.approval_required === true
-        && record.status === "submitted",
-      can_cancel: record.user_id === targetPerson.auth_user_id
-        && record.status === "approved",
-      can_attach: record.user_id === targetPerson.auth_user_id
-        && (record.status === "submitted" || record.status === "approved"),
-      employee_note: record.reason,
-      manager_note: record.manager_note,
-    }];
-  });
-
-  const requests = workspaceRows.map(toWorkspaceRequest);
-  const requestIds = requests.map((request) => request.id);
-  let attachments: LeaveAttachment[] = [];
-  if (requestIds.length > 0) {
-    const { data, error } = await admin
-      .from("leave_request_attachments")
-      .select("id,leave_request_id,file_name,mime_type,size_bytes,created_at")
-      .in("leave_request_id", requestIds);
-    if (!error && Array.isArray(data)) {
-      attachments = data.flatMap((attachment) => {
-        try {
-          return [toLeaveAttachment(attachment)];
-        } catch {
-          return [];
-        }
-      });
-    }
   }
 
   return {
@@ -1026,7 +914,10 @@ async function getSelectedEmployeeLeaveWorkspacePreview(personId: string) {
         hours: request.hours,
         status: request.status,
       })),
-    canReviewLeave: allCompanyScope || managerScope,
+    canReviewLeave: payload.can_review_leave,
+    warning: payload.is_truncated
+      ? "Leave history is limited to the 1,000 most recent visible requests."
+      : undefined,
   };
 }
 
@@ -1043,7 +934,7 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
 
   if (checkedPreviewPersonId) {
     const [preview, { data: birthdayData, error: birthdayError }, { data: checkInData, error: checkInError }] = await Promise.all([
-      getSelectedEmployeeLeaveWorkspacePreview(checkedPreviewPersonId),
+      getSelectedEmployeeLeaveWorkspacePreview(supabase, checkedPreviewPersonId),
       supabase.rpc("list_calendar_birthdays"),
       supabase.rpc("list_employee_check_in_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
     ]);
@@ -1053,15 +944,19 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
       !birthdays.available ? "birthdays" : "",
       !checkIns.available ? "check-ins" : "",
     ].filter(Boolean);
+    const warnings = [
+      preview.warning,
+      unavailable.length
+        ? `Some optional data is temporarily unavailable (${unavailable.join(", ")}). Leave requests remain available.`
+        : "",
+    ].filter(Boolean);
 
     return {
       ...preview,
       birthdayEntries: birthdays.rows,
       checkInEntries: checkIns.rows,
       isProfilePreview: true,
-      warning: unavailable.length
-        ? `Some optional data is temporarily unavailable (${unavailable.join(", ")}). Leave requests remain available.`
-        : undefined,
+      warning: warnings.length ? warnings.join(" ") : undefined,
     };
   }
 

@@ -178,15 +178,18 @@ export async function listPortalAccounts(): Promise<AccountDto[]> {
   const profileRows = Array.isArray(profiles) ? profiles as ProfileRow[] : [];
   const profileById = new Map(profileRows.map((profile) => [profile.id, profile]));
   const userIds = (people ?? []).flatMap((person) => person.auth_user_id ? [person.auth_user_id] : []);
+  const unresolvedUserIds = new Set(userIds);
   const lastSignInById = new Map<string, string | null>();
 
-  for (let page = 1; userIds.length && page <= 20; page += 1) {
+  for (let page = 1; unresolvedUserIds.size > 0; page += 1) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 100 });
     if (error) throw new Error("Accounts could not be loaded.");
     for (const user of data.users) {
-      if (userIds.includes(user.id)) lastSignInById.set(user.id, user.last_sign_in_at ?? null);
+      if (!unresolvedUserIds.has(user.id)) continue;
+      lastSignInById.set(user.id, user.last_sign_in_at ?? null);
+      unresolvedUserIds.delete(user.id);
     }
-    if (data.users.length < 100 || lastSignInById.size >= userIds.length) break;
+    if (data.users.length < 100) break;
   }
 
   return (people ?? []).map((person) => toAccount(
@@ -226,7 +229,6 @@ export async function createPortalAccount(input: CreateAccountInput): Promise<Ac
     email: opaqueAddress,
     password: input.newPassword,
     email_confirm: true,
-    app_metadata: { org_role: NEW_ACCOUNT_ROLE },
   });
   if (createError || !created.user) throw new Error("The login could not be created.");
 
