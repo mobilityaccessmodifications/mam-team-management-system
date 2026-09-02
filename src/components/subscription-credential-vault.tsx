@@ -316,6 +316,7 @@ export function SubscriptionCredentialAccessDialog({ onClose }: { onClose: () =>
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [hasLoadError, setHasLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const closeWhenReady = useCallback(() => { if (!saving) onClose(); }, [onClose, saving]);
@@ -325,6 +326,8 @@ export function SubscriptionCredentialAccessDialog({ onClose }: { onClose: () =>
     let isCurrent = true;
     async function load() {
       setLoading(true);
+      setHasLoadError(false);
+      setError("");
       try {
         const [availablePeople, grants] = await Promise.all([
           listSubscriptionCredentialGrantCandidates(),
@@ -334,7 +337,10 @@ export function SubscriptionCredentialAccessDialog({ onClose }: { onClose: () =>
         setPeople(availablePeople);
         setSelectedIds(grants.map((grant: SubscriptionCredentialAccessGrant) => grant.personId));
       } catch (reason) {
-        if (isCurrent) setError(reason instanceof Error ? reason.message : "Credential access could not be loaded. Refresh and try again.");
+        if (isCurrent) {
+          setHasLoadError(true);
+          setError(reason instanceof Error ? reason.message : "Credential access could not be loaded. Refresh and try again.");
+        }
       } finally {
         if (isCurrent) setLoading(false);
       }
@@ -354,11 +360,15 @@ export function SubscriptionCredentialAccessDialog({ onClose }: { onClose: () =>
   }
 
   async function save() {
-    if (saving || loading) return;
+    if (saving || loading || hasLoadError) return;
     setSaving(true);
     setError("");
     try {
-      await replaceSubscriptionCredentialAccessGrants(selectedIds);
+      const result = await replaceSubscriptionCredentialAccessGrants(selectedIds);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
       onClose();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Credential access could not be saved. Refresh and try again.");
@@ -375,7 +385,7 @@ export function SubscriptionCredentialAccessDialog({ onClose }: { onClose: () =>
         <p className={styles.selectionCount}>{selectedIds.length} {selectedIds.length === 1 ? "delegate selected" : "delegates selected"}</p>
         <div className={styles.grantList}>{filteredPeople.length ? filteredPeople.map((person) => <label className={styles.grantOption} key={person.personId}><input checked={selected.has(person.personId)} onChange={() => toggle(person.personId)} type="checkbox" /><span><strong>{person.fullName}</strong><small>{person.positionTitle}</small></span></label>) : <p className={styles.emptyGrantList}>No active portal employees match that search.</p>}</div>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
-        <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button><button className={styles.primaryAction} type="button" onClick={() => void save()} disabled={saving}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <ShieldCheck size={16} />}{saving ? "Saving…" : "Save access"}</button></footer>
+        <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button><button className={styles.primaryAction} type="button" onClick={() => void save()} disabled={saving || hasLoadError}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <ShieldCheck size={16} />}{saving ? "Saving…" : "Save access"}</button></footer>
       </div>}
     </section>
   </div>;

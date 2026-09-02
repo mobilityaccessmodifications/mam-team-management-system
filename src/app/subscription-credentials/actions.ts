@@ -321,18 +321,52 @@ export async function listSubscriptionCredentialGrantCandidates(): Promise<Subsc
   }
 }
 
-/** Replaces explicit vault delegates; active System Admin accounts remain implicit. */
-export async function replaceSubscriptionCredentialAccessGrants(personIds: string[]): Promise<void> {
-  const supabase = await requireVaultGrantAdministrator();
-  const uniquePersonIds = [...new Set(
-    (Array.isArray(personIds) ? personIds : []).map((personId) => requiredUuid(personId, "Choose valid active employees for credential access.")),
-  )];
-  if (uniquePersonIds.length > MAXIMUM_GRANTS) {
-    throw new Error("Choose no more than 24 credential delegates.");
+export type SubscriptionCredentialAccessGrantSaveResult =
+  | { ok: true }
+  | { ok: false; message: string };
+
+/**
+ * Replaces explicit vault delegates; active System Admin accounts remain
+ * implicit. Server Actions obscure thrown errors in production, so this
+ * result-shaped action intentionally returns only safe, action-specific copy.
+ */
+export async function replaceSubscriptionCredentialAccessGrants(
+  personIds: string[],
+): Promise<SubscriptionCredentialAccessGrantSaveResult> {
+  try {
+    const supabase = await requireVaultGrantAdministrator();
+    const uniquePersonIds = [...new Set(
+      (Array.isArray(personIds) ? personIds : []).map((personId) => requiredUuid(personId, "Choose valid active employees for credential access.")),
+    )];
+    if (uniquePersonIds.length > MAXIMUM_GRANTS) {
+      return { ok: false, message: "Choose no more than 24 credential delegates." };
+    }
+    const { error } = await supabase.rpc("replace_subscription_credential_access_grants", {
+      p_person_ids: uniquePersonIds,
+    });
+    if (error) {
+      const message = error.message.toLowerCase();
+      if (message.includes("active portal accounts")) {
+        return { ok: false, message: "One or more selected employees no longer have an active portal account. Refresh and choose again." };
+      }
+      if (message.includes("permission")) {
+        return { ok: false, message: "You do not have permission to manage credential access." };
+      }
+      return { ok: false, message: "Credential access could not be saved. Refresh and try again." };
+    }
+    revalidatePath("/");
+    return { ok: true };
+  } catch (reason) {
+    if (reason instanceof Error) {
+      const message = reason.message;
+      if (
+        message === "Your session has expired. Sign in again."
+        || message === "You do not have permission to manage credential access."
+        || message === "Choose valid active employees for credential access."
+      ) {
+        return { ok: false, message };
+      }
+    }
+    return { ok: false, message: "Credential access could not be saved. Refresh and try again." };
   }
-  const { error } = await supabase.rpc("replace_subscription_credential_access_grants", {
-    p_person_ids: uniquePersonIds,
-  });
-  if (error) throw genericVaultError(error, "Credential access could not be saved. Refresh and try again.");
-  revalidatePath("/");
 }
