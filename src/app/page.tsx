@@ -18,6 +18,8 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   let canViewEmployeeDirectory = false;
   let canChangeEmployeeView = false;
   let canViewSubscriptions = false;
+  let canManageSubscriptionCredentials = false;
+  let canManageSubscriptionCredentialGrants = false;
   let canAccessOwnSubscriptions = false;
   let canViewSubscriptionReviewCalendar = false;
   let canViewOwnTasks = false;
@@ -34,9 +36,16 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     const [
       { data: capabilities, error: capabilitiesError },
       { data: subscriptionReviewCapability, error: subscriptionReviewCapabilityError },
+      { data: subscriptionCredentialCapability, error: subscriptionCredentialCapabilityError },
+      { data: subscriptionCredentialGrantCapability, error: subscriptionCredentialGrantCapabilityError },
     ] = await Promise.all([
       supabase.rpc("get_portal_workspace_capabilities"),
       supabase.rpc("can_view_subscription_review_calendar"),
+      // These two capabilities are intentionally independent from the core
+      // workspace DTO. If the vault migration is not present yet, credentials
+      // remain hidden without interrupting a valid staff session.
+      supabase.rpc("can_manage_subscription_credentials"),
+      supabase.rpc("can_manage_subscription_credential_grants"),
     ]);
     const current = Array.isArray(capabilities) ? capabilities[0] : null;
     isAdmin = current?.can_manage_accounts === true;
@@ -47,6 +56,10 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     checkInResources = canViewCheckIns ? getCheckInResourceLinks() : undefined;
     canChangeEmployeeView = current?.can_change_employee_view === true;
     canViewSubscriptions = current?.can_view_subscription_register === true;
+    canManageSubscriptionCredentials = !subscriptionCredentialCapabilityError
+      && subscriptionCredentialCapability === true;
+    canManageSubscriptionCredentialGrants = !subscriptionCredentialGrantCapabilityError
+      && subscriptionCredentialGrantCapability === true;
     canAccessOwnSubscriptions = current?.can_access_own_subscriptions === true;
     canViewSubscriptionReviewCalendar = !subscriptionReviewCapabilityError
       && subscriptionReviewCapability === true;
@@ -89,6 +102,8 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     canViewEmployeeDirectory={canViewEmployeeDirectory}
     canChangeEmployeeView={canChangeEmployeeView}
     canViewSubscriptions={canViewSubscriptions}
+    canManageSubscriptionCredentials={canManageSubscriptionCredentials}
+    canManageSubscriptionCredentialGrants={canManageSubscriptionCredentialGrants}
     canAccessOwnSubscriptions={canAccessOwnSubscriptions}
     canViewSubscriptionReviewCalendar={canViewSubscriptionReviewCalendar}
     canViewOwnTasks={canViewOwnTasks}
