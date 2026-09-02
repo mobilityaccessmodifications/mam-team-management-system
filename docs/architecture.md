@@ -16,6 +16,9 @@ Browser
        -> System-Admin-authorised account-management Server Actions
             -> server-only Supabase secret key
             -> Supabase Auth Admin API
+       -> authorised subscription-credential Server Actions
+            -> current System Admin or explicit active credential delegate
+            -> server-only AES-256-GCM vault key and encrypted private payload
        -> deployed authenticated leave Server Actions
             -> controlled leave RPCs, RLS and Realtime invalidation
             -> private approval grants and per-request reviewer snapshots
@@ -62,6 +65,12 @@ Creating an HR Directory record is deliberately separate from creating a portal 
 
 `SUPABASE_SECRET_KEY` is required only by server code in `src/lib/supabase/admin.ts` and account/login Server Actions. It must never enter a client component or any `NEXT_PUBLIC_*` variable.
 
+## Subscription-service credentials
+
+Portal account passwords and subscription-service credentials are different data classes. Portal passwords remain non-recoverable Supabase Auth hashes. Subscription-service login details may be retained only through the encrypted credential vault: application server code encrypts the complete payload with a server-only AES-256-GCM key before storage, using the subscription ID and key version as authenticated associated data. The database holds ciphertext, IV, authentication tag, key version and an optimistic credential version only.
+
+`private.subscription_credential_vault` and its access/audit tables have RLS enabled and no browser table grants. Narrow `security definer` RPCs require both an active portal account and either the current System Admin role or an explicit current grant resolved through the linked active directory person. The catalogue contains only service name, plan label, status and a boolean that says whether credentials are saved. A credential record is decrypted in `server-only` code only after an explicit reveal action; neither the full subscription register nor its exports, review calendar, logs or audit events receive plaintext. A System Admin alone may replace the explicit delegate list, and all grants are keyed by current Auth user ID rather than a hard-coded name.
+
 ## HR employee directory
 
 `private.employee_directory_details` is a one-to-one extension of the safe organisation person record. It holds the approved employee fields that do not belong in the organisation tree: first and last name, work and personal contact details, team, country, date of birth, scheduled employment-end information and HR-only equipment allocation (laptop supply, laptop/mouse/keyboard IDs and asset tags). A separate narrow controlled response can provide a selected person’s work email to the organisation-tree inspector; it does not make the private table queryable by employees. The canonical start date, title, company and reporting parent remain on the organisation record so the tree and Directory cannot drift.
@@ -107,6 +116,9 @@ This boundary keeps onboarding and offboarding separate until their durable acce
 - `profiles`: Auth identity, login name, application role and portal-account lifecycle metadata.
 - `private.portal_account_admins`: controlled account-administrator membership.
 - `private.portal_account_admin_events`: password-free audit of account administration.
+- `private.subscription_credential_vault`: ciphertext, IV, authentication tag, key version and optimistic version for a subscription-service credential payload; no plaintext fields.
+- `private.subscription_credential_access_grants`: explicit active linked Auth-user grants for credential delegates; System Admin access is role-derived rather than stored here.
+- `private.subscription_credential_audit_events` and `private.subscription_credential_access_audit_events`: action metadata only, without credential values or individual grant contents.
 - `teams` and `team_memberships`: controlled team relationships for future live workflows.
 - `leave_requests` and `leave_request_events`: RLS-first durable leave model used by the deployed release after migration `20260817120000_persist_leave_workspace` was applied.
 - `private.leave_approval_grants`: private, explicit team, global or future-subtree leave-review capability grants; it is not exposed through the browser data API.

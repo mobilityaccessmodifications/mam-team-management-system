@@ -8,12 +8,14 @@ import {
   CircleDollarSign,
   CreditCard,
   Filter,
+  KeyRound,
   LoaderCircle,
   Pencil,
   Plus,
   RefreshCw,
   Search,
   ShieldCheck,
+  UsersRound,
   X,
 } from "lucide-react";
 import {
@@ -33,7 +35,12 @@ import {
   markSubscriptionReviewed,
   updateSubscription,
 } from "@/app/subscriptions/actions";
+import { listSubscriptionCredentialCatalogue } from "@/app/subscription-credentials/actions";
 import { EmployeePicker } from "@/components/employee-picker";
+import {
+  SubscriptionCredentialAccessDialog,
+  SubscriptionCredentialEditor,
+} from "@/components/subscription-credential-vault";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import styles from "@/components/subscription-register.module.css";
 import {
@@ -221,12 +228,18 @@ function SubscriptionSheetHeader({
   </div>;
 }
 
-/** System Admin can manage; managers receive this exact register read-only. */
+/** System Admin operational subscription register. Credential delegates use a smaller separate view. */
 export function SubscriptionRegister({
   readOnly = false,
+  canManageCredentials = false,
+  canManageCredentialGrants = false,
   onRecordsChanged,
 }: {
   readOnly?: boolean;
+  /** Enables encrypted credential actions without expanding any data projection. */
+  canManageCredentials?: boolean;
+  /** System Admin-only capability to choose credential delegates. */
+  canManageCredentialGrants?: boolean;
   /** Refreshes dependent calendar data after an owner, status or review changes. */
   onRecordsChanged?: () => void;
 }) {
@@ -243,25 +256,32 @@ export function SubscriptionRegister({
   });
   const [showAdd, setShowAdd] = useState(false);
   const [editTarget, setEditTarget] = useState<Subscription | null>(null);
+  const [credentialTarget, setCredentialTarget] = useState<Subscription | null>(null);
+  const [credentialStates, setCredentialStates] = useState<Record<string, boolean>>({});
+  const [showCredentialAccess, setShowCredentialAccess] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
     setRegisterState({ state: "loading" });
     try {
-      const [subscriptions, activePeople] = await Promise.all([
+      const [subscriptions, activePeople, credentialCatalogue] = await Promise.all([
         listSubscriptions(),
         readOnly ? Promise.resolve([]) : listSubscriptionPeople(),
+        canManageCredentials
+          ? listSubscriptionCredentialCatalogue()
+          : Promise.resolve([]),
       ]);
       setRegisterState({ state: "ready", subscriptions });
       setPeople(activePeople);
+      setCredentialStates(Object.fromEntries(credentialCatalogue.map((item) => [item.subscriptionId, item.credentialsSaved])));
     } catch (error) {
       setRegisterState({
         state: "error",
         message: error instanceof Error ? error.message : "Subscriptions could not be loaded.",
       });
     }
-  }, [readOnly]);
+  }, [canManageCredentials, readOnly]);
 
   useEffect(() => {
     // Defer the initial server action until after this render commits. This
@@ -413,7 +433,10 @@ export function SubscriptionRegister({
 
   return <section className={styles.workspace} aria-label="Subscription management">
     <header className={`${styles.header} ${styles.headerActionsOnly}`}>
-      {!readOnly ? <button className={styles.primaryAction} type="button" onClick={() => setShowAdd(true)}><Plus size={16} /> Add subscription</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Management view</div>}
+      <div className={styles.headerActionGroup}>
+        {canManageCredentialGrants ? <button className={styles.secondaryAction} type="button" onClick={() => setShowCredentialAccess(true)}><UsersRound size={16} /> Credential access</button> : null}
+        {!readOnly ? <button className={styles.primaryAction} type="button" onClick={() => setShowAdd(true)}><Plus size={16} /> Add subscription</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Management view</div>}
+      </div>
     </header>
 
     {notice ? <div className={styles.notice} role="status"><CheckCircle2 size={16} aria-hidden="true" /><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={15} /></button></div> : null}
@@ -451,7 +474,9 @@ export function SubscriptionRegister({
           <div className={`${styles.sheetCell} ${styles.statusCell}`} role="cell" data-label="Status"><span data-status={subscription.status}>{subscription.status}</span></div>
           <div className={`${styles.sheetCell} ${styles.membersCell}`} role="cell" data-label="Access"><strong title={`${subscription.memberNames.length} ${subscription.memberNames.length === 1 ? "person" : "people"} assigned`}>{subscription.memberNames.length || "—"}</strong></div>
           <div className={`${styles.sheetCell} ${styles.subscriptionActions}`} role="cell" data-label="Actions">
-            {!readOnly ? <button type="button" onClick={() => setEditTarget(subscription)} disabled={reviewingId !== null}><Pencil size={15} /> Edit</button> : <span className={styles.readOnlyCell} aria-label="Read only">—</span>}
+            {canManageCredentials ? <button type="button" onClick={() => setCredentialTarget(subscription)} disabled={reviewingId !== null}><KeyRound size={15} /> Credentials</button> : null}
+            {!readOnly ? <button type="button" onClick={() => setEditTarget(subscription)} disabled={reviewingId !== null}><Pencil size={15} /> Edit</button> : null}
+            {!canManageCredentials && readOnly ? <span className={styles.readOnlyCell} aria-label="Read only">—</span> : null}
           </div>
         </div>)}
       </div>
@@ -459,6 +484,16 @@ export function SubscriptionRegister({
 
     {showAdd ? <SubscriptionModal people={people} onClose={() => setShowAdd(false)} onCreated={subscriptionCreated} /> : null}
     {editTarget ? <SubscriptionModal people={people} subscription={editTarget} onClose={() => setEditTarget(null)} onUpdated={(next) => { replaceSubscription(next, `${next.serviceName} has been updated.`); setEditTarget(null); }} onReview={() => recordReview(editTarget)} /> : null}
+    {credentialTarget ? <SubscriptionCredentialEditor
+      subscriptionId={credentialTarget.id}
+      serviceName={credentialTarget.serviceName}
+      planName={credentialTarget.planName ?? ""}
+      credentialsSaved={credentialStates[credentialTarget.id] === true}
+      onClose={() => setCredentialTarget(null)}
+      onSaved={() => setCredentialStates((current) => ({ ...current, [credentialTarget.id]: true }))}
+      onRemoved={() => setCredentialStates((current) => ({ ...current, [credentialTarget.id]: false }))}
+    /> : null}
+    {showCredentialAccess ? <SubscriptionCredentialAccessDialog onClose={() => setShowCredentialAccess(false)} /> : null}
   </section>;
 }
 

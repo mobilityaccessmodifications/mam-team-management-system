@@ -79,6 +79,7 @@ import { CheckInTasks } from "@/components/check-in-tasks";
 import { EmployeeDirectory } from "@/components/employee-directory";
 import { EmployeeTeamDirectory } from "@/components/employee-team-directory";
 import { ManagerEmployeeDirectory } from "@/components/manager-employee-directory";
+import { SubscriptionCredentialVault } from "@/components/subscription-credential-vault";
 import { SubscriptionRegister } from "@/components/subscription-register";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
@@ -504,6 +505,8 @@ export function LeaveDemo({
   canViewEmployeeDirectory = false,
   canChangeEmployeeView = false,
   canViewSubscriptions = false,
+  canManageSubscriptionCredentials = false,
+  canManageSubscriptionCredentialGrants = false,
   canAccessOwnSubscriptions = false,
   canViewOwnTasks = false,
   canViewTeamCalendar = false,
@@ -522,8 +525,12 @@ export function LeaveDemo({
   /** Server-issued manager/System Admin capability for the safe directory projection. */
   canViewEmployeeDirectory?: boolean;
   canChangeEmployeeView?: boolean;
-  /** System-derived manager/System Admin access to the credential-free subscription register. */
+  /** System-derived System Admin access to the credential-free subscription register. */
   canViewSubscriptions?: boolean;
+  /** Server-issued access to the encrypted subscription-service credential vault. */
+  canManageSubscriptionCredentials?: boolean;
+  /** System Admin-only capability to select named credential delegates. */
+  canManageSubscriptionCredentialGrants?: boolean;
   /** System-derived self-service access to the current employee's own subscriptions. */
   canAccessOwnSubscriptions?: boolean;
   /** An active employee can see the self-only Tasks tab even without manager scope. */
@@ -1068,8 +1075,10 @@ export function LeaveDemo({
     && hasManagerPeopleWorkspace;
   const showManagerTasks = activeProfile.accessRole === "manager"
     && hasManagerPeopleWorkspace;
-  const showSubscriptionRegister = canViewSubscriptions
-    && activeProfile.accessRole !== "employee";
+  // A System Admin keeps their real subscription-management authority while
+  // using Change profile. Explicit vault delegates receive a deliberately
+  // smaller credential-only surface instead of the operational register.
+  const showSubscriptionRegister = canViewSubscriptions || canManageSubscriptionCredentials;
   const previewScopedManagerPersonId = isPreviewingEmployeeAccess
     && activeProfile.accessRole === "manager"
     ? previewProfile?.id
@@ -1775,7 +1784,16 @@ export function LeaveDemo({
                 ? <AssetRegister />
                 : undefined}
               renderSubscriptionRegister={showSubscriptionRegister
-                ? <SubscriptionRegister readOnly={!showHrWorkspace} onRecordsChanged={() => void refreshLeaveWorkspace()} />
+                ? canViewSubscriptions
+                  ? <SubscriptionRegister
+                      readOnly={!isAdmin}
+                      canManageCredentials={canManageSubscriptionCredentials}
+                      canManageCredentialGrants={canManageSubscriptionCredentialGrants}
+                      onRecordsChanged={() => void refreshLeaveWorkspace()}
+                    />
+                  : <SubscriptionCredentialVault
+                      canManageCredentialGrants={canManageSubscriptionCredentialGrants}
+                    />
                 : undefined}
             />
           </div>

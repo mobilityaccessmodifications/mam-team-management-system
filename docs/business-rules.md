@@ -75,7 +75,8 @@
 - The top-right self-profile is the sole employee self-service private-contact exception: it is scoped to the signed-in employee’s own record. A separate HR-only selected-profile path may show and correct one selected employee’s contact fields after the HR capability is rechecked.
 - Detailed leave types, reasons, notes and evidence do not appear in the shared calendar.
 - Login pages and account lists do not expose internal Auth email aliases.
-- Password values are never persisted in application tables, logs, screenshots or source. Existing passwords are never displayed.
+- Portal-account passwords are never persisted in application tables, logs, screenshots or source. Existing portal-account passwords are never displayed because Supabase Auth stores only non-reversible hashes.
+- Subscription-service credentials are a separate, explicit vault workflow. The vault stores an AES-256-GCM encrypted payload only; plaintext is decrypted only after an authorised user explicitly reveals a single service credential, is never included in a catalogue/export/audit row and is cleared from the page after a short timeout. A System Admin controls the named delegate list; a delegate receives no subscription cost, ownership, member or review data merely by receiving credential access.
 - HR employee CSV exports are available only to an authorised HR session and are not stored by the application, committed to Git or used as fixtures.
 - The business still needs to confirm the long-term retention/deletion period and whether malware scanning or quarantine is required for medical evidence. Until then, access remains restricted to the employee, authorised reviewer and HR, and unnecessary sensitive evidence should not be collected.
 - Onboarding/offboarding evidence, exit information, access records and audit history require role-specific access, retention and deletion rules before durable use.
