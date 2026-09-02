@@ -22,22 +22,31 @@ import {
   listManagedEmployeeDirectoryRecordsAction,
   updateManagedEmployeeDirectoryRecord,
 } from "@/app/people/manager-actions";
+import { EmployeeSelfResources } from "@/components/employee-team-directory";
 import styles from "@/components/employee-directory.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
 import type {
   ManagedEmployeeDirectoryDraft,
   ManagedEmployeeDirectoryRecord,
 } from "@/lib/employee-directory-types";
+import type { EmployeeItAsset } from "@/lib/it-asset-types";
+import type { EmployeeSubscription } from "@/lib/subscription-types";
 
 const recordsPerPage = 8;
 
 export type ManagerEmployeeDirectoryProps = {
   /** System Admin-only Change profile test scope; verified again by every RPC. */
   previewManagerPersonId?: string;
+  /** The active manager profile shown alongside their scoped team. */
+  managerPersonId?: string;
   /** Refreshes safe organisation data after a manager changes a work record. */
   onRecordsChanged?: () => void | Promise<void>;
   /** Incremented after a safe Realtime directory invalidation. */
   refreshKey?: number;
+  /** Safe no-argument self-service loader; never used for a report's records. */
+  onLoadMyDevices?: () => Promise<EmployeeItAsset[]>;
+  /** Safe no-argument self-service loader; never used for a report's records. */
+  onLoadMySubscriptions?: () => Promise<EmployeeSubscription[]>;
 };
 
 function initials(name: string) {
@@ -81,8 +90,11 @@ function Field({
 
 export function ManagerEmployeeDirectory({
   previewManagerPersonId,
+  managerPersonId,
   onRecordsChanged,
   refreshKey,
+  onLoadMyDevices,
+  onLoadMySubscriptions,
 }: ManagerEmployeeDirectoryProps) {
   const [records, setRecords] = useState<ManagedEmployeeDirectoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,7 +110,15 @@ export function ManagerEmployeeDirectory({
   const loadRecords = useCallback(async () => {
     setLoading(true);
     try {
-      const nextRecords = await listManagedEmployeeDirectoryRecordsAction(previewManagerPersonId);
+      const result = await listManagedEmployeeDirectoryRecordsAction(previewManagerPersonId);
+      if (!result.ok) {
+        setRecords([]);
+        setSelectedPersonId(null);
+        setDraft(null);
+        setLoadError(result.message);
+        return;
+      }
+      const nextRecords = result.records;
       setRecords(nextRecords);
       setSelectedPersonId((current) => (
         current && nextRecords.some((record) => record.personId === current) ? current : null
@@ -122,6 +142,7 @@ export function ManagerEmployeeDirectory({
   }, [loadAttempt, loadRecords, refreshKey]);
 
   const selectedRecord = records.find((record) => record.personId === selectedPersonId) ?? null;
+  const selectedRecordIsManager = selectedRecord?.personId === managerPersonId;
   const filteredRecords = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
     return records.filter((record) => !term || [
@@ -218,8 +239,11 @@ export function ManagerEmployeeDirectory({
       {selectedRecord && draft ? <ManagerEmployeeEditor
         record={selectedRecord}
         draft={draft}
+        readOnly={selectedRecordIsManager}
         saving={saving}
         error={saveError}
+        onLoadMyDevices={onLoadMyDevices}
+        onLoadMySubscriptions={onLoadMySubscriptions}
         onChange={updateDraft}
         onClose={closeRecord}
         onSubmit={saveRecord}
@@ -280,21 +304,27 @@ function ManagerRecordList({
 function ManagerEmployeeEditor({
   record,
   draft,
+  readOnly,
   saving,
   error,
+  onLoadMyDevices,
+  onLoadMySubscriptions,
   onChange,
   onClose,
   onSubmit,
 }: {
   record: ManagedEmployeeDirectoryRecord;
   draft: ManagedEmployeeDirectoryDraft;
+  readOnly: boolean;
   saving: boolean;
   error: string;
+  onLoadMyDevices?: () => Promise<EmployeeItAsset[]>;
+  onLoadMySubscriptions?: () => Promise<EmployeeSubscription[]>;
   onChange: (key: keyof ManagedEmployeeDirectoryDraft, value: string) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
-  return <section className={styles.editor} aria-label="Edit team employee record">
+  return <section className={styles.editor} aria-label={readOnly ? "View your work directory record" : "Edit team employee record"}>
     <header className={styles.editorHeader}>
       <div>
         <span>Team employee</span>
@@ -306,7 +336,7 @@ function ManagerEmployeeEditor({
 
     <form onSubmit={onSubmit}>
       {error ? <div className={styles.formError} role="alert"><AlertCircle size={16} /><span>{error}</span></div> : null}
-      <fieldset>
+      <fieldset disabled={readOnly}>
         <legend>Work directory details</legend>
         <div className={styles.formGrid}>
           <Field label="First name" required><input value={draft.firstName} onChange={(event) => onChange("firstName", event.target.value)} autoComplete="given-name" required maxLength={80} /></Field>
@@ -318,9 +348,16 @@ function ManagerEmployeeEditor({
           <Field label="Company"><input value={companyLabel(record.company)} readOnly aria-readonly="true" /></Field>
         </div>
       </fieldset>
+      {readOnly ? <EmployeeSelfResources
+        key={record.personId}
+        personId={record.personId}
+        personName={record.fullName}
+        onLoadMyDevices={onLoadMyDevices}
+        onLoadMySubscriptions={onLoadMySubscriptions}
+      /> : null}
       <footer className={styles.formFooter}>
-        <div className={styles.formFooterLeft}><p><Mail size={14} /> Reporting line, employment status and private HR details are managed by Admin.</p></div>
-        <div><button type="button" className={styles.secondaryAction} onClick={onClose} disabled={saving}>Cancel</button><button type="submit" className={styles.primaryAction} disabled={saving}>{saving ? "Saving…" : "Save changes"}</button></div>
+        <div className={styles.formFooterLeft}><p><Mail size={14} /> {readOnly ? "This is your own work directory record. Work details are managed by Admin." : "Reporting line, employment status and private HR details are managed by Admin."}</p></div>
+        <div>{readOnly ? <button type="button" className={styles.secondaryAction} onClick={onClose}>Close</button> : <><button type="button" className={styles.secondaryAction} onClick={onClose} disabled={saving}>Cancel</button><button type="submit" className={styles.primaryAction} disabled={saving}>{saving ? "Saving…" : "Save changes"}</button></>}</div>
       </footer>
     </form>
   </section>;

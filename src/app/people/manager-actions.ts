@@ -17,10 +17,15 @@ import type {
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENERIC_SAVE_ERROR = "This employee record could not be saved. Refresh and try again.";
+const GENERIC_LIST_ERROR = "Team employee records could not be loaded. Refresh and try again.";
 
 type MutationRpcRow = {
   person_id: string;
 };
+
+export type ManagedEmployeeDirectoryListResult =
+  | { ok: true; records: ManagedEmployeeDirectoryRecord[] }
+  | { ok: false; message: string };
 
 function inputObject(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -109,8 +114,21 @@ function mutationError(error: { message?: string } | null) {
  */
 export async function listManagedEmployeeDirectoryRecordsAction(
   previewManagerPersonIdValue?: string,
-): Promise<ManagedEmployeeDirectoryRecord[]> {
-  return listManagedEmployeeDirectoryRecords(previewManagerPersonIdValue);
+): Promise<ManagedEmployeeDirectoryListResult> {
+  try {
+    return {
+      ok: true,
+      records: await listManagedEmployeeDirectoryRecords(previewManagerPersonIdValue),
+    };
+  } catch (error) {
+    // Expected session, capability and scoped-RPC failures must be returned as
+    // a serialisable UI result. Throwing here makes Next turn a recoverable
+    // directory error into its generic Server Components production message.
+    console.warn("Managed team directory load was rejected or unavailable.", {
+      reason: error instanceof Error ? error.message : "unknown",
+    });
+    return { ok: false, message: GENERIC_LIST_ERROR };
+  }
 }
 
 /**

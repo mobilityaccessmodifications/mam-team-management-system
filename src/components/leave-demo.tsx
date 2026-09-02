@@ -64,6 +64,7 @@ import {
   type LeaveAttachment,
   type LeaveCalendarEntry,
   type LeaveWorkspaceRequest,
+  type SubscriptionReviewCalendarEntry,
 } from "@/app/leave/actions";
 import { signOut } from "@/app/login/actions";
 import {
@@ -506,6 +507,7 @@ export function LeaveDemo({
   canAccessOwnSubscriptions = false,
   canViewOwnTasks = false,
   canViewTeamCalendar = false,
+  canViewSubscriptionReviewCalendar = false,
   checkInResources,
 }: {
   initialNavigation?: InitialNavigation;
@@ -528,12 +530,14 @@ export function LeaveDemo({
   canViewOwnTasks?: boolean;
   /** Server-issued manager/System Admin capability for the team calendar. */
   canViewTeamCalendar?: boolean;
+  /** Server-issued capability for an employee's own subscription review dates. */
+  canViewSubscriptionReviewCalendar?: boolean;
   checkInResources?: CheckInResourceLinks;
 }) {
   const directorySupabase = isSupabaseConfigured() ? createClient() : null;
   const isNonRosterSystemAdminWorkspace = isNonRosterSystemAdmin && !currentPersonId;
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const initialView: AppView = initialNavigation?.view === "calendar" && !canViewTeamCalendar
+  const initialView: AppView = initialNavigation?.view === "calendar" && !(canViewTeamCalendar || canViewSubscriptionReviewCalendar)
     ? "home"
     : initialNavigation?.view ?? "home";
   const [activeView, setActiveView] = useState<AppView>(initialView);
@@ -542,6 +546,8 @@ export function LeaveDemo({
   const [calendarEntries, setCalendarEntries] = useState<LeaveRequest[]>([]);
   const [calendarBirthdays, setCalendarBirthdays] = useState<BirthdayCalendarEntry[]>([]);
   const [checkInCalendarEntries, setCheckInCalendarEntries] = useState<CheckInCalendarEntry[]>([]);
+  const [subscriptionReviewCalendarEntries, setSubscriptionReviewCalendarEntries] = useState<SubscriptionReviewCalendarEntry[]>([]);
+  const [canViewSubscriptionReviewCalendarForProfile, setCanViewSubscriptionReviewCalendarForProfile] = useState(canViewSubscriptionReviewCalendar);
   const [canReviewLeaveWorkspace, setCanReviewLeaveWorkspace] = useState(false);
   const [leaveWorkspaceUsesProfileScope, setLeaveWorkspaceUsesProfileScope] = useState(false);
   const [leaveDataLoading, setLeaveDataLoading] = useState(true);
@@ -650,6 +656,8 @@ export function LeaveDemo({
       setCalendarEntries(data.calendarEntries.map(toCalendarLeaveRequest));
       setCalendarBirthdays(data.birthdayEntries);
       setCheckInCalendarEntries(data.checkInEntries);
+      setSubscriptionReviewCalendarEntries(data.subscriptionReviewEntries);
+      setCanViewSubscriptionReviewCalendarForProfile(data.canViewSubscriptionReviewCalendar);
       setCanReviewLeaveWorkspace(data.canReviewLeave);
       setLeaveWorkspaceUsesProfileScope(data.isProfilePreview);
       setLeaveDataError(data.warning ?? "");
@@ -663,6 +671,8 @@ export function LeaveDemo({
       setCalendarEntries([]);
       setCalendarBirthdays([]);
       setCheckInCalendarEntries([]);
+      setSubscriptionReviewCalendarEntries([]);
+      setCanViewSubscriptionReviewCalendarForProfile(false);
       setSelectedRequestId("");
       setCancellationRequestId(null);
       setCancellationFocusRequestId(null);
@@ -1013,17 +1023,19 @@ export function LeaveDemo({
   // owner from auth.uid(). A Super Admin preview uses a separate read-only
   // target action that checks the Change profile capability and returns the
   // same safe DTO the selected employee would see.
+  const hasSelfResourceDirectory = activeProfile.accessRole === "employee"
+    || activeProfile.accessRole === "manager";
   const canLoadOwnDevices = !isPreviewingEmployeeAccess
-    && activeProfile.accessRole === "employee"
+    && hasSelfResourceDirectory
     && Boolean(currentPersonId && activeProfile.id === currentPersonId);
-  const employeeDirectoryDeviceLoader = activeProfile.accessRole === "employee"
+  const employeeDirectoryDeviceLoader = hasSelfResourceDirectory
     ? isPreviewingEmployeeAccess && selectedPreviewPersonId
       ? loadPreviewEmployeeDevices
       : canLoadOwnDevices
         ? listMyItAssets
         : undefined
     : undefined;
-  const employeeDirectorySubscriptionLoader = activeProfile.accessRole === "employee"
+  const employeeDirectorySubscriptionLoader = hasSelfResourceDirectory
     ? isPreviewingEmployeeAccess && selectedPreviewPersonId
       ? canViewSubscriptions
         ? loadPreviewEmployeeSubscriptions
@@ -1033,10 +1045,15 @@ export function LeaveDemo({
         : undefined
     : undefined;
   // Change profile must reflect the selected employee's workspace, not the
-  // System Admin session behind it. Until the profile role arrives, fail
-  // closed; only manager and HR previews may access the team calendar.
-  const canViewActiveWorkspaceCalendar = canViewTeamCalendar
+  // System Admin session behind it. A responsible employee can only open a
+  // calendar that contains their own subscription-review events; they never
+  // inherit birthdays, team leave or other employees' check-ins.
+  const canViewTeamCalendarForActiveProfile = canViewTeamCalendar
     && (!isPreviewingEmployeeAccess || activeProfile.accessRole !== "employee");
+  const canViewActiveWorkspaceCalendar = canViewTeamCalendarForActiveProfile
+    || canViewSubscriptionReviewCalendarForProfile;
+  const calendarIsSubscriptionReviewOnly = canViewSubscriptionReviewCalendarForProfile
+    && !canViewTeamCalendarForActiveProfile;
   // Change profile changes what the System Admin sees, not their real server
   // authority. Returning to their own profile restores the complete admin
   // workspace. Server Actions and RPCs still re-authorise the real session.
@@ -1117,6 +1134,7 @@ export function LeaveDemo({
   // in Change profile mode, while the Super Admin retains its real authority
   // for guarded actions and testing.
   const calendarCheckIns = checkInCalendarEntries;
+  const calendarSubscriptionReviews = subscriptionReviewCalendarEntries;
   const approvalQueue = canReviewLeave
     ? visibleRequests.filter((request) => request.canDecide)
     : [];
@@ -1674,7 +1692,7 @@ export function LeaveDemo({
           {organisationAccessError && activeView === "people" ? <div className={styles.loadErrorAction} role="alert"><span>{organisationAccessError}</span><button type="button" onClick={() => void loadOrganisation()}>Retry permissions</button></div> : null}
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} canReview={canReviewLeave} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
           {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
-          {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <CalendarView birthdays={calendarBirthdays} checkIns={calendarCheckIns} requests={calendarRequests} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
+          {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <CalendarView birthdays={calendarIsSubscriptionReviewOnly ? [] : calendarBirthdays} checkIns={calendarIsSubscriptionReviewOnly ? [] : calendarCheckIns} requests={calendarIsSubscriptionReviewOnly ? [] : calendarRequests} subscriptionReviews={calendarSubscriptionReviews} reviewOnly={calendarIsSubscriptionReviewOnly} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
               key={`${activeProfile.accessRole}:${isPreviewingEmployeeAccess ? activeProfile.id : "signed-in"}`}
@@ -1702,6 +1720,9 @@ export function LeaveDemo({
                 selectedPersonId={employeeDirectorySelectedPersonId}
               /> : showManagerDirectory ? <ManagerEmployeeDirectory
                 previewManagerPersonId={previewScopedManagerPersonId}
+                managerPersonId={previewScopedManagerPersonId ?? currentPersonId}
+                onLoadMyDevices={employeeDirectoryDeviceLoader}
+                onLoadMySubscriptions={employeeDirectorySubscriptionLoader}
                 onRecordsChanged={async () => {
                   // Refresh public organisation data after the manager-safe
                   // record mutation. The manager directory itself never
@@ -1754,7 +1775,7 @@ export function LeaveDemo({
                 ? <AssetRegister />
                 : undefined}
               renderSubscriptionRegister={showSubscriptionRegister
-                ? <SubscriptionRegister readOnly={!showHrWorkspace} />
+                ? <SubscriptionRegister readOnly={!showHrWorkspace} onRecordsChanged={() => void refreshLeaveWorkspace()} />
                 : undefined}
             />
           </div>
@@ -2103,6 +2124,8 @@ function CalendarView({
   birthdays,
   checkIns,
   requests,
+  subscriptionReviews,
+  reviewOnly,
   month,
   loading,
   onPreviousMonth,
@@ -2112,6 +2135,9 @@ function CalendarView({
   birthdays: BirthdayCalendarEntry[];
   checkIns: CheckInCalendarEntry[];
   requests: LeaveRequest[];
+  subscriptionReviews: SubscriptionReviewCalendarEntry[];
+  /** An employee-responsible calendar must never include team data. */
+  reviewOnly: boolean;
   month: Date;
   loading: boolean;
   onPreviousMonth: () => void;
@@ -2133,10 +2159,13 @@ function CalendarView({
           <button type="button" onClick={onToday}>Today</button>
         </div>
         <div className={styles.legend} aria-label="Calendar legend">
-          <span><i className={styles.legendApproved} />Approved</span>
-          <span><i className={styles.legendPending} />Pending</span>
-          <span><i className={styles.legendBirthday} />Birthday</span>
-          <span><i className={styles.legendCheckIn} />Check-in</span>
+          {!reviewOnly ? <>
+            <span><i className={styles.legendApproved} />Approved</span>
+            <span><i className={styles.legendPending} />Pending</span>
+            <span><i className={styles.legendBirthday} />Birthday</span>
+            <span><i className={styles.legendCheckIn} />Check-in</span>
+          </> : null}
+          <span><i className={styles.legendSubscriptionReview} />Subscription review</span>
         </div>
       </div>
       <div className={styles.calendarWeek}>
@@ -2157,6 +2186,8 @@ function CalendarView({
           const checkInEvents = Array.from(new Map(checkIns
             .filter((entry) => entry.dueDate === day.iso)
             .map((entry) => [`${entry.personId}:${entry.milestone}:${entry.dueDate}`, entry])).values());
+          const reviewEvents = subscriptionReviews.filter((entry) => entry.dueDate === day.iso);
+          const showReviewSummary = reviewEvents.length > 3;
           // Birthdays and open check-ins are never hidden. Leave entries use
           // any remaining compact slots and keep their existing overflow row.
           const shownLeaveEvents = leaveEvents.slice(0, Math.max(0, 3 - birthdayEvents.length - checkInEvents.length));
@@ -2176,6 +2207,15 @@ function CalendarView({
                   <b>{entry.employee}<small>{checkInMilestoneLabel(entry.milestone)}</small></b>
                 </article>
               ))}
+              {showReviewSummary ? <article className={styles.eventSubscriptionReview} aria-label={`${reviewEvents.length} paid subscription reviews due`} title={reviewEvents.map((entry) => entry.serviceName).join(", ")}>
+                <i aria-hidden="true">SR</i>
+                <b>{reviewEvents.length} paid subscriptions<small>Quarterly review</small></b>
+              </article> : reviewEvents.map((entry) => (
+                <article className={styles.eventSubscriptionReview} key={`subscription-review:${entry.subscriptionId}`}>
+                  <i aria-hidden="true">SR</i>
+                  <b>{entry.serviceName}<small>Subscription review</small></b>
+                </article>
+              ))}
               {shownLeaveEvents.map((event) => (
                 <article className={event.request.status === "Approved" ? styles.eventApproved : styles.eventPending} key={event.id}>
                   <i>{event.request.initials}</i>
@@ -2191,7 +2231,9 @@ function CalendarView({
         <ShieldCheck size={15} />
         {loading
           ? "Refreshing calendar…"
-          : "Leave reasons and medical leave types are private. Birthdays show only a name and recurring day/month."}
+          : reviewOnly
+            ? "Only subscription reviews assigned to this profile are shown."
+            : "Leave reasons and medical leave types are private. Birthdays show only a name and recurring day/month."}
       </footer>
     </section>
   );
