@@ -27,8 +27,17 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData.user) redirect("/login");
 
-    const { data: capabilities, error: capabilitiesError } = await supabase
-      .rpc("get_portal_workspace_capabilities_v2");
+    // Keep the established, production-backed capability projection as the
+    // login gate. Subscription review visibility is an optional feature
+    // capability: if its forward migration is unavailable, the feature stays
+    // hidden without turning a valid employee session into a sign-out loop.
+    const [
+      { data: capabilities, error: capabilitiesError },
+      { data: subscriptionReviewCapability, error: subscriptionReviewCapabilityError },
+    ] = await Promise.all([
+      supabase.rpc("get_portal_workspace_capabilities"),
+      supabase.rpc("can_view_subscription_review_calendar"),
+    ]);
     const current = Array.isArray(capabilities) ? capabilities[0] : null;
     isAdmin = current?.can_manage_accounts === true;
     currentPersonId = current?.person_id ?? undefined;
@@ -39,7 +48,8 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     canChangeEmployeeView = current?.can_change_employee_view === true;
     canViewSubscriptions = current?.can_view_subscription_register === true;
     canAccessOwnSubscriptions = current?.can_access_own_subscriptions === true;
-    canViewSubscriptionReviewCalendar = current?.can_view_subscription_review_calendar === true;
+    canViewSubscriptionReviewCalendar = !subscriptionReviewCapabilityError
+      && subscriptionReviewCapability === true;
     // Every active linked employee may open their own task surface. Its
     // contents remain limited by the dedicated task data source; this flag
     // only controls whether the tab itself is available.
