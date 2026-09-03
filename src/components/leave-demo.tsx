@@ -50,8 +50,8 @@ import {
   listMySubscriptions,
 } from "@/app/subscriptions/employee-actions";
 import {
-  cancelMyApprovedLeaveRequest,
-  cancelSelectedEmployeeApprovedLeaveRequest,
+  cancelMyLeaveRequest,
+  cancelSelectedEmployeeLeaveRequest,
   completeLeaveRequestAttachmentUpload,
   decideLeaveRequest,
   discardLeaveRequestAttachmentUpload,
@@ -1124,7 +1124,7 @@ export function LeaveDemo({
   // The server-projected per-request capability remains the source of truth.
   // This only prevents a Change profile or non-roster platform workspace from
   // presenting an impossible cancellation control.
-  const canCancelOwnApprovedLeave = !isNonRosterSystemAdminWorkspace
+  const canCancelOwnLeave = !isNonRosterSystemAdminWorkspace
     || isPreviewingEmployeeAccess;
   // Change Profile's leave data is already projected by the guarded server
   // action. Do not narrow it again in the browser: that used to hide a
@@ -1525,9 +1525,8 @@ export function LeaveDemo({
     if (
       !selectedRequest
       || selectedRequest.id !== requestId
-      || selectedRequest.status !== "Approved"
       || selectedRequest.canCancel !== true
-      || !canCancelOwnApprovedLeave
+      || !canCancelOwnLeave
       || isMutating
     ) return;
 
@@ -1548,9 +1547,8 @@ export function LeaveDemo({
     if (
       !selectedRequest
       || selectedRequest.id !== requestId
-      || selectedRequest.status !== "Approved"
       || selectedRequest.canCancel !== true
-      || !canCancelOwnApprovedLeave
+      || !canCancelOwnLeave
       || cancellationRequestId !== requestId
       || isMutating
     ) return;
@@ -1559,8 +1557,8 @@ export function LeaveDemo({
     setCancellationError("");
     try {
       const cancelled = isPreviewingEmployeeAccess && previewProfile
-        ? await cancelSelectedEmployeeApprovedLeaveRequest(previewProfile.id, { requestId })
-        : await cancelMyApprovedLeaveRequest({ requestId });
+        ? await cancelSelectedEmployeeLeaveRequest(previewProfile.id, { requestId })
+        : await cancelMyLeaveRequest({ requestId });
       if (!cancelled.ok) {
         setCancellationError(cancelled.message);
         return;
@@ -1571,8 +1569,8 @@ export function LeaveDemo({
       await refreshLeaveWorkspace();
       setSelectedRequestId(requestId);
       announce(isPreviewingEmployeeAccess
-        ? "The selected employee's future leave was cancelled. It has been removed from the team calendar; the approval history is kept."
-        : "Your future leave was cancelled. It has been removed from the team calendar; the approval history is kept.");
+        ? "The selected employee's leave was cancelled. The record and decision history are kept."
+        : "Your leave was cancelled. The record and decision history are kept.");
     } catch (error) {
       setCancellationError(error instanceof Error ? error.message : "The leave could not be cancelled. Refresh and try again.");
     } finally {
@@ -1700,7 +1698,7 @@ export function LeaveDemo({
           {selectedEmployeeProfileError && isPreviewingEmployeeAccess ? <div className={styles.loadErrorAction} role="alert"><span>{selectedEmployeeProfileError}</span><button type="button" onClick={() => setSelectedEmployeeProfileReloadKey((current) => current + 1)}>Retry profile</button></div> : null}
           {organisationAccessError && activeView === "people" ? <div className={styles.loadErrorAction} role="alert"><span>{organisationAccessError}</span><button type="button" onClick={() => void loadOrganisation()}>Retry permissions</button></div> : null}
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} canReview={canReviewLeave} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
-          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
+          {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
           {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <CalendarView birthdays={calendarIsSubscriptionReviewOnly ? [] : calendarBirthdays} checkIns={calendarIsSubscriptionReviewOnly ? [] : calendarCheckIns} requests={calendarIsSubscriptionReviewOnly ? [] : calendarRequests} subscriptionReviews={calendarSubscriptionReviews} reviewOnly={calendarIsSubscriptionReviewOnly} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
@@ -1931,7 +1929,7 @@ function PanelHeader({ title, action, onAction }: { title: string; action?: stri
   return <header className={styles.panelHeader}><h2>{title}</h2>{action && onAction ? <button type="button" onClick={onAction}>{action}<ChevronRight size={14} /></button> : null}</header>;
 }
 
-function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canApplyForLeave, canCancelOwnApprovedLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, onRequestLeave, onFilter, onSection, onNote, onSelect, onCloseMobileDetail, onDecision, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canApplyForLeave: boolean; canCancelOwnApprovedLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onRequestLeave: () => void; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onCloseMobileDetail: () => void; onDecision: (status: "Approved" | "Declined") => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canApplyForLeave, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, onRequestLeave, onFilter, onSection, onNote, onSelect, onCloseMobileDetail, onDecision, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canApplyForLeave: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onRequestLeave: () => void; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onCloseMobileDetail: () => void; onDecision: (status: "Approved" | "Declined") => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   return (
     <section className={styles.leaveDesk}>
       {canApplyForLeave ? <div className={styles.leaveActions}><button className={`${styles.primaryButton} ${styles.applyForLeaveButton}`} type="button" onClick={onRequestLeave} disabled={busy} aria-haspopup="dialog"><Plus aria-hidden="true" size={17} /><span>Apply for leave</span></button></div> : null}
@@ -1945,13 +1943,13 @@ function LeaveView({ profile, section, requests, allRequests, selected, filter, 
           </button>
         </div>
       ) : null}
-      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} attachmentsByRequestId={attachmentsByRequestId} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} mobileDetailOpen={mobileDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
+      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} attachmentsByRequestId={attachmentsByRequestId} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
       {section === "approvals" && canReview ? <ApprovalsView pending={pending} selected={selected} selectedId={selectedId} note={note} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={busy} readOnly={readOnly} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
     </section>
   );
 }
 
-function RequestsView({ profile, requests, allRequests, selected, filter, canReview, attachmentsByRequestId, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onCloseMobileDetail, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; attachmentsByRequestId: Map<string, LeaveAttachment[]>; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function RequestsView({ profile, requests, allRequests, selected, filter, canReview, attachmentsByRequestId, readOnly, hidePrivateDetails, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onCloseMobileDetail, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; attachmentsByRequestId: Map<string, LeaveAttachment[]>; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   const filters: ("All" | RequestStatus)[] = ["All", "Pending", "Approved", "Declined", "Cancelled"];
   const isEmployee = !canReview;
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -1987,23 +1985,21 @@ function RequestsView({ profile, requests, allRequests, selected, filter, canRev
         </div>
         {selected ? <>
           {mobileDetailDialogOpen ? <button className={styles.mobileDetailBackdrop} type="button" aria-label="Close leave details" onClick={onCloseMobileDetail} /> : null}
-          <RequestDetail profile={profile} request={selected} attachments={attachmentsByRequestId.get(selected.id) ?? []} canReview={canReview} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnApprovedLeave={canCancelOwnApprovedLeave} mobileOpen={mobileDetailDialogOpen} mobileDialogRef={mobileDetailDialogRef} mobileCloseButtonRef={mobileDetailCloseButtonRef} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancellationSucceeded={cancelledRequestId === selected.id} busy={busy} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} />
+          <RequestDetail profile={profile} request={selected} attachments={attachmentsByRequestId.get(selected.id) ?? []} canReview={canReview} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileOpen={mobileDetailDialogOpen} mobileDialogRef={mobileDetailDialogRef} mobileCloseButtonRef={mobileDetailCloseButtonRef} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancellationSucceeded={cancelledRequestId === selected.id} busy={busy} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} />
         </> : null}
       </div>
     </section>
   );
 }
 
-function RequestDetail({ profile, request, attachments, canReview, readOnly, hidePrivateDetails, canCancelOwnApprovedLeave, mobileOpen, mobileDialogRef, mobileCloseButtonRef, cancellationRequestId, cancellationError, cancellationSucceeded, busy, onCloseMobileDetail, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; request: LeaveRequest; attachments: LeaveAttachment[]; canReview: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnApprovedLeave: boolean; mobileOpen: boolean; mobileDialogRef: RefObject<HTMLElement | null>; mobileCloseButtonRef: RefObject<HTMLButtonElement | null>; cancellationRequestId: string | null; cancellationError: string; cancellationSucceeded: boolean; busy: boolean; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function RequestDetail({ profile, request, attachments, canReview, readOnly, hidePrivateDetails, canCancelOwnLeave, mobileOpen, mobileDialogRef, mobileCloseButtonRef, cancellationRequestId, cancellationError, cancellationSucceeded, busy, onCloseMobileDetail, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; request: LeaveRequest; attachments: LeaveAttachment[]; canReview: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnLeave: boolean; mobileOpen: boolean; mobileDialogRef: RefObject<HTMLElement | null>; mobileCloseButtonRef: RefObject<HTMLButtonElement | null>; cancellationRequestId: string | null; cancellationError: string; cancellationSucceeded: boolean; busy: boolean; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   const detailTitleId = useId();
   const showEmployee = canReview && request.personId !== profile.id;
-  const isApprovedLeave = request.status === "Approved";
   const isConfirmingCancellation = cancellationRequestId === request.id;
   const isCancelled = request.status === "Cancelled" || cancellationSucceeded;
   const canCancel = !readOnly
     && !isCancelled
-    && canCancelOwnApprovedLeave
-    && isApprovedLeave
+    && canCancelOwnLeave
     && request.canCancel === true;
   const canAddAttachments = !readOnly && request.canAttach === true;
   return <aside
@@ -2031,7 +2027,7 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
       <div><dt>Assigned reviewer</dt><dd>{request.approvalRequired ? request.assignedReviewerLabel ?? "Authorised reviewer" : "Not required"}</dd></div>
     </dl>
     {isCancelled ? <section className={styles.cancelLeaveRecorded} role="status"><CheckCircle2 aria-hidden="true" size={17} /><span><strong>Leave cancelled</strong><small>This leave is no longer on the team calendar. Its approval history is kept.</small></span></section> : null}
-    {canCancel ? <section className={styles.cancelLeaveAction}>{!isConfirmingCancellation ? <><span>Approved leave</span><p>Need to cancel this future approved leave?</p><button id={cancelLeaveTriggerId(request.id)} className={styles.cancelLeaveButton} type="button" onClick={() => onStartCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> Cancel leave</button></> : <><span>Cancel approved leave</span><p>This removes the future leave from the team calendar. The approval history is kept.</p><p>Past, same-day, and partly used leave cannot be cancelled here.</p>{cancellationError ? <p className={styles.cancelLeaveError} role="alert">{cancellationError}</p> : null}<div className={styles.cancelLeaveControls}><button className={styles.cancelLeaveKeepButton} type="button" onClick={onDismissCancellation} disabled={busy}>Keep leave</button><button className={styles.cancelLeaveConfirmButton} type="button" onClick={() => onConfirmCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> {busy ? "Cancelling…" : "Yes, cancel leave"}</button></div></>}</section> : null}
+    {canCancel ? <section className={styles.cancelLeaveAction}>{!isConfirmingCancellation ? <><span>Leave request</span><p>Need to cancel this leave?</p><button id={cancelLeaveTriggerId(request.id)} className={styles.cancelLeaveButton} type="button" onClick={() => onStartCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> Cancel leave</button></> : <><span>Cancel leave</span><p>This cancels the leave request. The record and any decision history are kept.</p><p>This cannot be undone.</p>{cancellationError ? <p className={styles.cancelLeaveError} role="alert">{cancellationError}</p> : null}<div className={styles.cancelLeaveControls}><button className={styles.cancelLeaveKeepButton} type="button" onClick={onDismissCancellation} disabled={busy}>Keep leave</button><button className={styles.cancelLeaveConfirmButton} type="button" onClick={() => onConfirmCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> {busy ? "Cancelling…" : "Yes, cancel leave"}</button></div></>}</section> : null}
     {!hidePrivateDetails && request.employeeNote ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p><small><ShieldCheck size={13} /> {request.approvalRequired ? "Private to employee, approver and HR" : "Private to this person and HR"}</small></section> : null}
     {!hidePrivateDetails && request.managerNote ? <section><span>Reviewer decision note</span><p>{request.managerNote}</p></section> : null}
     {!hidePrivateDetails ? <AttachmentList attachments={attachments} /> : null}

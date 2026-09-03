@@ -26,6 +26,7 @@
 - The deployed durable leave flow requires every submitted request to start Pending. It has no automatic approval and no self-approval. Approval authority is a separate, private database capability: an active linked profile with the database `manager` role is eligible, and the organisation tree determines which manager receives each request. Job titles and team labels alone never grant approval.
 - Every active linked employee may submit their own leave request. The request walks upward through the reporting tree and stops at the nearest active manager profile. An employee who is not a manager does not intercept requests from people below them. Every System Admin may review every request as part of their all-module role.
 - At submission, the database snapshots the nearest manager and global reviewers. Still-pending work is re-routed when manager permission changes; decided history is not rewritten. No reviewer, including HR and global reviewers, may decide their own leave request.
+- An active linked employee may cancel any of their own leave requests, regardless of leave type, date or current status, unless it is already cancelled. System Admin retains the same capability while using Change Profile. Cancellation is an audited state transition: the request and any previous decision remain in history, and an already cancelled request cannot be cancelled again.
 - Every active employee receives an automatic check-in schedule from their start date. Users do not enable reminders or queue catch-up work manually.
 - If a check-in milestone due date falls on Saturday or Sunday, it moves forward to the next Monday-to-Friday working day. Reminder lead time is measured from that scheduled workday; if the resulting advance notification date falls on a weekend, it moves back to the previous working day. Due check-in tasks appear in Calendar.
 - Every System Admin may view and complete check-ins for all employees. Configured managers receive Check-in access only for their current descendants in the authoritative organisation tree. This scope is based on the controlled active portal-account-to-employee link, not Auth metadata or a job title. An incorrect reporting link can therefore grant the wrong scoped task list and must be treated as an HR data-integrity issue. Manager access never exposes HR private profile fields.
@@ -38,16 +39,15 @@
 2. What delegate or fallback procedure applies when a named reviewer is unavailable? Any delegation must be an explicit private approval grant; the application must not infer it from the organisation tree.
 3. What overlap information may employees see: names and dates, team totals only, or nothing?
 4. Which leave categories are supported and which reasons are private to HR?
-5. Can an employee edit or cancel after submission or approval?
-6. Are weekends, public holidays, part-time patterns and break deductions calculated automatically?
-7. Which systems receive an approved result: Outlook, payroll, AroFlo, Teams or none initially?
-8. What is the retention period for rejected/cancelled requests, evidence and event history?
-9. What counts as manager-ready versus all-staff-ready?
-10. Who may start, view and complete onboarding/offboarding work, including delegated owners and HR-only exit information?
-11. Which systems, assets and subscriptions are required for each role, who approves them, and what retention/audit period applies? **Interim implementation pending confirmation/deployment:** only a System Admin receives the full asset and subscription registers (including costs and membership); employees retain their own minimised subscription/device projections, and managers receive no company-wide register until a scoped policy is approved.
-12. Should a cross-company reporting-line edit require an additional confirmation?
-13. What credential handover and forced-password-change process is required when an administrator creates or resets an account?
-14. Penny must identify the authoritative leave-balance source, ownership and calculation rules before the portal shows a leave balance or entitlement.
+5. Are weekends, public holidays, part-time patterns and break deductions calculated automatically?
+6. Which systems receive an approved result: Outlook, payroll, AroFlo, Teams or none initially?
+7. What is the retention period for rejected/cancelled requests, evidence and event history?
+8. What counts as manager-ready versus all-staff-ready?
+9. Who may start, view and complete onboarding/offboarding work, including delegated owners and HR-only exit information?
+10. Which systems, assets and subscriptions are required for each role, who approves them, and what retention/audit period applies? **Interim implementation pending confirmation/deployment:** only a System Admin receives the full asset and subscription registers (including costs and membership); employees retain their own minimised subscription/device projections, and managers receive no company-wide register until a scoped policy is approved.
+11. Should a cross-company reporting-line edit require an additional confirmation?
+12. What credential handover and forced-password-change process is required when an administrator creates or resets an account?
+13. Penny must identify the authoritative leave-balance source, ownership and calculation rules before the portal shows a leave balance or entitlement.
 
 ## Durable leave rollout (deployed)
 
