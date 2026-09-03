@@ -252,6 +252,10 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HR_LEAVE_CC_EMAIL = "hr@mobilityaccess.com.au";
 const MAM_ACCOUNTS_LEAVE_CC_EMAIL = "accounts@mobilityaccess.com.au";
+const LEAVE_EVENTS_REQUIRING_ACCOUNTS_CC = new Set<LeaveNotificationEvent>([
+  "leave-approved",
+  "leave-cancelled",
+]);
 const ATTACHMENT_STORAGE_PATH_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:pdf|heic|heif|jpg|png|webp)$/i;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const LEAVE_TYPES = new Set([
@@ -629,7 +633,7 @@ function notificationEmailList(value: unknown) {
 
 function leaveNotificationCcEmails(event: LeaveNotificationEvent) {
   const addresses = [HR_LEAVE_CC_EMAIL];
-  if (event === "leave-approved" || event === "leave-cancelled") {
+  if (LEAVE_EVENTS_REQUIRING_ACCOUNTS_CC.has(event)) {
     addresses.push(MAM_ACCOUNTS_LEAVE_CC_EMAIL);
   }
   return addresses;
@@ -677,7 +681,17 @@ async function deliverLeaveNotification(
   const webhookUrl = process.env.MAM_N8N_LEAVE_WEBHOOK_URL?.trim();
   const webhookOrigin = process.env.MAM_N8N_LEAVE_WEBHOOK_ORIGIN?.trim();
   const webhookSecret = process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET?.trim();
-  if (!webhookUrl || !webhookOrigin || !webhookSecret) return;
+  if (!webhookUrl || !webhookOrigin || !webhookSecret) {
+    // A leave mutation must remain durable even if the delivery integration is
+    // incomplete. Log only which configuration fields are absent: URLs,
+    // secrets, leave details and recipient details must never reach logs.
+    console.warn("Leave notification delivery is not configured.", {
+      hasWebhookUrl: Boolean(webhookUrl),
+      hasWebhookOrigin: Boolean(webhookOrigin),
+      hasWebhookSecret: Boolean(webhookSecret),
+    });
+    return;
+  }
 
   let url: URL;
   let trustedOrigin: URL;
