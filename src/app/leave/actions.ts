@@ -1180,11 +1180,11 @@ export async function decideLeaveRequest(input: DecideLeaveInput) {
 }
 
 /**
- * Cancels only a future approved request owned by the authenticated employee.
- * The RPC re-checks ownership, active linked-employee state, status and the
- * Melbourne start-date rule inside one locked database transaction.
+ * Cancels any non-cancelled request owned by the authenticated employee.
+ * The RPC re-checks ownership and active linked-employee state inside one
+ * locked database transaction; the browser never determines eligibility.
  */
-export async function cancelMyApprovedLeaveRequest(input: CancelLeaveInput) {
+export async function cancelMyLeaveRequest(input: CancelLeaveInput) {
   try {
     const checked = normaliseCancelInput(input);
     const supabase = await requireLeaveSession();
@@ -1229,7 +1229,7 @@ export async function cancelMyApprovedLeaveRequest(input: CancelLeaveInput) {
  * the database from its active employee/account link; the browser never sends
  * an Auth user ID and the real System Admin remains the audit actor.
  */
-export async function cancelSelectedEmployeeApprovedLeaveRequest(
+export async function cancelSelectedEmployeeLeaveRequest(
   personId: string,
   input: CancelLeaveInput,
 ) {
