@@ -87,6 +87,7 @@ const emptyDraft: EmployeeDirectoryDraft = {
   startedDate: "",
   scheduledEmploymentEndDate: "",
   archiveReason: "",
+  employmentType: "",
   laptopSupplied: "",
   laptopId: "",
   mouseId: "",
@@ -112,6 +113,7 @@ function toDraft(record: EmployeeDirectoryRecord): EmployeeDirectoryDraft {
     startedDate: record.startedDate,
     scheduledEmploymentEndDate: record.scheduledEmploymentEndDate,
     archiveReason: record.archiveReason,
+    employmentType: record.employmentType,
     laptopSupplied: record.laptopSupplied,
     laptopId: record.laptopId,
     mouseId: record.mouseId,
@@ -150,6 +152,14 @@ function companyLabel(company: EmployeeDirectoryRecord["company"]) {
 
 function displayManager(record: EmployeeDirectoryRecord) {
   return record.managerName || "No manager assigned";
+}
+
+function employmentTypeLabel(type: EmployeeDirectoryRecord["employmentType"]) {
+  if (type === "abn") return "ABN";
+  if (type === "casual") return "Casual";
+  if (type === "full_time") return "Full Time";
+  if (type === "part_time") return "Part Time";
+  return "Not set";
 }
 
 function compareByName(first: EmployeeDirectoryRecord, second: EmployeeDirectoryRecord) {
@@ -794,6 +804,26 @@ function EmployeeEditor({
           </Field>
           <Field label="Start date">
             <input value={editor.draft.startedDate} onChange={(event) => onChange("startedDate", event.target.value)} type="date" />
+          </Field>
+          <Field label="Employment type" required>
+            <select value={editor.draft.employmentType} onChange={(event) => onChange("employmentType", event.target.value)} required>
+              <option value="" disabled>Select employment type</option>
+              <option value="abn">ABN</option>
+              <option value="casual">Casual</option>
+              <option value="full_time">Full Time</option>
+              <option value="part_time">Part Time</option>
+            </select>
+          </Field>
+          <Field label="Leave entitlement">
+            <input
+              value={editor.draft.employmentType === "full_time" || editor.draft.employmentType === "part_time"
+                ? "Paid leave entitlement"
+                : editor.draft.employmentType
+                  ? "Unpaid leave only"
+                  : "Set employment type"}
+              readOnly
+              aria-label={`Leave entitlement for ${employmentTypeLabel(editor.draft.employmentType)}`}
+            />
           </Field>
           <Field label="Scheduled employment end date" className={styles.fullSpan}>
             <input value={editor.draft.scheduledEmploymentEndDate} onChange={(event) => onChange("scheduledEmploymentEndDate", event.target.value)} type="date" />

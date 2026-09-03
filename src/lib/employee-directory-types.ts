@@ -1,5 +1,6 @@
 export type EmployeeDirectoryCompany = "mam" | "equipsy";
 export type EmployeeLaptopSupply = "" | "own_laptop" | "mam_laptop";
+export type EmployeeEmploymentType = "abn" | "casual" | "full_time" | "part_time";
 
 /**
  * The HR-only employee record returned by the explicitly authorised directory
@@ -27,6 +28,8 @@ export type EmployeeDirectoryRecord = {
   startedDate: string;
   scheduledEmploymentEndDate: string;
   archiveReason: string;
+  employmentType: EmployeeEmploymentType | "";
+  hasPaidLeaveEntitlement: boolean;
   laptopSupplied: EmployeeLaptopSupply;
   laptopId: string;
   mouseId: string;
@@ -49,6 +52,7 @@ export type EmployeeDirectoryDraft = {
   startedDate: string;
   scheduledEmploymentEndDate: string;
   archiveReason: string;
+  employmentType: EmployeeEmploymentType | "";
   laptopSupplied: EmployeeLaptopSupply;
   laptopId: string;
   mouseId: string;

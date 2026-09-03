@@ -111,6 +111,13 @@ export type LeaveWorkspaceData = {
    * request is pending.
    */
   canReviewLeave: boolean;
+  /** Employment classification is authoritative; ABN/Casual receive Unpaid leave only. */
+  employmentType: "abn" | "casual" | "full_time" | "part_time" | null;
+  hasPaidLeaveEntitlement: boolean;
+  availableLeaveTypes: Array<{
+    value: "Annual leave" | "Sick leave" | "Carer's leave" | "Unpaid leave";
+    label: string;
+  }>;
   /** True when Super Admin has requested a server-scoped Change Profile view. */
   isProfilePreview: boolean;
   /** Non-blocking notice when an optional calendar projection is unavailable. */
@@ -246,6 +253,12 @@ type SubmitRpcRow = {
   assigned_reviewer_label: string | null;
 };
 
+type LeaveEntitlementPolicyRpcRow = {
+  person_id: string;
+  employment_type: string | null;
+  has_paid_leave_entitlement: boolean;
+};
+
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^(?:(?:0[6-9]|1[0-7]):(?:00|15|30|45)|18:00)$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -264,6 +277,15 @@ const LEAVE_TYPES = new Set([
   "Carer's leave",
   "Unpaid leave",
 ]);
+const PAID_ENTITLEMENT_LEAVE_TYPES: LeaveWorkspaceData["availableLeaveTypes"] = [
+  { value: "Annual leave", label: "Annual leave" },
+  { value: "Sick leave", label: "Sick leave" },
+  { value: "Carer's leave", label: "Carer's leave" },
+  { value: "Unpaid leave", label: "Unpaid leave" },
+];
+const UNPAID_ONLY_LEAVE_TYPES: LeaveWorkspaceData["availableLeaveTypes"] = [
+  { value: "Unpaid leave", label: "Unpaid leave" },
+];
 const ATTACHMENT_MIME_TYPES = new Set([
   "application/pdf",
   "image/heic",
@@ -857,10 +879,50 @@ function userFacingSubmitError(error: unknown) {
     || message === "Choose at least one weekday for this request."
     || message === "Timed leave must start and end on weekdays."
     || message === "Times must use 15-minute intervals within 06:00 to 18:00."
+    || message === "This employment type only allows Unpaid leave."
+    || message === "Ask a System Admin to set your employment type before requesting this leave."
   ) {
     return message;
   }
   return SAVE_ERROR;
+}
+
+function leaveEntitlementPolicy(
+  value: unknown,
+  error: unknown,
+): Pick<LeaveWorkspaceData, "employmentType" | "hasPaidLeaveEntitlement" | "availableLeaveTypes"> {
+  if (error || !Array.isArray(value)) throw new Error(LOAD_ERROR);
+  if (!value.length) {
+    return {
+      employmentType: null,
+      hasPaidLeaveEntitlement: false,
+      availableLeaveTypes: [],
+    };
+  }
+
+  const row = value[0] as LeaveEntitlementPolicyRpcRow;
+  const personId = requireText(row?.person_id, LOAD_ERROR);
+  if (!UUID_PATTERN.test(personId)) throw new Error(LOAD_ERROR);
+  const employmentType = row.employment_type;
+  if (
+    employmentType !== null
+    && employmentType !== "abn"
+    && employmentType !== "casual"
+    && employmentType !== "full_time"
+    && employmentType !== "part_time"
+  ) throw new Error(LOAD_ERROR);
+
+  const hasPaidLeaveEntitlement = employmentType === "full_time" || employmentType === "part_time";
+  if (row.has_paid_leave_entitlement !== hasPaidLeaveEntitlement) throw new Error(LOAD_ERROR);
+  return {
+    employmentType,
+    hasPaidLeaveEntitlement,
+    // An unclassified active employee also fails closed to Unpaid leave until
+    // a System Admin records their authoritative employment type.
+    availableLeaveTypes: hasPaidLeaveEntitlement
+      ? PAID_ENTITLEMENT_LEAVE_TYPES
+      : UNPAID_ONLY_LEAVE_TYPES,
+  };
 }
 
 function userFacingDecisionError(error: unknown) {
@@ -992,6 +1054,7 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
       { data: checkInData, error: checkInError },
       { data: subscriptionReviewData, error: subscriptionReviewError },
       { data: canViewSubscriptionReviewCalendar, error: subscriptionReviewCalendarPermissionError },
+      { data: entitlementPolicyData, error: entitlementPolicyError },
     ] = await Promise.all([
       canViewPreviewTeamCalendar
         ? supabase.rpc("list_calendar_birthdays")
@@ -1001,6 +1064,7 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
         : Promise.resolve({ data: [], error: null }),
       supabase.rpc("list_subscription_review_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("can_view_subscription_review_calendar_for_preview", { p_person_id: checkedPreviewPersonId }),
+      supabase.rpc("get_selected_employee_leave_entitlement_policy", { p_person_id: checkedPreviewPersonId }),
     ]);
     const birthdays = parseOptionalProjection(birthdayData, birthdayError, toBirthdayCalendarEntry);
     const checkIns = parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry);
@@ -1016,9 +1080,11 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
         ? `Some optional data is temporarily unavailable (${unavailable.join(", ")}). Leave requests remain available.`
         : "",
     ].filter(Boolean);
+    const policy = leaveEntitlementPolicy(entitlementPolicyData, entitlementPolicyError);
 
     return {
       ...preview,
+      ...policy,
       birthdayEntries: birthdays.rows,
       checkInEntries: checkIns.rows,
       subscriptionReviewEntries: subscriptionReviews.rows,
@@ -1040,6 +1106,7 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
     { data: canViewTeamCalendar, error: teamCalendarPermissionError },
     { data: canReviewLeave, error: canReviewError },
     { data: attachmentData, error: attachmentError },
+    { data: entitlementPolicyData, error: entitlementPolicyError },
   ] = await Promise.all([
     supabase.rpc("list_leave_workspace_requests"),
     supabase.rpc("list_leave_calendar_entries"),
@@ -1050,6 +1117,7 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
     supabase.rpc("can_view_employee_check_in_workspace"),
     supabase.rpc("can_review_leave_workspace"),
     supabase.rpc("list_leave_workspace_attachments"),
+    supabase.rpc("get_my_leave_entitlement_policy"),
   ]);
 
   if (workspaceError || canReviewError || !Array.isArray(workspaceData) || typeof canReviewLeave !== "boolean") {
@@ -1080,6 +1148,7 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
     ? parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry)
     : { available: true, rows: [] as CheckInCalendarEntry[] };
   const subscriptionReviews = parseOptionalProjection(subscriptionReviewData, subscriptionReviewError, toSubscriptionReviewCalendarEntry);
+  const policy = leaveEntitlementPolicy(entitlementPolicyData, entitlementPolicyError);
   // Supporting files are a Leave-detail capability, not a calendar projection.
   // Keep attachment capability failures out of the global notice so a missing
   // optional attachment RPC cannot make Calendar look unhealthy or block the
@@ -1092,6 +1161,7 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
   ].filter(Boolean);
 
   return {
+    ...policy,
     requests,
     attachments: attachments.rows,
     calendarEntries: calendar.rows,

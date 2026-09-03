@@ -11,6 +11,7 @@ import { getOrganisationPersonWorkEmailForMember } from "@/lib/organisation-dire
 import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryCompany,
+  EmployeeEmploymentType,
   EmployeeDirectoryMutationResult,
   EmployeeDirectoryRecord,
   UpdateEmployeeDirectoryInput,
@@ -92,6 +93,13 @@ function company(value: unknown): EmployeeDirectoryCompany {
   return value;
 }
 
+function employmentType(value: unknown): EmployeeEmploymentType {
+  if (value === "abn" || value === "casual" || value === "full_time" || value === "part_time") {
+    return value;
+  }
+  throw new Error("Choose an employment type.");
+}
+
 function laptopSupplied(value: unknown) {
   const cleaned = optionalText(value, "Laptop supplied", 32);
   if (cleaned === null) return null;
@@ -162,6 +170,7 @@ function validateDraft(input: unknown) {
       value.scheduledEmploymentEndDate,
       "Scheduled employment end date",
     ),
+    p_employment_type: employmentType(value.employmentType),
     p_company_key: company(value.company),
     p_is_active: value.isActive === true,
     p_laptop_supplied,
@@ -218,7 +227,7 @@ export async function createEmployeeDirectoryRecord(
 ): Promise<EmployeeDirectoryMutationResult> {
   const { supabase } = await requireEmployeeDirectoryManager();
   const values = validateDraft(input);
-  const { data, error } = await supabase.rpc("create_employee_directory_record_with_address", {
+  const { data, error } = await supabase.rpc("create_employee_directory_record_with_employment_type", {
     ...values,
     p_sort_order: 0,
   });
@@ -239,7 +248,7 @@ export async function updateEmployeeDirectoryRecord(
   }
   const { supabase } = await requireEmployeeDirectoryManager();
   const values = validateDraft(inputValue);
-  const { data, error } = await supabase.rpc("update_employee_directory_record_with_address", {
+  const { data, error } = await supabase.rpc("update_employee_directory_record_with_employment_type", {
     ...values,
     p_person_id: inputValue.personId,
     p_expected_person_version: version(inputValue.personVersion),

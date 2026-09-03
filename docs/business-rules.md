@@ -27,6 +27,7 @@
 - Every active linked employee may submit their own leave request. The request walks upward through the reporting tree and stops at the nearest active manager profile. An employee who is not a manager does not intercept requests from people below them. Every System Admin may review every request as part of their all-module role.
 - At submission, the database snapshots the nearest manager and global reviewers. Still-pending work is re-routed when manager permission changes; decided history is not rewritten. No reviewer, including HR and global reviewers, may decide their own leave request.
 - An active linked employee may cancel any of their own leave requests, regardless of leave type, date or current status, unless it is already cancelled. System Admin retains the same capability while using Change Profile. Cancellation is an audited state transition: the request and any previous decision remain in history, and an already cancelled request cannot be cancelled again.
+- Employment type is recorded as ABN, Casual, Full Time or Part Time by a System Admin. Full Time and Part Time employees may request Annual, Sick, Carer's or Unpaid leave. ABN and Casual employees have no paid-leave entitlement and may request Unpaid leave only. The database snapshots the employment type and paid/unpaid treatment when each request is submitted; this classification is eligibility, not a leave-balance calculation.
 - Every active employee receives an automatic check-in schedule from their start date. Users do not enable reminders or queue catch-up work manually.
 - If a check-in milestone due date falls on Saturday or Sunday, it moves forward to the next Monday-to-Friday working day. Reminder lead time is measured from that scheduled workday; if the resulting advance notification date falls on a weekend, it moves back to the previous working day. Due check-in tasks appear in Calendar.
 - Every System Admin may view and complete check-ins for all employees. Configured managers receive Check-in access only for their current descendants in the authoritative organisation tree. This scope is based on the controlled active portal-account-to-employee link, not Auth metadata or a job title. An incorrect reporting link can therefore grant the wrong scoped task list and must be treated as an HR data-integrity issue. Manager access never exposes HR private profile fields.
@@ -38,7 +39,7 @@
 1. Who may submit leave on behalf of another employee?
 2. What delegate or fallback procedure applies when a named reviewer is unavailable? Any delegation must be an explicit private approval grant; the application must not infer it from the organisation tree.
 3. What overlap information may employees see: names and dates, team totals only, or nothing?
-4. Which leave categories are supported and which reasons are private to HR?
+4. Which additional leave categories, if any, are supported and which reasons are private to HR?
 5. Are weekends, public holidays, part-time patterns and break deductions calculated automatically?
 6. Which systems receive an approved result: Outlook, payroll, AroFlo, Teams or none initially?
 7. What is the retention period for rejected/cancelled requests, evidence and event history?
@@ -52,7 +53,7 @@
 ## Durable leave rollout (deployed)
 
 - Migration `20260817120000_persist_leave_workspace` is applied to the verified MAM production project and the matching authenticated application is deployed. Leave requests and decisions persist through controlled, RLS-protected operations and refresh across authorised accounts.
-- The interface offers Annual leave, Sick leave, Carer's leave and Unpaid leave.
+- The interface offers Annual leave, Sick leave, Carer's leave and Unpaid leave to Full Time and Part Time employees. ABN and Casual employees see and may submit Unpaid leave only. An unclassified employee also fails closed to Unpaid leave until a System Admin records the employment type.
 - A request may optionally specify a start time for the first date and an end time for the last date. Times are between 6:00 am and 6:00 pm in fixed 15-minute intervals. Leaving both blank means full working days.
 - Weekday duration is calculated inside that working window. Break deductions, standard daily hours, payroll treatment and evidence rules are not final policy.
 - Every submitted request starts Pending and must be decided by an authorised reviewer. No request is automatically approved or self-approved. The database resolves the nearest active manager profile in the reporting tree, plus every System Admin, and snapshots that reviewer set at submission. Still-pending work is re-routed when manager permission changes; decided history is not rewritten.
