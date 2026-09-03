@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type {
   EmployeeDirectoryCompany,
+  EmployeeEmploymentType,
   EmployeeLaptopSupply,
   EmployeeDirectoryRecord,
 } from "@/lib/employee-directory-types";
@@ -29,6 +30,8 @@ type DirectoryRpcRow = {
   started_date: string | null;
   scheduled_employment_end_date: string | null;
   archive_reason: string | null;
+  employment_type: string | null;
+  has_paid_leave_entitlement: boolean;
   laptop_supplied: string | null;
   laptop_id: string | null;
   mouse_id: string | null;
@@ -67,6 +70,14 @@ function laptopSupply(value: unknown): EmployeeLaptopSupply {
   throw new Error(GENERIC_LOAD_ERROR);
 }
 
+function employmentType(value: unknown): EmployeeEmploymentType | "" {
+  if (value === null || value === undefined || value === "") return "";
+  if (value === "abn" || value === "casual" || value === "full_time" || value === "part_time") {
+    return value;
+  }
+  throw new Error(GENERIC_LOAD_ERROR);
+}
+
 function assetTags(value: unknown) {
   if (value === null || value === undefined) return [];
   if (!Array.isArray(value) || value.some((tag) => typeof tag !== "string")) {
@@ -98,6 +109,8 @@ function toRecord(row: DirectoryRpcRow): EmployeeDirectoryRecord {
     startedDate: optionalText(row.started_date),
     scheduledEmploymentEndDate: optionalText(row.scheduled_employment_end_date),
     archiveReason: optionalText(row.archive_reason),
+    employmentType: employmentType(row.employment_type),
+    hasPaidLeaveEntitlement: row.has_paid_leave_entitlement === true,
     laptopSupplied: laptopSupply(row.laptop_supplied),
     laptopId: optionalText(row.laptop_id),
     mouseId: optionalText(row.mouse_id),

@@ -63,6 +63,7 @@ import {
   type CheckInCalendarEntry,
   type LeaveAttachment,
   type LeaveCalendarEntry,
+  type LeaveWorkspaceData,
   type LeaveWorkspaceRequest,
   type SubscriptionReviewCalendarEntry,
 } from "@/app/leave/actions";
@@ -556,6 +557,9 @@ export function LeaveDemo({
   const [subscriptionReviewCalendarEntries, setSubscriptionReviewCalendarEntries] = useState<SubscriptionReviewCalendarEntry[]>([]);
   const [canViewSubscriptionReviewCalendarForProfile, setCanViewSubscriptionReviewCalendarForProfile] = useState(canViewSubscriptionReviewCalendar);
   const [canReviewLeaveWorkspace, setCanReviewLeaveWorkspace] = useState(false);
+  const [employmentType, setEmploymentType] = useState<LeaveWorkspaceData["employmentType"]>(null);
+  const [hasPaidLeaveEntitlement, setHasPaidLeaveEntitlement] = useState(false);
+  const [availableLeaveTypes, setAvailableLeaveTypes] = useState<LeaveWorkspaceData["availableLeaveTypes"]>([]);
   const [leaveWorkspaceUsesProfileScope, setLeaveWorkspaceUsesProfileScope] = useState(false);
   const [leaveDataLoading, setLeaveDataLoading] = useState(true);
   const [leaveDataError, setLeaveDataError] = useState("");
@@ -666,6 +670,9 @@ export function LeaveDemo({
       setSubscriptionReviewCalendarEntries(data.subscriptionReviewEntries);
       setCanViewSubscriptionReviewCalendarForProfile(data.canViewSubscriptionReviewCalendar);
       setCanReviewLeaveWorkspace(data.canReviewLeave);
+      setEmploymentType(data.employmentType);
+      setHasPaidLeaveEntitlement(data.hasPaidLeaveEntitlement);
+      setAvailableLeaveTypes(data.availableLeaveTypes);
       setLeaveWorkspaceUsesProfileScope(data.isProfilePreview);
       setLeaveDataError(data.warning ?? "");
     } catch {
@@ -685,6 +692,9 @@ export function LeaveDemo({
       setCancellationFocusRequestId(null);
       setCancellationError("");
       setCanReviewLeaveWorkspace(false);
+      setEmploymentType(null);
+      setHasPaidLeaveEntitlement(false);
+      setAvailableLeaveTypes([]);
       setLeaveWorkspaceUsesProfileScope(false);
       setLeaveDataError("Leave records could not be loaded. Refresh and try again.");
     } finally {
@@ -1120,7 +1130,8 @@ export function LeaveDemo({
   // Super Admin keeps full operational access while Change Profile is active.
   // The selected target is passed only to the guarded Server Action; auth and
   // audit authority remain with the real Super Admin account.
-  const canApplyForLeave = !isNonRosterSystemAdminWorkspace || isPreviewingEmployeeAccess;
+  const canApplyForLeave = availableLeaveTypes.length > 0
+    && (!isNonRosterSystemAdminWorkspace || isPreviewingEmployeeAccess);
   // The server-projected per-request capability remains the source of truth.
   // This only prevents a Change profile or non-roster platform workspace from
   // presenting an impossible cancellation control.
@@ -1302,6 +1313,9 @@ export function LeaveDemo({
     setSelectedEmployeeProfileErrorState(null);
     setShowRequestForm(false);
     setFormError("");
+    setEmploymentType(null);
+    setHasPaidLeaveEntitlement(false);
+    setAvailableLeaveTypes([]);
     setManagerNote("");
     setCancellationRequestId(null);
     setCancellationFocusRequestId(null);
@@ -1804,7 +1818,10 @@ export function LeaveDemo({
             <header><div><span>New request</span><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={closeLeaveRequestForm} aria-label="Close request form"><X size={19} /></button></header>
             <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{activeProfile.name}</strong><small>{activeProfile.team} · Your request will be routed to an authorised reviewer</small></span></div>
             <form className={styles.form} onSubmit={submitRequest}>
-              <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" defaultValue="Annual leave" required><option>Annual leave</option><option>Sick leave</option><option>Carer&apos;s leave</option><option>Unpaid leave</option></select></label>
+              <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" defaultValue={availableLeaveTypes[0]?.value} required>{availableLeaveTypes.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+              {!hasPaidLeaveEntitlement ? <p className={styles.leavePolicyNote} role="note">
+                {employmentType === "abn" ? "ABN" : employmentType === "casual" ? "Casual" : "Unclassified"} employees can record Unpaid leave only.
+              </p> : null}
               <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" defaultValue={nextAvailableLeaveDate()} required /></label><label><span>End date</span><input name="endDate" type="date" defaultValue={nextAvailableLeaveDate()} required /></label></div>
               <fieldset className={styles.timeRange}><legend>Start and end times <small>Optional</small></legend><div className={styles.formRow}><label><span>From · first day</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>To · last day</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>6:00 am–6:00 pm in 15-minute intervals. For multiple dates, these apply to the first and last day. Leave both blank for full working days.</p></fieldset>
               <label><span>Note for your reviewer <small>Optional</small></span><textarea name="employeeNote" rows={3} placeholder="Add only what your reviewer needs to decide." /></label>
