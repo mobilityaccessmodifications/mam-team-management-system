@@ -10,7 +10,7 @@ begin
     or to_regclass('private.employee_directory_audit_events') is null
     or to_regclass('public.leave_requests') is null
     or to_regprocedure('private.is_system_portal_account_admin()') is null
-    or to_regprocedure('private.is_active_portal_account()') is null
+    or to_regprocedure('private.is_active_portal_account(uuid)') is null
     or to_regprocedure('private.current_active_portal_employee_id()') is null
     or to_regprocedure('private.can_view_archived_employee_profiles()') is null
     or to_regprocedure('private.resolve_internal_org_employee_manager(uuid)') is null
