@@ -91,9 +91,15 @@ This runs lint, type-checking and the production build.
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser-safe | Supabase API URL for the selected environment |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser-safe | Publishable key constrained by RLS |
 | `SUPABASE_SECRET_KEY` | Server-only | Supabase Auth Admin access used by authorised account-management Server Actions |
+| `MAM_ANALYTICS_API_KEY` | Server-only | Dedicated bearer key for the read-only server-to-server dashboard API |
 | `NEXT_PUBLIC_APP_URL` | Browser-safe | Exact application origin used for in-app links |
 
 `SUPABASE_SECRET_KEY` must never use a `NEXT_PUBLIC_*` name, enter client code, appear in logs or be committed. Production keeps it only in the MAM Vercel project's encrypted Production environment. Login passwords are not application environment variables.
+
+The dashboard API is a separate server-to-server boundary. It exposes approved
+operational history through `/api/analytics/v1` only after a dedicated
+`MAM_ANALYTICS_API_KEY` has been configured; it never gives an analyst direct
+Supabase access or a service-role key. See `docs/analytics-api.md`.
 
 See `docs/environment-management.md` for the complete environment model.
 
