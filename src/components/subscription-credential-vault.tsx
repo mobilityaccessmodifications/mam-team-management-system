@@ -99,11 +99,9 @@ export function SubscriptionCredentialVault({
   return <section className={styles.workspace} aria-label="Subscription credentials">
     <header className={styles.header}>
       <div>
-        <span className={styles.eyebrow}>Restricted access</span>
-        <h2>Subscription credentials</h2>
-        <p>Open a service only when you need to view or update its login details.</p>
+        <h2>Credentials</h2>
       </div>
-      {canManageCredentialGrants ? <button className={styles.secondaryAction} type="button" onClick={() => setShowGrantAccess(true)}><UsersRound size={16} /> Credential access</button> : null}
+      {canManageCredentialGrants ? <button className={styles.secondaryAction} type="button" onClick={() => setShowGrantAccess(true)} aria-label="Manage credential access" title="Credential access"><UsersRound size={16} aria-hidden="true" /></button> : null}
     </header>
 
     {catalogueState.state === "loading" ? <div className={styles.state}><LoaderCircle className={styles.spinner} size={22} /><span>Loading credential services…</span></div> : null}
@@ -284,12 +282,12 @@ export function SubscriptionCredentialEditor({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="credential-dialog-title" tabIndex={-1}>
       <header>
-        <div><span className={styles.eyebrow}>Encrypted credential vault</span><h2 id="credential-dialog-title">{serviceName}</h2><p>{planName || "Service login details"}</p></div>
+        <div><h2 id="credential-dialog-title">{serviceName}</h2>{planName ? <p>{planName}</p> : null}</div>
         <button className={styles.iconButton} type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close credentials"><X size={19} /></button>
       </header>
       {loading ? <div className={styles.dialogState}><LoaderCircle className={styles.spinner} size={22} /> Opening encrypted credentials…</div> : hasStoredCredential && !sensitiveVisible ? <div className={styles.lockedCredentialState}>
         <LockKeyhole size={22} />
-        <div><strong>Saved credentials are locked</strong><span>Reveal them only when you need to view or update this service.</span></div>
+        <div><strong>Credentials locked</strong></div>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         {notice ? <p className={styles.notice} role="status"><CheckCircle2 size={15} />{notice}</p> : null}
         <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady}>Close</button><button className={styles.primaryAction} type="button" onClick={() => void reveal()}><Eye size={16} /> Reveal credentials</button></footer>
@@ -379,7 +377,7 @@ export function SubscriptionCredentialAccessDialog({ onClose }: { onClose: () =>
 
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="credential-access-title" tabIndex={-1}>
-      <header><div><span className={styles.eyebrow}>System Admin only</span><h2 id="credential-access-title">Credential access</h2><p>Super Admin always has access. Select the active employees who may open and update subscription login details.</p></div><button className={styles.iconButton} type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close credential access"><X size={19} /></button></header>
+      <header><div><h2 id="credential-access-title">Credential access</h2><p>Super Admin always has access. Selected people can view and update credentials.</p></div><button className={styles.iconButton} type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close credential access"><X size={19} /></button></header>
       {loading ? <div className={styles.dialogState}><LoaderCircle className={styles.spinner} size={22} /> Loading active employees…</div> : <div className={styles.grantBody}>
         <label className={styles.searchField}><span className={styles.visuallyHidden}>Search active employees</span><input ref={initialFocusRef} value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search employee" /></label>
         <p className={styles.selectionCount}>{selectedIds.length} {selectedIds.length === 1 ? "delegate selected" : "delegates selected"}</p>

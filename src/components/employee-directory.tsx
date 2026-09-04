@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Plus,
   Search,
   Trash2,
   UserPlus,
@@ -17,6 +16,7 @@ import {
 import {
   type FormEvent,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -35,6 +35,7 @@ import { EmployeeDeviceAssignments } from "@/components/employee-device-assignme
 import styles from "@/components/employee-directory.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
+import { useMediaQuery } from "@/components/ui/use-media-query";
 import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryDraft,
@@ -240,6 +241,8 @@ export function EmployeeDirectory({
   const endDateInputRef = useRef<HTMLInputElement>(null);
   const deleteDialogRef = useRef<HTMLElement>(null);
   const deleteCancelRef = useRef<HTMLButtonElement>(null);
+  const editorDialogRef = useRef<HTMLElement>(null);
+  const isMobileSheet = useMediaQuery("(max-width: 900px)");
   const closeEndDatePrompt = useCallback(() => {
     if (archiving) return;
     setEndDatePrompt(null);
@@ -352,6 +355,13 @@ export function EmployeeDirectory({
   const currentRecord = selectedRecord(records, activeEditor);
   const selectedDirectoryPersonId = activeEditor?.mode === "edit" ? activeEditor.personId : null;
   const employeeListKey = `${selectedDirectoryPersonId ?? "none"}:${sortedRecords.map((record) => record.personId).join(",")}`;
+
+  useDialogFocus(
+    Boolean(activeEditor) && isMobileSheet && !endDatePrompt && !deleteTarget,
+    editorDialogRef,
+    null,
+    closeEditor,
+  );
 
   function closeEditor() {
     if (saving) return;
@@ -511,8 +521,9 @@ export function EmployeeDirectory({
     <section className={styles.workspace} aria-label="Employee directory">
       <header className={styles.header} aria-label="Directory actions">
         <div className={styles.headerActions}>
-          <a className={styles.secondaryAction} href="/people/export">
-            <Download size={16} /> Export CSV
+          <a className={styles.secondaryAction} href="/people/export" aria-label="Export employees" title="Export employees">
+            <Download size={16} aria-hidden="true" />
+            <span className={styles.visuallyHidden}>Export employees</span>
           </a>
           <button className={styles.primaryAction} type="button" onClick={openCreate}>
             <UserPlus size={16} /> Add employee
@@ -579,7 +590,10 @@ export function EmployeeDirectory({
           /> : null}
         </aside>
 
+        {activeEditor ? <button className={styles.detailBackdrop} type="button" onClick={closeEditor} aria-label="Close employee record" /> : null}
         {activeEditor ? <EmployeeEditor
+          dialogRef={editorDialogRef}
+          mobileModal={isMobileSheet}
           editor={activeEditor}
           currentRecord={currentRecord}
           records={records}
@@ -590,17 +604,17 @@ export function EmployeeDirectory({
           onSubmit={saveRecord}
           onRequestArchive={!activeEditor || activeEditor.mode === "create" || !currentRecord || !currentRecord.isActive ? undefined : openEmploymentEndPrompt}
           onRequestDelete={!activeEditor || activeEditor.mode === "create" || !currentRecord || currentRecord.isActive ? undefined : () => setDeleteTarget(currentRecord)}
-        /> : <EmptyDetail onCreate={openCreate} />}
+        /> : <EmptyDetail />}
       </div>
 
       {endDatePrompt ? <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEndDatePrompt(); }}>
         <section className={styles.modal} ref={endDateDialogRef} role="dialog" aria-modal="true" aria-labelledby="end-date-title" tabIndex={-1}>
           <header className={styles.modalHeader}>
-            <div><span>Employment end</span><h3 id="end-date-title">Confirm employment end</h3>{currentRecord ? <p>{currentRecord.fullName}</p> : null}</div>
+            <div><h3 id="end-date-title">End employment</h3>{currentRecord ? <p>{currentRecord.fullName}</p> : null}</div>
             <button type="button" className={styles.modalClose} onClick={closeEndDatePrompt} disabled={archiving} aria-label="Close"><X size={17} /></button>
           </header>
           <div className={styles.modalBody}>
-            <p>This ends the active employment record and moves the profile to Archived for authorised HR review. If hardware is assigned, first record its return date in Registered devices below.</p>
+            <p>The profile moves to Archived. Record any device returns first.</p>
             <label className={styles.modalField}><span>Employment end date <b aria-hidden="true">*</b></span><input ref={endDateInputRef} type="date" value={endDatePrompt.date} onChange={(event) => setEndDatePrompt((current) => current ? { ...current, date: event.target.value } : current)} required /></label>
             <label className={styles.modalField}><span>Reason for leaving <b aria-hidden="true">*</b></span><select value={endDatePrompt.reason} onChange={(event) => setEndDatePrompt((current) => current ? { ...current, reason: event.target.value } : current)} required aria-required="true"><option value="" disabled>Select a reason</option>{employmentEndReasons.map((reason) => <option key={reason.value} value={reason.value}>{reason.label}</option>)}</select></label>
             {saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}
@@ -612,7 +626,7 @@ export function EmployeeDirectory({
       {deleteTarget ? <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDeletePrompt(); }}>
         <section className={styles.modal} ref={deleteDialogRef} role="dialog" aria-modal="true" aria-labelledby="delete-profile-title" tabIndex={-1}>
           <header className={styles.modalHeader}>
-            <div><span>Permanent action</span><h3 id="delete-profile-title">Delete archived profile?</h3><p>{deleteTarget.fullName}</p></div>
+            <div><h3 id="delete-profile-title">Delete archived profile?</h3><p>{deleteTarget.fullName}</p></div>
             <button type="button" className={styles.modalClose} onClick={closeDeletePrompt} disabled={deleting} aria-label="Close"><X size={17} /></button>
           </header>
           <div className={styles.modalBody}><p>This permanently removes the archived profile. This cannot be undone.</p>{saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}</div>
@@ -679,7 +693,6 @@ function EmployeeDirectoryList({
         >
           <ChevronLeft size={15} aria-hidden="true" />
         </button>
-        <span className={styles.pageIndicator} aria-hidden="true">{currentPage} / {totalPages}</span>
         <button
           type="button"
           className={styles.paginationButton}
@@ -695,16 +708,16 @@ function EmployeeDirectoryList({
   </>;
 }
 
-function EmptyDetail({ onCreate }: { onCreate: () => void }) {
+function EmptyDetail() {
   return <section className={styles.emptyDetail} aria-live="polite">
     <UsersRound size={28} />
     <h3>Select an employee</h3>
-    <p>Choose a record to review and update the HR details, or add a new employee.</p>
-    <button type="button" className={styles.secondaryAction} onClick={onCreate}><Plus size={16} /> Add employee</button>
   </section>;
 }
 
 function EmployeeEditor({
+  dialogRef,
+  mobileModal,
   editor,
   currentRecord,
   records,
@@ -716,6 +729,8 @@ function EmployeeEditor({
   onRequestArchive,
   onRequestDelete,
 }: {
+  dialogRef: RefObject<HTMLElement | null>;
+  mobileModal: boolean;
   editor: EditorState;
   currentRecord: EmployeeDirectoryRecord | null;
   records: EmployeeDirectoryRecord[];
@@ -732,12 +747,11 @@ function EmployeeEditor({
     .sort((first, second) => first.fullName.localeCompare(second.fullName));
   const isCreate = editor.mode === "create";
 
-  return <section className={styles.editor} aria-label={isCreate ? "Add employee" : "Edit employee"}>
+  return <section className={styles.editor} ref={dialogRef} role={mobileModal ? "dialog" : undefined} aria-modal={mobileModal ? "true" : undefined} aria-label={isCreate ? "Add employee" : "Edit employee"} tabIndex={mobileModal ? -1 : undefined}>
     <header className={styles.editorHeader}>
       <div>
-        <span>{isCreate ? "New employee" : "Employee record"}</span>
         <h3>{isCreate ? "Add employee" : editor.draft.firstName || currentRecord?.fullName || "Employee"}</h3>
-        {!isCreate && currentRecord ? <p>{currentRecord.positionTitle} · {displayManager(currentRecord)}</p> : <p>Fields marked required are needed for the directory.</p>}
+        {!isCreate && currentRecord ? <p>{currentRecord.positionTitle} · {displayManager(currentRecord)}</p> : null}
       </div>
       <button type="button" className={styles.closeButton} onClick={onClose} disabled={saving} aria-label="Close employee record"><X size={18} /></button>
     </header>

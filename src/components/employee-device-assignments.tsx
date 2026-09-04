@@ -126,7 +126,7 @@ function ChangeOwnerModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={`${styles.modal} ${styles.modalWithPicker}`} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="directory-device-owner-title" tabIndex={-1}>
       <header>
-        <div><span>Device custody</span><h4 id="directory-device-owner-title">Change device owner</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <div><h4 id="directory-device-owner-title">Change device owner</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close change device owner"><X size={17} /></button>
       </header>
       <form onSubmit={submit}>
@@ -134,7 +134,6 @@ function ChangeOwnerModal({
           <span>Assigned to <b aria-hidden="true">*</b></span>
           <EmployeePicker assignees={assignees} defaultValue={asset.assignedTo?.personId ?? ""} disabled={!assignees.length} inputRef={assigneeRef} />
         </label>
-        <p className={styles.modalHelp}>Changing the employee transfers accountability for this device. The asset number, barcode and audit record stay unchanged.</p>
         {error ? <p className={styles.modalError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         <footer>
           <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
@@ -150,12 +149,10 @@ function ChangeOwnerModal({
 
 function ReturnDeviceModal({
   asset,
-  personName,
   onClose,
   onReturned,
 }: {
   asset: ItAsset;
-  personName: string;
   onClose: () => void;
   onReturned: (asset: ItAsset, returnedOn: string) => void;
 }) {
@@ -195,11 +192,10 @@ function ReturnDeviceModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="directory-return-device-title" tabIndex={-1}>
       <header>
-        <div><span>Hardware return</span><h4 id="directory-return-device-title">Record device return</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <div><h4 id="directory-return-device-title">Record device return</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close record device return"><X size={17} /></button>
       </header>
       <form onSubmit={submit}>
-        <p className={styles.modalHelp}>Use this after {personName} has returned the hardware to MAM. The device stays in the register and its owner history is retained.</p>
         <label>
           <span>Hardware returned on <b aria-hidden="true">*</b></span>
           <input ref={returnedOnRef} name="returnedOn" type="date" defaultValue={melbourneToday()} max={melbourneToday()} required />
@@ -252,7 +248,7 @@ function RemoveDeviceModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="directory-remove-device-title" tabIndex={-1}>
       <header>
-        <div><span>Incorrect entry</span><h4 id="directory-remove-device-title">Remove incorrect entry?</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <div><h4 id="directory-remove-device-title">Remove incorrect entry?</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close remove device"><X size={17} /></button>
       </header>
       <div className={styles.modalBody}>
@@ -335,8 +331,7 @@ export function EmployeeDeviceAssignments({
   }
 
   return <fieldset className={styles.section}>
-    <legend>Registered devices <small>Live IT asset register</small></legend>
-    <p className={styles.intro}>Devices linked here are managed in the IT asset register. Each active device has one accountable employee.</p>
+    <legend>Devices</legend>
 
     {notice ? <div className={styles.notice} role="status"><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={14} /></button></div> : null}
     {loading ? <div className={styles.loadingState}><LoaderCircle className={styles.spinner} size={16} /> Loading devices…</div> : null}
@@ -358,7 +353,7 @@ export function EmployeeDeviceAssignments({
     </div> : null}
 
     {assignmentTarget ? <ChangeOwnerModal asset={assignmentTarget} assignees={assignees} onClose={() => setAssignmentTarget(null)} onSaved={ownerChanged} /> : null}
-    {returnTarget ? <ReturnDeviceModal asset={returnTarget} personName={personName} onClose={() => setReturnTarget(null)} onReturned={assetReturned} /> : null}
+    {returnTarget ? <ReturnDeviceModal asset={returnTarget} onClose={() => setReturnTarget(null)} onReturned={assetReturned} /> : null}
     {removalTarget ? <RemoveDeviceModal asset={removalTarget} onClose={() => setRemovalTarget(null)} onRemoved={assetRemoved} /> : null}
   </fieldset>;
 }

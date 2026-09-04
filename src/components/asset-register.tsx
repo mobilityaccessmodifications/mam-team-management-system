@@ -297,14 +297,14 @@ function AssetLabelModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className={styles.labelModal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="asset-label-title" tabIndex={-1}>
       <header>
-        <div><span>{onAddAnother ? "Device added" : "IT asset register"}</span><h2 id="asset-label-title">{onAddAnother ? "Barcode label ready" : "Barcode label"}</h2></div>
+        <div><h2 id="asset-label-title">{onAddAnother ? "Barcode ready" : "Barcode label"}</h2></div>
         <button type="button" onClick={onClose} aria-label="Close barcode label"><X size={19} /></button>
       </header>
       <div className={styles.labelPreview}>
         <div><span>MAM IT asset</span><strong>{asset.assetCode}</strong><small>{assetTypeLabel(asset.assetType)} · {asset.assignedTo?.fullName ?? "Assignment required"}</small></div>
         <BarcodePreview value={asset.barcodeValue} />
       </div>
-      <p className={styles.labelPrivacy}>This label encodes only the MAM asset number. It does not contain staff, account or recovery details.</p>
+      <p className={styles.labelPrivacy}>The barcode contains the asset number only.</p>
       {actionError ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{actionError}</p> : null}
       <footer>
         <button className={styles.secondaryAction} type="button" onClick={onAddAnother ?? onClose}>{onAddAnother ? "Add another" : "Close"}</button>
@@ -380,7 +380,7 @@ function AddDeviceModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={`${styles.modal} ${styles.modalWithPicker}`} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="add-device-title" tabIndex={-1}>
       <header>
-        <div><span>IT asset register</span><h2 id="add-device-title">Add device</h2><p>Record the accountable employee first; MAM then generates the permanent barcode number.</p></div>
+        <div><h2 id="add-device-title">Add device</h2></div>
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close add device"><X size={19} /></button>
       </header>
       <form onSubmit={submit}>
@@ -400,7 +400,7 @@ function AddDeviceModal({
           <label><span>Model <small>Optional</small></span><input name="model" maxLength={120} placeholder="MacBook Air, iPhone 16…" /></label>
         </div>
         <label><span>Serial number <small>Optional</small></span><input name="serialNumber" maxLength={128} placeholder="Enter the manufacturer serial number" /></label>
-        <p className={styles.formHelp}><Barcode size={15} /> MAM creates a unique asset number and Code 128 barcode after you save. No password, passcode or account information is stored here.</p>
+        <p className={styles.formHelp}><Barcode size={15} /> An asset number and barcode are created when you save.</p>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         <footer>
           <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
@@ -466,7 +466,7 @@ function ChangeDeviceOwnerModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={`${styles.modal} ${styles.modalWithPicker}`} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="change-device-owner-title" tabIndex={-1}>
       <header>
-        <div><span>Device custody</span><h2 id="change-device-owner-title">Change device owner</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <div><h2 id="change-device-owner-title">Change owner</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close change device owner"><X size={19} /></button>
       </header>
       <form onSubmit={submit}>
@@ -475,7 +475,7 @@ function ChangeDeviceOwnerModal({
           <span>Assigned to <b aria-hidden="true">*</b></span>
           <EmployeePicker assignees={assignees} defaultValue={asset.assignedTo?.personId ?? ""} disabled={!assignees.length} inputRef={assigneeRef} />
         </label>
-        <p className={styles.formHelp}><Pencil size={15} /> Changing the employee transfers accountability for this device. The barcode number and audit history stay unchanged.</p>
+        <p className={styles.formHelp}><Pencil size={15} /> Ownership history is kept.</p>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         <footer>
           <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
@@ -535,7 +535,7 @@ function ReturnDeviceModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="return-device-title" tabIndex={-1}>
       <header>
-        <div><span>Hardware return</span><h2 id="return-device-title">Record device return</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <div><h2 id="return-device-title">Return device</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close record device return"><X size={19} /></button>
       </header>
       <form onSubmit={submit}>
@@ -544,7 +544,7 @@ function ReturnDeviceModal({
           <span>Hardware returned on <b aria-hidden="true">*</b></span>
           <input ref={returnedOnRef} name="returnedOn" type="date" defaultValue={melbourneToday()} max={melbourneToday()} required />
         </label>
-        <p className={styles.formHelp}><CalendarCheck2 size={15} /> This closes the current custody period and keeps the device, barcode and owner history in the register for future reassignment.</p>
+        <p className={styles.formHelp}><CalendarCheck2 size={15} /> Device and ownership history are kept.</p>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         <footer>
           <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
@@ -594,7 +594,7 @@ function CustodyHistoryModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="device-history-title" tabIndex={-1}>
       <header>
-        <div><span>Device custody</span><h2 id="device-history-title">Ownership history</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <div><h2 id="device-history-title">Ownership history</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
         <button type="button" onClick={onClose} aria-label="Close device ownership history"><X size={19} /></button>
       </header>
       <div className={styles.modalBody}>
@@ -649,7 +649,7 @@ function RemoveDeviceModal({
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="remove-device-title" tabIndex={-1}>
       <header>
-        <div><span>Incorrect entry</span><h2 id="remove-device-title">Remove incorrect entry?</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <div><h2 id="remove-device-title">Remove device?</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close remove device"><X size={19} /></button>
       </header>
       <div className={styles.modalBody}>
@@ -695,7 +695,7 @@ function AssetSheetHeader({
   const sortDirection = sortIsActive ? activeSort.direction : undefined;
   const filterIsActive = Boolean(filterValue);
 
-  return <div className={styles.sheetHeaderCell} role="columnheader" aria-sort={sortKey ? (sortIsActive ? sortDirection : "none") : undefined} data-asset-filter={filterKey ? "true" : undefined}>
+  return <div className={styles.sheetHeaderCell} role="columnheader" aria-sort={sortKey ? (sortIsActive ? sortDirection : "none") : undefined} data-asset-filter={filterKey}>
     <span>{label}</span>
     {(sortKey || filterKey) ? <span className={styles.sheetHeaderTools}>
       {sortKey && onSort ? <button
@@ -710,17 +710,17 @@ function AssetSheetHeader({
       {filterKey && onToggleFilter ? <button
         type="button"
         className={styles.sheetHeaderButton}
+        data-asset-filter-trigger={filterKey}
         data-active={filterIsActive || undefined}
         onClick={() => onToggleFilter(filterKey)}
         aria-label={`Filter assets by ${label}`}
         aria-expanded={isFilterOpen}
-        aria-haspopup="menu"
         title={`Filter by ${label}`}
       ><Filter size={13} aria-hidden="true" /></button> : null}
     </span> : null}
-    {filterKey && onFilter && isFilterOpen ? <div className={styles.sheetFilterMenu} role="menu" aria-label={`Filter assets by ${label}`}>
-      <button type="button" role="menuitemradio" aria-checked={!filterValue} onClick={() => onFilter(filterKey, "")}>All</button>
-      {filterOptions.map((option) => <button key={option.value} type="button" role="menuitemradio" aria-checked={filterValue === option.value} onClick={() => onFilter(filterKey, option.value)}>{option.label}</button>)}
+    {filterKey && onFilter && isFilterOpen ? <div className={styles.sheetFilterMenu} role="group" aria-label={`Filter assets by ${label}`}>
+      <button type="button" aria-pressed={!filterValue} onClick={() => onFilter(filterKey, "")}>All</button>
+      {filterOptions.map((option) => <button key={option.value} type="button" aria-pressed={filterValue === option.value} onClick={() => onFilter(filterKey, option.value)}>{option.label}</button>)}
     </div> : null}
   </div>;
 }
@@ -764,8 +764,12 @@ export function AssetRegister() {
 
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        const filterKey = activeAssetFilter;
         setExpandedActionsId(null);
         setActiveAssetFilter(null);
+        if (filterKey) window.requestAnimationFrame(() => {
+          document.querySelector<HTMLButtonElement>(`[data-asset-filter-trigger="${filterKey}"]`)?.focus();
+        });
       }
     }
 
@@ -885,6 +889,9 @@ export function AssetRegister() {
   function setAssetFilter(key: AssetFilterKey, value: string) {
     setAssetFilters((current) => ({ ...current, [key]: value }));
     setActiveAssetFilter(null);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(`[data-asset-filter-trigger="${key}"]`)?.focus();
+    });
   }
 
   function toggleAssetFilter(key: AssetFilterKey) {
@@ -971,12 +978,11 @@ export function AssetRegister() {
   return <section className={styles.workspace} aria-labelledby="asset-register-title">
     <header className={styles.header}>
       <div>
-        <span>IT asset register</span>
-        <h2 id="asset-register-title">Devices and labels</h2>
+        <h2 id="asset-register-title">Devices</h2>
       </div>
       <div className={styles.headerActions}>
-        <a className={styles.secondaryAction} href="/assets/export?format=csv"><Download size={16} /> Export CSV</a>
-        <a className={styles.secondaryAction} href="/assets/export?format=xlsx"><Download size={16} /> Export Excel</a>
+        <a className={styles.secondaryAction} href="/assets/export?format=csv" aria-label="Download devices as CSV" title="Download CSV"><Download size={16} aria-hidden="true" /><span>CSV</span></a>
+        <a className={styles.secondaryAction} href="/assets/export?format=xlsx" aria-label="Download devices as Excel" title="Download Excel"><Download size={16} aria-hidden="true" /><span>Excel</span></a>
         <button className={styles.primaryAction} type="button" onClick={() => setShowAddDevice(true)}><PackagePlus size={17} /> Add device</button>
       </div>
     </header>
@@ -987,7 +993,7 @@ export function AssetRegister() {
       <label className={styles.searchField}>
         <Search size={17} aria-hidden="true" />
         <span className={styles.visuallyHidden}>Search assets</span>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search asset number, device or serial" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search devices" />
       </label>
       <div className={styles.toolSummary}>
         {hasAssetFilters ? <button className={styles.clearFilters} type="button" onClick={() => setAssetFilters({ assetType: "", assignedTo: "", status: "" })}>Clear filters</button> : null}
@@ -998,7 +1004,7 @@ export function AssetRegister() {
     {rowError ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{rowError}</p> : null}
     {loading ? <div className={styles.loadingState}><LoaderCircle className={styles.spinner} size={21} /><span>Loading IT assets…</span></div> : null}
     {!loading && loadError ? <div className={styles.errorState} role="alert"><AlertCircle size={20} aria-hidden="true" /><div><strong>IT assets could not be loaded</strong><span>{loadError}</span></div><button className={styles.secondaryAction} type="button" onClick={() => void loadAssets()} disabled={loading}><RefreshCw size={16} aria-hidden="true" /> Retry</button></div> : null}
-    {!loading && !loadError && !visibleAssets.length ? <div className={styles.emptyState}><Laptop size={28} /><strong>{assets.length ? "No matching devices" : "No devices recorded yet"}</strong><span>{assets.length ? "Try another search." : "Add the first MAM device to assign it and generate its barcode label."}</span>{!assets.length ? <button className={styles.secondaryAction} type="button" onClick={() => setShowAddDevice(true)}><PackagePlus size={16} /> Add device</button> : null}</div> : null}
+    {!loading && !loadError && !visibleAssets.length ? <div className={styles.emptyState}><Laptop size={28} /><strong>{assets.length ? "No matching devices" : "No devices"}</strong>{!assets.length ? <button className={styles.secondaryAction} type="button" onClick={() => setShowAddDevice(true)}><PackagePlus size={16} /> Add device</button> : null}</div> : null}
     {!loading && !loadError && visibleAssets.length ? <div className={styles.sheetViewport}>
       <div className={styles.assetSheet} role="table" aria-label="IT assets">
         <div className={`${styles.assetSheetRow} ${styles.assetSheetHeader}`} role="row">

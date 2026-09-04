@@ -158,3 +158,16 @@
   .control,
   .chevron { transition: none; }
 }
+
+/* Clarity pass. */
+.control { min-height: 44px; border-radius: 10px; }
+.control .input,
+.input { height: 42px; }
+.clearButton { width: 44px; height: 44px; margin-right: -8px; }
+.option { min-height: 44px; padding: 9px 10px; }
+.listbox { z-index: 120; border-radius: 12px; box-shadow: 0 14px 32px rgb(16 31 29 / 16%); }
+
+@media (max-width: 680px) {
+  .input { font-size: 16px; }
+  .listbox { max-height: min(42dvh, 320px); }
+}

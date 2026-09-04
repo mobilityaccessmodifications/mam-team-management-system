@@ -971,3 +971,66 @@
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation: none; }
 }
+
+/* Clarity pass: one flat register surface, compact actions, and touch-safe sheets. */
+.workspace { gap: 12px; }
+.header h2 { font-size: clamp(22px, 2vw, 27px); }
+.primaryAction,
+.secondaryAction,
+.rowActions button,
+.modal header > button,
+.labelModal header > button {
+  min-height: 44px;
+  border-radius: 10px;
+  box-shadow: none;
+}
+.primaryAction:hover:not(:disabled),
+.secondaryAction:hover:not(:disabled),
+.rowActions button:hover:not(:disabled) { box-shadow: none; transform: none; }
+.tools,
+.sheetViewport,
+.assetList { border-radius: 12px; box-shadow: none; }
+.tools { padding: 8px; }
+.searchField { min-height: 44px; background: var(--surface-raised); }
+.clearFilters { min-height: 44px; }
+.assetSheetRow:not(.assetSheetHeader) { min-height: 64px; }
+.assetIcon { width: 34px; height: 34px; border-radius: 9px; }
+.moreMenu { box-shadow: 0 12px 30px rgb(15 29 25 / 16%); }
+.modal,
+.labelModal { border-radius: 18px; box-shadow: 0 20px 56px rgb(13 28 23 / 24%); }
+.modal header,
+.labelModal header { background: var(--surface-raised); }
+.modal header > button,
+.labelModal header > button { width: 44px; height: 44px; padding: 0; }
+.emptyState span { display: none; }
+
+@media (max-width: 760px) {
+  .header { align-items: center; flex-direction: row; }
+  .headerActions { width: auto; flex: 0 1 auto; margin-left: auto; }
+  .headerActions > a,
+  .headerActions > button { flex: 0 0 auto; }
+  .headerActions .secondaryAction { width: 44px; padding: 0; }
+  .headerActions .secondaryAction span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .tools { align-items: center; flex-direction: row; }
+  .searchField { width: 100%; }
+  .assetCount { display: none; }
+  .toolSummary { width: auto; }
+  .assetSheetRow:not(.assetSheetHeader) { border-radius: 12px; box-shadow: none; }
+  .assetActionsCell { justify-content: flex-end; }
+  .modalBackdrop { align-items: end; padding: 0; }
+  .modal,
+  .labelModal {
+    width: 100%;
+    max-height: min(88dvh, 760px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .modal input,
+  .modal select,
+  .modal textarea { font-size: 16px; }
+}

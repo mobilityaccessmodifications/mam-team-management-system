@@ -41,10 +41,6 @@ export function ReadOnlyDirectory({
 
   return <section className={styles.directory} aria-label="Employee directory">
     <header className={styles.header}>
-      <div>
-        <span>Directory</span>
-        <h2>Employees</h2>
-      </div>
       <label className={styles.search}>
         <Search aria-hidden="true" size={16} />
         <input

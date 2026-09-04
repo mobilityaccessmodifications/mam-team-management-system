@@ -204,3 +204,30 @@
     margin-left: 45px;
   }
 }
+
+/* Clarity pass. */
+.directory { gap: 10px; }
+.search { min-height: 44px; border-radius: 10px; }
+.list { border-radius: 12px; box-shadow: none; }
+.list li { min-height: 62px; }
+.empty p { display: none; }
+
+@media (max-width: 640px) {
+  .list li {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .avatar { grid-column: 1; grid-row: 1; }
+  .person { grid-column: 2; grid-row: 1; }
+  .company { grid-column: 3; grid-row: 1; }
+  .manager { display: none; }
+  .workEmail {
+    grid-column: 2 / -1;
+    grid-row: 2;
+    min-width: 0;
+    margin-left: 0;
+  }
+  .workEmail button,
+  .workEmail a { max-width: 100%; min-height: 44px; }
+}

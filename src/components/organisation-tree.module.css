@@ -1980,3 +1980,54 @@
     transition: none;
   }
 }
+
+/* Clarity pass: compact tools, flat canvas, and icon-first secondary actions. */
+.organisation { gap: 12px; }
+.toolbar { border-radius: 12px; box-shadow: none; backdrop-filter: none; }
+.search { min-height: 44px; background: var(--surface); }
+.primaryAction,
+.arrangeAction,
+.secondaryAction,
+.filterButton,
+.cancelAction,
+.saveAction,
+.chartControls button,
+.inspectorHeader button,
+.drawerHeader > button { min-height: 44px; border-radius: 10px; box-shadow: none; }
+.primaryAction:hover:not(:disabled),
+.saveAction:hover:not(:disabled),
+.arrangeAction:hover,
+.secondaryAction:hover:not(:disabled) { transform: none; box-shadow: none; }
+.iconAction { width: 44px; padding: 0; }
+.iconAction > span,
+.filterButton > :not(svg):not(.filterBadge),
+.cleanUpControl > span,
+.namedChartControl > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.filterButton { width: 44px; padding: 0; }
+.canvasShell,
+.treeViewport { box-shadow: none; }
+.chartControls { box-shadow: none; }
+.confirmationCard,
+.drawer { box-shadow: 0 20px 56px rgb(13 28 23 / 24%); }
+.drawerHeader { background: var(--surface); }
+.form input,
+.form select { min-height: 44px; border-radius: 10px; }
+
+@media (max-width: 900px) {
+  .toolbar { align-items: center; flex-direction: row; }
+  .toolbarActions { width: auto; align-items: center; flex-direction: row; }
+  .headerActions { display: flex; width: auto; }
+  .headerActions .primaryAction { width: auto; }
+  .searchWrap { flex: 1 1 auto; width: auto; }
+  .treeViewport { box-shadow: none; }
+  .drawerHeader { position: sticky; z-index: 1; top: 0; }
+}
+
+@media (max-width: 640px) {
+  .toolbar { align-items: stretch; flex-direction: column; }
+  .toolbarActions { width: 100%; justify-content: flex-end; }
+  .searchWrap { width: 100%; }
+  .search input,
+  .form input,
+  .form select { font-size: 16px; }
+}

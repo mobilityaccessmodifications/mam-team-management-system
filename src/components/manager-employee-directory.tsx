@@ -5,16 +5,17 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Mail,
   Search,
   UsersRound,
   X,
 } from "lucide-react";
 import {
   type FormEvent,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -25,6 +26,8 @@ import {
 import { EmployeeSelfResources } from "@/components/employee-team-directory";
 import styles from "@/components/employee-directory.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
+import { useMediaQuery } from "@/components/ui/use-media-query";
 import type {
   ManagedEmployeeDirectoryDraft,
   ManagedEmployeeDirectoryRecord,
@@ -106,6 +109,8 @@ export function ManagerEmployeeDirectory({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [notice, setNotice] = useState("");
+  const editorDialogRef = useRef<HTMLElement>(null);
+  const isMobileSheet = useMediaQuery("(max-width: 900px)");
 
   const loadRecords = useCallback(async () => {
     setLoading(true);
@@ -167,6 +172,8 @@ export function ManagerEmployeeDirectory({
     setSaveError("");
   }, [saving]);
 
+  useDialogFocus(Boolean(selectedRecord && draft) && isMobileSheet, editorDialogRef, null, closeRecord);
+
   const updateDraft = useCallback((key: keyof ManagedEmployeeDirectoryDraft, value: string) => {
     setDraft((current) => current ? { ...current, [key]: value } : current);
   }, []);
@@ -200,13 +207,6 @@ export function ManagerEmployeeDirectory({
   }
 
   return <section className={styles.workspace} aria-label="Team employee directory">
-    <header className={styles.header}>
-      <div>
-        <span>Directory</span>
-        <h2>Team directory</h2>
-      </div>
-    </header>
-
     {notice ? <div className={styles.notice} role="status"><Check size={16} /><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={15} /></button></div> : null}
 
     <div className={styles.directoryDesk}>
@@ -236,7 +236,10 @@ export function ManagerEmployeeDirectory({
         /> : null}
       </aside>
 
+      {selectedRecord ? <button className={styles.detailBackdrop} type="button" onClick={closeRecord} aria-label="Close employee record" /> : null}
       {selectedRecord && draft ? <ManagerEmployeeEditor
+        dialogRef={editorDialogRef}
+        mobileModal={isMobileSheet}
         record={selectedRecord}
         draft={draft}
         readOnly={selectedRecordIsManager}
@@ -250,7 +253,6 @@ export function ManagerEmployeeDirectory({
       /> : <section className={styles.emptyDetail} aria-live="polite">
         <UsersRound size={28} />
         <h3>Select a team member</h3>
-        <p>Choose an employee to review and update their work directory details.</p>
       </section>}
     </div>
   </section>;
@@ -294,7 +296,6 @@ function ManagerRecordList({
       <span className={styles.pageRange} aria-live="polite" aria-atomic="true">Page {currentPage} of {totalPages}</span>
       <div className={styles.paginationControls}>
         <button type="button" className={styles.paginationButton} onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} aria-label="Previous page"><ChevronLeft size={15} aria-hidden="true" /></button>
-        <span className={styles.pageIndicator} aria-hidden="true">{currentPage} / {totalPages}</span>
         <button type="button" className={styles.paginationButton} onClick={() => setPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} aria-label="Next page"><ChevronRight size={15} aria-hidden="true" /></button>
       </div>
     </nav>
@@ -302,6 +303,8 @@ function ManagerRecordList({
 }
 
 function ManagerEmployeeEditor({
+  dialogRef,
+  mobileModal,
   record,
   draft,
   readOnly,
@@ -313,6 +316,8 @@ function ManagerEmployeeEditor({
   onClose,
   onSubmit,
 }: {
+  dialogRef: RefObject<HTMLElement | null>;
+  mobileModal: boolean;
   record: ManagedEmployeeDirectoryRecord;
   draft: ManagedEmployeeDirectoryDraft;
   readOnly: boolean;
@@ -324,10 +329,9 @@ function ManagerEmployeeEditor({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
-  return <section className={styles.editor} aria-label={readOnly ? "View your work directory record" : "Edit team employee record"}>
+  return <section className={styles.editor} ref={dialogRef} role={mobileModal ? "dialog" : undefined} aria-modal={mobileModal ? "true" : undefined} aria-label={readOnly ? "View your work directory record" : "Edit team employee record"} tabIndex={mobileModal ? -1 : undefined}>
     <header className={styles.editorHeader}>
       <div>
-        <span>Team employee</span>
         <h3>{draft.firstName || record.fullName}</h3>
         <p>{record.positionTitle}{record.managerName ? ` · Reports to ${record.managerName}` : ""}</p>
       </div>
@@ -356,7 +360,7 @@ function ManagerEmployeeEditor({
         onLoadMySubscriptions={onLoadMySubscriptions}
       /> : null}
       <footer className={styles.formFooter}>
-        <div className={styles.formFooterLeft}><p><Mail size={14} /> {readOnly ? "This is your own work directory record. Work details are managed by Admin." : "Reporting line, employment status and private HR details are managed by Admin."}</p></div>
+        <div className={styles.formFooterLeft} />
         <div>{readOnly ? <button type="button" className={styles.secondaryAction} onClick={onClose}>Close</button> : <><button type="button" className={styles.secondaryAction} onClick={onClose} disabled={saving}>Cancel</button><button type="submit" className={styles.primaryAction} disabled={saving}>{saving ? "Saving…" : "Save changes"}</button></>}</div>
       </footer>
     </form>
