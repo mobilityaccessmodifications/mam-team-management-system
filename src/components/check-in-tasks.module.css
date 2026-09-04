@@ -92,7 +92,7 @@
 
 .task {
   display: grid;
-  grid-template-columns: minmax(160px, 1.15fr) minmax(175px, 1.15fr) minmax(115px, auto) auto;
+  grid-template-columns: minmax(160px, 1.15fr) minmax(175px, 1.15fr) auto auto;
   align-items: center;
   gap: 14px;
   min-height: 72px;
@@ -386,7 +386,14 @@
 .list { gap: 0; padding: 0; border-radius: 14px; background: var(--surface-raised); box-shadow: none; }
 .task { min-height: 68px; border-width: 0 0 1px; border-radius: 0; box-shadow: none; }
 .task:last-child { border-bottom: 0; }
-.complete { min-height: 44px; border-radius: 10px; }
+.statusButton,
+.complete {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 10px;
+}
 .reviewPanel { border-radius: 10px; }
 
 @media (max-width: 680px) {
