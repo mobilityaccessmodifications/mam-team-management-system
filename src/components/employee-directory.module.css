@@ -137,6 +137,8 @@
 .notice button:focus-visible,
 .sortField select:focus-visible,
 .paginationButton:focus-visible,
+.scheduleEdit:focus-visible,
+.workdayButton:focus-visible,
 .editor input:focus-visible,
 .editor select:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--directory-accent) 30%, transparent);
@@ -616,6 +618,123 @@
   font-weight: 750;
 }
 
+.scheduleOverview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+}
+
+.scheduleIcon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--directory-accent-soft);
+  color: var(--directory-accent-deep);
+}
+
+.scheduleCopy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.scheduleCopy strong {
+  color: var(--directory-ink);
+  font-size: 13px;
+}
+
+.scheduleCopy small {
+  overflow: hidden;
+  color: var(--directory-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scheduleEdit {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  padding: 7px 10px;
+  touch-action: manipulation;
+}
+
+.scheduleEdit:hover {
+  border-color: color-mix(in srgb, var(--directory-accent) 52%, var(--surface-border-strong));
+  background: var(--directory-accent-soft);
+  color: var(--directory-accent-deep);
+}
+
+.scheduleFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 15px;
+  border-top: 1px solid var(--directory-line);
+  padding-top: 15px;
+}
+
+.scheduleFields > label,
+.workdayField {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: #526166;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.workdayField {
+  grid-column: 1 / -1;
+}
+
+.workdayPicker {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(44px, 1fr));
+  gap: 7px;
+}
+
+.workdayButton {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  touch-action: manipulation;
+}
+
+.workdayButton:hover {
+  border-color: color-mix(in srgb, var(--directory-accent) 52%, var(--surface-border-strong));
+}
+
+.workdayButton[data-selected="true"] {
+  border-color: var(--directory-accent);
+  background: var(--directory-accent);
+  color: #fff;
+}
+
 .formGrid > label > span b {
   color: #ba4e29;
 }
@@ -663,6 +782,14 @@
 .formFooter > div {
   flex: 0 0 auto;
   gap: 7px;
+}
+
+.footerHint {
+  max-width: 260px;
+  margin: 0;
+  color: var(--directory-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .modalBackdrop {
@@ -814,6 +941,22 @@
 
   .formGrid {
     grid-template-columns: 1fr;
+  }
+
+  .scheduleFields {
+    grid-template-columns: 1fr;
+  }
+
+  .workdayPicker {
+    grid-template-columns: repeat(4, minmax(44px, 1fr));
+  }
+
+  .scheduleCopy small {
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .fullSpan {

@@ -6,6 +6,7 @@ import type {
   EmployeeEmploymentType,
   EmployeeLaptopSupply,
   EmployeeDirectoryRecord,
+  EmployeeWorkingWeekday,
 } from "@/lib/employee-directory-types";
 
 type DirectoryRpcRow = {
@@ -29,6 +30,7 @@ type DirectoryRpcRow = {
   date_of_birth: string | null;
   started_date: string | null;
   scheduled_employment_end_date: string | null;
+  working_weekdays: number[] | null;
   archive_reason: string | null;
   employment_type: string | null;
   has_paid_leave_entitlement: boolean;
@@ -42,6 +44,12 @@ type DirectoryRpcRow = {
 const GENERIC_ACCESS_ERROR = "You do not have permission to manage employee records.";
 const GENERIC_LOAD_ERROR = "Employee records could not be loaded. Refresh and try again.";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isMissingWorkScheduleRpc(error: { code?: string; message?: string } | null) {
+  const message = error?.message?.toLocaleLowerCase() ?? "";
+  return error?.code === "PGRST202"
+    || (message.includes("could not find the function") && message.includes("work_schedule"));
+}
 
 function optionalText(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -78,6 +86,20 @@ function employmentType(value: unknown): EmployeeEmploymentType | "" {
   throw new Error(GENERIC_LOAD_ERROR);
 }
 
+function workingWeekdays(value: unknown): EmployeeWorkingWeekday[] | null {
+  if (value === null || value === undefined) return null;
+  if (
+    !Array.isArray(value)
+    || value.length === 0
+    || value.length > 7
+    || value.some((day) => !Number.isInteger(day) || day < 1 || day > 7)
+    || new Set(value).size !== value.length
+  ) {
+    throw new Error(GENERIC_LOAD_ERROR);
+  }
+  return [...value].sort((first, second) => first - second) as EmployeeWorkingWeekday[];
+}
+
 function assetTags(value: unknown) {
   if (value === null || value === undefined) return [];
   if (!Array.isArray(value) || value.some((tag) => typeof tag !== "string")) {
@@ -108,6 +130,7 @@ function toRecord(row: DirectoryRpcRow): EmployeeDirectoryRecord {
     dateOfBirth: optionalText(row.date_of_birth),
     startedDate: optionalText(row.started_date),
     scheduledEmploymentEndDate: optionalText(row.scheduled_employment_end_date),
+    workingWeekdays: workingWeekdays(row.working_weekdays),
     archiveReason: optionalText(row.archive_reason),
     employmentType: employmentType(row.employment_type),
     hasPaidLeaveEntitlement: row.has_paid_leave_entitlement === true,
@@ -143,9 +166,14 @@ export async function listEmployeeDirectoryRecordsForManager() {
 export async function listEmployeeDirectoryRecordsWithClient(
   supabase: Awaited<ReturnType<typeof createClient>>,
 ) {
-  const { data: archiveData, error: archiveError } = await supabase.rpc("list_employee_directory_records_with_archive_visibility", {
+  let { data: archiveData, error: archiveError } = await supabase.rpc("list_employee_directory_records_with_work_schedule", {
     p_include_archived: true,
   });
+  if (isMissingWorkScheduleRpc(archiveError)) {
+    ({ data: archiveData, error: archiveError } = await supabase.rpc("list_employee_directory_records_with_archive_visibility", {
+      p_include_archived: true,
+    }));
+  }
   if (archiveError || !Array.isArray(archiveData)) throw new Error(GENERIC_LOAD_ERROR);
 
   return (archiveData as DirectoryRpcRow[])
@@ -158,9 +186,14 @@ export async function findEmployeeDirectoryRecord(
   personId: string,
 ) {
   if (!UUID_PATTERN.test(personId)) throw new Error(GENERIC_LOAD_ERROR);
-  const { data, error } = await supabase.rpc("get_employee_directory_record_with_archive_visibility", {
+  let { data, error } = await supabase.rpc("get_employee_directory_record_with_work_schedule", {
     p_person_id: personId,
   });
+  if (isMissingWorkScheduleRpc(error)) {
+    ({ data, error } = await supabase.rpc("get_employee_directory_record_with_archive_visibility", {
+      p_person_id: personId,
+    }));
+  }
   if (error || !Array.isArray(data) || data.length !== 1) throw new Error(GENERIC_LOAD_ERROR);
   return toRecord(data[0] as DirectoryRpcRow);
 }

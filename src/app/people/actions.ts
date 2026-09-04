@@ -31,6 +31,12 @@ const EMPLOYMENT_END_REASONS = new Set([
   "Other",
 ]);
 
+function isMissingWorkScheduleRpc(error: { code?: string; message?: string } | null) {
+  const message = error?.message?.toLocaleLowerCase() ?? "";
+  return error?.code === "PGRST202"
+    || (message.includes("could not find the function") && message.includes("work_schedule"));
+}
+
 type MutationRpcRow = {
   person_id: string;
 };
@@ -98,6 +104,19 @@ function employmentType(value: unknown): EmployeeEmploymentType {
     return value;
   }
   throw new Error("Choose an employment type.");
+}
+
+function workingWeekdays(value: unknown) {
+  if (value === null || (Array.isArray(value) && value.length === 0)) return null;
+  if (
+    !Array.isArray(value)
+    || value.length > 7
+    || value.some((day) => !Number.isInteger(day) || day < 1 || day > 7)
+    || new Set(value).size !== value.length
+  ) {
+    throw new Error("Choose valid, non-repeating work days.");
+  }
+  return [...value].sort((first, second) => first - second);
 }
 
 function laptopSupplied(value: unknown) {
@@ -170,6 +189,7 @@ function validateDraft(input: unknown) {
       value.scheduledEmploymentEndDate,
       "Scheduled employment end date",
     ),
+    p_working_weekdays: workingWeekdays(value.workingWeekdays),
     p_employment_type: employmentType(value.employmentType),
     p_company_key: company(value.company),
     p_is_active: value.isActive === true,
@@ -179,6 +199,14 @@ function validateDraft(input: unknown) {
     p_keyboard_id: optionalText(value.keyboardId, "Keyboard ID", 120),
     p_asset_tags: assetTags(value.assetTags),
   };
+}
+
+function legacyDraftValues(values: ReturnType<typeof validateDraft>) {
+  const { p_working_weekdays, ...legacyValues } = values;
+  if (p_working_weekdays !== null) {
+    throw new Error("Work schedule storage is not ready. Refresh and try again.");
+  }
+  return legacyValues;
 }
 
 function returnedPersonId(data: unknown) {
@@ -227,10 +255,19 @@ export async function createEmployeeDirectoryRecord(
 ): Promise<EmployeeDirectoryMutationResult> {
   const { supabase } = await requireEmployeeDirectoryManager();
   const values = validateDraft(input);
-  const { data, error } = await supabase.rpc("create_employee_directory_record_with_employment_type", {
+  let { data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule", {
     ...values,
     p_sort_order: 0,
   });
+  if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
+    ({ data, error } = await supabase.rpc("create_employee_directory_record_with_employment_type", {
+      ...legacyDraftValues(values),
+      p_sort_order: 0,
+    }));
+  }
+  if (isMissingWorkScheduleRpc(error)) {
+    throw new Error("Work schedule storage is not ready. Refresh and try again.");
+  }
   if (error) throw mutationError(error);
 
   const personId = returnedPersonId(data);
@@ -248,12 +285,23 @@ export async function updateEmployeeDirectoryRecord(
   }
   const { supabase } = await requireEmployeeDirectoryManager();
   const values = validateDraft(inputValue);
-  const { data, error } = await supabase.rpc("update_employee_directory_record_with_employment_type", {
+  let { data, error } = await supabase.rpc("update_employee_directory_record_with_work_schedule", {
     ...values,
     p_person_id: inputValue.personId,
     p_expected_person_version: version(inputValue.personVersion),
     p_expected_detail_version: version(inputValue.detailVersion),
   });
+  if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
+    ({ data, error } = await supabase.rpc("update_employee_directory_record_with_employment_type", {
+      ...legacyDraftValues(values),
+      p_person_id: inputValue.personId,
+      p_expected_person_version: version(inputValue.personVersion),
+      p_expected_detail_version: version(inputValue.detailVersion),
+    }));
+  }
+  if (isMissingWorkScheduleRpc(error)) {
+    throw new Error("Work schedule storage is not ready. Refresh and try again.");
+  }
   if (error) throw mutationError(error);
 
   const personId = returnedPersonId(data);
