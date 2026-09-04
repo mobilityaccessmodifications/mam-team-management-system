@@ -18,6 +18,7 @@ import {
   type CalendarType,
   type Event,
   type EventDetailContentProps,
+  type MobileEventProps,
 } from "@dayflow/react";
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { Temporal } from "temporal-polyfill";
@@ -189,6 +190,32 @@ function EventDetail({ event, onClose }: EventDetailContentProps) {
   );
 }
 
+function MobileEventDetail({ draftEvent, isOpen, onClose }: MobileEventProps) {
+  if (!isOpen || !draftEvent) return null;
+
+  return (
+    <div className={styles.mobileDetailBackdrop} onClick={onClose} role="presentation">
+      <div
+        aria-label="Event details"
+        aria-modal="true"
+        className={styles.mobileDetailSheet}
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <span aria-hidden="true" className={styles.mobileDetailHandle} />
+        <EventDetail
+          app={undefined}
+          event={draftEvent}
+          isAllDay={Boolean(draftEvent.allDay)}
+          onClose={onClose}
+          onEventDelete={() => undefined}
+          onEventUpdate={() => undefined}
+        />
+      </div>
+    </div>
+  );
+}
+
 function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews, reviewOnly, loading }: TeamCalendarProps) {
   const year = new Date().getFullYear();
   const [visibleYears, setVisibleYears] = useState([year - 1, year, year + 1]);
@@ -229,7 +256,12 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
         <div className={styles.privacy}><ShieldCheck size={15} />{reviewOnly ? "Only your reviews" : "Private notes hidden"}</div>
       </header>
       <div className={styles.calendarFrame} aria-busy={loading}>
-        <DayFlowCalendar calendar={calendar} eventDetailContent={(props) => <EventDetail {...props} />} search={{ customSearch, debounceDelay: 120, emptyText: "No matching events", timeFormat: "12h" }} />
+        <DayFlowCalendar
+          calendar={calendar}
+          eventDetailContent={(props) => <EventDetail {...props} />}
+          mobileEventDetail={(props) => <MobileEventDetail {...props} />}
+          search={{ customSearch, debounceDelay: 120, emptyText: "No matching events", timeFormat: "12h" }}
+        />
         {loading ? <div className={styles.loading} role="status"><span /><strong>Refreshing calendar…</strong></div> : null}
       </div>
       <div className={styles.mobileHint}><Search size={15} />Use search or Agenda for a compact list.</div>
