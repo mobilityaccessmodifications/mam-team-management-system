@@ -5,11 +5,15 @@ an approved dashboard connector or analytics backend, not for browser code.
 
 ## Authentication
 
-Send the dedicated environment secret as a bearer token:
+Send the dedicated Analytics API key as a bearer token:
 
 ```http
-Authorization: Bearer <MAM_ANALYTICS_API_KEY>
+Authorization: Bearer <ANALYTICS_API_KEY>
 ```
+
+System Admin manages the key from People → Analytics API. A generated key is
+shown once, then only its hash is retained by the system. Rotate it whenever
+the dashboard connection changes; revoking it stops access immediately.
 
 Do not use or share a Supabase secret key, a Supabase Management API token, an
 HR portal account, or a subscription credential. The route does not enable
@@ -58,5 +62,5 @@ curl --fail --silent \
 ```
 
 Responses include `data` and `pagination`. Store the bearer key in the
-dashboard platform's encrypted connection-secret facility and rotate it by
-replacing the Vercel environment value.
+dashboard platform's encrypted connection-secret facility. Never place it in
+browser JavaScript, a spreadsheet, chat, email or source code.
