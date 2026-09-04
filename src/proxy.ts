@@ -9,6 +9,10 @@ export async function proxy(request: NextRequest) {
   const isConfirmationRoute = pathname === "/auth/confirm";
   const isCronRoute = pathname === "/api/cron/check-in-reminders"
     || pathname === "/api/cron/leave-attachment-cleanup";
+  // The analytics handler verifies its dedicated bearer secret before it
+  // accesses data. Let that server-to-server request reach the handler rather
+  // than redirecting it to the browser login flow.
+  const isAnalyticsRoute = pathname === "/api/analytics/v1";
 
   if (!isSupabaseConfigured()) {
     if (isLoginRoute) return NextResponse.next({ request });
@@ -44,7 +48,7 @@ export async function proxy(request: NextRequest) {
   // This route performs its own constant-time CRON_SECRET check before any
   // database action. It must reach the route handler unauthenticated because
   // the MAM scheduler does not have a browser session.
-  const isPublicRoute = isLoginRoute || isConfirmationRoute || isCronRoute;
+  const isPublicRoute = isLoginRoute || isConfirmationRoute || isCronRoute || isAnalyticsRoute;
 
   if (!claims && !isPublicRoute) {
     const url = request.nextUrl.clone();
