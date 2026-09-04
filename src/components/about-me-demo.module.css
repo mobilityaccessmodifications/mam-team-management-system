@@ -57,3 +57,12 @@
 @media (max-width: 520px) {
   .profileSummary { grid-template-columns: 1fr; gap: 5px; }
 }
+
+/* Clarity pass. */
+.profileCard { border-top-width: 2px; border-radius: 14px; box-shadow: none; }
+.profileSummary { min-height: 60px; }
+
+@media (max-width: 520px) {
+  .profileSummary { grid-template-columns: minmax(104px, .55fr) minmax(0, 1fr); gap: 12px; min-height: 58px; padding: 12px 14px; }
+  .profileSummary > span { font-size: 10px; }
+}

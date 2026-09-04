@@ -3,7 +3,7 @@
 // Adapted for Safer from beui.dev/components/motion/tabs.
 
 import { motion, MotionConfig, useReducedMotion } from "motion/react";
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { SPRING_LAYOUT } from "@/lib/ease";
 import styles from "./motion-tabs.module.css";
 
@@ -30,10 +30,26 @@ export function MotionTabs<T extends string>({
 }) {
   const layoutId = useId();
   const reduceMotion = useReducedMotion();
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const active = root?.querySelector<HTMLElement>('[data-active="true"]');
+    if (!root || !active) return;
+
+    const left = active.offsetLeft;
+    const right = left + active.offsetWidth;
+    if (left < root.scrollLeft || right > root.scrollLeft + root.clientWidth) {
+      root.scrollTo({
+        left: Math.max(0, left - (root.clientWidth - active.offsetWidth) / 2),
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
+    }
+  }, [reduceMotion, value]);
 
   return (
     <MotionConfig transition={reduceMotion ? { duration: 0 } : SPRING_LAYOUT}>
-      <div className={`${styles.root} ${className}`} role="group" aria-label={ariaLabel}>
+      <div className={`${styles.root} ${className}`} ref={rootRef} role="group" aria-label={ariaLabel}>
         {options.filter((option) => !option.hidden).map((option) => {
           const active = option.value === value;
           return (

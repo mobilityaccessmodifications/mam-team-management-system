@@ -386,3 +386,34 @@
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation: none; }
 }
+
+/* Clarity pass. */
+.section { border-radius: 12px; background: var(--surface-raised); }
+.intro,
+.section legend small { display: none; }
+.deviceList { border-radius: 10px; }
+.primaryAction,
+.secondaryAction,
+.dangerAction,
+.modal header > button { min-height: 44px; border-radius: 10px; box-shadow: none; }
+.modal header > button { width: 44px; min-width: 44px; height: 44px; padding: 0; }
+.modal { border-radius: 18px; box-shadow: 0 20px 56px rgb(13 28 23 / 24%); }
+.modal header { background: var(--surface-raised); }
+
+@media (max-width: 640px) {
+  .modalBackdrop { align-items: end; padding: 0; }
+  .modal {
+    width: 100%;
+    max-height: min(88dvh, 760px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .modal input,
+  .modal select { font-size: 16px; }
+}

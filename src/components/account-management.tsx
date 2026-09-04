@@ -9,6 +9,7 @@ import {
   EyeOff,
   KeyRound,
   LockKeyhole,
+  MoreHorizontal,
   Search,
   Sparkles,
   UserRoundCheck,
@@ -16,7 +17,7 @@ import {
   UserRoundX,
   X,
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import styles from "@/components/account-management.module.css";
 import { AnimatedStatusBadge } from "@/components/ui/animated-status-badge";
@@ -260,6 +261,26 @@ export function AccountManagement({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openActionMenuId) return;
+
+    function closeActionMenu(event: PointerEvent) {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("[data-account-action-menu]")
+      ) {
+        return;
+      }
+
+      setOpenActionMenuId(null);
+    }
+
+    document.addEventListener("pointerdown", closeActionMenu);
+    return () => document.removeEventListener("pointerdown", closeActionMenu);
+  }, [openActionMenuId]);
 
   const records = useMemo(
     () =>
@@ -337,6 +358,7 @@ export function AccountManagement({
   }
 
   function openEditor(account: AccountDto, action: EditorAction) {
+    setOpenActionMenuId(null);
     setEditor({ personId: account.personId, action });
     setLoginName(action === "login" ? (account.loginName ?? "") : "");
     setNewPassword("");
@@ -616,39 +638,31 @@ export function AccountManagement({
                       Create login
                     </button>
                   ) : (
-                    <>
-                      <button
-                        className={styles.textButton}
-                        onClick={() => openEditor(account, "login")}
-                        type="button"
-                      >
-                        Change login
-                      </button>
-                      <button
-                        className={styles.textButton}
-                        onClick={() => openEditor(account, "password")}
-                        type="button"
-                      >
-                        Reset password
-                      </button>
-                      <button
-                        className={styles.iconButton}
-                        aria-label={`${account.status === "disabled" ? "Enable" : "Disable"} ${account.name}'s login`}
-                        onClick={() => openEditor(account, "toggle")}
-                        title={
-                          account.status === "disabled"
-                            ? "Enable login"
-                            : "Disable login"
-                        }
-                        type="button"
-                      >
-                        {account.status === "disabled" ? (
-                          <UserRoundCheck aria-hidden="true" size={17} />
-                        ) : (
-                          <UserRoundX aria-hidden="true" size={17} />
-                        )}
-                      </button>
-                    </>
+                    <details
+                      className={styles.actionMenu}
+                      data-account-action-menu
+                      open={openActionMenuId === account.personId}
+                      onToggle={(event) => setOpenActionMenuId(event.currentTarget.open ? account.personId : (current) => current === account.personId ? null : current)}
+                      onBlur={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpenActionMenuId(null);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Escape") return;
+                        event.preventDefault();
+                        setOpenActionMenuId(null);
+                        event.currentTarget.querySelector<HTMLElement>("summary")?.focus();
+                      }}
+                    >
+                      <summary aria-label={`Manage ${account.name}'s login`} title="Manage login"><MoreHorizontal aria-hidden="true" size={18} /></summary>
+                      <div className={styles.actionMenuPopover}>
+                        <button className={styles.textButton} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openEditor(account, "login"); }} type="button">Change login</button>
+                        <button className={styles.textButton} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openEditor(account, "password"); }} type="button">Reset password</button>
+                        <button className={styles.textButton} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openEditor(account, "toggle"); }} type="button">
+                          {account.status === "disabled" ? <UserRoundCheck aria-hidden="true" size={16} /> : <UserRoundX aria-hidden="true" size={16} />}
+                          {account.status === "disabled" ? "Enable login" : "Disable login"}
+                        </button>
+                      </div>
+                    </details>
                   )}
                 </div>
               </div>
@@ -841,7 +855,6 @@ export function AccountManagement({
               type="button"
             >
               <ChevronLeft aria-hidden="true" size={16} />
-              <span>Previous</span>
             </button>
             <span aria-current="page" className={styles.pageIndicator}>
               Page {currentPage} of {pageCount}
@@ -852,7 +865,6 @@ export function AccountManagement({
               onClick={() => goToPage(currentPage + 1)}
               type="button"
             >
-              <span>Next</span>
               <ChevronRight aria-hidden="true" size={16} />
             </button>
           </nav>

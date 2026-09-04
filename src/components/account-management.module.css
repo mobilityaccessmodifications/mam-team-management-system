@@ -1149,3 +1149,70 @@
     gap: 10px;
   }
 }
+
+/* Clarity pass. */
+.workspace { gap: 12px; }
+.header { min-height: 44px; align-items: center; }
+.accountCount { border-radius: 10px; }
+.securityNote { display: none; }
+.searchField,
+.sortField { min-height: 44px; border-radius: 10px; }
+.accountList { overflow: visible; border-radius: 14px; box-shadow: none; }
+.accountCard { position: relative; }
+.actionMenu { position: relative; }
+.actionMenu summary {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid #d6dfdc;
+  border-radius: 10px;
+  background: #fff;
+  color: #536267;
+  cursor: pointer;
+  list-style: none;
+}
+.actionMenu summary::-webkit-details-marker { display: none; }
+.actionMenu summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--account-accent) 28%, transparent); outline-offset: 2px; }
+.actionMenuPopover {
+  position: absolute;
+  z-index: var(--layer-popover);
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  width: 176px;
+  padding: 5px;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.actionMenuPopover .textButton { justify-content: flex-start; width: 100%; padding-inline: 10px; }
+.accountRow { min-height: 68px; }
+.primaryButton,
+.secondaryButton,
+.dangerButton,
+.textButton,
+.iconButton,
+.pageControls button,
+.editorHeader > button { min-height: 44px; border-radius: 10px; box-shadow: none; }
+.iconButton,
+.editorHeader > button { width: 44px; min-width: 44px; height: 44px; padding: 0; }
+.pageControls button:hover:not(:disabled) { transform: none; }
+.field input,
+.passwordInput { height: 44px; border-radius: 10px; }
+
+@media (max-width: 720px) {
+  .accountCount span { display: none; }
+  .accountCount { min-width: 0; grid-template-columns: auto auto; padding: 9px 10px; }
+  .listControls { grid-template-columns: 1fr; }
+  .sortField select,
+  .searchField input,
+  .field input,
+  .passwordInput input { font-size: 16px; }
+  .accountRow { grid-template-columns: 38px minmax(0, 1fr) auto; }
+  .loginCopy { grid-column: 2 / -1; }
+  .actions { grid-column: 2 / -1; justify-content: flex-end; }
+  .editor { padding: 14px; }
+  .editor form { grid-template-columns: 1fr; }
+}

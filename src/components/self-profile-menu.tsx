@@ -27,6 +27,7 @@ import {
 } from "react";
 
 import styles from "@/components/self-profile-menu.module.css";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import { EASE_OUT } from "@/lib/ease";
 
 /**
@@ -124,6 +125,7 @@ export function SelfProfileMenu({
   const birthDateId = useId();
   const workEmailId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
   const reduceMotion = useReducedMotion();
@@ -165,9 +167,6 @@ export function SelfProfileMenu({
   const isHrPreview = mode === "hr-preview";
   const canEditProfile = !disabled;
   const contactHeading = isHrPreview ? "Contact details" : "My contact details";
-  const contactHelp = isHrPreview
-    ? "Update only the fields HR has confirmed for this employee."
-    : "You can keep these details up to date yourself.";
   const saveDefaultMessage = isHrPreview
     ? "Employee profile changes are saved."
     : "Your profile changes are saved.";
@@ -182,6 +181,8 @@ export function SelfProfileMenu({
     }
   }, [profileKey, savedValues]);
 
+  useDialogFocus(isOpen, panelRef, canEditProfile ? firstInputRef : null, () => closeMenu(true));
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -190,24 +191,12 @@ export function SelfProfileMenu({
         closeMenu();
       }
     };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeMenu(true);
-      }
-    };
-
     document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    requestAnimationFrame(() => {
-      if (canEditProfile) firstInputRef.current?.focus();
-    });
 
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
     };
-  }, [canEditProfile, closeMenu, isOpen]);
+  }, [closeMenu, isOpen]);
 
   const isDirty = draft.personalEmail !== savedValues.personalEmail
     || draft.phone !== savedValues.phone
@@ -293,13 +282,18 @@ export function SelfProfileMenu({
         <ChevronDown className={styles.chevron} aria-hidden="true" size={16} />
       </button>
 
+      {isOpen ? <button className={styles.backdrop} type="button" onClick={() => closeMenu(true)} aria-label="Close profile" /> : null}
+
       <AnimatePresence initial={false}>
         {isOpen ? (
           <motion.section
             aria-labelledby={titleId}
+            aria-modal="true"
             className={styles.panel}
             id={panelId}
+            ref={panelRef}
             role="dialog"
+            tabIndex={-1}
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.985 }}
@@ -333,7 +327,7 @@ export function SelfProfileMenu({
               <section className={styles.section} aria-labelledby={`${panelId}-contact`}>
                 <div className={styles.sectionHeading}>
                   <CircleUserRound aria-hidden="true" size={17} />
-                  <span><strong id={`${panelId}-contact`}>{contactHeading}</strong><small>{contactHelp}</small></span>
+                  <span><strong id={`${panelId}-contact`}>{contactHeading}</strong></span>
                 </div>
 
                 <label className={styles.field} htmlFor={personalEmailId}>
@@ -347,7 +341,7 @@ export function SelfProfileMenu({
                     type="email"
                     value={draft.personalEmail}
                   />
-                  <small className={styles.helpText}>{isHrPreview ? "Changing this does not change the employee's sign-in." : "For HR contact only; changing it does not change your sign-in."}</small>
+                  <small className={styles.helpText}>Does not change your sign-in.</small>
                 </label>
                 <label className={styles.field} htmlFor={phoneId}>
                   <span><Phone aria-hidden="true" size={15} /> Phone</span>
@@ -377,7 +371,7 @@ export function SelfProfileMenu({
               <section className={`${styles.section} ${styles.readonlySection}`} aria-labelledby={`${panelId}-work`}>
                 <div className={styles.sectionHeading}>
                   <ShieldCheck aria-hidden="true" size={17} />
-                  <span><strong id={`${panelId}-work`}>Work contact</strong><small>Managed by HR to keep the directory accurate.</small></span>
+                  <span><strong id={`${panelId}-work`}>Work contact</strong></span>
                 </div>
                 <label className={styles.field} htmlFor={workEmailId}>
                   <span><Mail aria-hidden="true" size={15} /> Work email <em><LockKeyhole aria-hidden="true" size={12} /> Read only</em></span>
@@ -389,7 +383,6 @@ export function SelfProfileMenu({
                     type="email"
                     value={profile.workEmail ?? ""}
                   />
-                  <small className={styles.helpText}>Ask HR if this work email needs to change.</small>
                 </label>
               </section>
 

@@ -328,3 +328,142 @@
     min-height: 44px;
   }
 }
+
+/* Shared People workspace clarity pass. */
+.workspace {
+  gap: 14px;
+}
+
+.primaryAction,
+.previewButton {
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.primaryAction:hover,
+.previewButton:hover {
+  box-shadow: none;
+  transform: none;
+}
+
+.taskSwitch {
+  display: inline-flex;
+  grid-template-columns: none;
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 10px;
+  scrollbar-width: none;
+}
+
+.taskSwitch::-webkit-scrollbar {
+  display: none;
+}
+
+.taskSwitch button {
+  min-width: max-content;
+  min-height: 44px;
+  font-size: 12px;
+}
+
+.workflowDesk,
+.checkInLayout,
+.taskBoard,
+.detailGrid section,
+.audit,
+.supportingDetails,
+.checkInMeta,
+.reminderTimeline {
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.workflowList > button:hover,
+.workflowList > .workflowSelected,
+.personList button:hover,
+.personList .personSelected {
+  background: var(--people-accent-soft);
+}
+
+.workflowDetail,
+.checkInDetail {
+  gap: 16px;
+  padding: 20px;
+}
+
+.supportingDetails summary small,
+.checkInLead p,
+.taskBoard > header > small {
+  display: none;
+}
+
+.taskActions label,
+.taskActions button,
+.assetRow button,
+.accessRow button,
+.reminderActions button,
+.detailToggle {
+  min-height: 36px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.emptyState {
+  min-height: 220px;
+  border-style: solid;
+  background: var(--surface-raised);
+}
+
+.modalBackdrop {
+  z-index: var(--layer-dialog);
+  background: rgb(11 22 19 / 62%);
+}
+
+.modal {
+  border-radius: 18px;
+  box-shadow: var(--shadow-md);
+}
+
+.modal > header {
+  min-height: 72px;
+  align-items: center;
+  padding: 14px 18px;
+}
+
+.modal > header > div > span {
+  display: none;
+}
+
+.modal > header button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+}
+
+@media (max-width: 680px) {
+  .workflowDetail,
+  .checkInDetail {
+    padding: 12px;
+  }
+
+  .taskActions label,
+  .taskActions button,
+  .assetRow button,
+  .accessRow button,
+  .reminderActions button,
+  .detailToggle {
+    min-height: 44px;
+  }
+
+  .modal {
+    max-height: 88dvh;
+  }
+
+  .modal input,
+  .modal select,
+  .modal textarea {
+    font-size: 16px;
+  }
+}

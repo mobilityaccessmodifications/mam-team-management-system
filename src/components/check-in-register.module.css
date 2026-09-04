@@ -331,3 +331,33 @@
     touch-action: manipulation;
   }
 }
+
+/* Clarity pass. */
+.workspace { gap: 12px; }
+.desk { border-radius: 14px; box-shadow: none; }
+.secondaryAction,
+.timeline button,
+.pagination button,
+.listToolbar select { min-height: 44px; border-radius: 10px; box-shadow: none; }
+.secondaryAction { width: 44px; padding: 0; }
+.resources a { min-height: 44px; border-radius: 10px; }
+.resources a:hover { transform: none; }
+.info { border-radius: 10px; background: var(--surface-raised); }
+.reminder { min-height: 62px; }
+.securityNote { display: none; }
+
+@media (max-width: 900px) {
+  .employeeList { max-height: 380px; }
+}
+
+@media (max-width: 620px) {
+  .toolbar { align-items: center; flex-direction: row; }
+  .resources { min-width: 0; overflow-x: auto; }
+  .resources nav { width: max-content; flex-wrap: nowrap; }
+  .listToolbar label { align-items: center; flex-direction: row; }
+  .listToolbar label { font-size: 0; }
+  .listToolbar select { width: 100%; min-width: 0; font-size: 16px; }
+  .personHeader { align-items: center; flex-direction: row; }
+  .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .info[data-value-kind="email"] { grid-column: 1 / -1; }
+}

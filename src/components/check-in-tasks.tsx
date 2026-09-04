@@ -178,7 +178,7 @@ export function CheckInTasks({
 
   return <section className={styles.workspace} aria-label="Check-in tasks">
     <header className={styles.header}>
-      <h2>Check-in tasks</h2>
+      <h2 className={styles.srOnly}>Check-in tasks</h2>
       <div className={styles.headerActions}>
         {toolbarAction}
         <button
@@ -186,9 +186,10 @@ export function CheckInTasks({
           type="button"
           onClick={() => void load()}
           disabled={loading || Boolean(pendingReminderId)}
+          aria-label="Refresh check-in tasks"
+          title="Refresh"
         >
           <RefreshCw size={16} aria-hidden="true" />
-          Refresh
         </button>
       </div>
     </header>

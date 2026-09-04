@@ -2372,12 +2372,14 @@ export function OrganisationTree({
         <div className={styles.toolbarActions}>
           <div className={styles.headerActions}>
             <button
-              className={styles.secondaryAction}
+              aria-label="Export organisation as PDF"
+              className={`${styles.secondaryAction} ${styles.iconAction}`}
               onClick={exportPdf}
+              title="Export PDF"
               type="button"
             >
               <Download aria-hidden="true" size={16} />
-              Export PDF
+              <span>Export PDF</span>
             </button>
             {canArrange ? (
               <button
@@ -2408,14 +2410,16 @@ export function OrganisationTree({
 
           <div className={styles.filterMenu}>
             <button
+              aria-label="Filter organisation"
               aria-expanded={filterOpen}
               aria-haspopup="menu"
               className={styles.filterButton}
               onClick={() => setFilterOpen((current) => !current)}
+              title="Filter"
               type="button"
             >
               <ListFilter aria-hidden="true" size={15} />
-              Filter
+              <span>Filter</span>
               {companyFilter !== "all" ? <span className={styles.filterBadge}>1</span> : null}
             </button>
             {filterOpen ? (
@@ -3176,7 +3180,6 @@ export function OrganisationTree({
                     <span>Name</span>
                     <input
                       autoComplete="off"
-                      autoFocus
                       onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
                       required
                       value={draft.name}
