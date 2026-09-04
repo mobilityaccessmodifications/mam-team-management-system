@@ -1,6 +1,7 @@
 export type EmployeeDirectoryCompany = "mam" | "equipsy";
 export type EmployeeLaptopSupply = "" | "own_laptop" | "mam_laptop";
 export type EmployeeEmploymentType = "abn" | "casual" | "full_time" | "part_time";
+export type EmployeeWorkingWeekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 /**
  * The HR-only employee record returned by the explicitly authorised directory
@@ -27,6 +28,7 @@ export type EmployeeDirectoryRecord = {
   dateOfBirth: string;
   startedDate: string;
   scheduledEmploymentEndDate: string;
+  workingWeekdays: EmployeeWorkingWeekday[] | null;
   archiveReason: string;
   employmentType: EmployeeEmploymentType | "";
   hasPaidLeaveEntitlement: boolean;
@@ -51,6 +53,7 @@ export type EmployeeDirectoryDraft = {
   dateOfBirth: string;
   startedDate: string;
   scheduledEmploymentEndDate: string;
+  workingWeekdays: EmployeeWorkingWeekday[] | null;
   archiveReason: string;
   employmentType: EmployeeEmploymentType | "";
   laptopSupplied: EmployeeLaptopSupply;

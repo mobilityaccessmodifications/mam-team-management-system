@@ -2,10 +2,13 @@
 
 import {
   AlertCircle,
+  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Download,
+  Pencil,
   Search,
   Trash2,
   UserPlus,
@@ -40,6 +43,7 @@ import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryDraft,
   EmployeeDirectoryRecord,
+  EmployeeWorkingWeekday,
   UpdateEmployeeDirectoryInput,
 } from "@/lib/employee-directory-types";
 
@@ -57,6 +61,21 @@ const employmentEndReasons = [
   { value: "Redundant", label: "Redundancy" },
   { value: "Other", label: "Other" },
 ] as const;
+const workingDayOptions = [
+  { value: 1, short: "Mon", label: "Monday" },
+  { value: 2, short: "Tue", label: "Tuesday" },
+  { value: 3, short: "Wed", label: "Wednesday" },
+  { value: 4, short: "Thu", label: "Thursday" },
+  { value: 5, short: "Fri", label: "Friday" },
+  { value: 6, short: "Sat", label: "Saturday" },
+  { value: 7, short: "Sun", label: "Sunday" },
+] as const satisfies ReadonlyArray<{ value: EmployeeWorkingWeekday; short: string; label: string }>;
+const scheduleDateFormatter = new Intl.DateTimeFormat("en-AU", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
 export type EmployeeDirectoryProps = {
   /**
@@ -87,6 +106,7 @@ const emptyDraft: EmployeeDirectoryDraft = {
   dateOfBirth: "",
   startedDate: "",
   scheduledEmploymentEndDate: "",
+  workingWeekdays: null,
   archiveReason: "",
   employmentType: "",
   laptopSupplied: "",
@@ -113,6 +133,7 @@ function toDraft(record: EmployeeDirectoryRecord): EmployeeDirectoryDraft {
     dateOfBirth: record.dateOfBirth,
     startedDate: record.startedDate,
     scheduledEmploymentEndDate: record.scheduledEmploymentEndDate,
+    workingWeekdays: record.workingWeekdays,
     archiveReason: record.archiveReason,
     employmentType: record.employmentType,
     laptopSupplied: record.laptopSupplied,
@@ -147,20 +168,44 @@ function todayIso() {
   return `${year}-${month}-${day}`;
 }
 
+function formatScheduleDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return "Not set";
+  return scheduleDateFormatter.format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+function workdaySummary(days: EmployeeWorkingWeekday[] | null) {
+  if (!days?.length) return "Work days not set";
+  const key = days.join(",");
+  if (key === "1,2,3,4,5") return "Mon–Fri";
+  if (key === "1,2,3,4,5,6,7") return "Every day";
+  const labels = new Map(workingDayOptions.map((day) => [day.value, day.short]));
+  return days.map((day) => labels.get(day)).filter(Boolean).join(", ");
+}
+
+function scheduleDateSummary(startDate: string, plannedEndDate: string) {
+  const start = startDate ? `Starts ${formatScheduleDate(startDate)}` : "Start date not set";
+  const end = plannedEndDate ? `Ends ${formatScheduleDate(plannedEndDate)}` : "Ongoing";
+  return `${start} · ${end}`;
+}
+
+function toggleWorkday(
+  days: EmployeeWorkingWeekday[] | null,
+  day: EmployeeWorkingWeekday,
+): EmployeeWorkingWeekday[] | null {
+  const selected = days ?? [];
+  const next = selected.includes(day)
+    ? selected.filter((value) => value !== day)
+    : [...selected, day].sort((first, second) => first - second);
+  return next.length ? next : null;
+}
+
 function companyLabel(company: EmployeeDirectoryRecord["company"]) {
   return company === "mam" ? "MAM" : "Equipsy";
 }
 
 function displayManager(record: EmployeeDirectoryRecord) {
   return record.managerName || "No manager assigned";
-}
-
-function employmentTypeLabel(type: EmployeeDirectoryRecord["employmentType"]) {
-  if (type === "abn") return "ABN";
-  if (type === "casual") return "Casual";
-  if (type === "full_time") return "Full Time";
-  if (type === "part_time") return "Part Time";
-  return "Not set";
 }
 
 function compareByName(first: EmployeeDirectoryRecord, second: EmployeeDirectoryRecord) {
@@ -199,10 +244,18 @@ function selectedRecord(
   return records.find((record) => record.personId === editor.personId) ?? null;
 }
 
+function hasUnsavedChanges(
+  record: EmployeeDirectoryRecord | null,
+  editor: EditorState | null,
+) {
+  if (!record || !editor || editor.mode !== "edit") return false;
+  return JSON.stringify(toDraft(record)) !== JSON.stringify(editor.draft);
+}
+
 function updateDraft(
   editor: EditorState,
   key: keyof EmployeeDirectoryDraft,
-  value: string | string[] | boolean | null,
+  value: EmployeeDirectoryDraft[keyof EmployeeDirectoryDraft],
 ): EditorState {
   return {
     ...editor,
@@ -353,6 +406,7 @@ export function EmployeeDirectory({
     ? { mode: "edit" as const, personId: externallySelectedRecord.personId, draft: toDraft(externallySelectedRecord) }
     : editor;
   const currentRecord = selectedRecord(records, activeEditor);
+  const editorHasUnsavedChanges = hasUnsavedChanges(currentRecord, activeEditor);
   const selectedDirectoryPersonId = activeEditor?.mode === "edit" ? activeEditor.personId : null;
   const employeeListKey = `${selectedDirectoryPersonId ?? "none"}:${sortedRecords.map((record) => record.personId).join(",")}`;
 
@@ -386,7 +440,7 @@ export function EmployeeDirectory({
 
   function handleDraftChange(
     key: keyof EmployeeDirectoryDraft,
-    value: string | string[] | boolean | null,
+    value: EmployeeDirectoryDraft[keyof EmployeeDirectoryDraft],
   ) {
     const base = editor ?? activeEditor;
     if (!base) return;
@@ -417,7 +471,7 @@ export function EmployeeDirectory({
       setSaveError("Select an employment end reason.");
       return;
     }
-    if (base.draft.startedDate && endDatePrompt.date < base.draft.startedDate) {
+    if (record.startedDate && endDatePrompt.date < record.startedDate) {
       setSaveError("The end date cannot be before the start date.");
       return;
     }
@@ -592,6 +646,7 @@ export function EmployeeDirectory({
 
         {activeEditor ? <button className={styles.detailBackdrop} type="button" onClick={closeEditor} aria-label="Close employee record" /> : null}
         {activeEditor ? <EmployeeEditor
+          key={activeEditor.mode === "edit" ? activeEditor.personId : "create"}
           dialogRef={editorDialogRef}
           mobileModal={isMobileSheet}
           editor={activeEditor}
@@ -603,6 +658,7 @@ export function EmployeeDirectory({
           onClose={closeEditor}
           onSubmit={saveRecord}
           onRequestArchive={!activeEditor || activeEditor.mode === "create" || !currentRecord || !currentRecord.isActive ? undefined : openEmploymentEndPrompt}
+          archiveDisabled={editorHasUnsavedChanges}
           onRequestDelete={!activeEditor || activeEditor.mode === "create" || !currentRecord || currentRecord.isActive ? undefined : () => setDeleteTarget(currentRecord)}
         /> : <EmptyDetail />}
       </div>
@@ -727,6 +783,7 @@ function EmployeeEditor({
   onClose,
   onSubmit,
   onRequestArchive,
+  archiveDisabled,
   onRequestDelete,
 }: {
   dialogRef: RefObject<HTMLElement | null>;
@@ -736,16 +793,18 @@ function EmployeeEditor({
   records: EmployeeDirectoryRecord[];
   saving: boolean;
   error: string;
-  onChange: (key: keyof EmployeeDirectoryDraft, value: string | string[] | boolean | null) => void;
+  onChange: (key: keyof EmployeeDirectoryDraft, value: EmployeeDirectoryDraft[keyof EmployeeDirectoryDraft]) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onRequestArchive?: () => void;
+  archiveDisabled?: boolean;
   onRequestDelete?: () => void;
 }) {
   const managerOptions = records
     .filter((record) => record.isActive && record.personId !== currentRecord?.personId)
     .sort((first, second) => first.fullName.localeCompare(second.fullName));
   const isCreate = editor.mode === "create";
+  const [editingSchedule, setEditingSchedule] = useState(isCreate);
 
   return <section className={styles.editor} ref={dialogRef} role={mobileModal ? "dialog" : undefined} aria-modal={mobileModal ? "true" : undefined} aria-label={isCreate ? "Add employee" : "Edit employee"} tabIndex={mobileModal ? -1 : undefined}>
     <header className={styles.editorHeader}>
@@ -756,10 +815,10 @@ function EmployeeEditor({
       <button type="button" className={styles.closeButton} onClick={onClose} disabled={saving} aria-label="Close employee record"><X size={18} /></button>
     </header>
 
-    <form onSubmit={onSubmit}>
+    <form onSubmit={onSubmit} aria-busy={saving}>
       {error ? <div className={styles.formError} role="alert"><AlertCircle size={16} /><span>{error}</span></div> : null}
 
-      <fieldset>
+      <fieldset disabled={saving}>
         <legend>Directory details</legend>
         <div className={styles.formGrid}>
           <Field label="First name" required>
@@ -789,7 +848,7 @@ function EmployeeEditor({
         </div>
       </fieldset>
 
-      <fieldset>
+      <fieldset disabled={saving}>
         <legend>Contact details</legend>
         <div className={styles.formGrid}>
           <Field label="Work email">
@@ -810,14 +869,11 @@ function EmployeeEditor({
         </div>
       </fieldset>
 
-      <fieldset>
-        <legend>Employment dates</legend>
+      <fieldset disabled={saving}>
+        <legend>Employment</legend>
         <div className={styles.formGrid}>
           <Field label="Date of birth">
             <input value={editor.draft.dateOfBirth} onChange={(event) => onChange("dateOfBirth", event.target.value)} type="date" />
-          </Field>
-          <Field label="Start date">
-            <input value={editor.draft.startedDate} onChange={(event) => onChange("startedDate", event.target.value)} type="date" />
           </Field>
           <Field label="Employment type" required>
             <select value={editor.draft.employmentType} onChange={(event) => onChange("employmentType", event.target.value)} required>
@@ -828,24 +884,56 @@ function EmployeeEditor({
               <option value="part_time">Part Time</option>
             </select>
           </Field>
-          <Field label="Leave entitlement">
-            <input
-              value={editor.draft.employmentType === "full_time" || editor.draft.employmentType === "part_time"
-                ? "Paid leave entitlement"
-                : editor.draft.employmentType
-                  ? "Unpaid leave only"
-                  : "Set employment type"}
-              readOnly
-              aria-label={`Leave entitlement for ${employmentTypeLabel(editor.draft.employmentType)}`}
-            />
-          </Field>
-          <Field label="Scheduled employment end date" className={styles.fullSpan}>
-            <input value={editor.draft.scheduledEmploymentEndDate} onChange={(event) => onChange("scheduledEmploymentEndDate", event.target.value)} type="date" />
-          </Field>
           {!editor.draft.isActive ? <Field label="Archive reason" className={styles.fullSpan}>
             <input value={editor.draft.archiveReason} readOnly />
           </Field> : null}
         </div>
+      </fieldset>
+
+      <fieldset disabled={saving}>
+        <legend>Work schedule</legend>
+        <div className={styles.scheduleOverview}>
+          <span className={styles.scheduleIcon}><CalendarDays size={18} aria-hidden="true" /></span>
+          <span className={styles.scheduleCopy}>
+            <strong>{workdaySummary(editor.draft.workingWeekdays)}</strong>
+            <small>{scheduleDateSummary(editor.draft.startedDate, editor.draft.scheduledEmploymentEndDate)}</small>
+          </span>
+          <button
+            type="button"
+            className={styles.scheduleEdit}
+            onClick={() => setEditingSchedule((current) => !current)}
+            aria-expanded={editingSchedule}
+            aria-controls="employee-work-schedule-fields"
+          >
+            {editingSchedule ? <ChevronUp size={15} aria-hidden="true" /> : <Pencil size={15} aria-hidden="true" />}
+            {editingSchedule ? "Hide" : "Edit"}
+          </button>
+        </div>
+        {editingSchedule ? <div className={styles.scheduleFields} id="employee-work-schedule-fields">
+          <Field label="Start date">
+            <input name="startedDate" value={editor.draft.startedDate} onChange={(event) => onChange("startedDate", event.target.value)} type="date" />
+          </Field>
+          <Field label="Planned end date">
+            <input name="scheduledEmploymentEndDate" value={editor.draft.scheduledEmploymentEndDate} onChange={(event) => onChange("scheduledEmploymentEndDate", event.target.value)} type="date" min={editor.draft.startedDate || undefined} />
+          </Field>
+          <div className={styles.workdayField}>
+            <span id="employee-workdays-label">Usual work days</span>
+            <div className={styles.workdayPicker} role="group" aria-labelledby="employee-workdays-label">
+              {workingDayOptions.map((day) => {
+                const selected = editor.draft.workingWeekdays?.includes(day.value) ?? false;
+                return <button
+                  key={day.value}
+                  type="button"
+                  className={styles.workdayButton}
+                  data-selected={selected}
+                  aria-pressed={selected}
+                  aria-label={day.label}
+                  onClick={() => onChange("workingWeekdays", toggleWorkday(editor.draft.workingWeekdays, day.value))}
+                ><span>{day.short}</span>{selected ? <Check size={12} aria-hidden="true" /> : null}</button>;
+              })}
+            </div>
+          </div>
+        </div> : null}
       </fieldset>
 
       {!isCreate && currentRecord ? <EmployeeDeviceAssignments
@@ -855,8 +943,9 @@ function EmployeeEditor({
       /> : null}
 
       <footer className={styles.formFooter}>
+        {archiveDisabled ? <p className={styles.footerHint} id="save-before-ending-employment">Save changes before ending employment.</p> : null}
         <div>
-          {onRequestArchive ? <button type="button" className={styles.dangerAction} onClick={onRequestArchive} disabled={saving}><UserMinus size={14} /> End employment</button> : null}
+          {onRequestArchive ? <button type="button" className={styles.dangerAction} onClick={onRequestArchive} disabled={saving || archiveDisabled} aria-describedby={archiveDisabled ? "save-before-ending-employment" : undefined}><UserMinus size={14} /> End employment</button> : null}
           {onRequestDelete ? <button type="button" className={styles.dangerAction} onClick={onRequestDelete} disabled={saving}><Trash2 size={14} /> Delete archived profile</button> : null}
           <button type="button" className={styles.secondaryAction} onClick={onClose} disabled={saving}>Cancel</button>
           <button type="submit" className={styles.primaryAction} disabled={saving}>{saving ? "Saving…" : isCreate ? "Create employee" : "Save changes"}</button>
