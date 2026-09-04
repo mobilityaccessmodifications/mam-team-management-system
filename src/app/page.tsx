@@ -20,6 +20,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   let canViewSubscriptions = false;
   let canManageSubscriptionCredentials = false;
   let canManageSubscriptionCredentialGrants = false;
+  let canManageAnalyticsApi = false;
   let canAccessOwnSubscriptions = false;
   let canViewSubscriptionReviewCalendar = false;
   let canViewOwnTasks = false;
@@ -38,6 +39,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       { data: subscriptionReviewCapability, error: subscriptionReviewCapabilityError },
       { data: subscriptionCredentialCapability, error: subscriptionCredentialCapabilityError },
       { data: subscriptionCredentialGrantCapability, error: subscriptionCredentialGrantCapabilityError },
+      { data: analyticsApiCapability, error: analyticsApiCapabilityError },
     ] = await Promise.all([
       supabase.rpc("get_portal_workspace_capabilities"),
       supabase.rpc("can_view_subscription_review_calendar"),
@@ -46,6 +48,10 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       // remain hidden without interrupting a valid staff session.
       supabase.rpc("can_manage_subscription_credentials"),
       supabase.rpc("can_manage_subscription_credential_grants"),
+      // Analytics key lifecycle is intentionally a separate System Admin
+      // capability. If its forward migration is unavailable, keep the tab
+      // hidden without disrupting an otherwise valid portal session.
+      supabase.rpc("can_manage_analytics_api"),
     ]);
     const current = Array.isArray(capabilities) ? capabilities[0] : null;
     isAdmin = current?.can_manage_accounts === true;
@@ -60,6 +66,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       && subscriptionCredentialCapability === true;
     canManageSubscriptionCredentialGrants = !subscriptionCredentialGrantCapabilityError
       && subscriptionCredentialGrantCapability === true;
+    canManageAnalyticsApi = !analyticsApiCapabilityError && analyticsApiCapability === true;
     canAccessOwnSubscriptions = current?.can_access_own_subscriptions === true;
     canViewSubscriptionReviewCalendar = !subscriptionReviewCapabilityError
       && subscriptionReviewCapability === true;
@@ -104,6 +111,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     canViewSubscriptions={canViewSubscriptions}
     canManageSubscriptionCredentials={canManageSubscriptionCredentials}
     canManageSubscriptionCredentialGrants={canManageSubscriptionCredentialGrants}
+    canManageAnalyticsApi={canManageAnalyticsApi}
     canAccessOwnSubscriptions={canAccessOwnSubscriptions}
     canViewSubscriptionReviewCalendar={canViewSubscriptionReviewCalendar}
     canViewOwnTasks={canViewOwnTasks}

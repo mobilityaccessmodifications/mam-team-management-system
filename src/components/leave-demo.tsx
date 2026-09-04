@@ -73,6 +73,7 @@ import {
   type AccountDto,
 } from "@/components/account-management";
 import { AssetRegister } from "@/components/asset-register";
+import { AnalyticsApiManagement } from "@/components/analytics-api-management";
 import { getOrganisationPersonWorkEmail } from "@/app/people/actions";
 import { CheckInRegister } from "@/components/check-in-register";
 import { CheckInWorkspace } from "@/components/check-in-workspace";
@@ -508,6 +509,7 @@ export function LeaveDemo({
   canViewSubscriptions = false,
   canManageSubscriptionCredentials = false,
   canManageSubscriptionCredentialGrants = false,
+  canManageAnalyticsApi = false,
   canAccessOwnSubscriptions = false,
   canViewOwnTasks = false,
   canViewTeamCalendar = false,
@@ -532,6 +534,8 @@ export function LeaveDemo({
   canManageSubscriptionCredentials?: boolean;
   /** System Admin-only capability to select named credential delegates. */
   canManageSubscriptionCredentialGrants?: boolean;
+  /** System Admin-only capability to generate, rotate and revoke analytics keys. */
+  canManageAnalyticsApi?: boolean;
   /** System-derived self-service access to the current employee's own subscriptions. */
   canAccessOwnSubscriptions?: boolean;
   /** An active employee can see the self-only Tasks tab even without manager scope. */
@@ -1808,6 +1812,9 @@ export function LeaveDemo({
                   : <SubscriptionCredentialVault
                       canManageCredentialGrants={canManageSubscriptionCredentialGrants}
                     />
+                : undefined}
+              renderAnalyticsApiManagement={canManageAnalyticsApi && !isPreviewingEmployeeAccess
+                ? <AnalyticsApiManagement />
                 : undefined}
             />
           </div>

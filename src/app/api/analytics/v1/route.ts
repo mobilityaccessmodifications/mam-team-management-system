@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -26,16 +26,47 @@ const JSON_HEADERS = {
   "Vary": "Authorization",
 };
 
-function matchesAnalyticsKey(request: Request) {
-  const expected = process.env.MAM_ANALYTICS_API_KEY?.trim();
+function bearerToken(request: Request) {
   const authorization = request.headers.get("authorization");
   const candidate = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+  return candidate.length <= 512 ? candidate : "";
+}
+
+function matchesEnvironmentAnalyticsKey(candidate: string) {
+  const expected = process.env.MAM_ANALYTICS_API_KEY?.trim();
 
   if (!expected || expected.length < 32 || !candidate) return false;
 
   const expectedBytes = Buffer.from(expected);
   const candidateBytes = Buffer.from(candidate);
   return candidateBytes.length === expectedBytes.length && timingSafeEqual(candidateBytes, expectedBytes);
+}
+
+/**
+ * Database-managed keys supersede the deployment environment key once one is
+ * created. Before the migration has been applied, the existing environment
+ * secret remains a safe compatibility path instead of causing an outage.
+ */
+async function matchesAnalyticsKey(request: Request) {
+  const candidate = bearerToken(request);
+  if (!candidate) return false;
+
+  const candidateHash = createHash("sha256").update(candidate, "utf8").digest("hex");
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase.rpc("validate_analytics_api_key", {
+      p_key_hash: candidateHash,
+    });
+    if (!error && typeof data === "boolean") return data;
+    // PostgREST uses PGRST202 when the RPC is not present in its schema cache.
+    // Only that initial, pre-migration state may use the old environment key.
+    if (error?.code !== "PGRST202") return false;
+  } catch {
+    // A missing/invalid server configuration must fail closed.
+    return false;
+  }
+
+  return matchesEnvironmentAnalyticsKey(candidate);
 }
 
 function isDate(value: string | null) {
@@ -65,7 +96,7 @@ function allowedDataset(value: string | null): value is AnalyticsDataset {
  * route never exposes the Supabase secret key or direct database tables.
  */
 export async function GET(request: Request) {
-  if (!matchesAnalyticsKey(request)) {
+  if (!(await matchesAnalyticsKey(request))) {
     return json({ ok: false, code: "unauthorized" }, 401);
   }
 
