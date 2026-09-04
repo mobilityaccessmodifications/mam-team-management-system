@@ -4,7 +4,6 @@ import {
   ArrowUpRight,
   CalendarDays,
   CheckCircle2,
-  ChevronLeft,
   ChevronRight,
   ChevronDown,
   ClipboardList,
@@ -83,6 +82,7 @@ import { EmployeeTeamDirectory } from "@/components/employee-team-directory";
 import { ManagerEmployeeDirectory } from "@/components/manager-employee-directory";
 import { SubscriptionCredentialVault } from "@/components/subscription-credential-vault";
 import { SubscriptionRegister } from "@/components/subscription-register";
+import { TeamCalendar } from "@/components/team-calendar";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   SelfProfileMenu,
@@ -354,46 +354,6 @@ function requestsOverlap(first: LeaveRequest, second: LeaveRequest) {
   return first.startTime! < second.endTime! && second.startTime! < first.endTime!;
 }
 
-function startOfCalendarMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1, 12);
-}
-
-function getCalendarMonthLabel(month: Date) {
-  return new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric" }).format(month);
-}
-
-function getCalendarDays(month: Date) {
-  const first = startOfCalendarMonth(month);
-  const firstWeekday = (first.getDay() + 6) % 7;
-  first.setDate(first.getDate() - firstWeekday);
-  return Array.from({ length: 42 }, (_, index) => {
-    const current = new Date(first);
-    current.setDate(first.getDate() + index);
-    return {
-      iso: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`,
-      day: current.getDate(),
-      inMonth: current.getMonth() === month.getMonth() && current.getFullYear() === month.getFullYear(),
-    };
-  });
-}
-
-function isLeapYear(year: number) {
-  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-}
-
-function birthdayOccursOnCalendarDate(birthday: BirthdayCalendarEntry, date: string) {
-  const [year, month, day] = date.split("-").map(Number);
-  if (birthday.month !== month) return false;
-  if (birthday.day === day) return true;
-
-  // A recurring 29 February birthday remains visible every year. The system
-  // observes it on 28 February where the selected calendar year has no 29th.
-  return birthday.month === 2
-    && birthday.day === 29
-    && day === 28
-    && !isLeapYear(year);
-}
-
 function checkInMilestoneLabel(milestone: CheckInCalendarEntry["milestone"]) {
   if (milestone === "2_week") return "2-week check-in";
   if (milestone === "1_month") return "1-month check-in";
@@ -567,7 +527,6 @@ export function LeaveDemo({
   const [leaveWorkspaceUsesProfileScope, setLeaveWorkspaceUsesProfileScope] = useState(false);
   const [leaveDataLoading, setLeaveDataLoading] = useState(true);
   const [leaveDataError, setLeaveDataError] = useState("");
-  const [calendarMonth, setCalendarMonth] = useState(() => startOfCalendarMonth(new Date()));
   const [selectedRequestId, setSelectedRequestId] = useState(initialNavigation?.requestId ?? "");
   const [mobileRequestDetailOpen, setMobileRequestDetailOpen] = useState(Boolean(initialNavigation?.requestId));
   const [leaveSection, setLeaveSection] = useState<LeaveSection>(initialNavigation?.section ?? "requests");
@@ -1719,7 +1678,7 @@ export function LeaveDemo({
           {organisationAccessError && activeView === "people" ? <div className={styles.loadErrorAction} role="alert"><span>{organisationAccessError}</span><button type="button" onClick={() => void loadOrganisation()}>Retry permissions</button></div> : null}
           {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} canReview={canReviewLeave} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
           {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
-          {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <CalendarView birthdays={calendarIsSubscriptionReviewOnly ? [] : calendarBirthdays} checkIns={calendarIsSubscriptionReviewOnly ? [] : calendarCheckIns} requests={calendarIsSubscriptionReviewOnly ? [] : calendarRequests} subscriptionReviews={calendarSubscriptionReviews} reviewOnly={calendarIsSubscriptionReviewOnly} month={calendarMonth} loading={leaveDataLoading} onNextMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1)))} onPreviousMonth={() => setCalendarMonth((current) => startOfCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1)))} onToday={() => setCalendarMonth(startOfCalendarMonth(new Date()))} /> : null}
+          {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <TeamCalendar birthdays={calendarIsSubscriptionReviewOnly ? [] : calendarBirthdays} checkIns={calendarIsSubscriptionReviewOnly ? [] : calendarCheckIns} requests={calendarIsSubscriptionReviewOnly ? [] : calendarRequests} subscriptionReviews={calendarSubscriptionReviews} reviewOnly={calendarIsSubscriptionReviewOnly} loading={leaveDataLoading} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
               key={`${activeProfile.accessRole}:${isPreviewingEmployeeAccess ? activeProfile.id : "signed-in"}`}
@@ -2159,144 +2118,6 @@ function ApprovalCalendar({ selected, requests, checkIns }: { selected: LeaveReq
         {overlaps.map((request) => <article className={request.status === "Approved" ? styles.reviewEventApproved : styles.reviewEventPending} key={`impact:${request.id}`}><i>{request.initials}</i><span><strong>{request.employee}</strong><small>{request.dateLabel} · {request.status}</small></span></article>)}
         {impactedCheckIns.map((entry) => <article className={styles.reviewEventCheckIn} key={`impact:checkin:${entry.reminderId}`}><i>CI</i><span><strong>{entry.employee}</strong><small>{formatDateRange(entry.dueDate, entry.dueDate)} · {checkInMilestoneLabel(entry.milestone)}</small></span></article>)}
       </div>
-    </section>
-  );
-}
-
-function CalendarView({
-  birthdays,
-  checkIns,
-  requests,
-  subscriptionReviews,
-  reviewOnly,
-  month,
-  loading,
-  onPreviousMonth,
-  onNextMonth,
-  onToday,
-}: {
-  birthdays: BirthdayCalendarEntry[];
-  checkIns: CheckInCalendarEntry[];
-  requests: LeaveRequest[];
-  subscriptionReviews: SubscriptionReviewCalendarEntry[];
-  /** An employee-responsible calendar must never include team data. */
-  reviewOnly: boolean;
-  month: Date;
-  loading: boolean;
-  onPreviousMonth: () => void;
-  onNextMonth: () => void;
-  onToday: () => void;
-}) {
-  const days = getCalendarDays(month);
-  const visible = requests.filter((request) => request.status !== "Declined" && request.status !== "Cancelled");
-  const monthLabel = getCalendarMonthLabel(month);
-  const eventsForDay = (day: (typeof days)[number]) => {
-    const birthdayEvents = birthdays
-      .filter((birthday) => birthdayOccursOnCalendarDate(birthday, day.iso))
-      .map((birthday, index) => ({
-        kind: "birthday" as const,
-        id: `birthday:${birthday.employee}:${birthday.month}:${birthday.day}:${index}`,
-        birthday,
-      }));
-    const leaveEvents = visible
-      .filter((request) => day.iso >= request.startDate && day.iso <= request.endDate)
-      .map((request) => ({ kind: "leave" as const, id: request.id, request }));
-    const checkInEvents = Array.from(new Map(checkIns
-      .filter((entry) => entry.dueDate === day.iso)
-      .map((entry) => [`${entry.personId}:${entry.milestone}:${entry.dueDate}`, entry])).values());
-    const reviewEvents = subscriptionReviews.filter((entry) => entry.dueDate === day.iso);
-    return { birthdayEvents, leaveEvents, checkInEvents, reviewEvents };
-  };
-  const agendaDays = days
-    .filter((day) => day.inMonth)
-    .map((day) => ({ day, ...eventsForDay(day) }))
-    .filter(({ birthdayEvents, leaveEvents, checkInEvents, reviewEvents }) => (
-      birthdayEvents.length + leaveEvents.length + checkInEvents.length + reviewEvents.length > 0
-    ));
-
-  return (
-    <section className={`${styles.panel} ${styles.calendarPanel}`}>
-      <div className={styles.calendarToolbar}>
-        <div className={styles.calendarMonthControls}>
-          <button type="button" onClick={onPreviousMonth} aria-label="Previous month" title="Previous month"><ChevronLeft size={17} /></button>
-          <strong aria-live="polite">{monthLabel}</strong>
-          <button type="button" onClick={onNextMonth} aria-label="Next month" title="Next month"><ChevronRight size={17} /></button>
-          <button type="button" onClick={onToday}>Today</button>
-        </div>
-        <div className={styles.legend} aria-label="Calendar legend">
-          {!reviewOnly ? <>
-            <span><i className={styles.legendApproved} />Approved</span>
-            <span><i className={styles.legendPending} />Pending</span>
-            <span><i className={styles.legendBirthday} />Birthday</span>
-            <span><i className={styles.legendCheckIn} />Check-in</span>
-          </> : null}
-          <span><i className={styles.legendSubscriptionReview} />Subscription review</span>
-        </div>
-      </div>
-      <div className={styles.calendarWeek}>
-        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}
-      </div>
-      <div className={styles.calendarGrid}>
-        {days.map((day) => {
-          const { birthdayEvents, leaveEvents, checkInEvents, reviewEvents } = eventsForDay(day);
-          const showReviewSummary = reviewEvents.length > 3;
-          // Birthdays and open check-ins are never hidden. Leave entries use
-          // any remaining compact slots and keep their existing overflow row.
-          const shownLeaveEvents = leaveEvents.slice(0, Math.max(0, 3 - birthdayEvents.length - checkInEvents.length));
-
-          return (
-            <div className={`${styles.calendarDay} ${day.inMonth ? "" : styles.calendarMuted}`} key={day.iso}>
-              <span>{day.day}</span>
-              {birthdayEvents.map((event) => (
-                <article className={styles.eventBirthday} key={event.id}>
-                  <i aria-hidden="true">BD</i>
-                  <b>{event.birthday.employee}<small>Birthday</small></b>
-                </article>
-              ))}
-              {checkInEvents.map((entry) => (
-                <article className={styles.eventCheckIn} key={`checkin:${entry.reminderId}`}>
-                  <i aria-hidden="true">CI</i>
-                  <b>{entry.employee}<small>{checkInMilestoneLabel(entry.milestone)}</small></b>
-                </article>
-              ))}
-              {showReviewSummary ? <article className={styles.eventSubscriptionReview} aria-label={`${reviewEvents.length} paid subscription reviews due`} title={reviewEvents.map((entry) => entry.serviceName).join(", ")}>
-                <i aria-hidden="true">SR</i>
-                <b>{reviewEvents.length} paid subscriptions<small>Quarterly review</small></b>
-              </article> : reviewEvents.map((entry) => (
-                <article className={styles.eventSubscriptionReview} key={`subscription-review:${entry.subscriptionId}`}>
-                  <i aria-hidden="true">SR</i>
-                  <b>{entry.serviceName}<small>Subscription review</small></b>
-                </article>
-              ))}
-              {shownLeaveEvents.map((event) => (
-                <article className={event.request.status === "Approved" ? styles.eventApproved : styles.eventPending} key={event.id}>
-                  <i>{event.request.initials}</i>
-                  <b>{event.request.employee}<small>{event.request.leaveType === "Away" ? "Away" : `${event.request.status} · ${event.request.leaveType}`}</small></b>
-                </article>
-              ))}
-              {leaveEvents.length > shownLeaveEvents.length ? <small className={styles.calendarMore}>+{leaveEvents.length - shownLeaveEvents.length} more leave</small> : null}
-            </div>
-          );
-        })}
-      </div>
-      <div className={styles.calendarAgenda} aria-label={`${monthLabel} events`}>
-        {agendaDays.length ? agendaDays.map(({ day, birthdayEvents, leaveEvents, checkInEvents, reviewEvents }) => (
-          <section className={styles.calendarAgendaDay} key={`agenda:${day.iso}`}>
-            <time dateTime={day.iso}>
-              <strong>{new Intl.DateTimeFormat("en-AU", { weekday: "short", timeZone: "Australia/Melbourne" }).format(new Date(`${day.iso}T00:00:00.000Z`))}</strong>
-              <span>{day.day}</span>
-            </time>
-            <div>
-              {birthdayEvents.map((event) => <article className={styles.eventBirthday} key={`agenda:${event.id}`}><i aria-hidden="true">BD</i><b>{event.birthday.employee}<small>Birthday</small></b></article>)}
-              {checkInEvents.map((entry) => <article className={styles.eventCheckIn} key={`agenda:checkin:${entry.reminderId}`}><i aria-hidden="true">CI</i><b>{entry.employee}<small>{checkInMilestoneLabel(entry.milestone)}</small></b></article>)}
-              {reviewEvents.map((entry) => <article className={styles.eventSubscriptionReview} key={`agenda:subscription-review:${entry.subscriptionId}`}><i aria-hidden="true">SR</i><b>{entry.serviceName}<small>Subscription review</small></b></article>)}
-              {leaveEvents.map((event) => <article className={event.request.status === "Approved" ? styles.eventApproved : styles.eventPending} key={`agenda:leave:${event.id}`}><i aria-hidden="true">{event.request.initials}</i><b>{event.request.employee}<small>{event.request.leaveType === "Away" ? "Away" : `${event.request.status} · ${event.request.leaveType}`}</small></b></article>)}
-            </div>
-          </section>
-        )) : <div className={styles.calendarAgendaEmpty}><CalendarDays size={22} aria-hidden="true" /><strong>No events this month</strong></div>}
-      </div>
-      <footer className={styles.calendarPrivacy}><ShieldCheck size={14} aria-hidden="true" /><span>{reviewOnly ? "Only your assigned reviews are shown." : "Private leave details stay hidden."}</span></footer>
-      {loading ? <span className={styles.srOnly} role="status">Refreshing calendar</span> : null}
     </section>
   );
 }
