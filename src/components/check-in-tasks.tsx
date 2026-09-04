@@ -116,19 +116,29 @@ export function CheckInTasks({
   previewPersonId,
   readOnly = false,
   toolbarAction,
+  scheduleContent,
+  showCheckInTasks = true,
 }: {
   previewPersonId?: string;
   readOnly?: boolean;
   toolbarAction?: ReactNode;
+  scheduleContent?: ReactNode;
+  showCheckInTasks?: boolean;
 } = {}) {
   const [data, setData] = useState<CheckInTasksData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(showCheckInTasks);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pendingReminderId, setPendingReminderId] = useState("");
   const [reviewReminderId, setReviewReminderId] = useState("");
 
   const load = useCallback(async () => {
+    if (!showCheckInTasks) {
+      setData(null);
+      setError("");
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -153,7 +163,7 @@ export function CheckInTasks({
     } finally {
       setLoading(false);
     }
-  }, [previewPersonId]);
+  }, [previewPersonId, showCheckInTasks]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -176,8 +186,8 @@ export function CheckInTasks({
     }
   }
 
-  return <section className={styles.workspace} aria-label="Check-in tasks">
-    <header className={styles.header}>
+  return <section className={styles.workspace} aria-label={showCheckInTasks ? "Check-in tasks" : "Work schedule"}>
+    {showCheckInTasks ? <header className={styles.header}>
       <h2 className={styles.srOnly}>Check-in tasks</h2>
       <div className={styles.headerActions}>
         {toolbarAction}
@@ -192,22 +202,24 @@ export function CheckInTasks({
           <RefreshCw size={16} aria-hidden="true" />
         </button>
       </div>
-    </header>
+    </header> : null}
 
-    {error ? <p className={styles.error} role="alert"><AlertTriangle size={17} aria-hidden="true" />{error}</p> : null}
-    {notice ? <p className={styles.notice} role="status"><CheckCircle2 size={17} aria-hidden="true" />{notice}</p> : null}
+    {scheduleContent}
 
-    {loading ? <div className={styles.loading} aria-live="polite"><CalendarCheck2 size={24} aria-hidden="true" /><MotionLoader label="Loading check-in tasks" /></div> : null}
-    {!loading && data && !data.tasks.length ? <div className={styles.empty}>
+    {showCheckInTasks && error ? <p className={styles.error} role="alert"><AlertTriangle size={17} aria-hidden="true" />{error}</p> : null}
+    {showCheckInTasks && notice ? <p className={styles.notice} role="status"><CheckCircle2 size={17} aria-hidden="true" />{notice}</p> : null}
+
+    {showCheckInTasks && loading ? <div className={styles.loading} aria-live="polite"><CalendarCheck2 size={24} aria-hidden="true" /><MotionLoader label="Loading check-in tasks" /></div> : null}
+    {showCheckInTasks && !loading && data && !data.tasks.length ? <div className={styles.empty}>
       <UsersRound size={24} aria-hidden="true" />
       <strong>No check-ins need your action.</strong>
     </div> : null}
-    {!loading && data?.tasks.length ? <div className={styles.list}>
+    {showCheckInTasks && !loading && data?.tasks.length ? <div className={styles.list}>
       {data.tasks.map((task) => {
         const pending = pendingReminderId === task.reminderId;
         const reviewOpen = reviewReminderId === task.reminderId;
         const reviewCopy = reviewReasonCopyFor(task);
-        return <article className={styles.task} key={task.reminderId}>
+        return <article className={styles.task} data-status={task.status} key={task.reminderId}>
           <div className={styles.person}>
             <strong>{task.employeeName}</strong>
             <span>{task.positionTitle || "Role not recorded"} · {companyLabel(task.company)}</span>
@@ -227,7 +239,7 @@ export function CheckInTasks({
             onClick={() => setReviewReminderId(reviewOpen ? "" : task.reminderId)}
           >
             <CircleAlert size={18} aria-hidden="true" />
-          </button> : <span className={styles.status} data-status={task.status}>{statusLabel(task.status)}</span>}
+          </button> : task.status !== "scheduled" ? <span className={styles.status} data-status={task.status}>{statusLabel(task.status)}</span> : null}
           {!readOnly ? <button
               className={styles.complete}
               type="button"
