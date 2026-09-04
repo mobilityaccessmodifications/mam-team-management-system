@@ -220,22 +220,26 @@ export function CheckInTasks({
             className={`${styles.status} ${styles.statusButton}`}
             data-status={task.status}
             type="button"
+            aria-label={`${reviewOpen ? "Hide" : "Show"} why ${task.employeeName}'s ${milestoneLabel(task.milestone)} needs review`}
             aria-expanded={reviewOpen}
             aria-controls={`review-${task.reminderId}`}
+            title="Needs review"
             onClick={() => setReviewReminderId(reviewOpen ? "" : task.reminderId)}
           >
-            <CircleAlert size={14} aria-hidden="true" />
-            {statusLabel(task.status)}
+            <CircleAlert size={18} aria-hidden="true" />
           </button> : <span className={styles.status} data-status={task.status}>{statusLabel(task.status)}</span>}
           {!readOnly ? <button
               className={styles.complete}
               type="button"
               disabled={Boolean(pendingReminderId) || !task.canComplete}
               onClick={() => void completeTask(task)}
+              aria-label={pending
+                ? `Marking ${task.employeeName}'s ${milestoneLabel(task.milestone)} complete`
+                : `Mark ${task.employeeName}'s ${milestoneLabel(task.milestone)} complete`}
+              aria-busy={pending}
               title={taskActionHint(task)}
             >
-              <CheckCircle2 size={16} aria-hidden="true" />
-              {pending ? "Saving…" : "Mark complete"}
+              <CheckCircle2 size={19} aria-hidden="true" />
             </button> : null}
           {reviewOpen ? <div className={styles.reviewPanel} id={`review-${task.reminderId}`} role="region" aria-label={`Why ${task.employeeName}'s check-in needs review`}>
             <strong>{reviewCopy.title}</strong>
