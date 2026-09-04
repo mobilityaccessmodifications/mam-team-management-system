@@ -248,8 +248,8 @@ export function CheckInRegister({
     <h2 className={styles.srOnly}>Employee check-ins</h2>
     <header className={styles.toolbar}>
       {data ? <ResourceLinks data={data} /> : <span />}
-      <button className={styles.secondaryAction} type="button" onClick={() => void load()} disabled={loading || Boolean(pendingAction)}>
-        <RefreshCw size={16} /> Refresh
+      <button className={styles.secondaryAction} type="button" onClick={() => void load()} disabled={loading || Boolean(pendingAction)} aria-label="Refresh check-ins" title="Refresh">
+        <RefreshCw size={16} aria-hidden="true" />
       </button>
     </header>
 
@@ -303,13 +303,13 @@ export function CheckInRegister({
 
         <div className={styles.summaryGrid}>
           <Info label="Manager" value={selected.managerName || "Not assigned"} />
-          <Info label="Manager work email" value={selected.recipientEmail || "Not recorded"} valueKind="email" warning={selected.recipientSource === "missing"} />
+          <Info label="Reminder recipient" value={selected.recipientEmail || "Not recorded"} valueKind="email" warning={selected.recipientSource === "missing"} />
           <Info label="Start date" value={formatDate(selected.startDate)} />
           <Info label="Company" value={selected.company === "mam" ? "MAM" : "Equipsy"} />
         </div>
 
         <details className={styles.privateDetails}>
-          <summary><UserRound size={16} /><span>Contact details</span></summary>
+          <summary><UserRound size={16} aria-hidden="true" /><span>Contact details</span></summary>
           <div>
             <Info label="Address" value={selected.address || "Not recorded"} />
             <Info label="Date of birth" value={formatDate(selected.dateOfBirth)} />
@@ -351,8 +351,7 @@ function ReminderRow({ reminder, pending, onComplete }: {
 }) {
   const isPending = Boolean(pending);
   return <div className={styles.reminder} data-status={reminder.status}>
-    <span className={styles.statusDot} />
-    <div className={styles.reminderCopy}><strong>{milestoneLabel(reminder.milestone)}{reminder.sequence === "final" ? " · final reminder" : ""}</strong><p>Due {formatDate(reminder.dueDate)} · scheduled email {formatDate(reminder.notifyDate)}</p>{reminder.status === "needs_review" ? <small>{reasonLabel(reminder.needsReviewReason)}</small> : null}</div>
+    <div className={styles.reminderCopy}><strong>{milestoneLabel(reminder.milestone)}{reminder.sequence === "final" ? " · final reminder" : ""}</strong><p>{formatDate(reminder.dueDate)} · email {formatDate(reminder.notifyDate)}</p>{reminder.status === "needs_review" ? <small>{reasonLabel(reminder.needsReviewReason)}</small> : null}</div>
     <AnimatedStatusBadge className={styles.status} tone={reminderTone(reminder.status)}>{reminder.status.replaceAll("_", " ")}</AnimatedStatusBadge>
     <div className={styles.reminderActions}>
       {canCompleteReminder(reminder) ? <button type="button" disabled={isPending} onClick={onComplete}>{pending === `complete:${reminder.id}` ? "Saving…" : "Mark complete"}</button> : null}

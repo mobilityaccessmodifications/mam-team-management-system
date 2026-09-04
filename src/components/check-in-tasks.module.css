@@ -5,6 +5,18 @@
   color: var(--text-primary);
 }
 
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -361,4 +373,25 @@
   .reviewPanel {
     padding: 10px 11px;
   }
+}
+
+/* Clarity pass. */
+.workspace { gap: 12px; }
+.header { min-height: 44px; justify-content: flex-end; }
+.refresh { width: 44px; min-width: 44px; min-height: 44px; padding: 0; border-radius: 10px; }
+.refresh:hover,
+.complete:hover:not(:disabled),
+.task:hover,
+.statusButton:hover { transform: none; box-shadow: none; }
+.list { gap: 0; padding: 0; border-radius: 14px; background: var(--surface-raised); box-shadow: none; }
+.task { min-height: 68px; border-width: 0 0 1px; border-radius: 0; box-shadow: none; }
+.task:last-child { border-bottom: 0; }
+.complete { min-height: 44px; border-radius: 10px; }
+.reviewPanel { border-radius: 10px; }
+
+@media (max-width: 680px) {
+  .headerActions { width: 100%; justify-content: flex-end; }
+  .list { gap: 0; padding: 0; }
+  .task { border: 0; border-bottom: 1px solid var(--surface-border); border-radius: 0; }
+  .person span { display: none; }
 }

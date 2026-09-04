@@ -19,6 +19,11 @@ export function useDialogFocus(
   onClose: () => void,
 ) {
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -38,7 +43,7 @@ export function useDialogFocus(
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -69,5 +74,5 @@ export function useDialogFocus(
       const returnTarget = returnFocusRef.current;
       window.requestAnimationFrame(() => returnTarget?.focus({ preventScroll: true }));
     };
-  }, [dialogRef, initialFocusRef, onClose, open]);
+  }, [dialogRef, initialFocusRef, open]);
 }

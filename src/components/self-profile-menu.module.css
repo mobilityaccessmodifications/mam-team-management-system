@@ -119,6 +119,10 @@
   box-shadow: 0 20px 52px rgba(28, 37, 38, 0.18), 0 3px 10px rgba(28, 37, 38, 0.08);
 }
 
+.backdrop {
+  display: none;
+}
+
 .panelHeader {
   min-height: 72px;
   display: flex;
@@ -734,6 +738,15 @@
 }
 
 @media (max-width: 680px) {
+  .backdrop {
+    position: fixed;
+    z-index: 169;
+    inset: 0;
+    display: block;
+    border: 0;
+    background: rgb(12 27 23 / 52%);
+  }
+
   .panel {
     top: 72px;
     right: 10px;
@@ -789,4 +802,39 @@
     border-radius: 50%;
     background: var(--surface-raised, #fff);
   }
+}
+
+/* Clarity pass: compact account trigger and a single, calm profile surface. */
+.trigger { border-radius: 10px; box-shadow: none; }
+.trigger:hover,
+.triggerOpen { transform: none; box-shadow: none; }
+.panel { border-radius: 16px; }
+.panelHeader { background: #fff; }
+.closeButton,
+.cancelButton,
+.saveButton { min-height: 44px; border-radius: 10px; box-shadow: none; }
+.closeButton { width: 44px; min-width: 44px; height: 44px; }
+.cancelButton:hover:not(:disabled),
+.saveButton:hover:not(:disabled) { transform: none; }
+.field input { height: 44px; border-radius: 10px; }
+.sectionHeading small { display: none; }
+
+@media (max-width: 680px) {
+  .panel {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-height: min(84dvh, 720px);
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -18px 48px rgb(13 28 23 / 24%);
+    overscroll-behavior: contain;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .panelHeader { position: sticky; z-index: 1; top: 0; }
+  .field input { font-size: 16px; }
 }

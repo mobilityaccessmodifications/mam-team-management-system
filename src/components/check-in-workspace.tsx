@@ -117,7 +117,9 @@ function sortRecords(records: CheckInWorkspaceRecord[], sort: EmployeeSort) {
 function listMeta(record: CheckInWorkspaceRecord) {
   const dueDate = nextDueDate(record);
   if (dueDate) return `Due ${formatDate(dueDate)} · ${record.company === "mam" ? "MAM" : "Equipsy"}`;
-  return `${record.positionTitle || "Role not recorded"} · ${record.company === "mam" ? "MAM" : "Equipsy"}`;
+  return record.positionTitle
+    ? `${record.positionTitle} · ${record.company === "mam" ? "MAM" : "Equipsy"}`
+    : record.company === "mam" ? "MAM" : "Equipsy";
 }
 
 export function CheckInWorkspace({
@@ -238,8 +240,8 @@ export function CheckInWorkspace({
     <h2 className={styles.srOnly}>Employee check-ins</h2>
     <header className={styles.toolbar}>
       {data ? <WorkspaceResources data={data} /> : <span />}
-      <button className={styles.secondaryAction} type="button" onClick={() => void load()} disabled={loading || Boolean(pendingReminderId)}>
-        <RefreshCw size={16} /> Refresh
+      <button className={styles.secondaryAction} type="button" onClick={() => void load()} disabled={loading || Boolean(pendingReminderId)} aria-label="Refresh check-ins" title="Refresh">
+        <RefreshCw aria-hidden="true" size={16} />
       </button>
     </header>
 
@@ -286,7 +288,7 @@ export function CheckInWorkspace({
 
       <article className={styles.detail} data-company={selected.company}>
         <header className={styles.personHeader}>
-          <div><span className={styles.avatar}>{initials(selected)}</span><span><h3>{selected.fullName}</h3><p>{selected.positionTitle || "Role not recorded"}</p></span></div>
+          <div><span className={styles.avatar}>{initials(selected)}</span><span><h3>{selected.fullName}</h3>{selected.positionTitle ? <p>{selected.positionTitle}</p> : null}</span></div>
         </header>
 
         <div className={`${styles.summaryGrid} ${styles.workspaceSummary}`}>

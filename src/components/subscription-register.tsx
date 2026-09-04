@@ -5,7 +5,6 @@ import {
   ArrowDownUp,
   CalendarClock,
   CheckCircle2,
-  CircleDollarSign,
   CreditCard,
   Filter,
   KeyRound,
@@ -139,12 +138,6 @@ function reviewSortValue(subscription: Subscription) {
   return hasQuarterlyReview(subscription) ? subscription.nextReviewOn : "9999-12-31";
 }
 
-function quarterlyReviewHint(subscription?: Subscription) {
-  return hasQuarterlyReview(subscription)
-    ? "Paid subscription reviews appear on the responsible person’s calendar."
-    : "Free and cancelled subscriptions do not have a quarterly review scheduled.";
-}
-
 function subscriptionSearchText(subscription: Subscription) {
   return [
     subscription.serviceName,
@@ -198,7 +191,7 @@ function SubscriptionSheetHeader({
   const sortDirection = sortIsActive ? activeSort.direction : undefined;
   const filterIsActive = Boolean(filterValue);
 
-  return <div className={styles.sheetHeaderCell} role="columnheader" aria-sort={sortKey ? (sortIsActive ? sortDirection : "none") : undefined} data-subscription-filter={filterKey ? "true" : undefined}>
+  return <div className={styles.sheetHeaderCell} role="columnheader" aria-sort={sortKey ? (sortIsActive ? sortDirection : "none") : undefined} data-subscription-filter={filterKey}>
     <span>{label}</span>
     {(sortKey || filterKey) ? <span className={styles.sheetHeaderTools}>
       {sortKey && onSort ? <button
@@ -213,17 +206,17 @@ function SubscriptionSheetHeader({
       {filterKey && onToggleFilter ? <button
         type="button"
         className={styles.sheetHeaderButton}
+        data-subscription-filter-trigger={filterKey}
         data-active={filterIsActive || undefined}
         onClick={() => onToggleFilter(filterKey)}
         aria-label={`Filter subscriptions by ${label}`}
         aria-expanded={isFilterOpen}
-        aria-haspopup="menu"
         title={`Filter by ${label}`}
       ><Filter size={13} aria-hidden="true" /></button> : null}
     </span> : null}
-    {filterKey && onFilter && isFilterOpen ? <div className={styles.sheetFilterMenu} role="menu" aria-label={`Filter subscriptions by ${label}`}>
-      <button type="button" role="menuitemradio" aria-checked={!filterValue} onClick={() => onFilter(filterKey, "")}>All</button>
-      {filterOptions.map((option) => <button key={option.value} type="button" role="menuitemradio" aria-checked={filterValue === option.value} onClick={() => onFilter(filterKey, option.value)}>{option.label}</button>)}
+    {filterKey && onFilter && isFilterOpen ? <div className={styles.sheetFilterMenu} role="group" aria-label={`Filter subscriptions by ${label}`}>
+      <button type="button" aria-pressed={!filterValue} onClick={() => onFilter(filterKey, "")}>All</button>
+      {filterOptions.map((option) => <button key={option.value} type="button" aria-pressed={filterValue === option.value} onClick={() => onFilter(filterKey, option.value)}>{option.label}</button>)}
     </div> : null}
   </div>;
 }
@@ -303,7 +296,12 @@ export function SubscriptionRegister({
     }
 
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setActiveSubscriptionFilter(null);
+      if (event.key !== "Escape") return;
+      const filterKey = activeSubscriptionFilter;
+      setActiveSubscriptionFilter(null);
+      if (filterKey) window.requestAnimationFrame(() => {
+        document.querySelector<HTMLButtonElement>(`[data-subscription-filter-trigger="${filterKey}"]`)?.focus();
+      });
     }
 
     document.addEventListener("pointerdown", closeOnOutsidePointer);
@@ -388,6 +386,9 @@ export function SubscriptionRegister({
   function setSubscriptionFilter(key: SubscriptionFilterKey, value: string) {
     setSubscriptionFilters((current) => ({ ...current, [key]: value }));
     setActiveSubscriptionFilter(null);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(`[data-subscription-filter-trigger="${key}"]`)?.focus();
+    });
   }
 
   function toggleSubscriptionFilter(key: SubscriptionFilterKey) {
@@ -434,8 +435,8 @@ export function SubscriptionRegister({
   return <section className={styles.workspace} aria-label="Subscription management">
     <header className={`${styles.header} ${styles.headerActionsOnly}`}>
       <div className={styles.headerActionGroup}>
-        {canManageCredentialGrants ? <button className={styles.secondaryAction} type="button" onClick={() => setShowCredentialAccess(true)}><UsersRound size={16} /> Credential access</button> : null}
-        {!readOnly ? <button className={styles.primaryAction} type="button" onClick={() => setShowAdd(true)}><Plus size={16} /> Add subscription</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Management view</div>}
+        {canManageCredentialGrants ? <button className={styles.secondaryAction} type="button" onClick={() => setShowCredentialAccess(true)} aria-label="Manage credential access" title="Credential access"><UsersRound size={16} aria-hidden="true" /></button> : null}
+        {!readOnly ? <button className={styles.primaryAction} type="button" onClick={() => setShowAdd(true)}><Plus size={16} /> Add</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Read only</div>}
       </div>
     </header>
 
@@ -444,7 +445,7 @@ export function SubscriptionRegister({
     <div className={styles.tools}>
       <label className={styles.searchField}><Search size={17} aria-hidden="true" /><span className={styles.visuallyHidden}>Search subscriptions</span><input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search service, owner or employee" /></label>
       {registerState.state === "ready" ? <div className={styles.toolSummary}>
-        {hasSubscriptionFilters ? <button className={styles.clearFilters} type="button" onClick={() => setSubscriptionFilters({ billing: "", nextReview: "", responsible: "", status: "" })}>Clear filters</button> : null}
+        {hasSubscriptionFilters ? <button className={styles.clearFilters} type="button" onClick={() => setSubscriptionFilters({ billing: "", nextReview: "", responsible: "", status: "" })}>Clear</button> : null}
         <span className={styles.count}>{filteredSubscriptions.length === registerState.subscriptions.length ? `${registerState.subscriptions.length} ${registerState.subscriptions.length === 1 ? "subscription" : "subscriptions"}` : `${filteredSubscriptions.length} of ${registerState.subscriptions.length} subscriptions`}</span>
       </div> : null}
     </div>
@@ -574,20 +575,20 @@ function SubscriptionModal({
 
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="subscription-dialog-title" tabIndex={-1}>
-      <header><div><span>Subscription register</span><h2 id="subscription-dialog-title">{isEditing ? "Edit subscription" : "Add subscription"}</h2><p>{isEditing ? `${subscription?.subscriptionCode} · ${quarterlyReviewHint(subscription)}` : "Add the service, responsible person and employees who use it."}</p></div><button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close subscription form"><X size={19} /></button></header>
+      <header><div><h2 id="subscription-dialog-title">{isEditing ? "Edit subscription" : "Add subscription"}</h2>{isEditing && subscription ? <p>{subscription.subscriptionCode}</p> : null}</div><button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close subscription form"><X size={19} /></button></header>
       <form onSubmit={submit}>
         <div className={styles.formGrid}>
           <label><span>Service name <b aria-hidden="true">*</b></span><input name="serviceName" ref={initialFocusRef} required maxLength={160} defaultValue={subscription?.serviceName ?? ""} placeholder="Microsoft 365, Adobe Creative Cloud…" /></label>
           <label><span>Plan <small>Optional</small></span><input name="planName" maxLength={160} defaultValue={subscription?.planName ?? ""} placeholder="Business Standard, Teams…" /></label>
         </div>
         {isEditing ? <label><span>Status <b aria-hidden="true">*</b></span><select name="status" defaultValue={subscription?.status ?? "active"}><option value="active">Active</option><option value="paused">Paused</option><option value="cancelled">Cancelled</option></select></label> : null}
-        <fieldset className={styles.pricingFieldset}><legend>Pricing</legend><div className={styles.pricingChoices}><label><input type="radio" name="pricingModel" value="free" checked={pricingModel === "free"} onChange={() => setPricingModel("free")} /> Free</label><label><input type="radio" name="pricingModel" value="paid" checked={pricingModel === "paid"} onChange={() => setPricingModel("paid")} /> Paid</label></div>{pricingModel === "paid" ? <div className={styles.formGrid}><label><span>Billing cycle <b aria-hidden="true">*</b></span><select name="billingCycle" required defaultValue={subscription?.billingCycle ?? "monthly"}>{SUBSCRIPTION_BILLING_CYCLES.map((cycle) => <option key={cycle} value={cycle}>{billingCycleLabels[cycle]}</option>)}</select></label><label><span>Amount (AUD) <b aria-hidden="true">*</b></span><input name="amount" inputMode="decimal" required defaultValue={centsToAmount(subscription?.amountCents ?? null)} placeholder="0.00" /></label></div> : <p className={styles.formHelp}><CircleDollarSign size={15} /> This is recorded as a free service. No amount or billing cycle is stored.</p>}</fieldset>
+        <fieldset className={styles.pricingFieldset}><legend>Pricing</legend><div className={styles.pricingChoices}><label><input type="radio" name="pricingModel" value="free" checked={pricingModel === "free"} onChange={() => setPricingModel("free")} /> Free</label><label><input type="radio" name="pricingModel" value="paid" checked={pricingModel === "paid"} onChange={() => setPricingModel("paid")} /> Paid</label></div>{pricingModel === "paid" ? <div className={styles.formGrid}><label><span>Billing cycle <b aria-hidden="true">*</b></span><select name="billingCycle" required defaultValue={subscription?.billingCycle ?? "monthly"}>{SUBSCRIPTION_BILLING_CYCLES.map((cycle) => <option key={cycle} value={cycle}>{billingCycleLabels[cycle]}</option>)}</select></label><label><span>Amount (AUD) <b aria-hidden="true">*</b></span><input name="amount" inputMode="decimal" required defaultValue={centsToAmount(subscription?.amountCents ?? null)} placeholder="0.00" /></label></div> : null}</fieldset>
         <div className={styles.formGrid}>
           <label><span>Renewal date <small>Optional</small></span><input name="renewalDate" type="date" defaultValue={subscription?.renewalDate ?? ""} /></label>
           <label><span>Responsible person <b aria-hidden="true">*</b></span><EmployeePicker assignees={people} defaultValue={subscription?.responsible.personId ?? ""} name="responsiblePersonId" disabled={!people.length} /></label>
         </div>
         <SubscriptionMemberPicker people={people} selectedIds={memberPersonIds} onChange={setMemberPersonIds} />
-        <p className={styles.formHelp}><CalendarClock size={15} /> All paid subscriptions are reviewed together on the first weekday (Monday–Friday) of each calendar quarter.</p>
+        {pricingModel === "paid" ? <p className={styles.formHelp}><CalendarClock size={15} /> Reviewed on the first weekday of each quarter.</p> : null}
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>{isEditing && onReview && subscription && hasQuarterlyReview(subscription) ? <button className={styles.secondaryAction} type="button" onClick={() => void reviewNow()} disabled={saving}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CalendarClock size={16} />}{saving ? "Saving…" : "Mark review complete"}</button> : null}<button className={styles.primaryAction} type="submit" disabled={saving || !people.length}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CreditCard size={16} />}{saving ? "Saving…" : isEditing ? "Save changes" : "Add subscription"}</button></footer>
       </form>
@@ -616,5 +617,5 @@ function SubscriptionMemberPicker({
     onChange(selected.has(personId) ? selectedIds.filter((id) => id !== personId) : [...selectedIds, personId]);
   }
 
-  return <fieldset className={styles.membersFieldset}><legend>Who has access <small>Optional</small></legend><p>Employees only see subscriptions assigned to them. You can search and choose more than one person.</p><label className={styles.memberSearch}><Search size={15} aria-hidden="true" /><span className={styles.visuallyHidden}>Search employees for subscription access</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search employees" type="search" /></label><div className={styles.memberSummary}>{selectedIds.length} {selectedIds.length === 1 ? "employee selected" : "employees selected"}</div><div className={styles.memberList} id={listId}>{filteredPeople.length ? filteredPeople.map((person) => <label className={styles.memberOption} key={person.personId}><input checked={selected.has(person.personId)} onChange={() => toggle(person.personId)} type="checkbox" /><span><strong>{person.fullName}</strong><small>{[person.positionTitle, person.teamName].filter(Boolean).join(" · ")}</small></span></label>) : <p className={styles.memberEmpty}>No employees match that search.</p>}</div></fieldset>;
+  return <fieldset className={styles.membersFieldset}><legend>Access <small>Optional</small></legend><p>Selected employees can see this subscription.</p><label className={styles.memberSearch}><Search size={15} aria-hidden="true" /><span className={styles.visuallyHidden}>Search employees for subscription access</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search employees" type="search" /></label><div className={styles.memberSummary}>{selectedIds.length} selected</div><div className={styles.memberList} id={listId}>{filteredPeople.length ? filteredPeople.map((person) => <label className={styles.memberOption} key={person.personId}><input checked={selected.has(person.personId)} onChange={() => toggle(person.personId)} type="checkbox" /><span><strong>{person.fullName}</strong><small>{[person.positionTitle, person.teamName].filter(Boolean).join(" · ")}</small></span></label>) : <p className={styles.memberEmpty}>No employees match that search.</p>}</div></fieldset>;
 }

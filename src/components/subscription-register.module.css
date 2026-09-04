@@ -469,7 +469,7 @@
 .pricingFieldset legend,
 .membersFieldset legend { padding: 0 5px; color: var(--subscription-ink); font-size: 12px; font-weight: 800; }
 .pricingChoices { gap: 12px; }
-.pricingChoices label { display: inline-flex; grid-template-columns: none; align-items: center; gap: 6px; min-height: 30px; cursor: pointer; color: var(--subscription-ink); }
+.pricingChoices label { display: inline-flex; grid-template-columns: none; align-items: center; gap: 6px; min-height: 44px; cursor: pointer; color: var(--subscription-ink); }
 .pricingChoices input { accent-color: var(--subscription-accent); }
 .formHelp { gap: 7px; margin: -2px 0 0; color: var(--subscription-muted); font-size: 11px; line-height: 1.45; }
 .formHelp svg { flex: 0 0 auto; color: var(--subscription-accent); }
@@ -562,4 +562,53 @@
 
   .subscriptionActions::before { display: none !important; }
   .subscriptionActions button { min-height: 44px; }
+}
+
+/* Clarity pass: subscriptions behave like a calm spreadsheet, not stacked cards. */
+.workspace { gap: 12px; }
+.primaryAction,
+.secondaryAction,
+.rowActions button,
+.modal header > button,
+.modal footer button { min-height: 44px; border-radius: 10px; box-shadow: none; }
+.primaryAction:hover:not(:disabled),
+.secondaryAction:hover:not(:disabled),
+.rowActions button:hover:not(:disabled) { box-shadow: none; transform: none; }
+.tools,
+.sheetViewport,
+.subscriptionList { border-radius: 12px; box-shadow: none; }
+.tools { padding: 8px; }
+.searchField,
+.memberSearch { min-height: 44px; background: var(--surface-raised, #fff); }
+.clearFilters { min-height: 44px; }
+.subscriptionSheetRow:not(.subscriptionSheetHeader) { min-height: 64px; }
+.subscriptionIcon { width: 34px; height: 34px; border-radius: 9px; }
+.emptyState span { display: none; }
+.modal { border-radius: 18px; box-shadow: 0 20px 56px rgb(13 28 23 / 24%); }
+.modal header { background: var(--surface-raised, #fff); }
+.modal header > button { width: 44px; height: 44px; padding: 0; }
+
+@media (max-width: 760px) {
+  .header { align-items: center; flex-direction: row; }
+  .headerActionGroup { width: 100%; justify-content: flex-end; }
+  .tools { align-items: center; flex-direction: row; }
+  .count { display: none; }
+  .toolSummary { width: auto; }
+  .subscriptionSheetRow:not(.subscriptionSheetHeader) { border-radius: 12px; box-shadow: none; }
+  .subscriptionActions { justify-content: flex-end; }
+  .modalBackdrop { align-items: end; padding: 0; }
+  .modal {
+    width: 100%;
+    max-height: min(88dvh, 760px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .modal input,
+  .modal select,
+  .modal textarea { font-size: 16px; }
 }
