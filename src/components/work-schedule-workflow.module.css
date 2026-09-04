@@ -1,0 +1,681 @@
+.homeWorkflow,
+.taskWorkflow {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.homeWorkflow {
+  grid-column: 1 / -1;
+  margin-bottom: 14px;
+}
+
+.scheduleCard {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-xs);
+  padding: 14px 16px;
+}
+
+.scheduleIcon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--mam-orange) 24%, var(--surface-border));
+  border-radius: var(--radius-md);
+  background: var(--surface-warm);
+  color: var(--mam-orange-dark);
+}
+
+.scheduleCopy {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.scheduleCopy > span:first-child,
+.reviewQueue > header span,
+.modalHeader span {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.scheduleCopy small {
+  color: #a94717;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dayChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.dayChips span {
+  border: 1px solid var(--surface-border-strong);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 750;
+  padding: 4px 8px;
+}
+
+.notRecorded {
+  color: var(--text-secondary) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.scheduleActions,
+.reviewActions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.iconButton,
+.modalHeader button {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.iconButton:hover:not(:disabled),
+.modalHeader button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--mam-orange) 45%, var(--surface-border));
+  color: var(--mam-orange-dark);
+}
+
+.iconButton:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+}
+
+.iconButton:focus-visible,
+.modalHeader button:focus-visible,
+.dayPicker button:focus-visible,
+.reviewActions button:focus-visible,
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.declineButton:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--mam-orange) 30%, transparent);
+  outline-offset: 2px;
+}
+
+.reviewQueue {
+  overflow: hidden;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-xs);
+}
+
+.reviewQueue > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--surface-border);
+  padding: 13px 16px;
+}
+
+.reviewQueue > header h2 {
+  margin: 2px 0 0;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.reviewQueue > header > strong {
+  display: grid;
+  min-width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface-warm);
+  color: var(--mam-orange-dark);
+  font-size: 11px;
+}
+
+.reviewRows {
+  display: grid;
+}
+
+.reviewRows article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid var(--surface-border);
+  padding: 13px 16px;
+}
+
+.reviewRows article:last-child {
+  border-bottom: 0;
+}
+
+.reviewRows article > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.reviewRows strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.reviewRows span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.reviewRows i {
+  color: var(--mam-orange-dark);
+  font-style: normal;
+}
+
+.reviewRows small {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reviewActions button,
+.primaryButton,
+.secondaryButton,
+.declineButton,
+.loadError button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  touch-action: manipulation;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  padding: 8px 12px;
+}
+
+.reviewActions button[data-decision="approved"],
+.primaryButton {
+  border-color: var(--mam-orange);
+  background: var(--mam-orange);
+  color: #fff;
+}
+
+.reviewActions button[data-decision="declined"],
+.declineButton {
+  border-color: #e5b8b1;
+  background: #fff7f5;
+  color: #a13f34;
+}
+
+.reviewActions button:hover,
+.primaryButton:hover:not(:disabled),
+.secondaryButton:hover:not(:disabled),
+.declineButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.declineButton:disabled {
+  cursor: not-allowed;
+  opacity: .52;
+}
+
+.moreRequests {
+  display: block;
+  border-top: 1px solid var(--surface-border);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  padding: 10px 16px;
+}
+
+.loadState,
+.loadError {
+  display: flex;
+  min-height: 76px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--surface-border-strong);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  padding: 12px 16px;
+}
+
+.loadError {
+  gap: 9px;
+  justify-content: flex-start;
+  border-style: solid;
+  border-color: #efc8bf;
+  background: #fff6f3;
+  color: #8f4137;
+  font-size: 12px;
+}
+
+.loadError span {
+  flex: 1;
+}
+
+.loadError button {
+  min-height: 44px;
+  border-color: #e3b8af;
+  background: transparent;
+  color: inherit;
+}
+
+.modalLayer {
+  position: fixed;
+  z-index: 110;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgb(13 28 23 / 58%);
+  backdrop-filter: blur(3px);
+  cursor: pointer;
+}
+
+.modal {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(560px, 100%);
+  max-height: min(86dvh, 760px);
+  overflow: hidden;
+  border: 1px solid var(--surface-border-strong);
+  border-top: 4px solid var(--mam-orange);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  box-shadow: 0 24px 64px rgb(9 25 20 / 28%);
+}
+
+.form {
+  display: contents;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--surface-border);
+  padding: 15px 17px;
+}
+
+.modalHeader h2 {
+  margin: 3px 0 0;
+  color: var(--text-primary);
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.modalHeader button {
+  flex: 0 0 auto;
+}
+
+.modalBody {
+  display: grid;
+  gap: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 17px;
+}
+
+.changeSummary,
+.decisionOverview > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  padding: 11px 13px;
+}
+
+.changeSummary span,
+.decisionOverview span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.changeSummary strong,
+.decisionOverview strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: right;
+}
+
+.dayPicker {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+}
+
+.dayPicker legend,
+.reasonField > span {
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.dayPicker > div {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dayPicker button {
+  display: grid;
+  min-width: 0;
+  min-height: 58px;
+  place-items: center;
+  gap: 2px;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.dayPicker button[aria-pressed="true"] {
+  border-color: var(--mam-orange);
+  background: var(--surface-warm);
+  color: var(--mam-orange-dark);
+}
+
+.dayPicker button span {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.dayPicker button small {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reasonField {
+  display: grid;
+}
+
+.reasonField textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 11px 12px;
+}
+
+.reasonField textarea:focus {
+  border-color: var(--mam-orange);
+  outline: 3px solid color-mix(in srgb, var(--mam-orange) 22%, transparent);
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  border: 1px solid #efc8bf;
+  border-radius: var(--radius-md);
+  background: #fff6f3;
+  color: #8f4137;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 10px 11px;
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--surface-border);
+  background: var(--surface-raised);
+  padding: 12px 17px calc(12px + env(safe-area-inset-bottom));
+}
+
+.decisionOverview {
+  display: grid;
+  gap: 8px;
+}
+
+.decisionOverview blockquote,
+.historyList blockquote {
+  margin: 0;
+  border-left: 3px solid var(--mam-orange);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  padding: 8px 11px;
+}
+
+.historyList {
+  gap: 10px;
+}
+
+.historyList article {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 12px 13px;
+}
+
+.historyList article > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.historyList article header strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.historyList article header span {
+  border-radius: 999px;
+  background: #edf3ef;
+  color: #50635c;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 7px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.historyList article header span[data-status="approved"] {
+  background: #e8f5ee;
+  color: #28664d;
+}
+
+.historyList article header span[data-status="declined"] {
+  background: #fff0ee;
+  color: #9d4137;
+}
+
+.historyList article header span[data-status="cancelled"] {
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+}
+
+.historyList article p,
+.historyList article small {
+  margin: 0;
+}
+
+.historyList article p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.historyList article small {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+@media (max-width: 680px) {
+  .homeWorkflow,
+  .taskWorkflow {
+    gap: 10px;
+  }
+
+  .scheduleCard {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .scheduleIcon,
+  .iconButton,
+  .modalHeader button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .scheduleIcon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .reviewRows article {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 13px;
+  }
+
+  .reviewActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .reviewActions button {
+    min-height: 44px;
+  }
+
+  .modalLayer {
+    place-items: end stretch;
+    padding: 0;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: min(88dvh, 760px);
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -18px 48px rgb(13 28 23 / 24%);
+  }
+
+  .modalHeader,
+  .modalBody {
+    padding-right: calc(16px + env(safe-area-inset-right));
+    padding-left: calc(16px + env(safe-area-inset-left));
+  }
+
+  .modalFooter {
+    padding-right: calc(17px + env(safe-area-inset-right));
+    padding-left: calc(17px + env(safe-area-inset-left));
+  }
+
+  .dayPicker > div {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .dayPicker button {
+    min-height: 54px;
+  }
+
+  .modalFooter > button {
+    min-height: 46px;
+  }
+}
+
+@media (max-width: 420px) {
+  .scheduleIcon {
+    display: none;
+  }
+
+  .scheduleCard {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .dayChips span {
+    padding: 4px 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reviewActions button,
+  .primaryButton,
+  .secondaryButton,
+  .declineButton {
+    transition: none;
+  }
+
+  .reviewActions button:hover,
+  .primaryButton:hover:not(:disabled),
+  .secondaryButton:hover:not(:disabled),
+  .declineButton:hover:not(:disabled) {
+    transform: none;
+  }
+}

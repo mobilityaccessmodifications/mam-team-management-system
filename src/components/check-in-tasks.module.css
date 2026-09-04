@@ -138,6 +138,7 @@
 }
 
 .status {
+  grid-column: 3;
   display: inline-flex;
   min-height: 28px;
   align-items: center;
@@ -187,6 +188,7 @@
 }
 
 .complete {
+  grid-column: 4;
   color: #26724f;
   white-space: nowrap;
 }
@@ -284,12 +286,18 @@
   }
 
   .status {
+    grid-column: 1;
+    grid-row: 3;
     justify-self: start;
   }
 
   .complete {
     grid-column: 2;
     grid-row: 3;
+  }
+
+  .task[data-status="scheduled"] .complete {
+    grid-row: 1;
   }
 }
 
@@ -308,18 +316,48 @@
   }
 
   .task {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .status,
-  .complete {
+  .person,
+  .milestone {
+    grid-column: 1 / -1;
+  }
+
+  .status {
     grid-column: 1;
-    grid-row: auto;
+    grid-row: 3;
     justify-self: start;
   }
 
+  .statusButton {
+    width: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
+
   .complete {
-    width: 100%;
+    grid-column: 2;
+    grid-row: 3;
+    width: 44px;
+    min-height: 44px;
+    justify-self: end;
+    padding: 0;
+  }
+
+  .task[data-status="scheduled"] .person {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .task[data-status="scheduled"] .complete {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .task[data-status="scheduled"] .milestone {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 }
 

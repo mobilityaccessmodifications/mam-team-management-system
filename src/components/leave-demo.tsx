@@ -22,7 +22,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { FormEvent, type CSSProperties, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import {
@@ -68,6 +68,11 @@ import {
 } from "@/app/leave/actions";
 import { signOut } from "@/app/login/actions";
 import {
+  loadEmployeeWorkScheduleWorkspace,
+  requestEmployeeWorkScheduleChange,
+  reviewEmployeeWorkScheduleChange,
+} from "@/app/work-schedule/actions";
+import {
   AccountManagement,
   type AccountDto,
 } from "@/components/account-management";
@@ -83,6 +88,10 @@ import { ManagerEmployeeDirectory } from "@/components/manager-employee-director
 import { SubscriptionCredentialVault } from "@/components/subscription-credential-vault";
 import { SubscriptionRegister } from "@/components/subscription-register";
 import { TeamCalendar } from "@/components/team-calendar";
+import {
+  WorkScheduleHome,
+  WorkScheduleTasks,
+} from "@/components/work-schedule-workflow";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   SelfProfileMenu,
@@ -99,6 +108,11 @@ import type {
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import type { CheckInResourceLinks } from "@/lib/check-in-register-types";
+import type { EmployeeWorkingWeekday } from "@/lib/employee-directory-types";
+import type {
+  WorkScheduleMutationResult,
+  WorkScheduleWorkspace,
+} from "@/lib/work-schedule-types";
 
 type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals";
@@ -527,6 +541,9 @@ export function LeaveDemo({
   const [leaveWorkspaceUsesProfileScope, setLeaveWorkspaceUsesProfileScope] = useState(false);
   const [leaveDataLoading, setLeaveDataLoading] = useState(true);
   const [leaveDataError, setLeaveDataError] = useState("");
+  const [workScheduleWorkspace, setWorkScheduleWorkspace] = useState<WorkScheduleWorkspace | null>(null);
+  const [workScheduleLoading, setWorkScheduleLoading] = useState(true);
+  const [workScheduleError, setWorkScheduleError] = useState("");
   const [selectedRequestId, setSelectedRequestId] = useState(initialNavigation?.requestId ?? "");
   const [mobileRequestDetailOpen, setMobileRequestDetailOpen] = useState(Boolean(initialNavigation?.requestId));
   const [leaveSection, setLeaveSection] = useState<LeaveSection>(initialNavigation?.section ?? "requests");
@@ -578,6 +595,9 @@ export function LeaveDemo({
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [profilePickerQuery, setProfilePickerQuery] = useState("");
   const leaveRefreshSequence = useRef(0);
+  const workScheduleRefreshSequence = useRef(0);
+  const profileScopeEpoch = useRef(0);
+  const workScheduleWorkspaceRef = useRef<WorkScheduleWorkspace | null>(null);
   const profilePickerDialogRef = useRef<HTMLElement>(null);
   const profilePickerSearchRef = useRef<HTMLInputElement>(null);
   const leaveRequestDialogRef = useRef<HTMLElement>(null);
@@ -618,13 +638,17 @@ export function LeaveDemo({
 
   const refreshLeaveWorkspace = useCallback(async () => {
     const requestSequence = leaveRefreshSequence.current + 1;
+    const requestEpoch = profileScopeEpoch.current;
     leaveRefreshSequence.current = requestSequence;
     setLeaveDataLoading(true);
     try {
       const data = await getLeaveWorkspaceData(previewPersonId || undefined);
       // A save, a safe Realtime invalidation and an initial load can overlap.
       // Only the newest role-scoped response may update calendar data.
-      if (requestSequence !== leaveRefreshSequence.current) return;
+      if (
+        requestSequence !== leaveRefreshSequence.current
+        || requestEpoch !== profileScopeEpoch.current
+      ) return;
       setRequests(data.requests.map(toLeaveRequest));
       setLeaveAttachments(data.attachments);
       setCalendarEntries(data.calendarEntries.map(toCalendarLeaveRequest));
@@ -639,7 +663,10 @@ export function LeaveDemo({
       setLeaveWorkspaceUsesProfileScope(data.isProfilePreview);
       setLeaveDataError(data.warning ?? "");
     } catch {
-      if (requestSequence !== leaveRefreshSequence.current) return;
+      if (
+        requestSequence !== leaveRefreshSequence.current
+        || requestEpoch !== profileScopeEpoch.current
+      ) return;
       // Do not leave a previously authorised calendar visible after a session,
       // access, or projection failure. The next successful role-scoped load
       // repopulates it.
@@ -661,9 +688,76 @@ export function LeaveDemo({
       setLeaveWorkspaceUsesProfileScope(false);
       setLeaveDataError("Leave records could not be loaded. Refresh and try again.");
     } finally {
-      if (requestSequence === leaveRefreshSequence.current) setLeaveDataLoading(false);
+      if (
+        requestSequence === leaveRefreshSequence.current
+        && requestEpoch === profileScopeEpoch.current
+      ) setLeaveDataLoading(false);
     }
   }, [previewPersonId]);
+
+  const refreshWorkScheduleWorkspace = useCallback(async () => {
+    const requestSequence = workScheduleRefreshSequence.current + 1;
+    const requestEpoch = profileScopeEpoch.current;
+    const hadWorkspace = workScheduleWorkspaceRef.current !== null;
+    workScheduleRefreshSequence.current = requestSequence;
+    if (!hadWorkspace) setWorkScheduleLoading(true);
+    setWorkScheduleError("");
+
+    try {
+      const result = await loadEmployeeWorkScheduleWorkspace(previewPersonId || undefined);
+      if (
+        requestSequence !== workScheduleRefreshSequence.current
+        || requestEpoch !== profileScopeEpoch.current
+      ) return;
+
+      if (!result.ok) {
+        // Authorization, target and data-shape failures fail closed. A narrowly
+        // classified transient upstream failure may retain the already scoped
+        // workspace so background refresh cannot destroy an in-progress form.
+        if (result.kind !== "transient") {
+          workScheduleWorkspaceRef.current = null;
+          setWorkScheduleWorkspace(null);
+        }
+        setWorkScheduleError(result.message);
+        return;
+      }
+
+      workScheduleWorkspaceRef.current = result.workspace;
+      setWorkScheduleWorkspace(result.workspace);
+    } catch {
+      if (
+        requestSequence !== workScheduleRefreshSequence.current
+        || requestEpoch !== profileScopeEpoch.current
+      ) return;
+      if (!hadWorkspace) {
+        workScheduleWorkspaceRef.current = null;
+        setWorkScheduleWorkspace(null);
+      }
+      setWorkScheduleError("Work schedule details could not be loaded. Refresh and try again.");
+    } finally {
+      if (
+        requestSequence === workScheduleRefreshSequence.current
+        && requestEpoch === profileScopeEpoch.current
+      ) setWorkScheduleLoading(false);
+    }
+  }, [previewPersonId]);
+
+  const submitWorkScheduleRequest = useCallback(async (
+    workingWeekdays: EmployeeWorkingWeekday[],
+    reason: string,
+  ): Promise<WorkScheduleMutationResult> => {
+    const actionEpoch = profileScopeEpoch.current;
+    const result = await requestEmployeeWorkScheduleChange({
+      workingWeekdays,
+      reason,
+      previewPersonId: previewPersonId || undefined,
+    });
+    if (actionEpoch !== profileScopeEpoch.current) {
+      return { ok: false, message: "The active profile changed. Open the schedule again." };
+    }
+    if (result.ok) void refreshWorkScheduleWorkspace();
+    return result;
+  }, [previewPersonId, refreshWorkScheduleWorkspace]);
 
   const loadAccounts = useCallback(async () => {
     if (!isAdmin || !canManageEmployeeDirectory) {
@@ -713,6 +807,25 @@ export function LeaveDemo({
     setOrganisationState("live");
   }, [directorySupabase]);
 
+  const reviewWorkScheduleRequest = useCallback(async (
+    requestId: string,
+    decision: "approved" | "declined",
+    reason: string,
+  ): Promise<WorkScheduleMutationResult> => {
+    const actionEpoch = profileScopeEpoch.current;
+    const result = await reviewEmployeeWorkScheduleChange({ requestId, decision, reason });
+    if (actionEpoch !== profileScopeEpoch.current) {
+      return { ok: false, message: "The active profile changed. Open the request again." };
+    }
+    if (result.ok) {
+      void Promise.allSettled([
+        refreshWorkScheduleWorkspace(),
+        loadOrganisation(),
+      ]);
+    }
+    return result;
+  }, [loadOrganisation, refreshWorkScheduleWorkspace]);
+
   const loadSelfProfile = useCallback(async () => {
     if (!currentPersonId) {
       setSelfProfile(null);
@@ -761,6 +874,7 @@ export function LeaveDemo({
           // their top-right card stays current without publishing any private
           // fields through Realtime.
           void loadSelfProfile();
+          void refreshWorkScheduleWorkspace();
           // Date-of-birth updates also touch this safe public organisation row.
           // Treat that event only as an invalidation signal: the calendar
           // re-reads its narrow birthday DTO and never receives private values
@@ -777,7 +891,7 @@ export function LeaveDemo({
       window.clearTimeout(refreshTimer);
       void directorySupabase.removeChannel(channel);
     };
-  }, [directorySupabase, loadOrganisation, loadSelfProfile, refreshLeaveWorkspace]);
+  }, [directorySupabase, loadOrganisation, loadSelfProfile, refreshLeaveWorkspace, refreshWorkScheduleWorkspace]);
 
   useEffect(() => {
     if (!isAdmin || !canManageEmployeeDirectory) return;
@@ -794,6 +908,25 @@ export function LeaveDemo({
     const timer = window.setTimeout(() => void refreshLeaveWorkspace(), 0);
     return () => window.clearTimeout(timer);
   }, [refreshLeaveWorkspace]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void refreshWorkScheduleWorkspace(), 0);
+    return () => window.clearTimeout(timer);
+  }, [refreshWorkScheduleWorkspace]);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshWorkScheduleWorkspace();
+    };
+    const interval = window.setInterval(refreshWhenVisible, 30_000);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [refreshWorkScheduleWorkspace]);
 
   useEffect(() => {
     if (!directorySupabase) return;
@@ -929,6 +1062,39 @@ export function LeaveDemo({
       cancelled = true;
     };
   }, [employeeDirectoryRefreshKey, selectedEmployeeProfileReloadKey, selectedPreviewPersonId]);
+
+  useEffect(() => {
+    if (organisationState !== "live" || !previewPersonId || selectedPreviewCandidate) return;
+    const timer = window.setTimeout(() => {
+      profileScopeEpoch.current += 1;
+      workScheduleRefreshSequence.current += 1;
+      leaveRefreshSequence.current += 1;
+      setPreviewPersonId("");
+      setSelectedEmployeeProfile(null);
+      setSelectedEmployeeProfileErrorState(null);
+      workScheduleWorkspaceRef.current = null;
+      setWorkScheduleWorkspace(null);
+      setWorkScheduleError("");
+      setWorkScheduleLoading(true);
+      setRequests([]);
+      setLeaveAttachments([]);
+      setCalendarEntries([]);
+      setCalendarBirthdays([]);
+      setCheckInCalendarEntries([]);
+      setSubscriptionReviewCalendarEntries([]);
+      setCanViewSubscriptionReviewCalendarForProfile(false);
+      setCanReviewLeaveWorkspace(false);
+      setEmploymentType(null);
+      setHasPaidLeaveEntitlement(false);
+      setAvailableLeaveTypes([]);
+      setLeaveWorkspaceUsesProfileScope(false);
+      setLeaveDataError("");
+      setLeaveDataLoading(true);
+      setActiveView("home");
+      setToast("That employee profile is no longer available. Returned to Super Admin.");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [organisationState, previewPersonId, selectedPreviewCandidate]);
 
   useEffect(() => {
     if (!cancellationRequestId || isMutating) return;
@@ -1085,7 +1251,12 @@ export function LeaveDemo({
     ? !authorisedPreviewProfile && !selectedEmployeeProfileError
     : !isNonRosterSystemAdminWorkspace && (!selfProfile || selfProfileLoading);
   const isNonRosterAdminHrWorkspace = isNonRosterSystemAdminWorkspace && !isPreviewingEmployeeAccess;
-
+  const expectedWorkSchedulePersonId = selectedPreviewPersonId || currentPersonId || null;
+  const visibleWorkScheduleWorkspace = workScheduleWorkspace
+    && workScheduleWorkspace.isProfilePreview === Boolean(selectedPreviewPersonId)
+    && workScheduleWorkspace.activePersonId === expectedWorkSchedulePersonId
+    ? workScheduleWorkspace
+    : null;
   // The capability is issued by the server-side leave policy. Change profile
   // only narrows the displayed employee; it never changes the Super Admin's
   // reviewer authority.
@@ -1268,8 +1439,33 @@ export function LeaveDemo({
     if (!canPreviewEmployeeAccess) return;
     const nextProfile = directoryProfiles.find((profile) => profile.id === personId);
     if (personId && !nextProfile) return;
+    const nextProfileId = nextProfile?.id ?? "";
 
-    setPreviewPersonId(nextProfile?.id ?? "");
+    if (nextProfileId === previewPersonId) {
+      setProfilePickerOpen(false);
+      setProfilePickerQuery("");
+      return;
+    }
+
+    profileScopeEpoch.current += 1;
+    leaveRefreshSequence.current += 1;
+    workScheduleRefreshSequence.current += 1;
+    workScheduleWorkspaceRef.current = null;
+    setWorkScheduleWorkspace(null);
+    setWorkScheduleError("");
+    setWorkScheduleLoading(true);
+    setRequests([]);
+    setLeaveAttachments([]);
+    setCalendarEntries([]);
+    setCalendarBirthdays([]);
+    setCheckInCalendarEntries([]);
+    setSubscriptionReviewCalendarEntries([]);
+    setCanViewSubscriptionReviewCalendarForProfile(false);
+    setCanReviewLeaveWorkspace(false);
+    setLeaveWorkspaceUsesProfileScope(false);
+    setLeaveDataError("");
+    setLeaveDataLoading(true);
+    setPreviewPersonId(nextProfileId);
     setProfilePickerOpen(false);
     setProfilePickerQuery("");
     setSelectedEmployeeProfile(null);
@@ -1676,7 +1872,24 @@ export function LeaveDemo({
           {selfProfileError && !isPreviewingEmployeeAccess && !isNonRosterSystemAdminWorkspace ? <div className={styles.loadErrorAction} role="alert"><span>{selfProfileError}</span><button type="button" onClick={() => void loadSelfProfile()} disabled={selfProfileLoading}>{selfProfileLoading ? "Retrying…" : "Retry profile"}</button></div> : null}
           {selectedEmployeeProfileError && isPreviewingEmployeeAccess ? <div className={styles.loadErrorAction} role="alert"><span>{selectedEmployeeProfileError}</span><button type="button" onClick={() => setSelectedEmployeeProfileReloadKey((current) => current + 1)}>Retry profile</button></div> : null}
           {organisationAccessError && activeView === "people" ? <div className={styles.loadErrorAction} role="alert"><span>{organisationAccessError}</span><button type="button" onClick={() => void loadOrganisation()}>Retry permissions</button></div> : null}
-          {activeView === "home" ? <HomeView profile={activeProfile} requests={calendarRequests} myRequests={myRequests} pending={approvalQueue} canReview={canReviewLeave} onNavigate={navigate} onSelect={selectRequest} isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace} /> : null}
+          {activeView === "home" ? <HomeView
+            profile={activeProfile}
+            requests={calendarRequests}
+            myRequests={myRequests}
+            pending={approvalQueue}
+            canReview={canReviewLeave}
+            onNavigate={navigate}
+            onSelect={selectRequest}
+            isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace}
+            workSchedule={<WorkScheduleHome
+              workspace={visibleWorkScheduleWorkspace}
+              loading={workScheduleLoading}
+              error={workScheduleError}
+              onRefresh={refreshWorkScheduleWorkspace}
+              onRequest={submitWorkScheduleRequest}
+              onReview={reviewWorkScheduleRequest}
+            />}
+          /> : null}
           {activeView === "leave" ? <LeaveView profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
           {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <TeamCalendar birthdays={calendarIsSubscriptionReviewOnly ? [] : calendarBirthdays} checkIns={calendarIsSubscriptionReviewOnly ? [] : calendarCheckIns} requests={calendarIsSubscriptionReviewOnly ? [] : calendarRequests} subscriptionReviews={calendarSubscriptionReviews} reviewOnly={calendarIsSubscriptionReviewOnly} loading={leaveDataLoading} /> : null}
           <div hidden={activeView !== "people"}>
@@ -1737,11 +1950,20 @@ export function LeaveDemo({
                       resources={checkInResources}
                     />
                   : undefined}
-              renderCheckInTasks={showHrWorkspace || showManagerTasks
+              renderCheckInTasks={showHrWorkspace || showManagerTasks || canViewOwnTasks || (isPreviewingEmployeeAccess && activeProfile.accessRole === "employee")
                 ? (toolbarAction) => <CheckInTasks
                     previewPersonId={previewScopedManagerPersonId}
                     readOnly={false}
                     toolbarAction={toolbarAction}
+                    showCheckInTasks={showHrWorkspace || showManagerTasks}
+                    scheduleContent={<WorkScheduleTasks
+                      workspace={visibleWorkScheduleWorkspace}
+                      loading={workScheduleLoading}
+                      error={workScheduleError}
+                      onRefresh={refreshWorkScheduleWorkspace}
+                      onRequest={submitWorkScheduleRequest}
+                      onReview={reviewWorkScheduleRequest}
+                    />}
                   />
                 : undefined}
               renderAccounts={showHrWorkspace ? accountsLoading
@@ -1853,10 +2075,11 @@ function StatusPill({ status }: { status: RequestStatus }) {
   return <span className={`${styles.status} ${styles[`status${status}`]}`}><i />{status}</span>;
 }
 
-function HomeView({ profile, requests, myRequests, pending, canReview, onNavigate, onSelect, isNonRosterSystemAdmin = false }: { profile: Profile; requests: LeaveRequest[]; myRequests: LeaveRequest[]; pending: LeaveRequest[]; canReview: boolean; onNavigate: (view: AppView, section?: LeaveSection) => void; onSelect: (id: string, section?: LeaveSection) => void; isNonRosterSystemAdmin?: boolean }) {
+function HomeView({ profile, requests, myRequests, pending, canReview, onNavigate, onSelect, isNonRosterSystemAdmin = false, workSchedule }: { profile: Profile; requests: LeaveRequest[]; myRequests: LeaveRequest[]; pending: LeaveRequest[]; canReview: boolean; onNavigate: (view: AppView, section?: LeaveSection) => void; onSelect: (id: string, section?: LeaveSection) => void; isNonRosterSystemAdmin?: boolean; workSchedule?: ReactNode }) {
   if (isNonRosterSystemAdmin) {
     return (
       <div className={styles.dashboard}>
+        {workSchedule}
         <section className={styles.panel}>
           <div className={styles.emptyState}>
             <ShieldCheck size={24} />
@@ -1876,6 +2099,7 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
   if (!canReview) {
     return (
       <div className={styles.dashboard}>
+        {workSchedule}
         <section className={`${styles.panel} ${styles.myLeavePanel} ${styles.personalLeavePanel}`}>
           <PanelHeader title="My leave" action="Open my leave" onAction={() => onNavigate("leave")} />
           {nextOwn ? (
@@ -1891,6 +2115,7 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
 
   return (
     <div className={styles.dashboard}>
+      {workSchedule}
       <div className={styles.homeGrid}>
         <section className={`${styles.panel} ${styles.attentionPanel}`}>
           <PanelHeader title={attentionTitle} action="Open requests" onAction={() => onNavigate("leave", recordSection)} />
