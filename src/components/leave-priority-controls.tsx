@@ -16,12 +16,12 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
   return <details className={styles.leaveBalances}>
     <summary>Annual leave balances{workspace.people.some((p) => p.canSubmit) ? " & team requests" : ""}</summary>
     {workspace.people.map((person) => <div className={styles.leaveBalanceRow} key={person.personId}>
-      <div><strong>{person.name}</strong><small>{person.paidLeave ? `${person.hours ?? 0} hours${person.asOf ? ` · As of ${leaveDateLabel(person.asOf)}` : ""}` : "Unpaid leave only"}</small></div>
+      <div><strong>{person.name}</strong>{person.canViewBalance ? <small>{person.paidLeave ? `${person.hours ?? 0} hours${person.asOf ? ` · As of ${leaveDateLabel(person.asOf)}` : ""}` : "Unpaid leave only"}</small> : null}</div>
       <div className={styles.leaveBalanceActions}>
         {person.canSubmit ? <button type="button" className={styles.secondaryButton} disabled={busy || saving} onClick={() => onRequest(person.personId)}>Request leave</button> : null}
-        {person.paidLeave && workspace.canManageBalances ? <button type="button" className={styles.secondaryButton} disabled={busy || saving} onClick={() => { setEditing(editing === person.personId ? null : person.personId); setError(""); }}>Edit balance</button> : null}
+        {person.paidLeave && person.canViewBalance && workspace.canManageBalances ? <button type="button" className={styles.secondaryButton} disabled={busy || saving} onClick={() => { setEditing(editing === person.personId ? null : person.personId); setError(""); }}>Edit balance</button> : null}
       </div>
-      {editing === person.personId ? <form className={styles.leaveBalanceEditor} onSubmit={async (event) => {
+      {editing === person.personId && person.canViewBalance && workspace.canManageBalances ? <form className={styles.leaveBalanceEditor} onSubmit={async (event) => {
         event.preventDefault(); if (saving) return;
         const data = new FormData(event.currentTarget);
         setSaving(true); setError("");

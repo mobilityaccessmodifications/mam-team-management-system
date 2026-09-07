@@ -63,11 +63,23 @@ do $$declare w jsonb; begin
   w:=public.get_leave_priority_workspace();
   assert jsonb_array_length(w->'people')=1;
   assert (w->'people'->0->>'hours')::numeric=60;
+  assert (w->'people'->0->>'canViewBalance')::boolean;
+  assert not (w->>'canManageBalances')::boolean;
 end$$;
 select set_config('test.uid','10000000-0000-4000-8000-000000000002',false);
 do $$declare w jsonb; p text; begin
   w:=public.get_leave_priority_workspace();
   assert jsonb_array_length(w->'people')=2;
+  assert not (w->>'canManageBalances')::boolean;
+  assert (select count(*)=1 from jsonb_array_elements(w->'people') e where (e->>'canViewBalance')::boolean);
+  assert (select (e->>'paidLeave')::boolean from jsonb_array_elements(w->'people') e
+    where e->>'personId'='10000000-0000-4000-8000-000000000003'), 'Delegated form retains eligible request categories, not balance data';
+  assert (select e->>'hours' is null and e->>'asOf' is null and (e->>'canSubmit')::boolean
+    from jsonb_array_elements(w->'people') e where e->>'personId'='10000000-0000-4000-8000-000000000003');
+  begin
+    perform public.set_employee_annual_leave_balance('10000000-0000-4000-8000-000000000003',10,current_date,false);
+    raise exception 'Manager changed a balance';
+  exception when insufficient_privilege then null; end;
   select storage_path into p from private.leave_attachment_upload_intents limit 1;
   insert into storage.objects(bucket_id,name,metadata) values('leave-evidence',p,'{"size":100,"mimetype":"application/pdf"}');
   perform public.complete_my_leave_request_attachment_upload(p);
@@ -75,6 +87,14 @@ do $$declare w jsonb; p text; begin
 end$$;
 select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
 do $$declare w jsonb; begin
+  w:=public.get_leave_priority_workspace();
+  assert (w->>'canManageBalances')::boolean;
+  assert (select count(*)=4 from jsonb_array_elements(w->'people') e where (e->>'canViewBalance')::boolean);
+  w:=public.get_leave_priority_workspace('10000000-0000-4000-8000-000000000002');
+  assert (w->>'canManageBalances')::boolean;
+  assert (select count(*)=1 from jsonb_array_elements(w->'people') e where (e->>'canViewBalance')::boolean);
+  assert (select e->>'hours' is null and e->>'asOf' is null
+    from jsonb_array_elements(w->'people') e where e->>'personId'='10000000-0000-4000-8000-000000000003');
   w:=public.get_leave_priority_workspace('10000000-0000-4000-8000-000000000003');
   assert jsonb_array_length(w->'people')=1;
 end$$;
