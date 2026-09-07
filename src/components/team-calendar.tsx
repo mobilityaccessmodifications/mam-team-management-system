@@ -25,6 +25,7 @@ import { Temporal } from "temporal-polyfill";
 
 import type { BirthdayCalendarEntry, CheckInCalendarEntry, SubscriptionReviewCalendarEntry } from "@/app/leave/actions";
 import styles from "@/components/team-calendar.module.css";
+import { BALANCE_PENDING_STATUS } from "@/lib/leave-priority";
 
 type CalendarLeaveRequest = {
   id: string;
@@ -36,10 +37,10 @@ type CalendarLeaveRequest = {
   endDate: string;
   startTime?: string;
   endTime?: string;
-  status: "Pending" | "Approved" | "Declined" | "Cancelled";
+  status: "Pending" | "Approved" | "Declined" | "Cancelled" | typeof BALANCE_PENDING_STATUS;
 };
 
-type EventKind = "approved" | "pending" | "birthday" | "check-in" | "subscription";
+type EventKind = "approved" | "pending" | "balance-pending" | "birthday" | "check-in" | "subscription";
 type MAMEventMeta = { kind: EventKind; subject: string; detail: string; dateLabel: string; priority: number };
 
 type TeamCalendarProps = {
@@ -57,6 +58,7 @@ const subscribeToClient = () => () => undefined;
 const views = [createDayView(), createWeekView(), createMonthView(), createYearView(), createAgendaView()];
 
 const calendars: CalendarType[] = [
+  { id: "balance-pending", name: "Approved – pending leave balance", icon: "◷", isVisible: true, readOnly: true, colors: { eventColor: "#fff2b3", eventSelectedColor: "#a17b00", lineColor: "#c79a12", textColor: "#604800" } },
   { id: "approved", name: "Approved leave", icon: "✓", isVisible: true, readOnly: true, colors: { eventColor: "#e9f6f0", eventSelectedColor: "#237657", lineColor: "#237657", textColor: "#164d3b" } },
   { id: "pending", name: "Pending leave", icon: "◷", isVisible: true, readOnly: true, colors: { eventColor: "#fff1e8", eventSelectedColor: "#ef6a25", lineColor: "#ef6a25", textColor: "#9a3d10" } },
   { id: "birthday", name: "Birthdays", icon: "◈", isVisible: true, readOnly: true, colors: { eventColor: "#e9f5fb", eventSelectedColor: "#1684ad", lineColor: "#1684ad", textColor: "#075978" } },
@@ -131,8 +133,8 @@ function buildEvents(
   reviews: SubscriptionReviewCalendarEntry[],
   years: number[],
 ) {
-  const leave = requests.filter((request) => request.status === "Approved" || request.status === "Pending").map((request) => {
-    const kind: EventKind = request.status === "Approved" ? "approved" : "pending";
+  const leave = requests.filter((request) => request.status === "Approved" || request.status === "Pending" || request.status === BALANCE_PENDING_STATUS).map((request) => {
+    const kind: EventKind = request.status === BALANCE_PENDING_STATUS ? "balance-pending" : request.status === "Approved" ? "approved" : "pending";
     const times = request.startTime && request.endTime ? ` · ${request.startTime.slice(0, 5)}–${request.endTime.slice(0, 5)}` : "";
     return createMAMEvent({
       id: `leave:${request.id}`,
