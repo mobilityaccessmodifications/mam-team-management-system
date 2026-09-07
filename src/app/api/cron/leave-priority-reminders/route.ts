@@ -5,14 +5,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-/** Called by the existing MAM daily 08:00 scheduler; no browser-supplied data. */
+/** MAM runs at 07:00 (birthdays) and 08:00 (leave); SQL enforces each window. */
 export async function GET(request: Request) {
   const expected = Buffer.from(`Bearer ${process.env.CRON_SECRET?.trim() ?? ""}`);
   const provided = Buffer.from(request.headers.get("authorization") ?? "");
   const response = (body: object, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
   if (!process.env.CRON_SECRET?.trim() || expected.length !== provided.length || !timingSafeEqual(expected, provided)) return response({ ok: false }, 401);
   const hour = Number(new Intl.DateTimeFormat("en-AU", { timeZone: "Australia/Melbourne", hour: "numeric", hourCycle: "h23" }).format(new Date()));
-  if (hour < 8 || hour >= 17) return response({ ok: true, code: "outside_delivery_window" });
+  if (hour < 7 || hour >= 17) return response({ ok: true, code: "outside_delivery_window" });
   const secret = process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET?.trim();
   let url: URL;
   try {
