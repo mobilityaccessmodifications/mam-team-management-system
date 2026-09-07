@@ -50,7 +50,19 @@
 10. Which systems, assets and subscriptions are required for each role, who approves them, and what retention/audit period applies? **Interim implementation pending confirmation/deployment:** only a System Admin receives the full asset and subscription registers (including costs and membership); employees retain their own minimised subscription/device projections, and managers receive no company-wide register until a scoped policy is approved.
 11. Should a cross-company reporting-line edit require an additional confirmation?
 12. What credential handover and forced-password-change process is required when an administrator creates or resets an account?
-13. Penny must identify the authoritative leave-balance source, ownership and calculation rules before the portal shows a leave balance or entitlement.
+13. Penny will provide the authoritative balance source later. Per the owner's 7 September instruction, eligible employees temporarily see 80 hours unless an administrator enters a balance; display normal numbers and the recorded update date, without an example label. These temporary balances must not trigger payroll deductions or automatic accrual.
+
+## Priority leave workflow — 7 September 2026
+
+- An active Manager may submit and attach evidence for employees whose nearest eligible reporting Manager is that account. Super Admin retains authorised selected-profile capabilities. The employee remains the request owner; the real submitter is audited. Existing reviewer routing and no-self-approval rules remain in force.
+- Employees see their own annual balance; Managers see their own and direct-report balances. System Admin maintains hours and balance date, with an append-only update history. Temporary values do not calculate payroll.
+- `Approved – pending leave balance` means coverage is approved but paid leave is not final. It stays pending in the underlying payroll-facing record until a reviewer confirms the balance and approves. Authorised calendars show it yellow; peers retain availability-only visibility.
+- Sick evidence is due on the Monday strictly after the last sick-leave date. The form and detail show the calculated date. After that date, missing evidence prompts review as Unpaid leave; the system does not silently change pay treatment. Leave duration continues to count weekdays only (Monday–Friday; no new holiday calendar is assumed).
+- At 08:00 Australia/Melbourne each workday, pending requests at least two workdays old receive a Manager reminder, once per request per day until handled. Conditional approvals remind the Manager to finalise the balance. HR is copied.
+- Managers receive a team birthday reminder on the birthday, or on Friday for weekend birthdays, with HR copied. Birth years and ages are never sent.
+- Submission sends to Manager and employee; approval, conditional approval and decline send to the employee. HR remains copied on every event. Final approval and cancellation of approved/conditionally-approved leave also copy Accounts; cancellation of a merely pending request does not.
+- Top-level employees without a reporting Manager route to their explicitly authorised assigned reviewer. No arbitrary manager assignment or guessed address is introduced.
+- Reminders have durable claims and completion records. A failed daily run automatically retries after 30 minutes, beyond the 25-minute claim lease; already-sent rows are skipped. Workflow retries use stable event keys. Tests use only synthetic local records and offline mail validation; release verification must not trigger real test mail.
 
 ## Durable leave rollout (deployed)
 

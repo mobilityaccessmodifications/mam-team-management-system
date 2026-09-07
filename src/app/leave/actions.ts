@@ -6,8 +6,9 @@ import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { BALANCE_PENDING_STATUS, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 
-export type LeaveStatus = "Pending" | "Approved" | "Declined" | "Cancelled";
+export type LeaveStatus = "Pending" | "Approved" | "Declined" | "Cancelled" | typeof BALANCE_PENDING_STATUS;
 
 export type LeaveWorkspaceRequest = {
   id: string;
@@ -36,6 +37,7 @@ export type LeaveWorkspaceRequest = {
   canAttach: boolean;
   employeeNote?: string;
   managerNote?: string;
+  evidenceDueDate?: string;
 };
 
 export type LeaveAttachment = {
@@ -96,6 +98,7 @@ export type SubscriptionReviewCalendarEntry = {
 };
 
 export type LeaveWorkspaceData = {
+  priority?: LeavePriorityWorkspace;
   requests: LeaveWorkspaceRequest[];
   attachments: LeaveAttachment[];
   calendarEntries: LeaveCalendarEntry[];
@@ -135,7 +138,7 @@ export type SubmitLeaveInput = {
 
 export type DecideLeaveInput = {
   requestId: string;
-  status: "Approved" | "Declined";
+  status: LeaveDecision;
   managerNote?: string;
 };
 
@@ -232,7 +235,7 @@ type SubscriptionReviewCalendarRpcRow = {
   status: unknown;
 };
 
-type LeaveNotificationEvent = "leave-submitted" | "leave-approved" | "leave-declined" | "leave-cancelled";
+type LeaveNotificationEvent = "leave-submitted" | "leave-approved" | "leave-declined" | "leave-cancelled" | "leave-conditionally-approved";
 
 type LeaveNotificationFallback = {
   leaveType?: string;
@@ -374,7 +377,7 @@ function company(value: unknown, errorMessage: string): "mam" | "equipsy" {
 }
 
 function status(value: unknown, errorMessage: string): LeaveStatus {
-  if (value === "Pending" || value === "Approved" || value === "Declined" || value === "Cancelled") return value;
+  if (value === "Pending" || value === "Approved" || value === "Declined" || value === "Cancelled" || value === BALANCE_PENDING_STATUS) return value;
   throw new Error(errorMessage);
 }
 
@@ -552,7 +555,7 @@ function normaliseDecisionInput(input: DecideLeaveInput) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error(DECISION_ERROR);
   const requestId = requireText(input.requestId, DECISION_ERROR);
   if (!UUID_PATTERN.test(requestId)) throw new Error(DECISION_ERROR);
-  if (input.status !== "Approved" && input.status !== "Declined") throw new Error(DECISION_ERROR);
+  if (input.status !== "Approved" && input.status !== "Declined" && input.status !== BALANCE_PENDING_STATUS) throw new Error(DECISION_ERROR);
   const managerNote = optionalText(input.managerNote);
   if (input.status === "Declined" && !managerNote) throw new Error("Add a decision note before declining this request.");
   if (managerNote && managerNote.length > 2000) throw new Error("Decision note must be 2,000 characters or fewer.");
@@ -653,9 +656,9 @@ function notificationEmailList(value: unknown) {
   return [...new Set(values.map(normaliseNotificationEmail).filter((email): email is string => Boolean(email)))];
 }
 
-function leaveNotificationCcEmails(event: LeaveNotificationEvent) {
+function leaveNotificationCcEmails(event: LeaveNotificationEvent, wasApproved: boolean) {
   const addresses = [HR_LEAVE_CC_EMAIL];
-  if (LEAVE_EVENTS_REQUIRING_ACCOUNTS_CC.has(event)) {
+  if (LEAVE_EVENTS_REQUIRING_ACCOUNTS_CC.has(event) && (event !== "leave-cancelled" || wasApproved)) {
     addresses.push(MAM_ACCOUNTS_LEAVE_CC_EMAIL);
   }
   return addresses;
@@ -754,10 +757,14 @@ async function deliverLeaveNotification(
   const managerEmail = await resolveLeaveManagerEmail(requestId);
   const employeeRecipients = await resolveLeaveEmployeeRecipients(requestId);
   const employeeEmail = employeeRecipients.emails.join(",");
-  const ccEmails = leaveNotificationCcEmails(event);
+  const wasApproved = event === "leave-cancelled"
+    ? (await createAdminClient().rpc("leave_notification_was_approved", { p_request_id: requestId })).data === true
+    : event === "leave-approved";
+  const ccEmails = leaveNotificationCcEmails(event, wasApproved);
 
   const payload = {
     version: 1,
+    wasApproved,
     event,
     eventKey: `leave:${requestId}:${event}:${createHash("sha256").update(JSON.stringify({
       event,
@@ -781,7 +788,7 @@ async function deliverLeaveNotification(
     endTime: request?.endTime ?? fallback.endTime ?? null,
     days: request?.days ?? null,
     hours: request?.hours ?? null,
-    status: request?.status ?? fallback.status ?? "Pending",
+    status: event === "leave-conditionally-approved" ? BALANCE_PENDING_STATUS : request?.status ?? fallback.status ?? "Pending",
     employeeNote: request?.employeeNote ?? fallback.employeeNote ?? null,
     managerNote: request?.managerNote ?? fallback.managerNote ?? null,
     managerEmail: managerEmail ?? fallback.managerEmail ?? null,
@@ -828,7 +835,7 @@ async function deliverLeaveNotification(
       ? actualRecipients.length === expectedRecipients.length && actualRecipients.every((email) => expectedRecipients.includes(email))
       : expectedRecipients.length === 0;
     if (!response.ok || result.ok !== true || (result.sent !== true && result.alreadySent !== true) || !recipientsMatch) {
-      console.warn("Leave notification delivery was not confirmed.", { event, requestId, status: response.status, expectedRecipients });
+      console.warn("Leave notification delivery was not confirmed.", { event, requestId, status: response.status });
     }
   } catch {
     console.warn("Leave notification delivery failed after the leave mutation.", { event, requestId });
@@ -1032,7 +1039,7 @@ async function getSelectedEmployeeLeaveWorkspacePreview(
   };
 }
 
-export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<LeaveWorkspaceData> {
+async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<LeaveWorkspaceData> {
   const supabase = await requireLeaveSession();
   const checkedPreviewPersonId = previewPersonId ? selectedPersonId(previewPersonId) : null;
 
@@ -1179,6 +1186,41 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
   };
 }
 
+export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<LeaveWorkspaceData> {
+  const base = await getBaseLeaveWorkspaceData(previewPersonId);
+  const supabase = await requireLeaveSession();
+  const { data, error } = await supabase.rpc("get_leave_priority_workspace", { p_preview_person_id: previewPersonId ? selectedPersonId(previewPersonId) : null });
+  // Keep the existing workspace usable during a staged database deployment.
+  if (error || !data || !Array.isArray(data.people) || !Array.isArray(data.requests) || !Array.isArray(data.pendingBalanceCalendarIds)) {
+    return { ...base, warning: [base.warning, "Leave balances and team requests are temporarily unavailable."].filter(Boolean).join(" ") };
+  }
+  const priority = data as LeavePriorityWorkspace;
+  const metadata = new Map(priority.requests.map((row) => [row.id, row]));
+  const conditionalCalendar = new Set(priority.pendingBalanceCalendarIds);
+  return {
+    ...base, priority,
+    requests: base.requests.map((request) => ({ ...request,
+      status: metadata.get(request.id)?.pendingBalance && request.status === "Pending" ? BALANCE_PENDING_STATUS : request.status,
+      evidenceDueDate: metadata.get(request.id)?.evidenceDueDate ?? undefined,
+      canAttach: metadata.get(request.id)?.canAttach === true,
+    })),
+    calendarEntries: base.calendarEntries.map((request) => ({ ...request,
+      status: conditionalCalendar.has(request.id) && request.status === "Pending" ? BALANCE_PENDING_STATUS : request.status,
+    })),
+  };
+}
+
+export async function saveAnnualLeaveBalance(personId: string, hours: number, asOf: string, isExample: boolean) {
+  const supabase = await requireLeaveSession();
+  if (!Number.isFinite(hours) || hours < -10000 || hours > 100000 || !/^\d{4}-\d{2}-\d{2}$/.test(asOf) || typeof isExample !== "boolean") return { ok: false, message: "Enter a valid balance and date." };
+  const { error } = await supabase.rpc("set_employee_annual_leave_balance", {
+    p_person_id: selectedPersonId(personId), p_hours: hours, p_as_of: asOf, p_is_example: isExample,
+  });
+  if (error) return { ok: false, message: "Balance could not be saved. Check your access and balance date." };
+  revalidatePath("/");
+  return { ok: true };
+}
+
 export async function submitLeaveRequest(input: SubmitLeaveInput) {
   const checked = normaliseLeaveInput(input);
   const supabase = await requireLeaveSession();
@@ -1210,9 +1252,7 @@ export async function submitLeaveRequestForSelectedEmployee(
   const checkedPersonId = selectedPersonId(personId);
   const checked = normaliseLeaveInput(input);
   const supabase = await requireLeaveSession();
-  const { data: allowed, error: permissionError } = await supabase.rpc("can_change_employee_view");
-  if (permissionError || allowed !== true) throw new Error(SELECTED_PROFILE_SUBMIT_ERROR);
-
+  // The database permits only System Admin or this employee's direct manager.
   const { data, error } = await supabase.rpc("submit_selected_employee_leave_request", {
     p_person_id: checkedPersonId,
     p_request_type_label: checked.leaveType,
@@ -1233,7 +1273,7 @@ export async function submitLeaveRequestForSelectedEmployee(
 export async function decideLeaveRequest(input: DecideLeaveInput) {
   const checked = normaliseDecisionInput(input);
   const supabase = await requireLeaveSession();
-  const { data, error } = await supabase.rpc("decide_my_managed_leave_request", {
+  const { data, error } = await supabase.rpc("decide_leave_with_balance", {
     p_request_id: checked.requestId,
     p_status: checked.status,
     p_manager_note: checked.managerNote ?? null,
@@ -1241,7 +1281,7 @@ export async function decideLeaveRequest(input: DecideLeaveInput) {
 
   if (error) throw new Error(userFacingDecisionError(error));
   const result = toDecisionResult(data);
-  await deliverLeaveNotification(supabase, checked.status === "Approved" ? "leave-approved" : "leave-declined", result.id, {
+  await deliverLeaveNotification(supabase, checked.status === BALANCE_PENDING_STATUS ? "leave-conditionally-approved" : checked.status === "Approved" ? "leave-approved" : "leave-declined", result.id, {
     status: checked.status,
     managerNote: checked.managerNote,
   });

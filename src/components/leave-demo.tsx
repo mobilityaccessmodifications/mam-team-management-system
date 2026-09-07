@@ -25,6 +25,8 @@ import {
 import { FormEvent, type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
+import { LeavePriorityControls, SickEvidenceNotice } from "@/components/leave-priority-controls";
+import { BALANCE_PENDING_STATUS, sickEvidenceDeadline, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import {
   getCurrentEmployeeSelfProfile,
   getSelectedEmployeeProfile,
@@ -116,7 +118,7 @@ import type {
 
 type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals";
-type RequestStatus = "Pending" | "Approved" | "Declined" | "Cancelled";
+type RequestStatus = "Pending" | "Approved" | "Declined" | "Cancelled" | typeof BALANCE_PENDING_STATUS;
 type AccessRole = "hr" | "manager" | "employee";
 
 type LeaveRequest = {
@@ -144,6 +146,7 @@ type LeaveRequest = {
   canAttach: boolean;
   employeeNote?: string;
   managerNote?: string;
+  evidenceDueDate?: string;
 };
 
 type Profile = {
@@ -446,6 +449,7 @@ function toLeaveRequest(record: LeaveWorkspaceRequest): LeaveRequest {
     canAttach: record.canAttach === true,
     employeeNote: record.employeeNote,
     managerNote: record.managerNote,
+    evidenceDueDate: record.evidenceDueDate,
   };
 }
 
@@ -535,6 +539,10 @@ export function LeaveDemo({
   const [subscriptionReviewCalendarEntries, setSubscriptionReviewCalendarEntries] = useState<SubscriptionReviewCalendarEntry[]>([]);
   const [canViewSubscriptionReviewCalendarForProfile, setCanViewSubscriptionReviewCalendarForProfile] = useState(canViewSubscriptionReviewCalendar);
   const [canReviewLeaveWorkspace, setCanReviewLeaveWorkspace] = useState(false);
+  const [leavePriority, setLeavePriority] = useState<LeavePriorityWorkspace>();
+  const [requestForPersonId, setRequestForPersonId] = useState("");
+  const [formLeaveType, setFormLeaveType] = useState("");
+  const [formEndDate, setFormEndDate] = useState(nextAvailableLeaveDate());
   const [employmentType, setEmploymentType] = useState<LeaveWorkspaceData["employmentType"]>(null);
   const [hasPaidLeaveEntitlement, setHasPaidLeaveEntitlement] = useState(false);
   const [availableLeaveTypes, setAvailableLeaveTypes] = useState<LeaveWorkspaceData["availableLeaveTypes"]>([]);
@@ -650,6 +658,7 @@ export function LeaveDemo({
         || requestEpoch !== profileScopeEpoch.current
       ) return;
       setRequests(data.requests.map(toLeaveRequest));
+      setLeavePriority(data.priority);
       setLeaveAttachments(data.attachments);
       setCalendarEntries(data.calendarEntries.map(toCalendarLeaveRequest));
       setCalendarBirthdays(data.birthdayEntries);
@@ -685,6 +694,7 @@ export function LeaveDemo({
       setEmploymentType(null);
       setHasPaidLeaveEntitlement(false);
       setAvailableLeaveTypes([]);
+      setLeavePriority(undefined);
       setLeaveWorkspaceUsesProfileScope(false);
       setLeaveDataError("Leave records could not be loaded. Refresh and try again.");
     } finally {
@@ -1087,6 +1097,7 @@ export function LeaveDemo({
       setEmploymentType(null);
       setHasPaidLeaveEntitlement(false);
       setAvailableLeaveTypes([]);
+      setLeavePriority(undefined);
       setLeaveWorkspaceUsesProfileScope(false);
       setLeaveDataError("");
       setLeaveDataLoading(true);
@@ -1475,6 +1486,7 @@ export function LeaveDemo({
     setEmploymentType(null);
     setHasPaidLeaveEntitlement(false);
     setAvailableLeaveTypes([]);
+      setLeavePriority(undefined);
     setManagerNote("");
     setCancellationRequestId(null);
     setCancellationFocusRequestId(null);
@@ -1534,7 +1546,15 @@ export function LeaveDemo({
   }
 
   function openLeaveRequestForm() {
-    if (!canApplyForLeave || isMutating) return;
+    openTeamLeaveRequestForm("");
+  }
+
+  function openTeamLeaveRequestForm(personId: string) {
+    const target = personId ? leavePriority?.people.find((person) => person.personId === personId && person.canSubmit) : undefined;
+    if (isMutating || (personId ? !target : !canApplyForLeave)) return;
+    setRequestForPersonId(personId);
+    setFormLeaveType(target ? target.paidLeave ? "Annual leave" : "Unpaid leave" : availableLeaveTypes[0]?.value ?? "Unpaid leave");
+    setFormEndDate(nextAvailableLeaveDate());
     setFormError("");
     setShowRequestForm(true);
   }
@@ -1556,7 +1576,7 @@ export function LeaveDemo({
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isMutating || (!isPreviewingEmployeeAccess && isNonRosterSystemAdminWorkspace)) return;
+    if (isMutating || (!requestForPersonId && !isPreviewingEmployeeAccess && isNonRosterSystemAdminWorkspace)) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     const leaveType = String(data.get("leaveType"));
@@ -1617,7 +1637,9 @@ export function LeaveDemo({
         endTime: endTime || undefined,
         employeeNote,
       };
-      const next = isPreviewingEmployeeAccess && previewProfile
+      const next = requestForPersonId
+        ? await submitLeaveRequestForSelectedEmployee(requestForPersonId, requestInput)
+        : isPreviewingEmployeeAccess && previewProfile
         ? await submitLeaveRequestForSelectedEmployee(previewProfile.id, requestInput)
         : await submitLeaveRequest(requestInput);
       const attachmentResult = attachmentFiles.length
@@ -1669,7 +1691,7 @@ export function LeaveDemo({
     }
   }
 
-  async function decideRequest(status: "Approved" | "Declined") {
+  async function decideRequest(status: LeaveDecision) {
     if (!selectedRequest || isMutating || !canReviewLeave) return;
     if (status === "Declined" && !managerNote.trim()) {
       announce("Add a decision note before declining this request.");
@@ -1868,6 +1890,7 @@ export function LeaveDemo({
         </header>
 
         <main className={styles.main} id="main-content">
+          {activeView === "leave" && !leaveDataLoading ? <LeavePriorityControls key={previewPersonId || "self"} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /> : null}
           {leaveDataError && activeView !== "people" ? <div className={styles.loadErrorAction} role="alert"><span>{leaveDataError}</span><button type="button" onClick={() => void refreshLeaveWorkspace()} disabled={leaveDataLoading}>{leaveDataLoading ? "Retrying…" : "Retry"}</button></div> : null}
           {selfProfileError && !isPreviewingEmployeeAccess && !isNonRosterSystemAdminWorkspace ? <div className={styles.loadErrorAction} role="alert"><span>{selfProfileError}</span><button type="button" onClick={() => void loadSelfProfile()} disabled={selfProfileLoading}>{selfProfileLoading ? "Retrying…" : "Retry profile"}</button></div> : null}
           {selectedEmployeeProfileError && isPreviewingEmployeeAccess ? <div className={styles.loadErrorAction} role="alert"><span>{selectedEmployeeProfileError}</span><button type="button" onClick={() => setSelectedEmployeeProfileReloadKey((current) => current + 1)}>Retry profile</button></div> : null}
@@ -2006,13 +2029,14 @@ export function LeaveDemo({
         <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeLeaveRequestForm()}>
           <section className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
             <header><div><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={closeLeaveRequestForm} aria-label="Close request form"><X size={19} /></button></header>
-            <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{activeProfile.name}</strong><small>{activeProfile.team}</small></span></div>
+            <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{requestForPersonId ? leavePriority?.people.find((person) => person.personId === requestForPersonId)?.name : activeProfile.name}</strong><small>{requestForPersonId ? "On behalf of your team member" : activeProfile.team}</small></span></div>
             <form className={styles.form} onSubmit={submitRequest}>
-              <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" defaultValue={availableLeaveTypes[0]?.value} required>{availableLeaveTypes.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
-              {!hasPaidLeaveEntitlement ? <p className={styles.leavePolicyNote} role="note">
+              <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" value={formLeaveType} onChange={(event) => setFormLeaveType(event.target.value)} required>{(requestForPersonId ? (leavePriority?.people.find((person) => person.personId === requestForPersonId)?.paidLeave ? ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"] : ["Unpaid leave"]).map((value) => ({ value, label: value })) : availableLeaveTypes).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+              {!requestForPersonId && !hasPaidLeaveEntitlement ? <p className={styles.leavePolicyNote} role="note">
                 {employmentType === "abn" ? "ABN" : employmentType === "casual" ? "Casual" : "Unclassified"} employees can record Unpaid leave only.
               </p> : null}
-              <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" defaultValue={nextAvailableLeaveDate()} required /></label><label><span>End date</span><input name="endDate" type="date" defaultValue={nextAvailableLeaveDate()} required /></label></div>
+              <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" defaultValue={nextAvailableLeaveDate()} required /></label><label><span>End date</span><input name="endDate" type="date" value={formEndDate} onChange={(event) => setFormEndDate(event.target.value)} required /></label></div>
+              {formLeaveType === "Sick leave" ? <SickEvidenceNotice dueDate={sickEvidenceDeadline(formEndDate)} hasEvidence={false} /> : null}
               <details className={styles.timeRange}><summary>Add times <small>Optional</small></summary><div className={styles.formRow}><label><span>Starts</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>Ends</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>First and last day only. Leave blank for full days.</p></details>
               <label><span>Note for your reviewer <small>Optional</small></span><textarea name="employeeNote" rows={3} placeholder="Add only what your reviewer needs to decide." /></label>
               <label className={styles.attachmentField}>
@@ -2072,7 +2096,7 @@ function DirectoryLoading({
 }
 
 function StatusPill({ status }: { status: RequestStatus }) {
-  return <span className={`${styles.status} ${styles[`status${status}`]}`}><i />{status}</span>;
+  return <span className={`${styles.status} ${status === BALANCE_PENDING_STATUS ? styles.statusBalancePending : styles[`status${status}`]}`}><i />{status}</span>;
 }
 
 function HomeView({ profile, requests, myRequests, pending, canReview, onNavigate, onSelect, isNonRosterSystemAdmin = false, workSchedule }: { profile: Profile; requests: LeaveRequest[]; myRequests: LeaveRequest[]; pending: LeaveRequest[]; canReview: boolean; onNavigate: (view: AppView, section?: LeaveSection) => void; onSelect: (id: string, section?: LeaveSection) => void; isNonRosterSystemAdmin?: boolean; workSchedule?: ReactNode }) {
@@ -2138,7 +2162,7 @@ function PanelHeader({ title, action, onAction }: { title: string; action?: stri
   return <header className={styles.panelHeader}><h2>{title}</h2>{action && onAction ? <button type="button" onClick={onAction} aria-label={action} title={action}><ChevronRight size={18} aria-hidden="true" /></button> : null}</header>;
 }
 
-function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canApplyForLeave, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, onRequestLeave, onFilter, onSection, onNote, onSelect, onCloseMobileDetail, onDecision, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canApplyForLeave: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onRequestLeave: () => void; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onCloseMobileDetail: () => void; onDecision: (status: "Approved" | "Declined") => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function LeaveView({ profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canApplyForLeave, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, onRequestLeave, onFilter, onSection, onNote, onSelect, onCloseMobileDetail, onDecision, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canApplyForLeave: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onRequestLeave: () => void; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onCloseMobileDetail: () => void; onDecision: (status: LeaveDecision) => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   return (
     <section className={styles.leaveDesk}>
       {canApplyForLeave ? <div className={styles.leaveActions}><button className={`${styles.primaryButton} ${styles.applyForLeaveButton}`} type="button" onClick={onRequestLeave} disabled={busy} aria-haspopup="dialog"><Plus aria-hidden="true" size={17} /><span>Apply for leave</span></button></div> : null}
@@ -2159,7 +2183,7 @@ function LeaveView({ profile, section, requests, allRequests, selected, filter, 
 }
 
 function RequestsView({ profile, requests, allRequests, selected, filter, canReview, attachmentsByRequestId, readOnly, hidePrivateDetails, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onCloseMobileDetail, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; attachmentsByRequestId: Map<string, LeaveAttachment[]>; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
-  const filters: ("All" | RequestStatus)[] = ["All", "Pending", "Approved", "Declined", "Cancelled"];
+  const filters: ("All" | RequestStatus)[] = ["All", "Pending", BALANCE_PENDING_STATUS, "Approved", "Declined", "Cancelled"];
   const isEmployee = !canReview;
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const mobileDetailDialogRef = useRef<HTMLElement>(null);
@@ -2239,6 +2263,7 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
     {!hidePrivateDetails && request.employeeNote ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p></section> : null}
     {!hidePrivateDetails && request.managerNote ? <section><span>Reviewer decision note</span><p>{request.managerNote}</p></section> : null}
     {!hidePrivateDetails ? <AttachmentList attachments={attachments} /> : null}
+    {!hidePrivateDetails && request.status !== "Declined" && request.status !== "Cancelled" ? <SickEvidenceNotice dueDate={request.evidenceDueDate} hasEvidence={attachments.length > 0} /> : null}
     {!hidePrivateDetails && canAddAttachments ? <section className={styles.attachmentUpload}>
       <span>Add files</span>
       {attachments.length ? <p>{attachments.length} of {MAX_LEAVE_ATTACHMENTS} files</p> : null}
@@ -2276,7 +2301,7 @@ function AttachmentList({ attachments }: { attachments: LeaveAttachment[] }) {
   </section>;
 }
 
-function ApprovalsView({ pending, selected, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: "Approved" | "Declined") => void }) {
+function ApprovalsView({ pending, selected, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, onNote, onSelect, onDecision }: { pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: LeaveDecision) => void }) {
   const showQueue = pending.length > 1 || !selected;
   return <div className={`${styles.approvalGrid} ${!selected ? styles.approvalGridEmpty : ""} ${!showQueue ? styles.approvalGridSingle : ""}`}>
     {showQueue ? <section className={`${styles.panel} ${styles.queue}`}><PanelHeader title="Requests" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} disabled={busy} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Nothing needs review</strong></div>}</section> : null}
@@ -2285,8 +2310,16 @@ function ApprovalsView({ pending, selected, selectedId, note, calendarRequests, 
       <div className={styles.factGrid}><article><CalendarDays size={17} /><span><small>When</small><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><small>Duration</small><strong>{formatDurationWithTime(selected)}</strong></span></article><article><ClipboardList size={17} /><span><small>Leave type</small><strong>{selected.leaveType}</strong></span></article></div>
       {selected.employeeNote ? <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div> : null}
       <AttachmentList attachments={attachmentsByRequestId.get(selected.id) ?? []} />
+      <SickEvidenceNotice dueDate={selected.evidenceDueDate} hasEvidence={(attachmentsByRequestId.get(selected.id)?.length ?? 0) > 0} />
       <ApprovalCalendar selected={selected} requests={calendarRequests} checkIns={calendarCheckIns} />
-      {selected.status === "Pending" ? <div className={styles.decisionBox}><label><span>Note <small>Required to decline</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} disabled={busy || readOnly} /></label><div><button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")} disabled={busy || readOnly}><XCircle size={16} /> {busy ? "Sending…" : readOnly ? "Preview only" : "Decline"}</button><button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")} disabled={busy || readOnly}><CheckCircle2 size={16} /> {busy ? "Sending…" : readOnly ? "Preview only" : "Approve"}</button></div></div> : null}
+      {selected.status === "Pending" || selected.status === BALANCE_PENDING_STATUS ? <div className={styles.decisionBox}>
+        <label><span>Note <small>Required to decline</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} disabled={busy || readOnly} /></label>
+        <div>
+          <button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")} disabled={busy || readOnly}><XCircle size={16} /> Decline</button>
+          {selected.leaveType === "Annual leave" && selected.status === "Pending" ? <button className={styles.secondaryButton} type="button" onClick={() => onDecision(BALANCE_PENDING_STATUS)} disabled={busy || readOnly}>Approve pending balance</button> : null}
+          <button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")} disabled={busy || readOnly}><CheckCircle2 size={16} /> {busy ? "Sending…" : selected.status === BALANCE_PENDING_STATUS ? "Balance confirmed · Approve" : "Approve"}</button>
+        </div>
+      </div> : null}
     </section> : null}
   </div>;
 }
