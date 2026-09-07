@@ -20,7 +20,7 @@ import {
   type EventDetailContentProps,
   type MobileEventProps,
 } from "@dayflow/react";
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Temporal } from "temporal-polyfill";
 
 import type { BirthdayCalendarEntry, CheckInCalendarEntry, SubscriptionReviewCalendarEntry } from "@/app/leave/actions";
@@ -220,10 +220,20 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
   const year = new Date().getFullYear();
   const [visibleYears, setVisibleYears] = useState([year - 1, year, year + 1]);
   const events = useMemo(() => buildEvents(birthdays, checkIns, requests, subscriptionReviews, visibleYears), [birthdays, checkIns, requests, subscriptionReviews, visibleYears]);
-  const version = useMemo(() => `${reviewOnly}|${events.map((event) => `${event.id}:${event.start}:${event.end}`).join("|")}`, [events, reviewOnly]);
+  // Keep the calendar instance stable while its event data syncs. Recreating it
+  // whenever visibleYears changes resets the active view back to Month (which
+  // made Year appear to do nothing).
+  const calendarVersion = reviewOnly ? "subscription-calendar" : "team-calendar";
   const onVisibleRangeChange = useCallback((start: Date, end: Date) => {
     const next = Array.from({ length: end.getFullYear() - start.getFullYear() + 3 }, (_, index) => start.getFullYear() - 1 + index);
     setVisibleYears((current) => current.join(",") === next.join(",") ? current : next);
+  }, []);
+  const calendarAppRef = useRef<ReturnType<typeof useCalendarApp>["app"] | null>(null);
+  const onMoreEventsClick = useCallback((date: Date) => {
+    const app = calendarAppRef.current;
+    if (!app) return;
+    app.setCurrentDate(date);
+    app.changeView(ViewType.DAY);
   }, []);
   const calendar = useCalendarApp({
     views,
@@ -241,9 +251,15 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
     eventDetailTrigger: "click",
     readOnly: { draggable: false, viewable: true },
     allDaySortComparator: (first, second) => eventMeta(first).priority - eventMeta(second).priority,
-    callbacks: { onVisibleRangeChange },
+    callbacks: { onVisibleRangeChange, onMoreEventsClick },
     theme: { mode: "light", colors: { background: "#fffdfa", foreground: "#20302c", text: "#20302c", border: "#d7e0dc", card: "#ffffff", cardForeground: "#20302c", hover: "#f5f7f5", muted: "#eef2ef", mutedForeground: "#697873", primary: "#ef6a25", primaryForeground: "#ffffff", ring: "#ef6a25" } },
-  }, version);
+  }, calendarVersion);
+  useEffect(() => {
+    calendarAppRef.current = calendar.app;
+    return () => {
+      if (calendarAppRef.current === calendar.app) calendarAppRef.current = null;
+    };
+  }, [calendar.app]);
   const customSearch = useCallback(({ keyword, events: items }: { keyword: string; events: CalendarSearchEvent[] }) => {
     const query = keyword.trim().toLowerCase();
     return query ? items.filter((event) => `${event.title} ${event.description ?? ""}`.toLowerCase().includes(query)) : items;
@@ -251,10 +267,6 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
 
   return (
     <section className={styles.calendarSection} aria-label={reviewOnly ? "Subscription review calendar" : "Team calendar"}>
-      <header className={styles.intro}>
-        <div><span>{reviewOnly ? "YOUR REVIEWS" : "TEAM SCHEDULE"}</span><h1>{reviewOnly ? "Subscription calendar" : "Team calendar"}</h1><p>{reviewOnly ? "Your assigned paid-subscription reviews." : "Leave, birthdays and manager check-ins in one calendar."}</p></div>
-        <div className={styles.privacy}><ShieldCheck size={15} />{reviewOnly ? "Only your reviews" : "Private notes hidden"}</div>
-      </header>
       <div className={styles.calendarFrame} aria-busy={loading}>
         <DayFlowCalendar
           calendar={calendar}

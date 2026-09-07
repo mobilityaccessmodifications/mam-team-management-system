@@ -6,51 +6,13 @@
   width: 100%;
 }
 
-.intro {
-  align-items: end;
-  display: flex;
-  gap: 24px;
-  justify-content: space-between;
-}
-
-.intro > div:first-child { display: grid; gap: 4px; }
-.intro span, .intro p, .intro h1 { margin: 0; }
-
-.intro > div:first-child > span {
-  color: #c94c13;
-  font-family: var(--font-mono), monospace;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
-}
-
-.intro h1 {
-  color: #20302c;
-  font-family: var(--font-heading), sans-serif;
-  font-size: clamp(30px, 4vw, 43px);
-  font-weight: 800;
-  letter-spacing: -.035em;
-  line-height: 1.05;
-}
-
-.intro p { color: #66756f; font-size: 14px; }
-
-.privacy, .mobileHint {
+.mobileHint {
   align-items: center;
   color: #60706a;
   display: inline-flex;
   font-size: 12px;
   font-weight: 700;
   gap: 7px;
-}
-
-.privacy {
-  background: #eef4f0;
-  border: 1px solid #d9e3dd;
-  border-radius: 999px;
-  min-height: 36px;
-  padding: 0 13px;
-  white-space: nowrap;
 }
 
 .calendarFrame {
@@ -91,6 +53,20 @@
 .calendarFrame :global(.df-event-detail-panel) {
   border-color: #d7e0dc;
   box-shadow: 0 24px 70px rgba(23, 43, 36, .18);
+}
+
+/* DayFlow renders desktop details in a body-level portal. Its default
+   placement can use the event's hidden month wrapper and run past the right
+   edge, so keep the panel in a predictable, scrollable viewport position. */
+@media (min-width: 761px) {
+  :global(.df-event-detail-panel) {
+    inset: 16px 16px auto auto !important;
+    max-height: calc(100dvh - 32px) !important;
+    max-width: min(374px, calc(100vw - 32px)) !important;
+    min-width: 0 !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
 }
 
 .loading {
@@ -241,9 +217,6 @@
 
 @media (max-width: 760px) {
   .calendarSection { gap: 12px; }
-  .intro { align-items: start; gap: 12px; }
-  .intro h1 { font-size: 29px; }
-  .intro p, .intro > div:first-child > span, .privacy { display: none; }
   .calendarFrame { border-radius: 14px; margin-inline: -10px; }
 
   .calendarFrame :global(.df-calendar-container) {
