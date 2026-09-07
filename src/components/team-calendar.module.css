@@ -50,6 +50,23 @@
 .calendarFrame :global(.df-calendar-nav-button) { min-width: 36px; }
 .calendarFrame :global(.df-month-day-cell[data-today="true"]) { background: #fff9f5; }
 
+/* The virtual month rows can be shorter than DayFlow's fixed 40px offset
+   plus 48px title. Keep the fading label inside its own week instead. */
+.calendarFrame :global(.df-month-title) {
+  top: 50%;
+  height: auto;
+  padding: 4px 8px;
+  transform: translateY(-50%);
+  background: var(--df-color-background);
+  border-radius: 6px;
+  pointer-events: none !important;
+}
+
+.calendarFrame :global(.df-month-title-label) {
+  display: block;
+  line-height: 1.35;
+}
+
 .calendarFrame :global(.df-event-detail-panel) {
   border-color: #d7e0dc;
   box-shadow: 0 24px 70px rgba(23, 43, 36, .18);
