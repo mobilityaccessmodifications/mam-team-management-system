@@ -38,7 +38,7 @@ export async function GET(request: Request) {
             employeeName: r.employee_name, employeeEmail: null, employeeEmails: [], company: r.company,
             leaveType: r.leave_type, startDate: r.start_date, endDate: r.end_date, startTime: null, endTime: null,
             days: null, hours: null, status: r.status, employeeNote: null, managerNote: null,
-            managerEmail: r.manager_email, ccEmails: ["hr@mobilityaccess.com.au"], wasApproved: false }),
+            managerEmail: r.manager_email, ccEmails: r.event === "leave-reminder" ? [] : ["hr@mobilityaccess.com.au"], wasApproved: false }),
         });
         const receipt = await result.json();
         if (!result.ok || receipt.ok !== true || !(receipt.sent || receipt.alreadySent) || receipt.eventKey !== eventKey
