@@ -25,7 +25,7 @@ test('Accounts receives only approved cancellation',()=>{
 });
 for(const event of ['leave-reminder','team-birthday']) test(event,()=>{
   const out=run(event,{employeeEmail:null,leaveType:event==='team-birthday'?'Birthday':'Annual leave'});
-  assert.equal(out.outcome,'send'); assert.equal(out.deliveryRecipient,'manager@example.test'); assert.equal(out.ccRecipients,'hr@mobilityaccess.com.au');
+  assert.equal(out.outcome,'send'); assert.equal(out.deliveryRecipient,'manager@example.test'); assert.equal(out.ccRecipients,event==='leave-reminder'?'':'hr@mobilityaccess.com.au');
 });
 test('deduplicates sent event and fails closed without a manager',()=>{
   const key=`leave:${id}:leave-submitted:${'a'.repeat(24)}`;
@@ -36,4 +36,8 @@ test('deduplicates sent event and fails closed without a manager',()=>{
 test('conditional approval reminder asks the manager to finalise the balance',()=>{
   const out=run('leave-reminder',{status:'Approved – pending leave balance'});
   assert(out.emailHtml.includes('confirm the annual leave balance and finalise approval'));
+  assert.equal(out.ccRecipients,'');
+});
+test('reminder cannot re-enable HR CC through the payload',()=>{
+  assert.equal(run('leave-reminder',{ccEmails:['hr@mobilityaccess.com.au']}).ccRecipients,'');
 });

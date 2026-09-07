@@ -74,7 +74,7 @@ try {
   const deliveryRecipient = body.event === 'leave-submitted'
     ? [...new Set([body.managerEmail, ...employeeEmails])].join(',')
     : confirmationRecipient;
-  const ccRecipients = [HR, ...(body.event === 'leave-approved' || (body.event === 'leave-cancelled' && body.wasApproved !== false) ? [ACCOUNTS] : [])].join(',');
+  const ccRecipients = body.event === 'leave-reminder' ? '' : [HR, ...(body.event === 'leave-approved' || (body.event === 'leave-cancelled' && body.wasApproved !== false) ? [ACCOUNTS] : [])].join(',');
   const previous = events[body.eventKey];
   if (previous?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true, actualRecipient: confirmationRecipient, eventKey: body.eventKey } }];
   if (previous?.state === 'processing' && now - previous.at < PROCESSING) return reject('delivery-in-flight');
