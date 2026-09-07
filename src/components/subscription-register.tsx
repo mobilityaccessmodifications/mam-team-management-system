@@ -126,6 +126,21 @@ function hasQuarterlyReview(subscription?: Subscription) {
   return subscription?.pricingModel === "paid" && subscription.status !== "cancelled";
 }
 
+function passwordReviewInstruction(subscription?: Subscription) {
+  if (!subscription || subscription.status === "cancelled") return null;
+  const service = subscription.serviceName.toLocaleLowerCase().replace(/[^a-z0-9]/g, "");
+  if (["aroflo", "aroflooffice", "ispring"].includes(service)) {
+    return "Password review: prompt users to reset their password on next login.";
+  }
+  if (["xero", "deputy"].includes(service)) {
+    return "Password review: confirm the management/accounts access list and rotate the credentials.";
+  }
+  if (service === "canva") {
+    return "Password review: update the password and share it with the approved main users.";
+  }
+  return null;
+}
+
 function reviewFilterValue(subscription: Subscription) {
   if (!hasQuarterlyReview(subscription)) return "notScheduled";
   if (isReviewDue(subscription)) return "due";
@@ -521,6 +536,7 @@ function SubscriptionModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const closeWhenReady = useCallback(() => { if (!saving) onClose(); }, [onClose, saving]);
+  const passwordReminder = passwordReviewInstruction(subscription);
   useDialogFocus(true, dialogRef, initialFocusRef, closeWhenReady);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -589,6 +605,7 @@ function SubscriptionModal({
         </div>
         <SubscriptionMemberPicker people={people} selectedIds={memberPersonIds} onChange={setMemberPersonIds} />
         {pricingModel === "paid" ? <p className={styles.formHelp}><CalendarClock size={15} /> Reviewed on the first weekday of each quarter.</p> : null}
+        {isEditing && passwordReminder ? <p className={styles.formHelp}><KeyRound size={15} /> {passwordReminder} Repeat every six months.</p> : null}
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>{isEditing && onReview && subscription && hasQuarterlyReview(subscription) ? <button className={styles.secondaryAction} type="button" onClick={() => void reviewNow()} disabled={saving}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CalendarClock size={16} />}{saving ? "Saving…" : "Mark review complete"}</button> : null}<button className={styles.primaryAction} type="submit" disabled={saving || !people.length}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CreditCard size={16} />}{saving ? "Saving…" : isEditing ? "Save changes" : "Add subscription"}</button></footer>
       </form>
