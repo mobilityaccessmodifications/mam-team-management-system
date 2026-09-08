@@ -1,5 +1,7 @@
 "use client";
 
+import { ModalBackdrop } from "@/components/ui/modal-backdrop";
+
 import {
   ArrowUpRight,
   CalendarDays,
@@ -1838,7 +1840,7 @@ export function LeaveDemo({
             ) : null}
           </section>
         ) : null}
-            {profilePickerOpen ? <div className={styles.profilePickerBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeProfilePicker(); }}>
+            {profilePickerOpen ? <ModalBackdrop className={styles.profilePickerBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeProfilePicker(); }}>
           <section className={styles.profilePicker} ref={profilePickerDialogRef} role="dialog" aria-modal="true" aria-labelledby="profile-picker-title" tabIndex={-1}>
             <header className={styles.profilePickerHeader}>
               <div><span>Super Admin</span><h2 id="profile-picker-title">Change profile</h2></div>
@@ -1859,7 +1861,7 @@ export function LeaveDemo({
               {!profilePickerResults.length ? <p className={styles.profilePickerEmpty}>No profiles match that search.</p> : null}
             </div>
           </section>
-        </div> : null}
+        </ModalBackdrop> : null}
       </aside>
 
       <div className={styles.workspace}>
@@ -2026,7 +2028,7 @@ export function LeaveDemo({
       </div>
 
       {showRequestForm ? (
-        <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeLeaveRequestForm()}>
+        <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeLeaveRequestForm()}>
           <section className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
             <header><div><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={closeLeaveRequestForm} aria-label="Close request form"><X size={19} /></button></header>
             <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{requestForPersonId ? leavePriority?.people.find((person) => person.personId === requestForPersonId)?.name : activeProfile.name}</strong><small>{requestForPersonId ? "On behalf of your team member" : activeProfile.team}</small></span></div>
@@ -2049,7 +2051,7 @@ export function LeaveDemo({
               <footer><button className={styles.secondaryButton} type="button" onClick={closeLeaveRequestForm} disabled={isMutating}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : "Send request"}</button></footer>
             </form>
           </section>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`} role="status" aria-live="polite"><CheckCircle2 size={17} />{toast}</div>

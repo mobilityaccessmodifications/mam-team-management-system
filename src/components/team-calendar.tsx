@@ -25,6 +25,8 @@ import { Temporal } from "temporal-polyfill";
 
 import type { BirthdayCalendarEntry, CheckInCalendarEntry, SubscriptionReviewCalendarEntry } from "@/app/leave/actions";
 import styles from "@/components/team-calendar.module.css";
+import { ModalBackdrop } from "@/components/ui/modal-backdrop";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import { BALANCE_PENDING_STATUS } from "@/lib/leave-priority";
 
 type CalendarLeaveRequest = {
@@ -193,16 +195,19 @@ function EventDetail({ event, onClose }: EventDetailContentProps) {
 }
 
 function MobileEventDetail({ draftEvent, isOpen, onClose }: MobileEventProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(isOpen && Boolean(draftEvent), dialogRef, null, onClose);
   if (!isOpen || !draftEvent) return null;
 
   return (
-    <div className={styles.mobileDetailBackdrop} onClick={onClose} role="presentation">
+    <ModalBackdrop className={styles.mobileDetailBackdrop} onClick={onClose} role="presentation">
       <div
         aria-label="Event details"
         aria-modal="true"
         className={styles.mobileDetailSheet}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
+        ref={dialogRef}
       >
         <span aria-hidden="true" className={styles.mobileDetailHandle} />
         <EventDetail
@@ -214,7 +219,7 @@ function MobileEventDetail({ draftEvent, isOpen, onClose }: MobileEventProps) {
           onEventUpdate={() => undefined}
         />
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 

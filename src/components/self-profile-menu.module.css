@@ -837,4 +837,7 @@
   }
   .panelHeader { position: sticky; z-index: 1; top: 0; }
   .field input { font-size: 16px; }
+  .field > span { font-size: 14px; line-height: 1.4; }
+  .field input { min-height: 48px; }
+  .cancelButton, .saveButton { min-height: 48px; }
 }

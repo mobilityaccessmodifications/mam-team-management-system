@@ -440,3 +440,18 @@
   .task { border: 0; border-bottom: 1px solid var(--surface-border); border-radius: 0; }
   .person span { display: none; }
 }
+.touchLabel { display: none; }
+
+@media (max-width: 680px) {
+  .touchLabel { display: inline; font-size: 13px; }
+  .task .statusButton, .task .complete {
+    width: auto;
+    min-height: 48px;
+    height: auto;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .task[data-status="scheduled"] .complete { grid-row: 3; }
+  .milestone span, .reviewPanel small { font-size: 13px; line-height: 1.5; }
+  .person strong, .milestone strong { font-size: 15px; }
+}

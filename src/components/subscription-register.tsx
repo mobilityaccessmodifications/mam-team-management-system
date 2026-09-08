@@ -1,5 +1,8 @@
 "use client";
 
+import { ModalBackdrop } from "@/components/ui/modal-backdrop";
+import { MobileRegisterTools } from "@/components/ui/mobile-register-tools";
+
 import {
   AlertCircle,
   ArrowDownUp,
@@ -402,7 +405,9 @@ export function SubscriptionRegister({
     setSubscriptionFilters((current) => ({ ...current, [key]: value }));
     setActiveSubscriptionFilter(null);
     window.requestAnimationFrame(() => {
-      document.querySelector<HTMLButtonElement>(`[data-subscription-filter-trigger="${key}"]`)?.focus();
+      const trigger = document.querySelector<HTMLButtonElement>(`[data-subscription-filter-trigger="${key}"]`);
+      // The phone picker owns focus while the desktop header is hidden.
+      if (trigger?.getClientRects().length) trigger.focus({ preventScroll: true });
     });
   }
 
@@ -467,6 +472,20 @@ export function SubscriptionRegister({
 
     {registerState.state === "loading" ? <div className={styles.loadingState}><LoaderCircle className={styles.spinner} size={22} aria-hidden="true" /><span>Loading subscriptions…</span></div> : null}
     {registerState.state === "error" ? <div className={styles.errorState} role="alert"><AlertCircle size={19} aria-hidden="true" /><div><strong>Subscriptions could not be loaded</strong><span>{registerState.message}</span></div><button className={styles.secondaryAction} type="button" onClick={() => void load()}><RefreshCw size={15} /> Retry</button></div> : null}
+    {registerState.state === "ready" ? <MobileRegisterTools
+      sort={subscriptionSort}
+      onSort={setSubscriptionSort}
+      sortOptions={[
+        { value: "service", label: "Service" }, { value: "monthly", label: "Monthly cost" },
+        { value: "nextReview", label: "Next review" }, { value: "responsible", label: "Responsible" },
+        { value: "status", label: "Status" }, { value: "members", label: "Access" },
+      ]}
+      filters={([
+        { key: "billing", label: "Billing" }, { key: "nextReview", label: "Next review" },
+        { key: "responsible", label: "Responsible" }, { key: "status", label: "Status" },
+      ] as const).map(filter => ({ ...filter, value: subscriptionFilters[filter.key], options: subscriptionFilterOptions[filter.key] }))}
+      onFilter={setSubscriptionFilter}
+    /> : null}
     {registerState.state === "ready" && !filteredSubscriptions.length ? <div className={styles.emptyState}><CreditCard size={25} aria-hidden="true" /><strong>{query || hasSubscriptionFilters ? "No subscriptions match those filters" : "No subscriptions have been added"}</strong><span>{readOnly ? "Subscription records will appear here when they are created by a System Admin." : "Start with the systems your staff use, then assign their owner and access."}</span>{!readOnly && !query && !hasSubscriptionFilters ? <button className={styles.secondaryAction} type="button" onClick={() => setShowAdd(true)}><Plus size={15} /> Add subscription</button> : null}</div> : null}
     {registerState.state === "ready" && filteredSubscriptions.length ? <div className={styles.sheetViewport}>
       <div className={styles.subscriptionSheet} role="table" aria-label="Subscriptions">
@@ -589,7 +608,7 @@ function SubscriptionModal({
     }
   }
 
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="subscription-dialog-title" tabIndex={-1}>
       <header><div><h2 id="subscription-dialog-title">{isEditing ? "Edit subscription" : "Add subscription"}</h2>{isEditing && subscription ? <p>{subscription.subscriptionCode}</p> : null}</div><button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close subscription form"><X size={19} /></button></header>
       <form onSubmit={submit}>
@@ -610,7 +629,7 @@ function SubscriptionModal({
         <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>{isEditing && onReview && subscription && hasQuarterlyReview(subscription) ? <button className={styles.secondaryAction} type="button" onClick={() => void reviewNow()} disabled={saving}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CalendarClock size={16} />}{saving ? "Saving…" : "Mark review complete"}</button> : null}<button className={styles.primaryAction} type="submit" disabled={saving || !people.length}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CreditCard size={16} />}{saving ? "Saving…" : isEditing ? "Save changes" : "Add subscription"}</button></footer>
       </form>
     </section>
-  </div>;
+  </ModalBackdrop>;
 }
 
 function SubscriptionMemberPicker({

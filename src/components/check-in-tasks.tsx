@@ -239,6 +239,7 @@ export function CheckInTasks({
             onClick={() => setReviewReminderId(reviewOpen ? "" : task.reminderId)}
           >
             <CircleAlert size={18} aria-hidden="true" />
+            <span className={styles.touchLabel}>Needs review</span>
           </button> : task.status !== "scheduled" ? <span className={styles.status} data-status={task.status}>{statusLabel(task.status)}</span> : null}
           {!readOnly ? <button
               className={styles.complete}
@@ -252,6 +253,7 @@ export function CheckInTasks({
               title={taskActionHint(task)}
             >
               <CheckCircle2 size={19} aria-hidden="true" />
+              <span className={styles.touchLabel}>Complete</span>
             </button> : null}
           {reviewOpen ? <div className={styles.reviewPanel} id={`review-${task.reminderId}`} role="region" aria-label={`Why ${task.employeeName}'s check-in needs review`}>
             <strong>{reviewCopy.title}</strong>

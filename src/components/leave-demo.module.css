@@ -6683,8 +6683,8 @@
   }
 
   .navItem b {
-    font-size: 10px;
-    line-height: 1;
+    font-size: 12px;
+    line-height: 1.2;
   }
 
   .navItem i {
@@ -6728,21 +6728,21 @@
     display: flex;
     width: max-content;
     min-width: 100%;
-    gap: 2px;
+    gap: 8px;
   }
 
   .filterTabs button {
     min-width: max-content;
     min-height: 44px;
     padding: 0 10px;
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .filterTabs button span {
     display: grid;
     min-width: 19px;
     height: 19px;
-    font-size: 9px;
+    font-size: 12px;
   }
 
   .recordsGrid,

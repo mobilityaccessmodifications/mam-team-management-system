@@ -1,5 +1,7 @@
 "use client";
 
+import { ModalBackdrop } from "@/components/ui/modal-backdrop";
+
 import {
   AlertCircle,
   CalendarDays,
@@ -663,7 +665,7 @@ export function EmployeeDirectory({
         /> : <EmptyDetail />}
       </div>
 
-      {endDatePrompt ? <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEndDatePrompt(); }}>
+      {endDatePrompt ? <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEndDatePrompt(); }}>
         <section className={styles.modal} ref={endDateDialogRef} role="dialog" aria-modal="true" aria-labelledby="end-date-title" tabIndex={-1}>
           <header className={styles.modalHeader}>
             <div><h3 id="end-date-title">End employment</h3>{currentRecord ? <p>{currentRecord.fullName}</p> : null}</div>
@@ -677,9 +679,9 @@ export function EmployeeDirectory({
           </div>
           <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={closeEndDatePrompt} disabled={archiving}>Cancel</button><button type="button" className={styles.dangerAction} onClick={() => void confirmEndDate()} disabled={archiving}><UserMinus size={15} />{archiving ? "Ending employment…" : "Confirm end employment"}</button></footer>
         </section>
-      </div> : null}
+      </ModalBackdrop> : null}
 
-      {deleteTarget ? <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDeletePrompt(); }}>
+      {deleteTarget ? <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDeletePrompt(); }}>
         <section className={styles.modal} ref={deleteDialogRef} role="dialog" aria-modal="true" aria-labelledby="delete-profile-title" tabIndex={-1}>
           <header className={styles.modalHeader}>
             <div><h3 id="delete-profile-title">Delete archived profile?</h3><p>{deleteTarget.fullName}</p></div>
@@ -688,7 +690,7 @@ export function EmployeeDirectory({
           <div className={styles.modalBody}><p>This permanently removes the archived profile. This cannot be undone.</p>{saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}</div>
           <footer className={styles.modalActions}><button ref={deleteCancelRef} type="button" className={styles.secondaryAction} onClick={closeDeletePrompt} disabled={deleting}>Cancel</button><button type="button" className={styles.dangerAction} onClick={() => void confirmDelete()} disabled={deleting}><Trash2 size={15} />{deleting ? "Deleting…" : "Delete permanently"}</button></footer>
         </section>
-      </div> : null}
+      </ModalBackdrop> : null}
     </section>
   );
 }

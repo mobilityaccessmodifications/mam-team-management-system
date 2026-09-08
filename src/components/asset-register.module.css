@@ -1,8 +1,12 @@
-.workspace {
+.workspace,
+.modalBackdrop {
   --asset-accent: var(--mam-orange);
   --asset-accent-deep: var(--mam-orange-dark);
   --asset-ink: var(--text-primary);
   --asset-muted: var(--text-tertiary);
+}
+
+.workspace {
   display: grid;
   gap: 16px;
   width: 100%;
@@ -886,6 +890,7 @@
   .headerActions > button { flex: 1 1 auto; }
   .tools { gap: 9px; }
   .searchField { width: 100%; }
+  .searchField input { min-height: 48px; font-size: 16px; }
   .assetCount { padding: 0 3px; }
   .assetRow { grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; padding: 12px; }
   .assetIcon { width: 34px; height: 34px; }
@@ -936,7 +941,7 @@
     color: var(--asset-muted);
     content: attr(data-label);
     font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 800;
     letter-spacing: .09em;
     line-height: 1.25;

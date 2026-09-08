@@ -1,5 +1,8 @@
 "use client";
 
+import { ModalBackdrop } from "@/components/ui/modal-backdrop";
+import { MobileRegisterTools } from "@/components/ui/mobile-register-tools";
+
 import {
   AlertCircle,
   ArrowDownUp,
@@ -294,7 +297,7 @@ function AssetLabelModal({
     }
   }
 
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className={styles.labelModal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="asset-label-title" tabIndex={-1}>
       <header>
         <div><h2 id="asset-label-title">{onAddAnother ? "Barcode ready" : "Barcode label"}</h2></div>
@@ -320,7 +323,7 @@ function AssetLabelModal({
         </div>
       </footer>
     </section>
-  </div>;
+  </ModalBackdrop>;
 }
 
 function AddDeviceModal({
@@ -377,7 +380,7 @@ function AddDeviceModal({
     }
   }
 
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={`${styles.modal} ${styles.modalWithPicker}`} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="add-device-title" tabIndex={-1}>
       <header>
         <div><h2 id="add-device-title">Add device</h2></div>
@@ -411,7 +414,7 @@ function AddDeviceModal({
         </footer>
       </form>
     </section>
-  </div>;
+  </ModalBackdrop>;
 }
 
 function ChangeDeviceOwnerModal({
@@ -463,7 +466,7 @@ function ChangeDeviceOwnerModal({
     }
   }
 
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={`${styles.modal} ${styles.modalWithPicker}`} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="change-device-owner-title" tabIndex={-1}>
       <header>
         <div><h2 id="change-device-owner-title">Change owner</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
@@ -486,7 +489,7 @@ function ChangeDeviceOwnerModal({
         </footer>
       </form>
     </section>
-  </div>;
+  </ModalBackdrop>;
 }
 
 function ReturnDeviceModal({
@@ -532,7 +535,7 @@ function ReturnDeviceModal({
     }
   }
 
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="return-device-title" tabIndex={-1}>
       <header>
         <div><h2 id="return-device-title">Return device</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
@@ -555,7 +558,7 @@ function ReturnDeviceModal({
         </footer>
       </form>
     </section>
-  </div>;
+  </ModalBackdrop>;
 }
 
 function CustodyHistoryModal({
@@ -591,7 +594,7 @@ function CustodyHistoryModal({
     };
   }, [asset.id]);
 
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="device-history-title" tabIndex={-1}>
       <header>
         <div><h2 id="device-history-title">Ownership history</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
@@ -612,7 +615,7 @@ function CustodyHistoryModal({
         <button className={styles.secondaryAction} type="button" onClick={onClose} ref={closeRef}>Close</button>
       </footer>
     </section>
-  </div>;
+  </ModalBackdrop>;
 }
 
 function RemoveDeviceModal({
@@ -646,7 +649,7 @@ function RemoveDeviceModal({
     }
   }
 
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="remove-device-title" tabIndex={-1}>
       <header>
         <div><h2 id="remove-device-title">Remove device?</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
@@ -665,7 +668,7 @@ function RemoveDeviceModal({
         </button>
       </footer>
     </section>
-  </div>;
+  </ModalBackdrop>;
 }
 
 function AssetSheetHeader({
@@ -890,7 +893,9 @@ export function AssetRegister() {
     setAssetFilters((current) => ({ ...current, [key]: value }));
     setActiveAssetFilter(null);
     window.requestAnimationFrame(() => {
-      document.querySelector<HTMLButtonElement>(`[data-asset-filter-trigger="${key}"]`)?.focus();
+      const trigger = document.querySelector<HTMLButtonElement>(`[data-asset-filter-trigger="${key}"]`);
+      // The phone picker owns focus while the desktop header is hidden.
+      if (trigger?.getClientRects().length) trigger.focus({ preventScroll: true });
     });
   }
 
@@ -1001,6 +1006,20 @@ export function AssetRegister() {
       </div>
     </div>
 
+    <MobileRegisterTools
+      sort={assetSort}
+      onSort={setAssetSort}
+      sortOptions={[
+        { value: "device", label: "Device" }, { value: "assetCode", label: "Asset number" },
+        { value: "serialNumber", label: "Serial number" }, { value: "assignedTo", label: "Assigned to" },
+        { value: "assignedOn", label: "Assigned on" }, { value: "status", label: "Status" },
+      ]}
+      filters={([
+        { key: "assetType", label: "Device type" }, { key: "assignedTo", label: "Assigned to" },
+        { key: "status", label: "Status" },
+      ] as const).map(filter => ({ ...filter, value: assetFilters[filter.key], options: assetFilterOptions[filter.key] }))}
+      onFilter={setAssetFilter}
+    />
     {rowError ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{rowError}</p> : null}
     {loading ? <div className={styles.loadingState}><LoaderCircle className={styles.spinner} size={21} /><span>Loading IT assets…</span></div> : null}
     {!loading && loadError ? <div className={styles.errorState} role="alert"><AlertCircle size={20} aria-hidden="true" /><div><strong>IT assets could not be loaded</strong><span>{loadError}</span></div><button className={styles.secondaryAction} type="button" onClick={() => void loadAssets()} disabled={loading}><RefreshCw size={16} aria-hidden="true" /> Retry</button></div> : null}
