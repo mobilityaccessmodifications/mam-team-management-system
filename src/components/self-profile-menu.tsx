@@ -15,9 +15,9 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   type FormEvent,
+  type CSSProperties,
   useCallback,
   useEffect,
   useId,
@@ -28,7 +28,7 @@ import {
 
 import styles from "@/components/self-profile-menu.module.css";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
-import { EASE_OUT } from "@/lib/ease";
+import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 
 /**
  * A profile DTO already authorised for the current viewer. The caller must
@@ -124,11 +124,9 @@ export function SelfProfileMenu({
   const phoneId = useId();
   const birthDateId = useId();
   const workEmailId = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
-  const reduceMotion = useReducedMotion();
 
   const profileKey = [
     mode,
@@ -156,6 +154,7 @@ export function SelfProfileMenu({
     values: profileValues,
   }));
   const [isOpen, setIsOpen] = useState(false);
+  const [anchor, setAnchor] = useState({ top: 72, right: 16 });
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(idleFeedback);
   const savedValues = savedLocally?.profileKey === profileKey ? savedLocally.values : profileValues;
@@ -186,17 +185,13 @@ export function SelfProfileMenu({
   useEffect(() => {
     if (!isOpen) return;
 
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) {
-        closeMenu();
-      }
+    const updateAnchor = () => {
+      const bounds = triggerRef.current?.getBoundingClientRect();
+      if (bounds) setAnchor({ top: bounds.bottom + 9, right: Math.max(14, window.innerWidth - bounds.right) });
     };
-    document.addEventListener("pointerdown", onPointerDown);
-
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-    };
-  }, [closeMenu, isOpen]);
+    window.addEventListener("resize", updateAnchor);
+    return () => window.removeEventListener("resize", updateAnchor);
+  }, [isOpen]);
 
   const isDirty = draft.personalEmail !== savedValues.personalEmail
     || draft.phone !== savedValues.phone
@@ -204,6 +199,8 @@ export function SelfProfileMenu({
 
   function openMenu() {
     if (!canEditProfile) return;
+    const bounds = triggerRef.current?.getBoundingClientRect();
+    if (bounds) setAnchor({ top: bounds.bottom + 9, right: Math.max(14, window.innerWidth - bounds.right) });
     setDraftState({ profileKey, values: savedValues });
     setFeedback(idleFeedback);
     setIsOpen(true);
@@ -261,7 +258,6 @@ export function SelfProfileMenu({
     <div
       className={styles.root}
       data-company={profile.company.toLowerCase()}
-      ref={rootRef}
     >
       <button
         aria-controls={panelId}
@@ -282,11 +278,14 @@ export function SelfProfileMenu({
         <ChevronDown className={styles.chevron} aria-hidden="true" size={16} />
       </button>
 
-      {isOpen ? <button className={styles.backdrop} type="button" onClick={() => closeMenu(true)} aria-label="Close profile" /> : null}
-
-      <AnimatePresence initial={false}>
         {isOpen ? (
-          <motion.section
+          <ModalBackdrop
+            className={styles.profileOverlay}
+            data-company={profile.company.toLowerCase()}
+            style={{ "--profile-top": `${anchor.top}px`, "--profile-right": `${anchor.right}px` } as CSSProperties}
+            onPointerDown={(event) => event.target === event.currentTarget && closeMenu(true)}
+          >
+          <section
             aria-labelledby={titleId}
             aria-modal="true"
             className={styles.panel}
@@ -294,10 +293,6 @@ export function SelfProfileMenu({
             ref={panelRef}
             role="dialog"
             tabIndex={-1}
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.985 }}
-            transition={{ duration: reduceMotion ? 0 : 0.2, ease: EASE_OUT }}
           >
           <header className={styles.panelHeader}>
             <div className={styles.profileHeading}>
@@ -401,9 +396,9 @@ export function SelfProfileMenu({
               </footer>
             </form>
           </>}
-          </motion.section>
+          </section>
+          </ModalBackdrop>
         ) : null}
-      </AnimatePresence>
     </div>
   );
 }

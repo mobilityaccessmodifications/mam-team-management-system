@@ -5,6 +5,19 @@
   color: var(--ink, #252d2f);
 }
 
+/* Outside the filtered top bar: fixed descendants must use the viewport. */
+.profileOverlay {
+  position: fixed;
+  inset: 0;
+  color: var(--ink, #252d2f);
+}
+
+.profileOverlay .panel {
+  top: var(--profile-top, 72px);
+  right: var(--profile-right, 16px);
+  max-height: min(720px, calc(100dvh - var(--profile-top, 72px) - 16px));
+}
+
 .trigger {
   min-width: min(224px, 30vw);
   min-height: 46px;
@@ -840,4 +853,54 @@
   .field > span { font-size: 14px; line-height: 1.4; }
   .field input { min-height: 48px; }
   .cancelButton, .saveButton { min-height: 48px; }
+}
+
+@media (max-width: 760px), (max-width: 1000px) and (max-height: 500px) {
+  .profileOverlay {
+    display: flex;
+    align-items: flex-end;
+    background: rgb(13 28 23 / 48%);
+  }
+
+  .profileOverlay.profileOverlay > .panel.panel {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    max-height: min(84dvh, calc(var(--dialog-viewport-height, 100dvh) - 16px));
+    border-radius: 20px 20px 0 0;
+  }
+
+  .panelHeader { position: sticky; top: 0; z-index: 1; background: #fff; }
+  .form, .organisationSummary, .panelHeader { padding-inline: var(--mobile-gutter, 16px); }
+  .field, .section, .form { min-width: 0; }
+  .field input { min-width: 0; max-width: 100%; font-size: 16px; }
+  .profileHeading strong, .profileHeading small { white-space: normal; overflow-wrap: anywhere; }
+  .closeButton { flex-shrink: 0; }
+}
+
+@media (max-width: 760px) {
+  .trigger, .triggerOpen {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    display: grid;
+    grid-template-columns: 1fr;
+    place-items: center;
+    padding: 0;
+    gap: 0;
+    border-radius: 10px;
+    background: var(--accent-soft, #fff0e7);
+    box-shadow: none;
+  }
+  .triggerCopy, .chevron { display: none; }
+  .avatar {
+    width: auto;
+    height: auto;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    clip-path: none;
+    font-size: 14px;
+  }
 }
