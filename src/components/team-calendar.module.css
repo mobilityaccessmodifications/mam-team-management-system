@@ -221,7 +221,7 @@
 
 @media (max-width: 760px) {
   .calendarSection { gap: 12px; }
-  .calendarFrame { border-radius: 14px; margin-inline: -10px; }
+  .calendarFrame { border-radius: 14px; margin-inline: 0; min-width: 0; }
 
   .calendarFrame :global(.df-calendar-container) {
     --df-calendar-height: calc(100dvh - 232px);

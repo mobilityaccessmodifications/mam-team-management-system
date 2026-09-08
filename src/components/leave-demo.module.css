@@ -6877,4 +6877,39 @@
 .leaveBalanceEditor { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; width: 100%; }
 .leaveBalanceEditor label { display: grid; gap: 6px; }
 .leaveBalanceEditor input { padding: 10px; border: 1px solid #cbd7d2; border-radius: 8px; max-width: 100%; }
+
+/* One mobile page rail, shared by Home, Leave, Calendar and People. */
+@media (max-width: 760px), (max-width: 1000px) and (max-height: 500px) {
+  .shell { --mobile-gutter: 16px; }
+  .main {
+    width: 100%;
+    min-width: 0;
+    padding: 16px var(--mobile-gutter) calc(28px + env(safe-area-inset-bottom));
+  }
+  .main > *, .workspace, .leaveDesk, .recordsWorkspace {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .topbar { padding-inline: var(--mobile-gutter); }
+  .viewToolbar { margin-inline: 0; max-width: 100%; }
+  .applyForLeaveButton { width: 100%; min-height: 48px; }
+  .leaveActions { width: 100%; }
+}
+
+@media (max-width: 760px), (max-width: 1000px) and (max-height: 500px) {
+  .modal { animation: none; }
+  .modal > header, .form { padding-inline: var(--mobile-gutter, 16px); }
+  .formPerson { margin-inline: var(--mobile-gutter, 16px); }
+  .form footer {
+    margin-inline: calc(-1 * var(--mobile-gutter, 16px));
+    padding-inline: var(--mobile-gutter, 16px);
+  }
+  .form, .form label, .formRow, .timeRange { min-width: 0; max-width: 100%; }
+  .formRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .form input, .form select, .form textarea { width: 100%; min-width: 0; max-width: 100%; }
+}
+
+@media (max-width: 380px) {
+  .formRow { grid-template-columns: minmax(0, 1fr); }
+}
 .statusBalancePending { color: #745700; background: #fff2b3; border-color: #dfc650; white-space: normal; }
