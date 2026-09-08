@@ -8,6 +8,7 @@ export async function proxy(request: NextRequest) {
   const isLoginRoute = pathname.startsWith("/login");
   const isConfirmationRoute = pathname === "/auth/confirm";
   const isCronRoute = pathname === "/api/cron/check-in-reminders"
+    || pathname === "/api/cron/leave-notifications"
     || pathname === "/api/cron/leave-priority-reminders"
     || pathname === "/api/cron/leave-attachment-cleanup";
   // The analytics handler verifies its dedicated bearer secret before it
