@@ -72,20 +72,6 @@
   box-shadow: 0 24px 70px rgba(23, 43, 36, .18);
 }
 
-/* DayFlow renders desktop details in a body-level portal. Its default
-   placement can use the event's hidden month wrapper and run past the right
-   edge, so keep the panel in a predictable, scrollable viewport position. */
-@media (min-width: 761px) {
-  :global(.df-event-detail-panel) {
-    inset: 16px 16px auto auto !important;
-    max-height: calc(100dvh - 32px) !important;
-    max-width: min(374px, calc(100vw - 32px)) !important;
-    min-width: 0 !important;
-    overflow-y: auto !important;
-    overscroll-behavior: contain;
-  }
-}
-
 .loading {
   align-items: center;
   backdrop-filter: blur(3px);

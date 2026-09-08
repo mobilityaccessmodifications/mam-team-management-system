@@ -105,6 +105,20 @@ a {
   color: var(--text-primary);
 }
 
+/* DayFlow renders desktop event details in a body-level portal, outside the
+   calendar CSS Module. Keep the panel inside the viewport without relying on
+   a local ancestor that the portal does not have. */
+@media (min-width: 761px) {
+  .df-event-detail-panel {
+    inset: 16px 16px auto auto !important;
+    max-height: calc(100dvh - 32px) !important;
+    max-width: min(374px, calc(100vw - 32px)) !important;
+    min-width: 0 !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+}
+
 .skip-link {
   position: fixed;
   left: 16px;

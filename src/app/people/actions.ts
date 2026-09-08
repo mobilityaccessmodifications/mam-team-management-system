@@ -8,6 +8,7 @@ import {
   requireEmployeeDirectoryManager,
 } from "@/lib/employee-directory";
 import { getOrganisationPersonWorkEmailForMember } from "@/lib/organisation-directory";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryCompany,
@@ -40,6 +41,20 @@ function isMissingWorkScheduleRpc(error: { code?: string; message?: string } | n
 type MutationRpcRow = {
   person_id: string;
 };
+
+type ArchivePersonRow = {
+  auth_user_id: string | null;
+};
+
+type ArchiveProfileRow = {
+  account_status: "active" | "disabled";
+};
+
+function authUserIsBanned(user: { banned_until?: string | null } | null | undefined) {
+  if (!user?.banned_until) return false;
+  const bannedUntil = Date.parse(user.banned_until);
+  return Number.isFinite(bannedUntil) && bannedUntil > Date.now();
+}
 
 function textValue(value: unknown, label: string) {
   if (typeof value !== "string") throw new Error(`${label} is invalid.`);
@@ -321,6 +336,21 @@ export async function archiveEmployeeDirectoryRecord(input: {
   endDate: string;
   reason: string;
 }): Promise<ArchiveEmployeeDirectoryResult> {
+  let admin: ReturnType<typeof createAdminClient> | null = null;
+  let targetAuthUserId: string | null = null;
+  let authBanChanged = false;
+  let databaseArchived = false;
+
+  async function rollbackAuthBan() {
+    if (!admin || !targetAuthUserId || !authBanChanged) return true;
+    try {
+      const { error } = await admin.auth.admin.updateUserById(targetAuthUserId, { ban_duration: "none" });
+      return !error;
+    } catch {
+      return false;
+    }
+  }
+
   try {
     const inputValue = inputObject(input);
     if (typeof inputValue.personId !== "string" || !UUID_PATTERN.test(inputValue.personId)) {
@@ -329,19 +359,80 @@ export async function archiveEmployeeDirectoryRecord(input: {
     const endDate = optionalDate(inputValue.endDate, "End date");
     const reason = employmentEndReason(inputValue.reason);
     if (!endDate) return { ok: false, message: "Choose an employment end date." };
+    const expectedPersonVersion = version(inputValue.personVersion);
+    const expectedDetailVersion = version(inputValue.detailVersion);
 
-    const { supabase } = await requireEmployeeDirectoryManager();
+    const { supabase, actorUserId } = await requireEmployeeDirectoryManager();
+    admin = createAdminClient();
+
+    // The database RPC owns the transactional archive and profile-status
+    // update. Auth is a separate provider, so disable it first and roll that
+    // provider change back if the database transaction is rejected.
+    const { data: person, error: personError } = await admin
+      .from("internal_org_people")
+      .select("auth_user_id")
+      .eq("id", inputValue.personId)
+      .eq("node_kind", "person")
+      .eq("is_active", true)
+      .maybeSingle<ArchivePersonRow>();
+    if (personError || !person) {
+      return { ok: false, message: "The employee record could not be found. Refresh and try again." };
+    }
+
+    targetAuthUserId = person.auth_user_id;
+    if (targetAuthUserId === actorUserId) {
+      return { ok: false, message: "You cannot end employment and disable your own portal account." };
+    }
+
+    if (targetAuthUserId) {
+      const { data: profile, error: profileError } = await admin
+        .from("profiles")
+        .select("account_status")
+        .eq("id", targetAuthUserId)
+        .maybeSingle<ArchiveProfileRow>();
+      if (profileError) {
+        return { ok: false, message: "The portal account could not be checked. No changes were made." };
+      }
+
+      if (profile?.account_status === "active") {
+        const { data: authData, error: authLookupError } = await admin.auth.admin.getUserById(targetAuthUserId);
+        if (authLookupError || !authData.user) {
+          return { ok: false, message: "The portal account could not be checked. No changes were made." };
+        }
+
+        if (!authUserIsBanned(authData.user)) {
+          const { error: authBanError } = await admin.auth.admin.updateUserById(targetAuthUserId, {
+            ban_duration: "876000h",
+          });
+          if (authBanError) {
+            return { ok: false, message: "The portal account could not be disabled. No changes were made." };
+          }
+          authBanChanged = true;
+        }
+      }
+    }
+
     const { data, error } = await supabase.rpc("archive_employee_directory_record", {
       p_person_id: inputValue.personId,
-      p_expected_person_version: version(inputValue.personVersion),
-      p_expected_detail_version: version(inputValue.detailVersion),
+      p_expected_person_version: expectedPersonVersion,
+      p_expected_detail_version: expectedDetailVersion,
       p_end_date: endDate,
       p_archive_reason: reason,
     });
     if (error) {
+      const rollbackSucceeded = await rollbackAuthBan();
+      if (!rollbackSucceeded) {
+        return {
+          ok: false,
+          message: "The profile could not be archived. Its portal account is disabled; refresh and contact an administrator.",
+        };
+      }
       const message = error.message?.toLocaleLowerCase() ?? "";
       if (message.includes("return of this employee") || message.includes("active it devices")) {
         return { ok: false, message: "Record the employee’s hardware return date in Registered devices before ending employment." };
+      }
+      if (message.includes("disable the portal account before archiving")) {
+        return { ok: false, message: "The combined archive and account-disable setup is not available yet. Refresh after the next release." };
       }
       if (message.includes("reporting") || message.includes("account") || message.includes("manager") || message.includes("end date")) {
         return { ok: false, message: error.message };
@@ -363,10 +454,15 @@ export async function archiveEmployeeDirectoryRecord(input: {
       return { ok: false, message: "The employee profile could not be archived. Refresh and try again." };
     }
 
+    databaseArchived = true;
     const record = await findEmployeeDirectoryRecord(supabase, returnedId);
     revalidatePath("/");
     return { ok: true, record };
   } catch {
+    if (!databaseArchived) await rollbackAuthBan();
+    if (databaseArchived) {
+      return { ok: false, message: "Employment ended and the portal account was disabled, but the archived record needs refreshing." };
+    }
     return { ok: false, message: "The employee profile could not be archived. Refresh and try again." };
   }
 }
