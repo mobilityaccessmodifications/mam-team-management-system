@@ -13,6 +13,18 @@ test('submission goes to manager and employee with HR copied',()=>{
   assert.equal(out.outcome,'send'); assert.equal(out.deliveryRecipient,'manager@example.test,employee@example.test');
   assert.equal(out.ccRecipients,'hr@mobilityaccess.com.au');
 });
+test('missing employee email never blocks the manager submission notice',()=>{
+  const out=run('leave-submitted',{employeeEmail:null,employeeEmails:[]});
+  assert.equal(out.outcome,'send');assert.equal(out.deliveryRecipient,'manager@example.test');
+});
+test('multiline textarea notes are accepted and HTML remains escaped',()=>{
+  const out=run('leave-approved',{status:'Approved',employeeNote:'First line\nSecond line',managerNote:'Approved\r\n<unsafe>\ttext'});
+  assert.equal(out.outcome,'send');
+  assert(out.emailHtml.includes('&lt;unsafe&gt;'));
+  assert(!out.emailHtml.includes('<unsafe>'));
+  assert.equal(run('leave-approved',{employeeNote:'bad\u0000note'}).outcome,'rejected');
+  assert.equal(run('leave-approved',{employeeName:'name\nheader'}).outcome,'rejected');
+});
 for(const event of ['leave-approved','leave-declined','leave-conditionally-approved']) test(event,()=>{
   const out=run(event,{status:event==='leave-conditionally-approved'?'Approved – pending leave balance':event==='leave-approved'?'Approved':'Declined',managerNote:'<unsafe>'});
   assert.equal(out.deliveryRecipient,'employee@example.test');

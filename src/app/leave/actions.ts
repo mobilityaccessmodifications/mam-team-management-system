@@ -1,10 +1,9 @@
 "use server";
 
-import { createHash } from "node:crypto";
+import { dispatchLeaveNotificationsForRequest } from "@/lib/leave-notification-outbox";
 
 import { revalidatePath } from "next/cache";
 
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { BALANCE_PENDING_STATUS, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 
@@ -235,20 +234,6 @@ type SubscriptionReviewCalendarRpcRow = {
   status: unknown;
 };
 
-type LeaveNotificationEvent = "leave-submitted" | "leave-approved" | "leave-declined" | "leave-cancelled" | "leave-conditionally-approved";
-
-type LeaveNotificationFallback = {
-  leaveType?: string;
-  startDate?: string;
-  endDate?: string;
-  startTime?: string;
-  endTime?: string;
-  employeeNote?: string;
-  managerNote?: string;
-  managerEmail?: string;
-  status?: LeaveStatus;
-};
-
 type SubmitRpcRow = {
   id: string;
   status: string;
@@ -265,13 +250,6 @@ type LeaveEntitlementPolicyRpcRow = {
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^(?:(?:0[6-9]|1[0-7]):(?:00|15|30|45)|18:00)$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const HR_LEAVE_CC_EMAIL = "hr@mobilityaccess.com.au";
-const MAM_ACCOUNTS_LEAVE_CC_EMAIL = "accounts@mobilityaccess.com.au";
-const LEAVE_EVENTS_REQUIRING_ACCOUNTS_CC = new Set<LeaveNotificationEvent>([
-  "leave-approved",
-  "leave-cancelled",
-]);
 const ATTACHMENT_STORAGE_PATH_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:pdf|heic|heif|jpg|png|webp)$/i;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const LEAVE_TYPES = new Set([
@@ -602,246 +580,6 @@ function toSubmitResult(value: unknown) {
     approvalRequired: row.approval_required === true,
     assignedReviewerLabel: optionalText(row.assigned_reviewer_label),
   };
-}
-
-type LeaveNotificationManagerRow = {
-  manager_user_id: string | null;
-  manager_name: string | null;
-  manager_email: string | null;
-};
-
-type LeaveNotificationEmployeeRow = {
-  employee_work_email?: unknown;
-  employee_personal_email?: unknown;
-  employee_emails?: unknown;
-};
-
-type LeaveNotificationEmployeeRecipients = {
-  workEmail?: string;
-  personalEmail?: string;
-  emails: string[];
-};
-
-/**
- * Resolve the employee's nearest active reporting manager on the server. The
- * notification recipient is the HR-recorded work email, never the portal
- * login email (which may be an internal accounts alias). The browser never
- * supplies a recipient and the private work email is only included in the
- * signed n8n notification payload.
- */
-async function resolveLeaveManagerEmail(requestId: string) {
-  try {
-    const admin = createAdminClient();
-    const { data, error } = await admin.rpc("resolve_leave_notification_manager", {
-      p_request_id: requestId,
-    });
-    if (error || !Array.isArray(data) || data.length !== 1) return undefined;
-
-    const row = data[0] as LeaveNotificationManagerRow;
-    const email = row?.manager_email?.trim().toLowerCase();
-    return email && EMAIL_PATTERN.test(email) ? email : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function normaliseNotificationEmail(value: unknown) {
-  if (typeof value !== "string") return undefined;
-  const email = value.trim().toLowerCase();
-  return EMAIL_PATTERN.test(email) ? email : undefined;
-}
-
-function notificationEmailList(value: unknown) {
-  const values = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[;,]/) : [];
-  return [...new Set(values.map(normaliseNotificationEmail).filter((email): email is string => Boolean(email)))];
-}
-
-function leaveNotificationCcEmails(event: LeaveNotificationEvent, wasApproved: boolean) {
-  const addresses = [HR_LEAVE_CC_EMAIL];
-  if (LEAVE_EVENTS_REQUIRING_ACCOUNTS_CC.has(event) && (event !== "leave-cancelled" || wasApproved)) {
-    addresses.push(MAM_ACCOUNTS_LEAVE_CC_EMAIL);
-  }
-  return addresses;
-}
-
-/**
- * Resolve the employee's HR-recorded work and personal emails on the server.
- * Both addresses are included only in the signed notification payload; they
- * are never returned to the browser or accepted from the leave form.
- */
-async function resolveLeaveEmployeeRecipients(requestId: string): Promise<LeaveNotificationEmployeeRecipients> {
-  try {
-    const admin = createAdminClient();
-    const { data, error } = await admin.rpc("resolve_leave_notification_employee_recipients", {
-      p_request_id: requestId,
-    });
-    if (error || !Array.isArray(data) || data.length !== 1) return { emails: [] };
-
-    const row = data[0] as LeaveNotificationEmployeeRow;
-    const workEmail = normaliseNotificationEmail(row.employee_work_email);
-    const personalEmail = normaliseNotificationEmail(row.employee_personal_email);
-    const emails = notificationEmailList(row.employee_emails);
-    return {
-      workEmail,
-      personalEmail,
-      emails: emails.length ? emails : [...new Set([workEmail, personalEmail].filter((email): email is string => Boolean(email)))],
-    };
-  } catch {
-    return { emails: [] };
-  }
-}
-
-/**
- * Leave submission and cancellation events are routed to the request's
- * nearest active manager/admin. Approval and decline events are routed to the
- * requesting employee. The browser never supplies a recipient, and a delivery
- * failure cannot roll back a leave decision already recorded in Supabase.
- */
-async function deliverLeaveNotification(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  event: LeaveNotificationEvent,
-  requestId: string,
-  fallback: LeaveNotificationFallback = {},
-) {
-  const webhookUrl = process.env.MAM_N8N_LEAVE_WEBHOOK_URL?.trim();
-  const webhookOrigin = process.env.MAM_N8N_LEAVE_WEBHOOK_ORIGIN?.trim();
-  const webhookSecret = process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET?.trim();
-  if (!webhookUrl || !webhookOrigin || !webhookSecret) {
-    // A leave mutation must remain durable even if the delivery integration is
-    // incomplete. Log only which configuration fields are absent: URLs,
-    // secrets, leave details and recipient details must never reach logs.
-    console.warn("Leave notification delivery is not configured.", {
-      hasWebhookUrl: Boolean(webhookUrl),
-      hasWebhookOrigin: Boolean(webhookOrigin),
-      hasWebhookSecret: Boolean(webhookSecret),
-    });
-    return;
-  }
-
-  let url: URL;
-  let trustedOrigin: URL;
-  try {
-    url = new URL(webhookUrl);
-    trustedOrigin = new URL(webhookOrigin);
-  } catch {
-    return;
-  }
-  if (
-    url.protocol !== "https:"
-    || trustedOrigin.protocol !== "https:"
-    || trustedOrigin.pathname !== "/"
-    || trustedOrigin.username
-    || trustedOrigin.password
-    || trustedOrigin.search
-    || trustedOrigin.hash
-    || url.origin !== trustedOrigin.origin
-    || url.username
-    || url.password
-    || url.search
-    || url.hash
-    || url.pathname === "/"
-  ) return;
-
-  let request: LeaveWorkspaceRequest | undefined;
-  try {
-    const { data } = await supabase.rpc("list_leave_workspace_requests");
-    if (Array.isArray(data)) {
-      const row = data.find((candidate) => typeof candidate === "object" && candidate !== null && "id" in candidate && (candidate as { id?: unknown }).id === requestId);
-      if (row) request = toWorkspaceRequest(row);
-    }
-  } catch {
-    // The durable leave mutation already succeeded; fallback fields below are
-    // still sufficient for the marketing test message.
-  }
-
-  const managerEmail = await resolveLeaveManagerEmail(requestId);
-  const employeeRecipients = await resolveLeaveEmployeeRecipients(requestId);
-  const employeeEmail = employeeRecipients.emails.join(",");
-  const wasApproved = event === "leave-cancelled"
-    ? (await createAdminClient().rpc("leave_notification_was_approved", { p_request_id: requestId })).data === true
-    : event === "leave-approved";
-  const ccEmails = leaveNotificationCcEmails(event, wasApproved);
-
-  const payload = {
-    version: 1,
-    wasApproved,
-    event,
-    eventKey: `leave:${requestId}:${event}:${createHash("sha256").update(JSON.stringify({
-      event,
-      requestId,
-      status: request?.status ?? fallback.status ?? "Pending",
-      startDate: request?.startDate ?? fallback.startDate ?? "",
-      endDate: request?.endDate ?? fallback.endDate ?? "",
-      managerNote: request?.managerNote ?? fallback.managerNote ?? "",
-      managerEmail: managerEmail ?? fallback.managerEmail ?? "",
-      employeeEmail,
-      employeeEmails: employeeRecipients.emails,
-      ccEmails,
-    })).digest("hex").slice(0, 24)}`,
-    requestId,
-    employeeName: request?.employee ?? "Employee",
-    company: request?.company ?? "mam",
-    leaveType: request?.leaveType ?? fallback.leaveType ?? "Leave",
-    startDate: request?.startDate ?? fallback.startDate ?? "",
-    endDate: request?.endDate ?? fallback.endDate ?? "",
-    startTime: request?.startTime ?? fallback.startTime ?? null,
-    endTime: request?.endTime ?? fallback.endTime ?? null,
-    days: request?.days ?? null,
-    hours: request?.hours ?? null,
-    status: event === "leave-conditionally-approved" ? BALANCE_PENDING_STATUS : request?.status ?? fallback.status ?? "Pending",
-    employeeNote: request?.employeeNote ?? fallback.employeeNote ?? null,
-    managerNote: request?.managerNote ?? fallback.managerNote ?? null,
-    managerEmail: managerEmail ?? fallback.managerEmail ?? null,
-    // Keep employeeEmail as a comma-separated value for the existing n8n
-    // Outlook node, while also exposing typed fields for a receiver that
-    // prefers an explicit list or separate work/personal mappings.
-    employeeEmail: employeeEmail || null,
-    employeeEmails: employeeRecipients.emails,
-    employeeWorkEmail: employeeRecipients.workEmail ?? null,
-    employeePersonalEmail: employeeRecipients.personalEmail ?? null,
-    // The n8n receiver should map ccEmails to the email provider's CC field.
-    // HR is included on every leave notification; MAM Accounts is included
-    // when a leave request is approved or cancelled.
-    ccEmails,
-    ccEmail: ccEmails.join(","),
-  };
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-MAM-Notification-Secret": webhookSecret },
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      redirect: "error",
-      signal: controller.signal,
-    });
-    const responseText = await response.text();
-    let result: { ok?: boolean; sent?: boolean; alreadySent?: boolean; actualRecipient?: unknown; actualRecipients?: unknown } = {};
-    if (responseText && responseText.length <= 4096) {
-      try {
-        const parsed: unknown = JSON.parse(responseText);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) result = parsed;
-      } catch {
-        console.warn("Leave notification receiver returned invalid JSON.", { event, requestId, status: response.status });
-      }
-    }
-    const expectedRecipients = event === "leave-submitted" || event === "leave-cancelled"
-      ? managerEmail ? [managerEmail] : []
-      : employeeRecipients.emails;
-    const actualRecipients = notificationEmailList(result.actualRecipients ?? result.actualRecipient);
-    const recipientsMatch = actualRecipients.length > 0
-      ? actualRecipients.length === expectedRecipients.length && actualRecipients.every((email) => expectedRecipients.includes(email))
-      : expectedRecipients.length === 0;
-    if (!response.ok || result.ok !== true || (result.sent !== true && result.alreadySent !== true) || !recipientsMatch) {
-      console.warn("Leave notification delivery was not confirmed.", { event, requestId, status: response.status });
-    }
-  } catch {
-    console.warn("Leave notification delivery failed after the leave mutation.", { event, requestId });
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 function toDecisionResult(value: unknown) {
@@ -1235,7 +973,7 @@ export async function submitLeaveRequest(input: SubmitLeaveInput) {
 
   if (error) throw new Error(userFacingSubmitError(error));
   const result = toSubmitResult(data);
-  await deliverLeaveNotification(supabase, "leave-submitted", result.id, checked);
+  await dispatchLeaveNotificationsForRequest(result.id);
   revalidatePath("/");
   return result;
 }
@@ -1265,7 +1003,7 @@ export async function submitLeaveRequestForSelectedEmployee(
 
   if (error) throw new Error(userFacingSubmitError(error));
   const result = toSubmitResult(data);
-  await deliverLeaveNotification(supabase, "leave-submitted", result.id, checked);
+  await dispatchLeaveNotificationsForRequest(result.id);
   revalidatePath("/");
   return result;
 }
@@ -1281,10 +1019,7 @@ export async function decideLeaveRequest(input: DecideLeaveInput) {
 
   if (error) throw new Error(userFacingDecisionError(error));
   const result = toDecisionResult(data);
-  await deliverLeaveNotification(supabase, checked.status === BALANCE_PENDING_STATUS ? "leave-conditionally-approved" : checked.status === "Approved" ? "leave-approved" : "leave-declined", result.id, {
-    status: checked.status,
-    managerNote: checked.managerNote,
-  });
+  await dispatchLeaveNotificationsForRequest(result.id);
   revalidatePath("/");
   return result;
 }
@@ -1323,7 +1058,7 @@ export async function cancelMyLeaveRequest(input: CancelLeaveInput) {
       return { ok: false, message: CANCEL_ERROR } satisfies CancelLeaveResult;
     }
 
-    await deliverLeaveNotification(supabase, "leave-cancelled", result.id, { status: "Cancelled" });
+    await dispatchLeaveNotificationsForRequest(result.id);
     revalidatePath("/");
     return { ok: true, id: result.id, status: "Cancelled" } satisfies CancelLeaveResult;
   } catch (error) {
@@ -1368,7 +1103,7 @@ export async function cancelSelectedEmployeeLeaveRequest(
       return { ok: false, message: CANCEL_ERROR } satisfies CancelLeaveResult;
     }
 
-    await deliverLeaveNotification(supabase, "leave-cancelled", result.id, { status: "Cancelled" });
+    await dispatchLeaveNotificationsForRequest(result.id);
     revalidatePath("/");
     return { ok: true, id: result.id, status: "Cancelled" } satisfies CancelLeaveResult;
   } catch (error) {
