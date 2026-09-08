@@ -19,7 +19,7 @@ Do not deploy only the application: its new queue RPCs require the migration.
 1. Verify the configured MAM Supabase project and apply the reviewed migration. No old events are backfilled. Plan a short coordinated release window: old application sends and the new queue must not both dispatch the same events. Keep the new worker disabled until the application switches; reconcile any queued transition events with existing receiver receipts before enabling it. Never blindly resend a backlog.
 2. Verify the MAM n8n instance per its project rules; publish the reviewed validator using the existing receiver release script. Do not execute a workflow to test with real recipients.
 3. Merge the reviewed GitHub branch to `main` and verify the resulting deployment. Never deploy local application code directly to Vercel.
-4. The five-minute Vercel schedule requires a plan supporting sub-daily cron. Verify the project plan before release. If unavailable, use the existing approved MAM scheduler to call this same bearer-protected endpoint every five minutes; do not upgrade a plan implicitly. Configure exactly one periodic scheduler. Preserve the existing birthday/reminder timing.
+4. Production target verification confirmed Vercel Hobby. The five-minute worker is therefore scheduled through MAM n8n, not Vercel cron; no plan upgrade. It calls the same bearer-protected endpoint. Configure exactly one periodic scheduler and preserve existing birthday/reminder timing.
 5. Verify queue counts and scheduler receipts without printing staff data. A synthetic isolated end-to-end test must prove retries and deduplication before any real sending. Check framing headers on public and authenticated responses.
 
 ## Operations
