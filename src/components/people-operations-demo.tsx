@@ -1,5 +1,7 @@
 "use client";
 
+import { ModalBackdrop } from "@/components/ui/modal-backdrop";
+
 import {
   ArrowUpRight,
   CalendarClock,
@@ -635,9 +637,9 @@ function CreateCaseModal({ mode, profiles, onClose, onSubmit }: {
     .sort((first, second) => first.name.localeCompare(second.name));
   const label = mode === "onboarding" ? "onboarding" : mode === "offboarding" ? "offboarding" : "check-ins";
   const dateLabel = mode === "offboarding" ? "Final working day" : "Start date";
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="people-case-title" tabIndex={-1}><header><div><h2 id="people-case-title">Start {label}</h2></div><button type="button" onClick={onClose} aria-label="Close"><X size={19} /></button></header><form onSubmit={onSubmit}>
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="people-case-title" tabIndex={-1}><header><div><h2 id="people-case-title">Start {label}</h2></div><button type="button" onClick={onClose} aria-label="Close"><X size={19} /></button></header><form onSubmit={onSubmit}>
     <label><span>Person</span><select ref={personSelectRef} name="personId" required defaultValue=""><option value="" disabled>Select from organisation</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.position}</option>)}</select></label>
     <label><span>{dateLabel}</span><input name="date" type="date" required /></label>
     <footer><button type="button" className={styles.cancelButton} onClick={onClose}>Cancel</button><button type="submit" className={styles.primaryAction}>Create <ArrowUpRight size={16} /></button></footer>
-  </form></section></div>;
+  </form></section></ModalBackdrop>;
 }

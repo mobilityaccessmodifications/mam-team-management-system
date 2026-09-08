@@ -1215,4 +1215,8 @@
   .actions { grid-column: 2 / -1; justify-content: flex-end; }
   .editor { padding: 14px; }
   .editor form { grid-template-columns: 1fr; }
+  .searchField input, .sortField select { min-height: 48px; }
+  .actionMenuPopover { position: relative; top: auto; margin-top: 8px; max-width: calc(100vw - 64px); }
+  .actionMenuPopover .textButton { min-height: 48px; }
+  .field input, .passwordInput { min-height: 48px; }
 }

@@ -22,8 +22,9 @@
 }
 
 .control:focus-within {
-  border-color: var(--surface-border-strong);
-  outline: 0;
+  border-color: var(--mam-orange-dark);
+  outline: 2px solid var(--mam-orange-dark);
+  outline-offset: 2px;
 }
 
 .control .input {
@@ -168,6 +169,17 @@
 .listbox { z-index: 120; border-radius: 12px; box-shadow: 0 14px 32px rgb(16 31 29 / 16%); }
 
 @media (max-width: 680px) {
+  .control { min-height: 48px; }
+  .control .input { height: 46px; }
   .input { font-size: 16px; }
-  .listbox { max-height: min(42dvh, 320px); }
+  .listbox {
+    position: relative;
+    top: auto;
+    margin-top: 8px;
+    max-height: min(36dvh, 280px);
+    box-shadow: none;
+  }
+  .option { min-height: 52px; touch-action: manipulation; }
+  .optionName { font-size: 15px; white-space: normal; overflow-wrap: anywhere; }
+  .optionMeta, .resultCount, .empty { font-size: 13px; }
 }

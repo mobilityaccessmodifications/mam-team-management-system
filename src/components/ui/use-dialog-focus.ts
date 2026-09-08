@@ -11,6 +11,17 @@ const DIALOG_FOCUSABLE = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+// One stack owns Escape and the page scroll lock, including nested dialogs.
+const dialogStack: HTMLElement[] = [];
+let pageOverflow = "";
+
+function visibleControls(dialog: HTMLElement) {
+  return Array.from(dialog.querySelectorAll<HTMLElement>(DIALOG_FOCUSABLE))
+    .filter((element) => element.tabIndex >= 0 && !element.hasAttribute("disabled")
+      && !element.closest("[inert]") && element.getClientRects().length > 0
+      && window.getComputedStyle(element).visibility !== "hidden");
+}
+
 /** Focus containment, Escape close and trigger restoration for modal UI. */
 export function useDialogFocus(
   open: boolean,
@@ -33,13 +44,27 @@ export function useDialogFocus(
     returnFocusRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    const previousOverflow = document.body.style.overflow;
+    if (!dialogStack.length) pageOverflow = document.body.style.overflow;
+    dialogStack.push(dialog);
     document.body.style.overflow = "hidden";
-    const focusFrame = window.requestAnimationFrame(() => {
-      const firstFocusable = dialog.querySelector<HTMLElement>(DIALOG_FOCUSABLE);
-      (initialFocusRef?.current ?? firstFocusable ?? dialog).focus({ preventScroll: true });
-    });
+    const originalTabIndex = dialog.getAttribute("tabindex");
+    if (originalTabIndex === null) dialog.tabIndex = -1;
+    const backdrop = dialog.closest<HTMLElement>(".app-modal-backdrop");
+    const viewport = window.visualViewport;
+    const updateViewport = () => {
+      if (!backdrop || !viewport) return;
+      backdrop.style.setProperty("--dialog-viewport-height", `${viewport.height}px`);
+      backdrop.style.setProperty("--dialog-viewport-top", `${viewport.offsetTop}px`);
+    };
+    updateViewport();
+    viewport?.addEventListener("resize", updateViewport);
+    viewport?.addEventListener("scroll", updateViewport);
+    // Opening a sheet should not summon the phone keyboard before a field is tapped.
+    const target = window.matchMedia("(pointer: coarse), (max-width: 760px)").matches
+      ? dialog : initialFocusRef?.current ?? visibleControls(dialog)[0] ?? dialog;
+    target.focus({ preventScroll: true });
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || dialogStack.at(-1) !== dialog) return;
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
@@ -48,8 +73,7 @@ export function useDialogFocus(
       }
       if (event.key !== "Tab") return;
 
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(DIALOG_FOCUSABLE))
-        .filter((element) => element.tabIndex >= 0 && !element.hasAttribute("disabled"));
+      const focusable = visibleControls(dialog);
       if (!focusable.length) {
         event.preventDefault();
         dialog.focus({ preventScroll: true });
@@ -57,22 +81,33 @@ export function useDialogFocus(
       }
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      const outsideControls = !focusable.includes(document.activeElement as HTMLElement);
+      if (event.shiftKey && (document.activeElement === first || outsideControls)) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && (document.activeElement === last || outsideControls)) {
         event.preventDefault();
         first.focus();
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown, true);
+    // Bubble phase lets a combobox consume Escape before its containing sheet.
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      window.cancelAnimationFrame(focusFrame);
-      window.removeEventListener("keydown", handleKeyDown, true);
-      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+      viewport?.removeEventListener("resize", updateViewport);
+      viewport?.removeEventListener("scroll", updateViewport);
+      const wasTop = dialogStack.at(-1) === dialog;
+      const index = dialogStack.lastIndexOf(dialog);
+      if (index >= 0) dialogStack.splice(index, 1);
+      if (!dialogStack.length) document.body.style.overflow = pageOverflow;
+      if (originalTabIndex === null) dialog.removeAttribute("tabindex");
       const returnTarget = returnFocusRef.current;
-      window.requestAnimationFrame(() => returnTarget?.focus({ preventScroll: true }));
+      window.requestAnimationFrame(() => {
+        if (!wasTop || !returnTarget?.isConnected) return;
+        const top = dialogStack.at(-1);
+        if (!top || top.contains(returnTarget)) returnTarget.focus({ preventScroll: true });
+      });
     };
   }, [dialogRef, initialFocusRef, open]);
 }

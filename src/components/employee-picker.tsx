@@ -68,6 +68,18 @@ export function EmployeePicker({
     return () => document.removeEventListener("pointerdown", closeWhenOutside);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const option = document.getElementById(`${listboxId}-option-${highlightedIndex}`);
+    const list = option?.parentElement;
+    if (!option || !list) return;
+    // Scroll only the options, not the page or the sheet containing the picker.
+    if (option.offsetTop < list.scrollTop) list.scrollTop = option.offsetTop;
+    else if (option.offsetTop + option.offsetHeight > list.scrollTop + list.clientHeight) {
+      list.scrollTop = option.offsetTop + option.offsetHeight - list.clientHeight;
+    }
+  }, [highlightedIndex, listboxId, open]);
+
   function openPicker() {
     if (disabled) return;
     setOpen(true);
@@ -110,6 +122,7 @@ export function EmployeePicker({
     }
     if (event.key === "Escape" && open) {
       event.preventDefault();
+      event.stopPropagation();
       setOpen(false);
       setSearch("");
       setHighlightedIndex(0);

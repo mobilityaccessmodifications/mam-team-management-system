@@ -1,9 +1,13 @@
-.workspace {
+.workspace,
+.modalBackdrop {
   --subscription-accent: var(--mam-orange, #f56d25);
   --subscription-accent-deep: var(--mam-orange-dark, #be4814);
   --subscription-line: var(--surface-border, #dce5df);
   --subscription-ink: var(--text-primary, #1f2e2b);
   --subscription-muted: var(--text-tertiary, #6e7d78);
+}
+
+.workspace {
   display: grid;
   gap: 16px;
   width: 100%;
@@ -533,7 +537,7 @@
     color: var(--subscription-muted);
     content: attr(data-label);
     font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 800;
     letter-spacing: .09em;
     line-height: 1.25;
@@ -591,6 +595,8 @@
 @media (max-width: 760px) {
   .header { align-items: center; flex-direction: row; }
   .headerActionGroup { width: 100%; justify-content: flex-end; }
+  .headerActionGroup > button { min-width: 48px; min-height: 48px; }
+  .searchField input { min-height: 48px; font-size: 16px; }
   .tools { align-items: center; flex-direction: row; }
   .count { display: none; }
   .toolSummary { width: auto; }

@@ -1,5 +1,7 @@
 "use client";
 
+import { ModalBackdrop } from "@/components/ui/modal-backdrop";
+
 import {
   AlertCircle,
   CalendarCheck2,
@@ -123,7 +125,7 @@ function ChangeOwnerModal({
     }
   }
 
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={`${styles.modal} ${styles.modalWithPicker}`} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="directory-device-owner-title" tabIndex={-1}>
       <header>
         <div><h4 id="directory-device-owner-title">Change device owner</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
@@ -144,7 +146,7 @@ function ChangeOwnerModal({
         </footer>
       </form>
     </section>
-  </div>;
+  </ModalBackdrop>;
 }
 
 function ReturnDeviceModal({
@@ -189,7 +191,7 @@ function ReturnDeviceModal({
     }
   }
 
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="directory-return-device-title" tabIndex={-1}>
       <header>
         <div><h4 id="directory-return-device-title">Record device return</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
@@ -211,7 +213,7 @@ function ReturnDeviceModal({
         </footer>
       </form>
     </section>
-  </div>;
+  </ModalBackdrop>;
 }
 
 function RemoveDeviceModal({
@@ -245,7 +247,7 @@ function RemoveDeviceModal({
     }
   }
 
-  return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="directory-remove-device-title" tabIndex={-1}>
       <header>
         <div><h4 id="directory-remove-device-title">Remove incorrect entry?</h4><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
@@ -263,7 +265,7 @@ function RemoveDeviceModal({
         </button>
       </footer>
     </section>
-  </div>;
+  </ModalBackdrop>;
 }
 
 /**
