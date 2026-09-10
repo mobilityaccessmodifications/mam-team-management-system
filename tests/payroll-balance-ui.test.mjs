@@ -119,9 +119,9 @@ test('coverage compares full precision, respects visibility and review holds', (
   assert.equal(approvalBalanceCoverage(person, 'Sick leave', 15), null);
   assert.equal(approvalBalanceCoverage(person, 'Unpaid leave', 15), null);
 });
-test('approval renders a pill only on the requested balance, including sick leave', () => {
+test('duration pill reports the requested balance, including sick leave', () => {
   for (const [leaveType, sickHours, expected] of [['Annual leave', 0, 'Enough balance'], ['Sick leave', 14, 'Not enough balance'], ['Sick leave', 15, 'Enough balance']]) {
-    const html = renderToStaticMarkup(createElement(loaded.exports.ApprovalLeaveBalances, {
+    const html = renderToStaticMarkup(createElement(loaded.exports.ApprovalBalancePill, {
       workspace: workspace([{ ...person, canViewSickBalance: true, sickHours }]),
       personId: 'employee', requestId: 'request', leaveType, requiredHours: 15, busy: false, async onSaved() {},
     }));
