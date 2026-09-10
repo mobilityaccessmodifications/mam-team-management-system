@@ -60,11 +60,27 @@ elif sys.argv[1]=='import':
 set local lock_timeout='5s';set local statement_timeout='75s';
 create temp table task_payroll_rows on commit drop as
 select * from jsonb_to_recordset(PAYLOAD::jsonb) as x(company_key text,employee_name text,annual_hours numeric,sick_hours numeric,as_of date,source_file text,source_sha256 text,person_id uuid,match_status text);
+-- Hold the short import's identity snapshot stable, including HR-name aliases.
+lock table public.internal_org_people,private.employee_directory_details in share mode;
+create temp table task_payroll_matches on commit drop as
+select s.company_key,s.employee_name,s.source_sha256,s.as_of,
+  count(p.id) filter(where p.company_key=s.company_key and p.is_active) active_count,
+  count(p.id) filter(where p.company_key=s.company_key and not p.is_active) inactive_count,
+  (array_agg(p.id) filter(where p.company_key=s.company_key and p.is_active))[1] active_id,
+  (array_agg(p.id) filter(where p.company_key=s.company_key and not p.is_active))[1] inactive_id,
+  count(p.id) any_count,count(p.id) filter(where p.company_key=s.company_key) same_company_count
+from task_payroll_rows s
+left join (public.internal_org_people p left join private.employee_directory_details d on d.person_id=p.id)
+  on p.node_kind='person' and regexp_replace(lower(s.employee_name),'[^a-z0-9]','','g') in (
+    regexp_replace(lower(p.full_name),'[^a-z0-9]','','g'),
+    regexp_replace(lower(coalesce(d.first_name,'')||' '||coalesce(d.last_name,'')),'[^a-z0-9]','','g'))
+group by s.company_key,s.employee_name,s.source_sha256,s.as_of;
+update task_payroll_rows s set
+  person_id=case when m.active_count=1 then m.active_id when m.active_count=0 and m.inactive_count=1 then m.inactive_id else null end,
+  match_status=case when m.active_count=1 then 'linked' when m.active_count=0 and m.inactive_count=1 then 'inactive'
+    when m.any_count>0 and m.same_company_count=0 then 'company_mismatch' else 'unmatched' end
+from task_payroll_matches m where m.company_key=s.company_key and m.employee_name=s.employee_name and m.source_sha256=s.source_sha256 and m.as_of=s.as_of;
 do $$begin
-  if exists(select 1 from task_payroll_rows s left join public.internal_org_people p on p.id=s.person_id
-    where s.person_id is not null and (p.id is null or p.company_key<>s.company_key or p.is_active<>(s.match_status='linked')
-      or regexp_replace(lower(p.full_name),'[^a-z0-9]','','g')<>regexp_replace(lower(s.employee_name),'[^a-z0-9]','','g'))) then
-    raise exception 'Employee mapping changed or is not an exact normalized same-company name';end if;
   if exists(select person_id from task_payroll_rows where match_status='linked' group by person_id having count(*)>1) then
     raise exception 'Duplicate employee mapping';end if;
 end$$;
