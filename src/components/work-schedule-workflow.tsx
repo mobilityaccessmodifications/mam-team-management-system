@@ -245,7 +245,7 @@ function ScheduleCard({
     <ModalFrame open={requestOpen} dialogRef={requestDialogRef} titleId={requestTitleId} onClose={closeRequest}>
       <form className={styles.form} onSubmit={submit}>
         <header className={styles.modalHeader}>
-          <div><span>Work schedule</span><h2 id={requestTitleId}>Request a change</h2></div>
+          <div><h2 id={requestTitleId}>Change work days</h2></div>
           <button type="button" onClick={closeRequest} disabled={busy} aria-label="Close request"><X size={19} /></button>
         </header>
         <div className={styles.modalBody}>
@@ -258,9 +258,10 @@ function ScheduleCard({
               key={day.value}
               ref={day.value === 1 ? firstDayRef : undefined}
               type="button"
+              aria-label={day.long}
               aria-pressed={selectedDays.includes(day.value)}
               onClick={() => toggleDay(day.value)}
-            ><span>{day.short}</span><small>{day.long}</small></button>)}</div>
+            ><span>{day.short}</span></button>)}</div>
           </fieldset>
           <label className={styles.reasonField}>
             <span>Reason</span>
@@ -271,7 +272,7 @@ function ScheduleCard({
               maxLength={1000}
               rows={4}
               required
-              placeholder="Why do you need this change?"
+
             />
           </label>
           {error ? <p className={styles.error} role="alert"><AlertTriangle size={16} />{error}</p> : null}
@@ -285,7 +286,7 @@ function ScheduleCard({
 
     <ModalFrame open={historyOpen} dialogRef={historyDialogRef} titleId={historyTitleId} onClose={closeHistory}>
       <header className={styles.modalHeader}>
-        <div><span>Work schedule</span><h2 id={historyTitleId}>Change history</h2></div>
+        <div><h2 id={historyTitleId}>Work day history</h2></div>
         <button type="button" onClick={closeHistory} aria-label="Close history"><X size={19} /></button>
       </header>
       <div className={`${styles.modalBody} ${styles.historyList}`}>
@@ -379,7 +380,7 @@ function ReviewQueue({
   if (!reviews.length) return null;
   return <>
     <section className={styles.reviewQueue} aria-labelledby={headingId}>
-      <header><div><span>Manager action</span><h2 id={headingId}>Schedule requests</h2></div><strong>{reviews.length}</strong></header>
+      <header><div><h2 id={headingId}>Schedule requests</h2></div><strong>{reviews.length}</strong></header>
       <div className={styles.reviewRows}>
         {visibleReviews.map((item) => <article key={item.id}>
           <div><strong>{item.employeeName}</strong><span>{daySummary(item.originalWorkingWeekdays)} <i aria-hidden="true">→</i> {daySummary(item.requestedWorkingWeekdays)}</span><small>{item.requestReason}</small></div>

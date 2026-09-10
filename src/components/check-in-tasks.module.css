@@ -27,7 +27,7 @@
 .header h2 {
   margin: 0;
   color: var(--text-primary);
-  font-family: var(--font-display, Impact, sans-serif);
+  font-family: var(--font-geist-sans), sans-serif;
   font-size: clamp(28px, 3vw, 34px);
   font-weight: 650;
   letter-spacing: -.035em;
@@ -455,3 +455,7 @@
   .milestone span, .reviewPanel small { font-size: 13px; line-height: 1.5; }
   .person strong, .milestone strong { font-size: 15px; }
 }
+
+/* Shared People Hub page rhythm. */
+.workspace { gap: 20px; }
+.header, .headerActions { gap: 12px; }

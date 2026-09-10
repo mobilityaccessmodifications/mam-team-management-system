@@ -66,3 +66,7 @@
   .profileSummary { grid-template-columns: minmax(104px, .55fr) minmax(0, 1fr); gap: 12px; min-height: 58px; padding: 12px 14px; }
   .profileSummary > span { font-size: 10px; }
 }
+
+/* Shared People Hub page rhythm. */
+.workspace { gap: 20px; }
+.profileCard { border-radius: 12px; box-shadow: none; }

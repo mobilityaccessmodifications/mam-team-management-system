@@ -54,7 +54,7 @@
 .drawerHeader h3 {
   margin: 3px 0 0;
   color: var(--ink);
-  font-family: var(--font-display, sans-serif);
+  font-family: var(--font-geist-sans), sans-serif;
   font-weight: 680;
   letter-spacing: -0.035em;
   line-height: 0.98;
@@ -2031,3 +2031,7 @@
   .form input,
   .form select { font-size: 16px; }
 }
+
+/* Shared People Hub page rhythm. */
+.primaryAction, .secondaryAction { min-height: 40px; font-size: 13px; font-weight: 600; box-shadow: none; }
+.toolbar, .headerActions { gap: 12px; }

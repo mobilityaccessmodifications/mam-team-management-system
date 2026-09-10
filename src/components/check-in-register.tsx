@@ -351,7 +351,7 @@ function ReminderRow({ reminder, pending, onComplete }: {
 }) {
   const isPending = Boolean(pending);
   return <div className={styles.reminder} data-status={reminder.status}>
-    <div className={styles.reminderCopy}><strong>{milestoneLabel(reminder.milestone)}{reminder.sequence === "final" ? " · final reminder" : ""}</strong><p>{formatDate(reminder.dueDate)} · email {formatDate(reminder.notifyDate)}</p>{reminder.status === "needs_review" ? <small>{reasonLabel(reminder.needsReviewReason)}</small> : null}</div>
+    <div className={styles.reminderCopy}><strong>{milestoneLabel(reminder.milestone)}{reminder.sequence === "final" ? " · final reminder" : ""}</strong><p>{formatDate(reminder.dueDate)}</p>{reminder.status === "needs_review" ? <small>{reasonLabel(reminder.needsReviewReason)}</small> : null}</div>
     <AnimatedStatusBadge className={styles.status} tone={reminderTone(reminder.status)}>{reminder.status.replaceAll("_", " ")}</AnimatedStatusBadge>
     <div className={styles.reminderActions}>
       {canCompleteReminder(reminder) ? <button type="button" disabled={isPending} onClick={onComplete}>{pending === `complete:${reminder.id}` ? "Saving…" : "Mark complete"}</button> : null}

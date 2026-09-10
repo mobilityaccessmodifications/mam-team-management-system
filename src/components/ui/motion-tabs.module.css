@@ -119,3 +119,9 @@
     transition: none;
   }
 }
+
+/* Quiet navigation shared by People workspaces. */
+.root { display: flex; gap: 4px; padding: 0; border: 0; border-bottom: 1px solid var(--surface-border); border-radius: 0; background: transparent; }
+.trigger { flex: 0 0 auto; border-radius: 0; padding: 0 14px; }
+.indicator { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.indicator::after { left: 12px; right: 12px; bottom: 0; }

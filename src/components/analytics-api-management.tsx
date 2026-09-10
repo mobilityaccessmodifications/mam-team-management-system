@@ -4,7 +4,6 @@ import {
   AlertCircle,
   CheckCircle2,
   ClipboardCopy,
-  Code2,
   KeyRound,
   LoaderCircle,
   RefreshCw,
@@ -81,7 +80,6 @@ export function AnalyticsApiManagement() {
       <div>
         <span className={styles.eyebrow}>System Admin</span>
         <h2>Analytics API</h2>
-        <p>Create one server-to-server key for the approved dashboard connection.</p>
       </div>
       <button className={styles.primaryAction} type="button" onClick={() => { setNotice(""); setShowCreate(true); }}>
         {activeKey ? <RotateCw size={16} aria-hidden="true" /> : <KeyRound size={16} aria-hidden="true" />}
@@ -96,7 +94,7 @@ export function AnalyticsApiManagement() {
       <div className={styles.keyStatus}>
         <span className={`${styles.status} ${activeKey ? styles.statusActive : ""}`}>{activeKey ? "Active key" : "No managed key"}</span>
         <div>
-          <strong>{activeKey?.label ?? "Generate a key to manage dashboard access here."}</strong>
+          <strong>{activeKey?.label ?? "No API key"}</strong>
           <small>{activeKey ? `${activeKey.keyPrefix}… · Last used ${formatDate(activeKey.lastUsedAt)}` : "The existing deployment key remains available until a managed key is generated."}</small>
         </div>
       </div>
@@ -106,8 +104,8 @@ export function AnalyticsApiManagement() {
       </div>
     </div> : null}
 
-    <section className={styles.guide} aria-labelledby="analytics-api-guide-title">
-      <header><Code2 size={18} aria-hidden="true" /><div><h3 id="analytics-api-guide-title">Developer guide</h3><p>Use an encrypted connection secret in the dashboard platform.</p></div></header>
+    <details className={styles.guide}>
+      <summary>Connection details</summary>
       <div className={styles.guideGrid}>
         <div><span>Endpoint</span><code>/api/analytics/v1</code></div>
         <div><span>Header</span><code>Authorization: Bearer &lt;API_KEY&gt;</code></div>
@@ -122,7 +120,7 @@ export function AnalyticsApiManagement() {
           setNotice("Copy is unavailable in this browser. Use the example in the API guide.");
         }
       }}><ClipboardCopy size={15} aria-hidden="true" />Copy example</button>
-    </section>
+    </details>
 
     {showCreate ? <CreateKeyDialog
       rotating={Boolean(activeKey)}
@@ -171,7 +169,7 @@ function CreateKeyDialog({ rotating, onClose, onCreated }: { rotating: boolean; 
 
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !saving && onClose()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="create-analytics-key-title" tabIndex={-1}>
-      <header><div><span className={styles.eyebrow}>{rotating ? "Key rotation" : "New API key"}</span><h2 id="create-analytics-key-title">{rotating ? "Rotate Analytics API key" : "Generate Analytics API key"}</h2></div><button className={styles.iconButton} type="button" onClick={onClose} disabled={saving} aria-label="Close"><X size={18} /></button></header>
+      <header><div><h2 id="create-analytics-key-title">{rotating ? "Rotate Analytics API key" : "Generate Analytics API key"}</h2></div><button className={styles.iconButton} type="button" onClick={onClose} disabled={saving} aria-label="Close"><X size={18} /></button></header>
       <form onSubmit={submit}>
         <label><span>Connection label</span><input ref={labelRef} name="label" maxLength={80} defaultValue="Dashboard connection" required /></label>
         <p className={styles.warning}><ShieldAlert size={17} aria-hidden="true" />{rotating ? "The current key stops working immediately after rotation." : "The key is shown once. Save it in the dashboard platform before closing."}</p>
@@ -204,7 +202,7 @@ function RevokeKeyDialog({ target, onClose, onRevoked }: { target: AnalyticsApiK
 
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !saving && onClose()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="revoke-analytics-key-title" tabIndex={-1}>
-      <header><div><span className={styles.eyebrow}>Immediate action</span><h2 id="revoke-analytics-key-title">Revoke API key?</h2></div><button className={styles.iconButton} type="button" onClick={onClose} disabled={saving} aria-label="Close"><X size={18} /></button></header>
+      <header><div><h2 id="revoke-analytics-key-title">Revoke API key?</h2></div><button className={styles.iconButton} type="button" onClick={onClose} disabled={saving} aria-label="Close"><X size={18} /></button></header>
       <div className={styles.dialogBody}><p><strong>{target.label}</strong> will lose dashboard access immediately. Existing reports may stop refreshing.</p>{error ? <p className={styles.inlineError} role="alert"><AlertCircle size={16} aria-hidden="true" />{error}</p> : null}<footer><button ref={cancelRef} className={styles.secondaryAction} type="button" onClick={onClose} disabled={saving}>Cancel</button><button className={styles.dangerAction} type="button" onClick={() => void revoke()} disabled={saving}>{saving ? "Revoking…" : "Revoke access"}</button></footer></div>
     </section>
   </div>;
@@ -229,7 +227,7 @@ function OneTimeKeyDialog({ keyValue, onClose }: { keyValue: string; onClose: ()
 
   return <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="one-time-analytics-key-title" tabIndex={-1}>
-      <header><div><span className={styles.eyebrow}>Copy now</span><h2 id="one-time-analytics-key-title">Analytics API key</h2></div><button className={styles.iconButton} type="button" onClick={onClose} aria-label="Close"><X size={18} /></button></header>
+      <header><div><h2 id="one-time-analytics-key-title">Analytics API key</h2></div><button className={styles.iconButton} type="button" onClick={onClose} aria-label="Close"><X size={18} /></button></header>
       <div className={styles.dialogBody}>
         <p className={styles.warning}><ShieldAlert size={17} aria-hidden="true" />This is the only time this key is shown. Save it in the dashboard platform’s encrypted connection settings.</p>
         <label className={styles.keyField}><span>API key</span><input value={keyValue} readOnly aria-label="Generated Analytics API key" onFocus={(event) => event.currentTarget.select()} /></label>

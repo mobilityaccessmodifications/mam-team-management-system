@@ -6964,3 +6964,59 @@
 .viewMoreButton {
   margin-top: 16px;
 }
+
+/* Task-first layout: one page heading, plain navigation and quiet detail rows. */
+.pageTitle { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -.025em; }
+.topbar { justify-content: space-between; }
+.topActions { margin-left: auto; }
+.main { padding-top: 24px; }
+.leaveDesk { gap: 16px; }
+.leaveSwitch { padding: 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+.leaveSwitch button { border-radius: 0; background: transparent; box-shadow: none; min-height: 44px; }
+.leaveSwitch .leaveSwitchActive { background: transparent; box-shadow: inset 0 -2px var(--accent); }
+.viewToolbar { padding: 0; border: 0; background: transparent; border-radius: 0; min-height: 44px; }
+.filterTabs button { padding: 0 12px; font-weight: 550; }
+.filterTabs .filterActive { border-radius: 8px; background: var(--accent-soft); }
+.panel, .recordsGrid { border-radius: 12px; }
+.emptyState { min-height: 112px; padding: 24px; }
+.emptyState > svg { width: 24px; height: 24px; padding: 0; border: 0; background: transparent; }
+.panelHeader h2 { font-size: 14px; font-weight: 650; }
+.approvalRecord { padding: 20px; }
+.approvalHeader { margin-bottom: 16px; padding-bottom: 16px; }
+.approvalHeader h2, .detailPanel h2 { font-size: 21px; line-height: 1.3; }
+.detailPanel dl { border: 0; border-radius: 0; margin: 18px 0; }
+.detailPanel dl div { padding: 12px 0; }
+.detailPanel dt { font: 12px var(--font-geist-sans), sans-serif; letter-spacing: 0; color: var(--muted); }
+.detailPanel > section { border: 0; padding: 0; margin: 16px 0; border-radius: 0; }
+.detailPanel > .attachmentUpload { padding: 14px; border: 1px dashed var(--line-dark); border-radius: 10px; }
+.attachmentUpload small { font-size: 11px; }
+.decisionBox { margin: 20px 0; padding: 16px; border: 0; border-radius: 10px; background: var(--surface-muted); }
+.decisionBox textarea { background: #fff; }
+.approvalBalances { padding: 16px 0; border: 0; border-radius: 0; margin: 0; }
+.approvalBalances > strong { font-size: 13px; }
+.calendarImpact { margin-top: 20px; padding-top: 0; border-radius: 10px; }
+.impactAgenda { display: block; padding: 14px; }
+.impactAgenda summary { cursor: pointer; font-size: 12px; font-weight: 600; }
+.impactAgenda article { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 9px; border-left: 3px solid currentColor; border-radius: 8px; padding: 8px 10px; }
+.impactAgenda article > i { display: grid; width: 28px; height: 28px; place-items: center; font-size: 9px; font-style: normal; font-weight: 700; }
+.impactAgenda article strong, .impactAgenda article small { display: block; }
+.impactAgenda article strong { font-size: 12px; }
+.impactAgenda article small { margin-top: 2px; font-size: 11px; }
+.impactAgenda[open] article { margin-top: 10px; }
+.requestExtras { padding: 14px 0; border-top: 1px solid var(--line); }
+.requestExtras summary { cursor: pointer; font-weight: 600; }
+.requestExtras[open] { display: grid; gap: 14px; }
+.leaveBalances { margin-top: 20px; padding: 16px; border-radius: 10px; }
+.primaryButton, .secondaryButton, .approveButton, .declineButton { font-size: 13px; font-weight: 600; box-shadow: none; }
+@media (max-width: 680px) {
+  .pageTitle { font-size: 17px; }
+  .reviewCalendarViewport { display: block; }
+  .reviewCalendar { min-width: 700px; }
+  .impactLegend { display: flex; flex-wrap: wrap; }
+  .mobileBrand { display: none; }
+  .approvalRecord { padding: 16px; }
+  .factGrid article { min-height: 56px; padding: 10px 12px; }
+  .decisionBox { padding: 12px; }
+  .decisionBox > div { width: 100%; }
+  .decisionBox > div button { flex: 1; min-height: 44px; }
+}

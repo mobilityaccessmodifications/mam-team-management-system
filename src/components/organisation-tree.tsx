@@ -871,7 +871,6 @@ export function OrganisationTree({
     email: string | null;
   } | null>(null);
   const titleId = useId();
-  const descriptionId = useId();
   const inspectorTitleId = useId();
   const searchResultsId = useId();
   const markerPrefix = useId().replaceAll(":", "");
@@ -3139,7 +3138,6 @@ export function OrganisationTree({
             type="button"
           />
           <aside
-            aria-describedby={descriptionId}
             aria-labelledby={`${titleId}-editor`}
             aria-modal="true"
             className={styles.drawer}
@@ -3149,7 +3147,7 @@ export function OrganisationTree({
           >
             <header className={styles.drawerHeader}>
               <div>
-                <span className={styles.eyebrow}>Organisation</span>
+
                 <h3 id={`${titleId}-editor`}>
                   {activeEditor.mode === "create"
                     ? "Add person"
@@ -3157,11 +3155,6 @@ export function OrganisationTree({
                       ? "Edit person"
                       : "Edit reporting line"}
                 </h3>
-                <p id={descriptionId}>
-                  {activeEditor.mode === "create" || canUseLegacyTreeEditor
-                    ? "Name, position and reporting line."
-                    : "Move this person to a different reporting group."}
-                </p>
               </div>
               <button
                 aria-label="Close"
@@ -3207,11 +3200,7 @@ export function OrganisationTree({
                     </select>
                   </label>
                 </>
-              ) : (
-                <p className={styles.relationshipEditorNote}>
-                  Change the reporting line only. Employee details stay in the HR record.
-                </p>
-              )}
+              ) : null}
 
               <label>
                 <span>Reports to</span>

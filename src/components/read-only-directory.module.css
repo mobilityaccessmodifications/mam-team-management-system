@@ -231,3 +231,13 @@
   .workEmail button,
   .workEmail a { max-width: 100%; min-height: 44px; }
 }
+
+/* Shared People Hub page rhythm. */
+.header { gap: 12px; }
+
+.directory { border-radius: 12px; box-shadow: none; }
+.list { grid-template-columns: 1fr; }
+@media (min-width: 641px) {
+  .list li { display: grid; grid-template-columns: 34px minmax(130px, 1fr) minmax(95px, .65fr) minmax(130px, .85fr) auto; }
+  .manager, .workEmail { min-width: 0; margin-left: 0; }
+}
