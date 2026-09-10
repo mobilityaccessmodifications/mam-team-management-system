@@ -19,7 +19,7 @@ const barlowCondensed = Barlow_Condensed({
 });
 
 export const metadata: Metadata = {
-  title: "Safer People System",
+  title: "People Hub",
   description: "Private people, leave and organisation workspace for MAM and Equipsy.",
 };
 

@@ -1786,7 +1786,7 @@ export function LeaveDemo({
   return (
     <div className={styles.shell} data-company={activeProfile.company}>
       <a className={styles.skipLink} href="#main-content">Skip to workspace</a>
-      <aside className={styles.sidebar} aria-label="Safer People System navigation">
+      <aside className={styles.sidebar} aria-label="People Hub navigation">
         <div className={styles.brandRow}><BrandMark /></div>
         <nav className={styles.nav} style={navCountStyle}>
           {navItems.map((item) => {
@@ -2073,7 +2073,7 @@ function DirectoryLoading({
   const isUnlinked = state === "unlinked";
   const hasError = state === "error" || isUnlinked;
   return <div className={styles.shell} data-company="mam">
-    <aside className={styles.sidebar} aria-label="Safer People System navigation">
+    <aside className={styles.sidebar} aria-label="People Hub navigation">
       <div className={styles.brandRow}><BrandMark /></div>
     </aside>
     <div className={styles.workspace}>

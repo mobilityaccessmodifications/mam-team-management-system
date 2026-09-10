@@ -90,7 +90,7 @@ try {
   const managerCopy = body.event === 'leave-reminder' ? (body.status === 'Approved – pending leave balance' ? 'Please confirm the annual leave balance and finalise approval for this request.' : 'Please review this outstanding leave request.') : body.event === 'leave-submitted' ? 'A leave request is waiting for your review.' : 'This is a record of the leave request being ' + eventLabel + '.';
   const employeeDeliveryLink = APP_URL + '/?view=leave&request=' + encodeURIComponent(body.requestId);
   const managerDeliveryLink = APP_URL + '/?view=leave&section=approvals&request=' + encodeURIComponent(body.requestId);
-  const emailHtml = body.event === 'team-birthday' ? '<p>Team birthday reminder: <strong>' + escape(body.employeeName) + '</strong></p><p>Birthday: ' + escape(friendlyDate(body.startDate)) + '</p><p><a href="' + APP_URL + '">Open People System</a></p>' : [
+  const emailHtml = body.event === 'team-birthday' ? '<p>Team birthday reminder: <strong>' + escape(body.employeeName) + '</strong></p><p>Birthday: ' + escape(friendlyDate(body.startDate)) + '</p><p><a href="' + APP_URL + '">People Hub</a></p>' : [
     '<p>' + (employeeDelivery ? 'Hi ' + escape(body.employeeName) + ',' : 'MAM leave notification') + '</p>',
     '<p>' + escape(body.event === 'leave-submitted' ? 'A leave request has been submitted and is awaiting review.' : employeeDelivery ? employeeCopy : managerCopy) + '</p>',
     '<p><strong>Leave request details</strong></p>', '<ul>',
@@ -104,7 +104,7 @@ try {
     body.hours !== null ? '<li><strong>Hours:</strong> ' + escape(body.hours) + '</li>' : '',
     '<li><strong>Status:</strong> ' + escape(body.status) + '</li>', '</ul>',
     employeeDelivery && body.managerNote && !(body.company === 'mam' && emailList([deliveryRecipient,ccRecipients].join(',')).includes(ACCOUNTS.toLowerCase())) ? '<p><strong>Manager note:</strong> ' + escape(body.managerNote) + '</p>' : '',
-    '<p><a href="' + (body.event === 'leave-submitted' ? APP_URL : employeeDelivery ? employeeDeliveryLink : managerDeliveryLink) + '" style="display:inline-block;padding:10px 16px;background:#ef6c24;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Open People System</a></p>',
+    '<p><a href="' + (body.event === 'leave-submitted' ? APP_URL : employeeDelivery ? employeeDeliveryLink : managerDeliveryLink) + '" style="display:inline-block;padding:10px 16px;background:#ef6c24;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">People Hub</a></p>',
   ].join('');
   return [{ json: { outcome: 'send', mamDelivery: body.company === 'mam', deliveryRecipient, confirmationRecipient, ccRecipients, eventKey: body.eventKey,
     emailSubject: employeeDelivery ? `[MAM] Leave ${eventLabel}: ${body.leaveType}` : `[MAM] Leave ${eventLabel}: ${body.employeeName} — ${body.leaveType}`,
