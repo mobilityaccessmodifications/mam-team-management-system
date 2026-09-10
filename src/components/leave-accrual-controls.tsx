@@ -6,12 +6,8 @@ import { leaveDateLabel, type LeaveBalancePerson } from "@/lib/leave-priority";
 import styles from "@/components/leave-demo.module.css";
 
 export function LeaveAccrualNotice({ person }: { person: LeaveBalancePerson }) {
-  if (!person.accrualStatus || person.accrualStatus === "not_configured") return null;
-  return <small role="status">{person.accrualStatus === "needs_review"
-    ? "Payroll reconciliation needed. Further calculation and sufficient-balance reminders are paused."
-    : "Includes automatic accrual through completed days."}
-    {person.annualPayrollDate ? ` Payroll baseline: ${leaveDateLabel(person.annualPayrollDate)}.` : ""}
-  </small>;
+  if (person.accrualStatus !== "needs_review") return null;
+  return <small role="status" className={styles.balanceReviewNotice}>Balance needs checking. Ask HR to confirm.</small>;
 }
 
 /** Render only from the real administrator capability, outside employee preview. */

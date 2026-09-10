@@ -1,10 +1,31 @@
 "use client";
 
 import { useState } from "react";
+import { HeartPulse, Palmtree } from "lucide-react";
 import { LeaveAccrualControls, LeaveAccrualNotice } from "@/components/leave-accrual-controls";
 import { saveAnnualLeaveBalance, saveSickLeaveBalance, saveLeaveBalanceRequiredHours } from "@/app/leave/actions";
 import { leaveDateLabel, melbourneToday, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import styles from "@/components/leave-demo.module.css";
+
+// Presentation only: balances and approval calculations retain full precision.
+function balanceHours(hours: number) {
+  if (hours !== 0 && Math.abs(hours) < 0.01) return hours < 0 ? "−<0.01" : "<0.01";
+  return new Intl.NumberFormat("en-AU", { maximumFractionDigits: 2 }).format(hours);
+}
+
+function BalanceCard({ label, hours, sick = false }: { label: string; hours?: number | null; sick?: boolean }) {
+  const Icon = sick ? HeartPulse : Palmtree;
+  return <div className={styles.balanceCard} data-kind={sick ? "sick" : "annual"}>
+    <span className={styles.balanceIcon}><Icon size={23} strokeWidth={1.7} aria-hidden="true" /></span>
+    <div className={styles.balanceCardContent}>
+      <span className={styles.balanceCardLabel}>{label}</span>
+      {hours == null ? <strong className={styles.balanceUnavailable}>Unavailable</strong>
+        : <div className={styles.balanceCardValue} data-negative={hours < 0 || undefined}>
+          <strong>{balanceHours(hours)}</strong><span>hours</span>
+        </div>}
+    </div>
+  </div>;
+}
 
 export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
   workspace?: LeavePriorityWorkspace; busy: boolean;
@@ -18,8 +39,8 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
   return <details className={styles.leaveBalances}>
     <summary>Leave balances{workspace.people.some((p) => p.canSubmit) ? " & team requests" : ""}</summary>
     {workspace.people.map((person) => <div className={styles.leaveBalanceRow} key={person.personId}>
-      <div><strong>{person.name}</strong>{person.canViewBalance ? <small>{person.paidLeave ? `Annual: ${person.hours == null ? "Not supplied" : `${person.hours} hours`}${person.asOf ? ` · As of ${leaveDateLabel(person.asOf)}` : ""}` : "Unpaid leave only"}</small> : null}
-        {person.canViewSickBalance ? <small>Sick: {person.sickHours == null ? "Not supplied" : `${person.sickHours} hours`}{person.sickAsOf ? ` · As of ${leaveDateLabel(person.sickAsOf)}` : ""}</small> : null}
+      <div><strong>{person.name}</strong>{person.canViewBalance ? <small>{person.paidLeave ? `Annual: ${person.hours == null ? "Not supplied" : `${balanceHours(person.hours)} hours`}` : "Unpaid leave only"}</small> : null}
+        {person.canViewSickBalance ? <small>Sick: {person.sickHours == null ? "Not supplied" : `${balanceHours(person.sickHours)} hours`}</small> : null}
         <LeaveAccrualNotice person={person} />
       </div>
       <div className={styles.leaveBalanceActions}>
@@ -70,11 +91,13 @@ export function ApprovalLeaveBalances({ workspace, personId, requestId, busy, on
   const request = workspace?.requests.find((r) => r.id === requestId);
   return <section className={styles.approvalBalances} aria-label="Employee leave balances">
     <strong>Leave balances</strong>
-    {person?.canViewBalance ? <p>Annual: {person.hours == null ? "Not supplied" : `${person.hours} hours`}{person.asOf ? ` · As of ${leaveDateLabel(person.asOf)}` : ""}</p> : <p>Annual balance unavailable.</p>}
-    {person?.canViewSickBalance ? <p>Sick: {person.sickHours == null ? "Not supplied" : `${person.sickHours} hours`}{person.sickAsOf ? ` · As of ${leaveDateLabel(person.sickAsOf)}` : ""}</p> : null}
+    <div className={styles.balanceCards}>
+      <BalanceCard label="Annual leave" hours={person?.canViewBalance ? person.hours : null} />
+      {person?.canViewSickBalance ? <BalanceCard label="Sick leave" hours={person.sickHours} sick /> : null}
+    </div>
     {person ? <LeaveAccrualNotice person={person} /> : null}
     {request?.pendingBalance ? <>
-      <p>{request.balanceSufficient ? "The current balance covers the recorded hours. Review and approve when ready." : "Routine reminders are paused. An updated balance covering the required hours will trigger one manager reminder."}</p>
+      <p>{request.balanceSufficient ? "Balance sufficient — ready for review." : "Waiting for enough leave. You’ll be notified when the balance is sufficient."}</p>
       <form className={styles.leaveBalanceEditor} onSubmit={async (event) => {
         event.preventDefault(); if (saving || busy) return;
         const hours = Number(new FormData(event.currentTarget).get("requiredHours"));
