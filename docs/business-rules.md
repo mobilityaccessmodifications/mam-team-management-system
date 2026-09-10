@@ -118,3 +118,9 @@ The owner confirmed 38 ordinary hours per week and automatic future accrual. The
 - Existing submitted manager requests are rerouted; decided history and already-delivered email events are retained. Balance-pending requests retain their reminder pause and one-time sufficiency notification. HR is not duplicated in CC when already a direct recipient.
 
 Approval duration display uses 7.5 hours per full day (confirmed 10 September 2026); hourly requests retain their recorded hours. Annual and sick/personal leave coverage pills compare the relevant visible balance at full precision. Review-held or unavailable balances require checking. This display conversion does not change the 38-hour weekly accrual policy or payroll reconciliation.
+
+### Leave request email balances
+
+Submission emails show requested hours, the current accrued balance, and the balance remaining if that request is approved. Full days use 7.5 hours; an explicit hourly request takes precedence. Values are captured when the request is submitted, so retries use the same figures. Missing, example, or review-held balances show “Check balance”.
+
+Annual leave balances can appear in the employee and reviewer copies. Sick/carer’s leave submission emails are split: only reviewers (including HR) receive the balance; the employee receives a separate confirmation. Each copy has a stable delivery key, and the outbox completes only when every required copy is acknowledged. Existing queued legacy emails retain their original delivery contract. Approval/cancellation emails do not subtract the requested hours again.

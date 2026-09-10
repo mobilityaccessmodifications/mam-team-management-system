@@ -74,3 +74,46 @@ test('preserves deployed MAM Accounts note minimisation and delivery flag',()=>{
   assert.equal(out.mamDelivery,true);
   assert(!out.emailHtml.includes('Private approval note'));
 });
+
+test('annual submission includes full-day hours and projected balance without duplication',()=>{
+  const out=run('leave-submitted',{leaveBalance:{kind:'annual',status:'current',hours:28.4621}});
+  assert.equal(out.outcome,'send');
+  assert(out.emailHtml.includes('Annual leave hours requested:</strong> 15 hours'));
+  assert(out.emailHtml.includes('Annual leave balance:</strong> 28.46 hours'));
+  assert(out.emailHtml.includes('Annual leave remaining if approved:</strong> 13.46 hours'));
+  assert(!out.emailHtml.includes('<strong>Hours:</strong>'));
+  const partial=run('leave-submitted',{hours:3.25,leaveBalance:{kind:'annual',status:'current',hours:2}});
+  assert(partial.emailHtml.includes('hours requested:</strong> 3.25 hours'));
+  assert(partial.emailHtml.includes('remaining if approved:</strong> -1.25 hours'));
+});
+test('unknown or held balances are never rendered as zero',()=>{
+  const out=run('leave-submitted',{leaveBalance:{kind:'annual',status:'check_balance',hours:null}});
+  assert(out.emailHtml.includes('balance:</strong> Check balance'));
+  assert(out.emailHtml.includes('remaining if approved:</strong> Check balance'));
+  assert(!out.emailHtml.includes('balance:</strong> 0 hours'));
+});
+test('sick balance is private to reviewer copy, including overlapping applicant addresses',()=>{
+  const extra={leaveType:'Sick leave',leaveBalance:{kind:'sick',status:'current',hours:40.9297}};
+  const review=run('leave-submitted',{...extra,audience:'reviewers',managerEmail:'manager@example.test,employee@example.test'});
+  assert.equal(review.deliveryRecipient,'manager@example.test,hr@mobilityaccess.com.au');
+  assert.equal(review.confirmationRecipient,review.deliveryRecipient);
+  assert.equal(review.ccRecipients,'');
+  assert(review.emailHtml.includes('Sick leave remaining if approved:</strong> 25.93 hours'));
+  for(const audience of [undefined,'employee']) {
+    const out=run('leave-submitted',{...extra,...(audience?{audience}:{})});
+    assert.equal(out.outcome,'send');
+    assert(!out.emailHtml.includes('40.93'));
+    assert(!out.emailHtml.includes('remaining if approved'));
+    if(audience) {assert.equal(out.deliveryRecipient,'employee@example.test');assert.equal(out.ccRecipients,'');}
+  }
+  const carer=run('leave-submitted',{...extra,leaveType:"Carer's leave",audience:'reviewers'});
+  assert(carer.emailHtml.includes('Sick leave balance:</strong> 40.93 hours'));
+});
+test('balance contract rejects invalid values and does not subtract again after approval',()=>{
+  for(const leaveBalance of [{kind:'sick',status:'current',hours:10},{kind:'annual',status:'current',hours:'10'},
+    {kind:'annual',status:'check_balance',hours:10},{kind:'annual',status:'current',hours:Infinity}]) {
+    assert.equal(run('leave-submitted',{leaveBalance}).outcome,'rejected');
+  }
+  assert.equal(run('leave-approved',{audience:'reviewers'}).outcome,'rejected');
+  assert(!run('leave-approved',{leaveBalance:{kind:'annual',status:'current',hours:10}}).emailHtml.includes('remaining if approved'));
+});

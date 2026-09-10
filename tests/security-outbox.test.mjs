@@ -61,3 +61,40 @@ test('global framing policy includes every route',()=>{
   assert(config.includes('frame-ancestors \'none\''));
   assert(config.includes('{ key: "X-Frame-Options", value: "DENY" }'));
 });
+
+test('sick copies have separate stable receipts and retry without exposing the balance to the employee',async(t)=>{
+  const oldFetch=globalThis.fetch; const saved={...process.env};
+  t.after(()=>{globalThis.fetch=oldFetch;for(const k of ['MAM_N8N_LEAVE_WEBHOOK_URL','MAM_N8N_LEAVE_WEBHOOK_ORIGIN','MAM_N8N_LEAVE_WEBHOOK_SECRET']) {
+    if(saved[k]===undefined)delete process.env[k];else process.env[k]=saved[k];
+  }});
+  process.env.MAM_N8N_LEAVE_WEBHOOK_URL='https://example.test/hook';
+  process.env.MAM_N8N_LEAVE_WEBHOOK_ORIGIN='https://example.test';
+  process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET='synthetic';
+  const row={delivery_id:id,claim_token:id,payload:{requestId:id,event:'leave-submitted',leaveType:'Sick leave',
+    employeeEmails:['employee@example.test'],managerEmail:'manager@example.test,employee@example.test',
+    leaveBalance:{kind:'sick',status:'current',hours:40.9297}}};
+  const acks=[];const keys={reviewers:[],employee:[]};let failEmployee=true;
+  const {dispatchLeaveNotificationOutbox}=load('src/lib/leave-notification-outbox.ts',{
+    'server-only':{},'node:crypto':require('node:crypto'),
+    '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{
+      if(name==='claim_leave_notification_outbox')return {data:[row],error:null};
+      acks.push(args);return {data:true,error:null};
+    }})},
+  });
+  globalThis.fetch=async(url,options)=>{
+    const payload=JSON.parse(options.body);keys[payload.audience].push(payload.eventKey);
+    if(payload.audience==='employee'){
+      assert.equal(payload.leaveBalance,undefined);
+      if(failEmployee)throw new Error('synthetic timeout');
+    }else assert.equal(payload.leaveBalance.hours,40.9297);
+    return Response.json({ok:true,sent:failEmployee,alreadySent:!failEmployee,eventKey:payload.eventKey,
+      actualRecipient:payload.audience==='employee'?'employee@example.test':'hr@mobilityaccess.com.au,manager@example.test'});
+  };
+  assert.equal((await dispatchLeaveNotificationOutbox()).failed,1);
+  assert.equal(acks.at(-1).p_delivered,false);
+  failEmployee=false;
+  assert.equal((await dispatchLeaveNotificationOutbox()).sent,1);
+  assert.equal(acks.at(-1).p_delivered,true);
+  assert.equal(new Set(keys.reviewers).size,1);assert.equal(new Set(keys.employee).size,1);
+  assert.notEqual(keys.employee[0],keys.reviewers[0]);
+});

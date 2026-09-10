@@ -121,3 +121,19 @@ See `docs/environment-management.md` for the complete environment model.
 5. Store the publishable values and server-only secret separately for Development, Preview and Production.
 6. For any future production change, verify the applicable migration history in the exact MAM project. Test leave persistence and privacy, plus automatic check-in scheduling, weekend due-date forward adjustment, weekend advance-notification backward adjustment, Calendar visibility, role scope, manager-view data minimisation and the pre-1-July-2026 completed backfill.
 7. Deploy without changing the established production URL.
+
+### Submission email balances
+
+New annual leave request emails include hours requested, current accrued balance,
+and remaining hours if approved. Sick/carer’s requests send a private balance copy
+to reviewers/HR and a separate employee confirmation without the sick balance.
+Full-day requests use 7.5 hours per business day; explicit hourly requests keep
+their recorded hours. Missing or review-held balances show “Check balance”.
+
+Release order: merge the reviewed app into `main` and verify Vercel production;
+publish `workflows/leave-notification-validator.n8n.txt` through
+`scripts/deploy-priority-n8n.py ... receiver`; then run
+`scripts/deploy-leave-email-balances.py apply <reviewed-sha256>` through the MAM
+Supabase credential helper. Verify with its `inspect` operation. The migration
+captures only new submissions and never replays historical emails or changes
+payroll balances. SQL boundary tests run in CI with synthetic data.

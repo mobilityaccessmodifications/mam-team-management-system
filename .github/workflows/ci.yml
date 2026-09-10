@@ -46,3 +46,4 @@ jobs:
           -f tests/security-remediation-bootstrap.sql
           -f supabase/migrations/20260908015416_security_notification_outbox_and_grant_audit.sql
           -f tests/security-remediation.sql
+          -f tests/leave-email-balances.sql

@@ -59,7 +59,16 @@ try {
     && managerEmails.every((email) => email.length <= 254 && EMAIL.test(email))))) return reject('manager-email');
   const managers = [...new Set(managerEmails.map((email) => email.toLowerCase()))];
   const employeeEmails = emailList(Array.isArray(body.employeeEmails) ? body.employeeEmails : body.employeeEmail);
-  const employeeDelivery = ['leave-approved', 'leave-declined', 'leave-conditionally-approved'].includes(body.event);
+  const sick = body.leaveType === 'Sick leave' || body.leaveType === "Carer's leave";
+  const split = body.audience !== undefined;
+  if (split && (body.event !== 'leave-submitted' || !sick || !['employee', 'reviewers'].includes(body.audience))) return reject('audience');
+  const snapshot = body.leaveBalance;
+  if (snapshot !== undefined && snapshot !== null && (!object(snapshot)
+    || snapshot.kind !== (sick ? 'sick' : 'annual') || (!sick && body.leaveType !== 'Annual leave')
+    || !['current', 'check_balance'].includes(snapshot.status)
+    || (snapshot.hours !== null && !Number.isFinite(snapshot.hours))
+    || (snapshot.status === 'check_balance' && snapshot.hours !== null))) return reject('leave-balance');
+  const employeeDelivery = body.audience === 'employee' || ['leave-approved', 'leave-declined', 'leave-conditionally-approved'].includes(body.event);
   const managerDelivery = ['leave-submitted', 'leave-cancelled', 'leave-reminder', 'team-birthday'].includes(body.event);
   if (employeeDelivery && employeeEmails.length === 0) return reject('employee-email');
   if (managerDelivery && managers.length === 0) return reject('manager-email');
@@ -73,14 +82,13 @@ try {
     }
   }
   state.leaveNotificationEvents = events;
-  // On submission both the employee and the assigned reviewer receive the
-  // confirmation. The confirmation field keeps the app-side delivery check
-  // aligned with its manager-routing expectation.
-  const confirmationRecipient = managerDelivery ? managers.join(',') : employeeEmails.join(',');
-  const deliveryRecipient = body.event === 'leave-submitted'
-    ? [...new Set([...managers, ...employeeEmails])].join(',')
-    : confirmationRecipient;
-  const ccRecipients = body.event === 'leave-reminder' ? '' : [HR, ...(body.event === 'leave-approved' || (body.event === 'leave-cancelled' && body.wasApproved !== false) ? [ACCOUNTS] : [])].filter((email) => !deliveryRecipient.split(',').includes(email)).join(',');
+  const reviewers = [...new Set([...managers, HR])].filter((email) => !employeeEmails.includes(email));
+  const confirmationRecipient = split ? (body.audience === 'employee' ? employeeEmails : reviewers).join(',')
+    : managerDelivery ? managers.join(',') : employeeEmails.join(',');
+  if (!confirmationRecipient) return reject('recipient');
+  const deliveryRecipient = body.event === 'leave-submitted' && !split
+    ? [...new Set([...managers, ...employeeEmails])].join(',') : confirmationRecipient;
+  const ccRecipients = split || body.event === 'leave-reminder' ? '' : [HR, ...(body.event === 'leave-approved' || (body.event === 'leave-cancelled' && body.wasApproved !== false) ? [ACCOUNTS] : [])].filter((email) => !deliveryRecipient.split(',').includes(email)).join(',');
   const previous = events[body.eventKey];
   if (previous?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true, actualRecipient: confirmationRecipient, eventKey: body.eventKey } }];
   if (previous?.state === 'processing' && now - previous.at < PROCESSING) return reject('delivery-in-flight');
@@ -90,6 +98,18 @@ try {
   const managerCopy = body.event === 'leave-reminder' ? (body.status === 'Approved – pending leave balance' ? 'Please confirm the annual leave balance and finalise approval for this request.' : 'Please review this outstanding leave request.') : body.event === 'leave-submitted' ? 'A leave request is waiting for your review.' : 'This is a record of the leave request being ' + eventLabel + '.';
   const employeeDeliveryLink = APP_URL + '/?view=leave&request=' + encodeURIComponent(body.requestId);
   const managerDeliveryLink = APP_URL + '/?view=leave&section=approvals&request=' + encodeURIComponent(body.requestId);
+  const requestedHours = body.hours ?? (body.days === null ? null : body.days * 7.5);
+  const balanceLabel = sick ? 'Sick leave' : 'Annual leave';
+  const hoursLabel = (value) => new Intl.NumberFormat('en-AU', { maximumFractionDigits: 2 }).format(value) + ' hours';
+  // Fail closed during staggered releases: an unsplit sick message cannot show balances.
+  const showBalance = body.event === 'leave-submitted' && object(snapshot)
+    && (!sick || body.audience === 'reviewers');
+  const knownBalance = snapshot?.status === 'current' && Number.isFinite(snapshot?.hours);
+  const balanceRows = showBalance ? [
+    '<li><strong>' + balanceLabel + ' hours requested:</strong> ' + (requestedHours === null ? 'Check hours' : hoursLabel(requestedHours)) + '</li>',
+    '<li><strong>' + balanceLabel + ' balance:</strong> ' + (knownBalance ? hoursLabel(snapshot.hours) : 'Check balance') + '</li>',
+    '<li><strong>' + balanceLabel + ' remaining if approved:</strong> ' + (knownBalance && requestedHours !== null ? hoursLabel(snapshot.hours - requestedHours) : 'Check balance') + '</li>',
+  ].join('') : '';
   const emailHtml = body.event === 'team-birthday' ? '<p>Team birthday reminder: <strong>' + escape(body.employeeName) + '</strong></p><p>Birthday: ' + escape(friendlyDate(body.startDate)) + '</p><p><a href="' + APP_URL + '">People Hub</a></p>' : [
     '<p>' + (employeeDelivery ? 'Hi ' + escape(body.employeeName) + ',' : 'MAM leave notification') + '</p>',
     '<p>' + escape(body.event === 'leave-submitted' ? 'A leave request has been submitted and is awaiting review.' : employeeDelivery ? employeeCopy : managerCopy) + '</p>',
@@ -101,10 +121,10 @@ try {
     body.startTime ? '<li><strong>Start time:</strong> ' + escape(body.startTime) + '</li>' : '',
     body.endTime ? '<li><strong>End time:</strong> ' + escape(body.endTime) + '</li>' : '',
     body.days !== null ? '<li><strong>Business days:</strong> ' + escape(body.days) + '</li>' : '',
-    body.hours !== null ? '<li><strong>Hours:</strong> ' + escape(body.hours) + '</li>' : '',
-    '<li><strong>Status:</strong> ' + escape(body.status) + '</li>', '</ul>',
+    !showBalance && requestedHours !== null && body.event === 'leave-submitted' ? '<li><strong>Hours requested:</strong> ' + hoursLabel(requestedHours) + '</li>' : !showBalance && body.hours !== null ? '<li><strong>Hours:</strong> ' + escape(body.hours) + '</li>' : '',
+    '<li><strong>Status:</strong> ' + escape(body.status) + '</li>', balanceRows, '</ul>',
     employeeDelivery && body.managerNote && !(body.company === 'mam' && emailList([deliveryRecipient,ccRecipients].join(',')).includes(ACCOUNTS.toLowerCase())) ? '<p><strong>Manager note:</strong> ' + escape(body.managerNote) + '</p>' : '',
-    '<p><a href="' + (body.event === 'leave-submitted' ? APP_URL : employeeDelivery ? employeeDeliveryLink : managerDeliveryLink) + '" style="display:inline-block;padding:10px 16px;background:#ef6c24;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">People Hub</a></p>',
+    '<p><a href="' + (body.event === 'leave-submitted' && !split ? APP_URL : employeeDelivery ? employeeDeliveryLink : managerDeliveryLink) + '" style="display:inline-block;padding:10px 16px;background:#ef6c24;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">People Hub</a></p>',
   ].join('');
   return [{ json: { outcome: 'send', mamDelivery: body.company === 'mam', deliveryRecipient, confirmationRecipient, ccRecipients, eventKey: body.eventKey,
     emailSubject: employeeDelivery ? `[MAM] Leave ${eventLabel}: ${body.leaveType}` : `[MAM] Leave ${eventLabel}: ${body.employeeName} — ${body.leaveType}`,
