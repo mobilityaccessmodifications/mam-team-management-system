@@ -1,5 +1,7 @@
 "use client";
 
+import { approvalRequestHours } from "@/lib/leave-priority";
+
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 
 import {
@@ -2311,8 +2313,8 @@ function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, sele
     {showQueue ? <section className={`${styles.panel} ${styles.queue}`}><PanelHeader title="Requests" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} disabled={busy} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Nothing needs review</strong></div>}</section> : null}
     {selected ? <section className={`${styles.panel} ${styles.approvalRecord}`}>
       <header className={styles.approvalHeader}><span className={styles.avatarOrange}>{selected.initials}</span><span><h2>{selected.employee}</h2><p>{selected.team}</p></span><StatusPill status={selected.status} /></header>
-      <div className={styles.factGrid}><article><CalendarDays size={17} /><span><small>When</small><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><small>Duration</small><strong>{formatDurationWithTime(selected)}</strong></span></article><article><ClipboardList size={17} /><span><small>Leave type</small><strong>{selected.leaveType}</strong></span></article></div>
-      <ApprovalLeaveBalances key={selected.id} workspace={leavePriority} personId={selected.personId} requestId={selected.id} busy={busy || readOnly} onSaved={onBalancesSaved} />
+      <div className={styles.factGrid}><article><CalendarDays size={17} /><span><small>When</small><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><small>Duration</small><span className={styles.approvalDuration}><strong>{formatDuration(selected)}</strong>{selected.hours == null && approvalRequestHours(selected) != null ? <span>{approvalRequestHours(selected)} hours</span> : null}</span>{formatTimeRange(selected) ? <small>{formatTimeRange(selected)}</small> : null}</span></article><article><ClipboardList size={17} /><span><small>Leave type</small><strong>{selected.leaveType}</strong></span></article></div>
+      <ApprovalLeaveBalances key={selected.id} workspace={leavePriority} personId={selected.personId} requestId={selected.id} leaveType={selected.leaveType} requiredHours={approvalRequestHours(selected)} busy={busy || readOnly} onSaved={onBalancesSaved} />
       {selected.employeeNote ? <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div> : null}
       <AttachmentList attachments={attachmentsByRequestId.get(selected.id) ?? []} />
       <SickEvidenceNotice dueDate={selected.evidenceDueDate} hasEvidence={(attachmentsByRequestId.get(selected.id)?.length ?? 0) > 0} />

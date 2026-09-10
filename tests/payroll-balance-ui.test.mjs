@@ -12,7 +12,12 @@ const code = ts.transpileModule(fs.readFileSync('src/components/leave-priority-c
 }).outputText;
 function resolveImport(id) {
   if (id === '@/app/leave/actions') return {};
-  if (id === '@/lib/leave-priority') return { leaveDateLabel: (date) => date, melbourneToday: () => '2026-09-10' };
+  if (id === '@/lib/leave-priority') {
+    const lib = { exports: {} };
+    const js = ts.transpileModule(fs.readFileSync('src/lib/leave-priority.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+    new Function('require', 'module', 'exports', js)(resolveImport, lib, lib.exports);
+    return lib.exports;
+  }
   if (id === '@/components/leave-accrual-controls') {
     const component = { exports: {} };
     const js = ts.transpileModule(fs.readFileSync('src/components/leave-accrual-controls.tsx', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -97,4 +102,31 @@ test('approval keeps sick balances private and does not round tiny debt to zero'
   }));
   assert.match(html, /−&lt;0.01/);
   assert.doesNotMatch(html, /Sick leave|99|2026-09-10|automatic accrual/);
+});
+
+const { approvalRequestHours, approvalBalanceCoverage } = resolveImport('@/lib/leave-priority');
+test('approval hours use 7.5 hours per day and retain recorded hourly requests', () => {
+  assert.equal(approvalRequestHours({ days: 2 }), 15);
+  assert.equal(approvalRequestHours({ days: 2, hours: 3.25 }), 3.25);
+  assert.equal(approvalRequestHours({ days: 0 }), null);
+  assert.equal(approvalRequestHours({ days: 2, hours: NaN }), null);
+});
+test('coverage compares full precision, respects visibility and review holds', () => {
+  assert.equal(approvalBalanceCoverage({ ...person, hours: 15 }, 'Annual leave', 15), 'Enough balance');
+  assert.equal(approvalBalanceCoverage({ ...person, hours: 14.9999 }, 'Annual leave', 15), 'Not enough balance');
+  assert.equal(approvalBalanceCoverage({ ...person, accrualStatus: 'needs_review' }, 'Annual leave', 15), 'Check balance');
+  assert.equal(approvalBalanceCoverage({ ...person, hours: null }, 'Annual leave', 15), 'Check balance');
+  assert.equal(approvalBalanceCoverage(person, 'Sick leave', 15), null);
+  assert.equal(approvalBalanceCoverage(person, 'Unpaid leave', 15), null);
+});
+test('approval renders a pill only on the requested balance, including sick leave', () => {
+  for (const [leaveType, sickHours, expected] of [['Annual leave', 0, 'Enough balance'], ['Sick leave', 14, 'Not enough balance'], ['Sick leave', 15, 'Enough balance']]) {
+    const html = renderToStaticMarkup(createElement(loaded.exports.ApprovalLeaveBalances, {
+      workspace: workspace([{ ...person, canViewSickBalance: true, sickHours }]),
+      personId: 'employee', requestId: 'request', leaveType, requiredHours: 15, busy: false, async onSaved() {},
+    }));
+    assert.equal((html.match(/data-sufficient=/g) ?? []).length, 1);
+    assert.ok(html.includes(expected));
+    assert.ok(html.includes(`data-sufficient="${expected === 'Enough balance'}"`));
+  }
 });
