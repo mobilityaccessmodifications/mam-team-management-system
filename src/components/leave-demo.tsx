@@ -2295,7 +2295,7 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
       </label>
       <small>PDF or image · 5 MB each · not malware-scanned.</small>
     </section> : null}
-    {canReview && request.canDecide ? <button className={styles.primaryButton} type="button" disabled={busy} onClick={() => onViewMore(request.id)}>View more <ChevronRight size={16} aria-hidden="true" /></button> : null}
+    {canReview && request.canDecide ? <button className={`${styles.primaryButton} ${styles.viewMoreButton}`} type="button" disabled={busy} onClick={() => onViewMore(request.id)}>View more <ChevronRight size={16} aria-hidden="true" /></button> : null}
   </aside>;
 }
 
