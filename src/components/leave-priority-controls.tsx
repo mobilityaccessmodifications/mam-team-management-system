@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LeaveAccrualControls, LeaveAccrualNotice } from "@/components/leave-accrual-controls";
 import { saveAnnualLeaveBalance, saveSickLeaveBalance, saveLeaveBalanceRequiredHours } from "@/app/leave/actions";
 import { leaveDateLabel, melbourneToday, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import styles from "@/components/leave-demo.module.css";
@@ -17,8 +18,9 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
   return <details className={styles.leaveBalances}>
     <summary>Leave balances{workspace.people.some((p) => p.canSubmit) ? " & team requests" : ""}</summary>
     {workspace.people.map((person) => <div className={styles.leaveBalanceRow} key={person.personId}>
-      <div><strong>{person.name}</strong>{person.canViewBalance ? <small>{person.paidLeave ? `Annual: ${person.hours ?? 0} hours${person.asOf ? ` · As of ${leaveDateLabel(person.asOf)}` : ""}` : "Unpaid leave only"}</small> : null}
+      <div><strong>{person.name}</strong>{person.canViewBalance ? <small>{person.paidLeave ? `Annual: ${person.hours == null ? "Not supplied" : `${person.hours} hours`}${person.asOf ? ` · As of ${leaveDateLabel(person.asOf)}` : ""}` : "Unpaid leave only"}</small> : null}
         {person.canViewSickBalance ? <small>Sick: {person.sickHours == null ? "Not supplied" : `${person.sickHours} hours`}{person.sickAsOf ? ` · As of ${leaveDateLabel(person.sickAsOf)}` : ""}</small> : null}
+        <LeaveAccrualNotice person={person} />
       </div>
       <div className={styles.leaveBalanceActions}>
         {person.canSubmit ? <button type="button" className={styles.secondaryButton} disabled={busy || saving} onClick={() => onRequest(person.personId)}>Request leave</button> : null}
@@ -38,12 +40,13 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
         } catch { setError("Balance could not be saved. Please try again."); }
         finally { setSaving(false); }
       }}>
-        <label>{balanceType === "annual" ? "Annual" : "Sick"} payroll hours<input name="hours" type="number" step="0.0001" min="-10000" max="100000" defaultValue={(balanceType === "annual" ? person.hours : person.sickHours) ?? ""} required /></label>
-        <label>Balance date<input name="asOf" type="date" defaultValue={(balanceType === "annual" ? person.asOf : person.sickAsOf) ?? melbourneToday()} max={melbourneToday()} required /></label>
+        <label>{balanceType === "annual" ? "Annual" : "Sick"} payroll hours<input name="hours" type="number" step="0.0001" min="-10000" max="100000" defaultValue={(balanceType === "annual" ? (person.annualPayrollHours ?? person.hours) : (person.sickPayrollHours ?? person.sickHours)) ?? ""} required /></label>
+        <label>Balance date<input name="asOf" type="date" defaultValue={(balanceType === "annual" ? (person.annualPayrollDate ?? person.asOf) : (person.sickPayrollDate ?? person.sickAsOf)) ?? melbourneToday()} max={melbourneToday()} required /></label>
         <button className={styles.primaryButton} disabled={saving} type="submit">{saving ? "Saving…" : "Save"}</button>
         <button className={styles.secondaryButton} disabled={saving} type="button" onClick={() => setEditing(null)}>Cancel</button>
         {error ? <p role="alert" className={styles.formError}>{error}</p> : null}
       </form> : null}
+      {workspace.canManageBalances && person.paidLeave && person.accrualPolicy !== undefined ? <LeaveAccrualControls person={person} busy={busy || saving} onSaved={onSaved} /> : null}
     </div>)}
     {workspace.canManageBalances && workspace.payrollImports?.length ? <details className={styles.payrollImportRegister}>
       <summary>Payroll import · {workspace.payrollImports.length} records</summary>
@@ -69,8 +72,9 @@ export function ApprovalLeaveBalances({ workspace, personId, requestId, busy, on
     <strong>Leave balances</strong>
     {person?.canViewBalance ? <p>Annual: {person.hours == null ? "Not supplied" : `${person.hours} hours`}{person.asOf ? ` · As of ${leaveDateLabel(person.asOf)}` : ""}</p> : <p>Annual balance unavailable.</p>}
     {person?.canViewSickBalance ? <p>Sick: {person.sickHours == null ? "Not supplied" : `${person.sickHours} hours`}{person.sickAsOf ? ` · As of ${leaveDateLabel(person.sickAsOf)}` : ""}</p> : null}
+    {person ? <LeaveAccrualNotice person={person} /> : null}
     {request?.pendingBalance ? <>
-      <p>{request.balanceSufficient ? "The updated payroll balance covers the recorded hours. Review and approve when ready." : "Routine reminders are paused. A payroll balance update covering the required hours will trigger one manager reminder."}</p>
+      <p>{request.balanceSufficient ? "The current balance covers the recorded hours. Review and approve when ready." : "Routine reminders are paused. An updated balance covering the required hours will trigger one manager reminder."}</p>
       <form className={styles.leaveBalanceEditor} onSubmit={async (event) => {
         event.preventDefault(); if (saving || busy) return;
         const hours = Number(new FormData(event.currentTarget).get("requiredHours"));

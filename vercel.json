@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/leave-accrual",
+      "schedule": "35 16 * * *"
+    },
+    {
       "path": "/api/cron/leave-attachment-cleanup",
       "schedule": "17 16 * * *"
     }
