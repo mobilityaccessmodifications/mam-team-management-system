@@ -34,15 +34,18 @@ test('employee balance section contains annual hours and no sick fields or edit 
   assert.doesNotMatch(html, /Sick:|Edit sick|Edit annual/);
 });
 
-test('approval panel includes dated annual and authorised sick balances beside reminder controls', () => {
+test('approval panel shows concise rounded balances with icons and no bookkeeping dates', () => {
   const html = renderToStaticMarkup(createElement(loaded.exports.ApprovalLeaveBalances, {
     workspace: workspace([{ ...person, canViewSickBalance: true, sickHours: 25.1234, sickAsOf: '2026-09-10' }], [{ id: 'request', pendingBalance: true, requiredHours: null }]),
     personId: 'employee', requestId: 'request', busy: false, async onSaved() {},
   }));
-  assert.match(html, /Annual: 60 hours/);
-  assert.match(html, /Sick: 25.1234 hours/);
-  assert.match(html, /As of 2026-09-10/);
-  assert.match(html, /Routine reminders are paused/);
+  assert.match(html, /Annual leave/);
+  assert.match(html, /<strong>60<\/strong>/);
+  assert.match(html, /Sick leave/);
+  assert.match(html, /<strong>25.12<\/strong>/);
+  assert.match(html, /<svg/);
+  assert.doesNotMatch(html, /As of|2026-09-10|Payroll baseline|Includes automatic|25.1234/);
+  assert.match(html, /Waiting for enough leave/);
   assert.match(html, /Confirm the paid hours/);
 });
 
@@ -51,8 +54,9 @@ test('missing sick snapshot is not displayed as a zero balance', () => {
     workspace: workspace([{ ...person, canViewSickBalance: true, sickHours: null }]),
     personId: 'employee', requestId: 'request', busy: false, async onSaved() {},
   }));
-  assert.match(html, /Sick: Not supplied/);
-  assert.doesNotMatch(html, /Sick: 0/);
+  assert.match(html, /Sick leave/);
+  assert.match(html, /Unavailable/);
+  assert.doesNotMatch(html, /<strong>0<\/strong>/);
 });
 
 test('administrator can review payroll rows that have no employee match', () => {
@@ -71,7 +75,8 @@ test('current accrual and review hold are visible without exposing staff sick ba
   const html = renderToStaticMarkup(createElement(loaded.exports.LeavePriorityControls, {
     workspace: workspace([p]), busy: false, onRequest() {}, async onSaved() {},
   }));
-  assert.match(html, /Payroll reconciliation needed/);
+  assert.match(html, /Balance needs checking/);
+  assert.doesNotMatch(html, /As of|Payroll baseline/);
   assert.doesNotMatch(html, /Personal\/carer|Save confirmed hours|Accrual settings/);
 });
 
@@ -83,4 +88,13 @@ test('actual administrator gets policy and audited day reconciliation controls',
   assert.match(html, /38 ordinary hours\/week/);
   assert.match(html, /Save confirmed hours/);
   assert.match(html, /Changes apply from today/);
+});
+
+test('approval keeps sick balances private and does not round tiny debt to zero', () => {
+  const html = renderToStaticMarkup(createElement(loaded.exports.ApprovalLeaveBalances, {
+    workspace: workspace([{ ...person, hours: -0.004, sickHours: 99, canViewSickBalance: false, accrualStatus: 'current', annualPayrollDate: '2026-09-10' }]),
+    personId: 'employee', requestId: 'request', busy: false, async onSaved() {},
+  }));
+  assert.match(html, /−&lt;0.01/);
+  assert.doesNotMatch(html, /Sick leave|99|2026-09-10|automatic accrual/);
 });
