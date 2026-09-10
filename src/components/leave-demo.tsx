@@ -29,7 +29,7 @@ import {
 import { FormEvent, type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
-import { ApprovalLeaveBalances, LeavePriorityControls, SickEvidenceNotice } from "@/components/leave-priority-controls";
+import { ApprovalBalancePill, ApprovalLeaveBalances, LeavePriorityControls, SickEvidenceNotice } from "@/components/leave-priority-controls";
 import { BALANCE_PENDING_STATUS, sickEvidenceDeadline, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import {
   getCurrentEmployeeSelfProfile,
@@ -2319,8 +2319,8 @@ function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, sele
     {showQueue ? <section className={`${styles.panel} ${styles.queue}`}><PanelHeader title="Requests" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} disabled={busy} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Nothing needs review</strong></div>}</section> : null}
     {selected ? <section className={`${styles.panel} ${styles.approvalRecord}`}>
       <header className={styles.approvalHeader}><span className={styles.avatarOrange}>{selected.initials}</span><span><h2>{selected.employee}</h2></span><StatusPill status={selected.status} /></header>
-      <div className={styles.factGrid}><article><CalendarDays size={17} /><span><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><span className={styles.approvalDuration}><strong>{formatDuration(selected)}</strong>{selected.hours == null && approvalRequestHours(selected) != null ? <span>{approvalRequestHours(selected)} hours</span> : null}</span>{formatTimeRange(selected) ? <small>{formatTimeRange(selected)}</small> : null}</span></article><article><ClipboardList size={17} /><span><strong>{selected.leaveType}</strong></span></article></div>
-      <ApprovalLeaveBalances key={selected.id} workspace={leavePriority} personId={selected.personId} requestId={selected.id} leaveType={selected.leaveType} requiredHours={approvalRequestHours(selected)} busy={busy || readOnly} onSaved={onBalancesSaved} />
+      <div className={styles.factGrid}><article><CalendarDays size={17} /><span><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><span className={styles.approvalDuration}><strong>{formatDuration(selected)}</strong>{selected.hours == null && approvalRequestHours(selected) != null ? <span>{approvalRequestHours(selected)} hours</span> : null}<ApprovalBalancePill workspace={leavePriority} personId={selected.personId} leaveType={selected.leaveType} requiredHours={approvalRequestHours(selected)} /></span>{formatTimeRange(selected) ? <small>{formatTimeRange(selected)}</small> : null}</span></article><article><ClipboardList size={17} /><span><strong>{selected.leaveType}</strong></span></article></div>
+      <ApprovalLeaveBalances key={selected.id} workspace={leavePriority} personId={selected.personId} requestId={selected.id} busy={busy || readOnly} onSaved={onBalancesSaved} />
       {selected.employeeNote ? <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div> : null}
       <AttachmentList attachments={attachmentsByRequestId.get(selected.id) ?? []} />
       <SickEvidenceNotice dueDate={selected.evidenceDueDate} hasEvidence={(attachmentsByRequestId.get(selected.id)?.length ?? 0) > 0} />

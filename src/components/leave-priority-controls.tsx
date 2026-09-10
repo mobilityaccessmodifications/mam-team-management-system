@@ -13,7 +13,7 @@ function balanceHours(hours: number) {
   return new Intl.NumberFormat("en-AU", { maximumFractionDigits: 2 }).format(hours);
 }
 
-function BalanceCard({ label, hours, sick = false, coverage }: { label: string; hours?: number | null; sick?: boolean; coverage?: string | null }) {
+function BalanceCard({ label, hours, sick = false }: { label: string; hours?: number | null; sick?: boolean }) {
   const Icon = sick ? HeartPulse : Palmtree;
   return <div className={styles.balanceCard} data-kind={sick ? "sick" : "annual"}>
     <span className={styles.balanceIcon}><Icon size={23} strokeWidth={1.7} aria-hidden="true" /></span>
@@ -23,7 +23,6 @@ function BalanceCard({ label, hours, sick = false, coverage }: { label: string; 
         : <div className={styles.balanceCardValue} data-negative={hours < 0 || undefined}>
           <strong>{balanceHours(hours)}</strong><span>hours</span>
         </div>}
-      {coverage ? <span className={styles.balanceCoverage} data-sufficient={coverage === "Enough balance"}>{coverage}</span> : null}
     </div>
   </div>;
 }
@@ -83,19 +82,18 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
   </details>;
 }
 
-export function ApprovalLeaveBalances({ workspace, personId, requestId, leaveType = "", requiredHours = null, busy, onSaved }: {
-  workspace?: LeavePriorityWorkspace; personId?: string; requestId: string; leaveType?: string; requiredHours?: number | null; busy: boolean; onSaved: () => Promise<void>;
+export function ApprovalLeaveBalances({ workspace, personId, requestId, busy, onSaved }: {
+  workspace?: LeavePriorityWorkspace; personId?: string; requestId: string; busy: boolean; onSaved: () => Promise<void>;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const person = workspace?.people.find((p) => p.personId === personId);
   const request = workspace?.requests.find((r) => r.id === requestId);
-  const coverage = approvalBalanceCoverage(person, leaveType, requiredHours);
   return <section className={styles.approvalBalances} aria-label="Employee leave balances">
     <strong>Leave balances</strong>
     <div className={styles.balanceCards}>
-      <BalanceCard label="Annual leave" hours={person?.canViewBalance ? person.hours : null} coverage={leaveType === "Annual leave" ? coverage : null} />
-      {person?.canViewSickBalance ? <BalanceCard label="Sick leave" hours={person.sickHours} sick coverage={leaveType === "Sick leave" || leaveType === "Carer's leave" ? coverage : null} /> : null}
+      <BalanceCard label="Annual leave" hours={person?.canViewBalance ? person.hours : null} />
+      {person?.canViewSickBalance ? <BalanceCard label="Sick leave" hours={person.sickHours} sick /> : null}
     </div>
     {person ? <LeaveAccrualNotice person={person} /> : null}
     {request?.pendingBalance ? <>
@@ -126,4 +124,12 @@ export function SickEvidenceNotice({ dueDate, hasEvidence }: { dueDate?: string;
   return <p className={overdue ? styles.formError : styles.leavePolicyNote} role="note">
     {overdue ? `Medical certificate overdue since ${leaveDateLabel(dueDate)}. Review as Unpaid leave.` : `Upload your medical certificate by Monday ${leaveDateLabel(dueDate)}. If not provided, this leave will need review as Unpaid leave.`}
   </p>;
+}
+
+export function ApprovalBalancePill({ workspace, personId, leaveType, requiredHours }: {
+  workspace?: LeavePriorityWorkspace; personId?: string; leaveType: string; requiredHours: number | null;
+}) {
+  const person = workspace?.people.find((p) => p.personId === personId);
+  const coverage = approvalBalanceCoverage(person, leaveType, requiredHours);
+  return coverage ? <span className={styles.balanceCoverage} data-sufficient={coverage === "Enough balance"}>{coverage}</span> : null;
 }
