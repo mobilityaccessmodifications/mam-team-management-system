@@ -30,7 +30,7 @@ export async function dispatchLeaveNotificationOutbox(requestId: string | null =
   let target: ReturnType<typeof receiver>;
   try { target = receiver(); } catch { return { ok: false, code: "not_configured", claimed: 0, sent: 0, failed: 0 }; }
   const admin = createAdminClient();
-  const claimed = await admin.rpc("claim_leave_notification_outbox", { p_request_id: requestId, p_limit: requestId ? 1 : 50 });
+  const claimed = await admin.rpc("claim_leave_notification_outbox", { p_request_id: requestId, p_limit: requestId ? 1 : 25 });
   if (claimed.error || !Array.isArray(claimed.data)) return { ok: false, code: "claim_failed", claimed: 0, sent: 0, failed: 0 };
   let sent = 0;
   let failed = 0;
@@ -38,22 +38,40 @@ export async function dispatchLeaveNotificationOutbox(requestId: string | null =
     await Promise.all(claimed.data.slice(offset, offset + 5).map(async (row) => {
       if (!row.payload || !row.claim_token) { failed++; return; }
       const payload = row.payload;
-      const eventKey = `leave:${payload.requestId}:${payload.event}:${createHash("sha256").update(row.delivery_id).digest("hex").slice(0, 24)}`;
-      const managerDelivery = payload.event === "leave-submitted" || payload.event === "leave-cancelled";
-      const expected = emailList(managerDelivery ? payload.managerEmail : payload.employeeEmails);
-      let delivered = false;
-      try {
-        if (!expected.length) throw new Error("missing_recipient");
-        const response = await fetch(target.url, {
-          method: "POST", redirect: "error", cache: "no-store", signal: AbortSignal.timeout(15_000),
-          headers: { "Content-Type": "application/json", "X-MAM-Notification-Secret": target.secret },
-          body: JSON.stringify({ ...payload, eventKey, employeeNote: bodyNote(payload.employeeNote), managerNote: bodyNote(payload.managerNote) }),
-        });
-        const receipt = await response.json();
-        const actual = emailList(receipt.actualRecipients ?? receipt.actualRecipient);
-        delivered = response.ok && receipt.ok === true && (receipt.sent === true || receipt.alreadySent === true)
-          && receipt.eventKey === eventKey && JSON.stringify(actual) === JSON.stringify(expected);
-      } catch { /* The durable event remains retryable; never log the sensitive payload. */ }
+      // New sick/personal submissions use independently deduplicated copies.
+      // Legacy snapshots keep their original delivery key and recipient contract.
+      const split = payload.event === "leave-submitted" && payload.leaveBalance?.kind === "sick";
+      const employees = emailList(payload.employeeEmails ?? payload.employeeEmail);
+      const managers = emailList(payload.managerEmail);
+      const copies = split ? ["reviewers", ...(employees.length ? ["employee"] : [])] : ["shared"];
+      let delivered = true;
+      for (const audience of copies) {
+        const eventKey = `leave:${payload.requestId}:${payload.event}:${createHash("sha256")
+          .update(row.delivery_id + (split ? `:${audience}` : "")).digest("hex").slice(0, 24)}`;
+        const managerDelivery = payload.event === "leave-submitted" || payload.event === "leave-cancelled";
+        const expected = audience === "reviewers" ? managers.filter((email) => !employees.includes(email))
+          : audience === "employee" ? employees : managerDelivery ? managers : employees;
+        // HR remains a reviewer even if all assigned addresses belong to the applicant.
+        if (audience === "reviewers" && !employees.includes("hr@mobilityaccess.com.au")) {
+          expected.push("hr@mobilityaccess.com.au");
+        }
+        const recipients = [...new Set(expected)].sort();
+        try {
+          if (!recipients.length) throw new Error("missing_recipient");
+          const response = await fetch(target.url, {
+            method: "POST", redirect: "error", cache: "no-store", signal: AbortSignal.timeout(15_000),
+            headers: { "Content-Type": "application/json", "X-MAM-Notification-Secret": target.secret },
+            body: JSON.stringify({ ...payload, ...(split ? { audience } : {}),
+              // The employee copy never carries the private sick balance.
+              leaveBalance: audience === "employee" ? undefined : payload.leaveBalance,
+              eventKey, employeeNote: bodyNote(payload.employeeNote), managerNote: bodyNote(payload.managerNote) }),
+          });
+          const receipt = await response.json();
+          const actual = emailList(receipt.actualRecipients ?? receipt.actualRecipient);
+          delivered = response.ok && receipt.ok === true && (receipt.sent === true || receipt.alreadySent === true)
+            && receipt.eventKey === eventKey && JSON.stringify(actual) === JSON.stringify(recipients) && delivered;
+        } catch { delivered = false; /* Keep the durable event retryable; never log its payload. */ }
+      }
       try {
         const result = await admin.rpc("finish_leave_notification_outbox", {
           p_delivery_id: row.delivery_id, p_claim_token: row.claim_token, p_delivered: delivered,
