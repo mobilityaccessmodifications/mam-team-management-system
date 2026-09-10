@@ -71,10 +71,10 @@ do $$declare w jsonb; p text; begin
   w:=public.get_leave_priority_workspace();
   assert jsonb_array_length(w->'people')=2;
   assert not (w->>'canManageBalances')::boolean;
-  assert (select count(*)=1 from jsonb_array_elements(w->'people') e where (e->>'canViewBalance')::boolean);
+  assert (select count(*)=2 from jsonb_array_elements(w->'people') e where (e->>'canViewBalance')::boolean);
   assert (select (e->>'paidLeave')::boolean from jsonb_array_elements(w->'people') e
-    where e->>'personId'='10000000-0000-4000-8000-000000000003'), 'Delegated form retains eligible request categories, not balance data';
-  assert (select e->>'hours' is null and e->>'asOf' is null and (e->>'canSubmit')::boolean
+    where e->>'personId'='10000000-0000-4000-8000-000000000003'), 'Delegated form retains eligible request categories and scoped balance data';
+  assert (select (e->>'hours')::numeric=60 and e->>'asOf' is not null and (e->>'canSubmit')::boolean
     from jsonb_array_elements(w->'people') e where e->>'personId'='10000000-0000-4000-8000-000000000003');
   begin
     perform public.set_employee_annual_leave_balance('10000000-0000-4000-8000-000000000003',10,current_date,false);
@@ -92,8 +92,8 @@ do $$declare w jsonb; begin
   assert (select count(*)=4 from jsonb_array_elements(w->'people') e where (e->>'canViewBalance')::boolean);
   w:=public.get_leave_priority_workspace('10000000-0000-4000-8000-000000000002');
   assert (w->>'canManageBalances')::boolean;
-  assert (select count(*)=1 from jsonb_array_elements(w->'people') e where (e->>'canViewBalance')::boolean);
-  assert (select e->>'hours' is null and e->>'asOf' is null
+  assert (select count(*)=2 from jsonb_array_elements(w->'people') e where (e->>'canViewBalance')::boolean);
+  assert (select (e->>'hours')::numeric=60 and e->>'asOf' is not null
     from jsonb_array_elements(w->'people') e where e->>'personId'='10000000-0000-4000-8000-000000000003');
   w:=public.get_leave_priority_workspace('10000000-0000-4000-8000-000000000003');
   assert jsonb_array_length(w->'people')=1;
@@ -103,7 +103,7 @@ end$$;
 update public.leave_requests set submitted_at=now()-interval '8 days',
   start_date=(now() at time zone 'Australia/Melbourne')::date-4,
   end_date=(now() at time zone 'Australia/Melbourne')::date-3 where status='submitted';
-update private.employee_directory_details set date_of_birth=(now() at time zone 'Australia/Melbourne')::date-interval '30 years'
+update private.employee_directory_details set date_of_birth=(now() at time zone 'Australia/Melbourne')::date+1-interval '30 years'
 where person_id='10000000-0000-4000-8000-000000000003';
 do $$declare r record; n integer:=0; begin
   if extract(isodow from (now() at time zone 'Australia/Melbourne'))<=5 then

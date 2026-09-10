@@ -959,6 +959,26 @@ export async function saveAnnualLeaveBalance(personId: string, hours: number, as
   return { ok: true };
 }
 
+export async function saveSickLeaveBalance(personId: string, hours: number, asOf: string) {
+  const supabase = await requireLeaveSession();
+  if (!Number.isFinite(hours) || hours < -10000 || hours > 100000 || !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) return { ok: false, message: "Enter a valid balance and date." };
+  const { error } = await supabase.rpc("set_employee_sick_leave_balance", {
+    p_person_id: selectedPersonId(personId), p_hours: hours, p_as_of: asOf,
+  });
+  if (error) return { ok: false, message: "Balance could not be saved. Check your access and balance date." };
+  revalidatePath("/");
+  return { ok: true };
+}
+
+export async function saveLeaveBalanceRequiredHours(requestId: string, hours: number) {
+  const supabase = await requireLeaveSession();
+  if (!UUID_PATTERN.test(requestId) || !Number.isFinite(hours) || hours <= 0 || hours > 100000) return { ok: false, message: "Enter valid paid hours for this request." };
+  const { error } = await supabase.rpc("set_leave_balance_required_hours", { p_request_id: requestId, p_hours: hours });
+  if (error) return { ok: false, message: "Required hours could not be saved. Refresh and check your review access." };
+  revalidatePath("/");
+  return { ok: true };
+}
+
 export async function submitLeaveRequest(input: SubmitLeaveInput) {
   const checked = normaliseLeaveInput(input);
   const supabase = await requireLeaveSession();

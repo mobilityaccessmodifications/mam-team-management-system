@@ -10,11 +10,20 @@ export type LeaveBalancePerson = {
   hours: number | null;
   asOf: string | null;
   isExample: boolean;
+  canViewSickBalance?: boolean;
+  sickHours?: number | null;
+  sickAsOf?: string | null;
 };
 export type LeavePriorityWorkspace = {
   people: LeaveBalancePerson[];
+  payrollImports?: Array<{
+    id: string; employeeName: string; company: "mam" | "equipsy";
+    annualHours: number; sickHours: number; asOf: string;
+    status: "linked" | "inactive" | "unmatched" | "company_mismatch";
+    linkedName: string | null; sourceFile: string;
+  }>;
   canManageBalances: boolean;
-  requests: Array<{ id: string; pendingBalance: boolean; evidenceDueDate: string | null; canAttach: boolean }>;
+  requests: Array<{ id: string; pendingBalance: boolean; evidenceDueDate: string | null; canAttach: boolean; requiredHours?: number | null; balanceSufficient?: boolean }>;
   pendingBalanceCalendarIds: string[];
 };
 

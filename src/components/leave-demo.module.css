@@ -6870,6 +6870,11 @@
   }
 }
 .leaveBalances { margin-block: 16px; border: 1px solid #d5dfdc; border-radius: 14px; background: white; }
+.approvalBalances { margin: 16px 0; padding: 16px; border: 1px solid #d5dfdc; border-radius: 12px; }
+.approvalBalances p { margin: 8px 0; font-size: 13px; line-height: 1.5; }
+.payrollImportRegister { border-top: 1px solid #d5dfdc; }
+.payrollImportRegister > summary { padding: 14px 18px; cursor: pointer; font-weight: 650; }
+.payrollImportRegister > p { padding: 0 18px 12px; font-size: 13px; line-height: 1.5; color: #61726e; }
 .leaveBalances > summary { padding: 14px 18px; cursor: pointer; font-weight: 650; }
 .leaveBalanceRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-top: 1px solid #e4eae7; }
 .leaveBalanceRow small { display: block; margin-top: 4px; color: #61726e; }
