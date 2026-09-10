@@ -1,7 +1,7 @@
 // Executed inside the authenticated MAM n8n Code node; tested without network.
 const HR = 'hr@mobilityaccess.com.au';
 const ACCOUNTS = 'accounts@mobilityaccess.com.au';
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 const APP_URL = 'https://mam-team-management-system-ten.vercel.app';
 const EVENTS = ['leave-submitted', 'leave-approved', 'leave-declined', 'leave-cancelled', 'leave-conditionally-approved', 'leave-reminder', 'team-birthday'];
 const STATUSES = ['Pending', 'Approved', 'Declined', 'Cancelled', 'Approved – pending leave balance'];
@@ -54,12 +54,15 @@ try {
   if (!['number', 'object'].includes(typeof body.days) || (body.days !== null && (!Number.isFinite(body.days) || body.days <= 0))) return reject('days');
   if (!['number', 'object'].includes(typeof body.hours) || (body.hours !== null && (!Number.isFinite(body.hours) || body.hours <= 0))) return reject('hours');
   if (!STATUSES.includes(body.status) || !optionalNote(body.employeeNote, 4000) || !optionalNote(body.managerNote, 4000)) return reject('status-or-notes');
-  if (!(body.managerEmail === null || (typeof body.managerEmail === 'string' && body.managerEmail.length <= 254 && EMAIL.test(body.managerEmail)))) return reject('manager-email');
+  const managerEmails = typeof body.managerEmail === 'string' ? body.managerEmail.split(',') : [];
+  if (!(body.managerEmail === null || (managerEmails.length > 0 && managerEmails.length <= 10
+    && managerEmails.every((email) => email.length <= 254 && EMAIL.test(email))))) return reject('manager-email');
+  const managers = [...new Set(managerEmails.map((email) => email.toLowerCase()))];
   const employeeEmails = emailList(Array.isArray(body.employeeEmails) ? body.employeeEmails : body.employeeEmail);
   const employeeDelivery = ['leave-approved', 'leave-declined', 'leave-conditionally-approved'].includes(body.event);
   const managerDelivery = ['leave-submitted', 'leave-cancelled', 'leave-reminder', 'team-birthday'].includes(body.event);
   if (employeeDelivery && employeeEmails.length === 0) return reject('employee-email');
-  if (managerDelivery && !(typeof body.managerEmail === 'string' && EMAIL.test(body.managerEmail))) return reject('manager-email');
+  if (managerDelivery && managers.length === 0) return reject('manager-email');
   const now = Date.now();
   const state = $getWorkflowStaticData('global');
   const raw = object(state.leaveNotificationEvents) ? state.leaveNotificationEvents : {};
@@ -73,11 +76,11 @@ try {
   // On submission both the employee and the assigned reviewer receive the
   // confirmation. The confirmation field keeps the app-side delivery check
   // aligned with its manager-routing expectation.
-  const confirmationRecipient = managerDelivery ? body.managerEmail : employeeEmails.join(',');
+  const confirmationRecipient = managerDelivery ? managers.join(',') : employeeEmails.join(',');
   const deliveryRecipient = body.event === 'leave-submitted'
-    ? [...new Set([body.managerEmail, ...employeeEmails])].join(',')
+    ? [...new Set([...managers, ...employeeEmails])].join(',')
     : confirmationRecipient;
-  const ccRecipients = body.event === 'leave-reminder' ? '' : [HR, ...(body.event === 'leave-approved' || (body.event === 'leave-cancelled' && body.wasApproved !== false) ? [ACCOUNTS] : [])].join(',');
+  const ccRecipients = body.event === 'leave-reminder' ? '' : [HR, ...(body.event === 'leave-approved' || (body.event === 'leave-cancelled' && body.wasApproved !== false) ? [ACCOUNTS] : [])].filter((email) => !deliveryRecipient.split(',').includes(email)).join(',');
   const previous = events[body.eventKey];
   if (previous?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true, actualRecipient: confirmationRecipient, eventKey: body.eventKey } }];
   if (previous?.state === 'processing' && now - previous.at < PROCESSING) return reject('delivery-in-flight');
@@ -100,10 +103,10 @@ try {
     body.days !== null ? '<li><strong>Business days:</strong> ' + escape(body.days) + '</li>' : '',
     body.hours !== null ? '<li><strong>Hours:</strong> ' + escape(body.hours) + '</li>' : '',
     '<li><strong>Status:</strong> ' + escape(body.status) + '</li>', '</ul>',
-    employeeDelivery && body.managerNote ? '<p><strong>Manager note:</strong> ' + escape(body.managerNote) + '</p>' : '',
+    employeeDelivery && body.managerNote && !(body.company === 'mam' && emailList([deliveryRecipient,ccRecipients].join(',')).includes(ACCOUNTS.toLowerCase())) ? '<p><strong>Manager note:</strong> ' + escape(body.managerNote) + '</p>' : '',
     '<p><a href="' + (body.event === 'leave-submitted' ? APP_URL : employeeDelivery ? employeeDeliveryLink : managerDeliveryLink) + '" style="display:inline-block;padding:10px 16px;background:#ef6c24;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Open People System</a></p>',
   ].join('');
-  return [{ json: { outcome: 'send', deliveryRecipient, confirmationRecipient, ccRecipients, eventKey: body.eventKey,
+  return [{ json: { outcome: 'send', mamDelivery: body.company === 'mam', deliveryRecipient, confirmationRecipient, ccRecipients, eventKey: body.eventKey,
     emailSubject: employeeDelivery ? `[MAM] Leave ${eventLabel}: ${body.leaveType}` : `[MAM] Leave ${eventLabel}: ${body.employeeName} — ${body.leaveType}`,
     emailHtml } }];
 } catch { return reject('exception'); }
