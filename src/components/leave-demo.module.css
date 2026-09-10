@@ -6939,3 +6939,25 @@
 .statusBalancePending { color: #745700; background: #fff2b3; border-color: #dfc650; white-space: normal; }
 
 .nextLeaveSimple + .nextLeaveSimple { border-top: 1px solid #d5dfdc; }
+
+.approvalDuration {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-variant-numeric: tabular-nums;
+}
+.factGrid .approvalDuration strong { font-size: 24px; line-height: 1.3; }
+.approvalDuration > span { font-size: 14px; color: #55655e; }
+.balanceCoverage {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #fff4d6;
+  color: #80520c;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.balanceCoverage[data-sufficient="true"] { background: #deeee5; color: #246b50; }
