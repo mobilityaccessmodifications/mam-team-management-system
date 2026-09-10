@@ -2117,7 +2117,14 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
   }
 
   const activeOwnRequests = myRequests.filter((request) => request.status !== "Cancelled");
-  const nextOwn = activeOwnRequests.find((request) => request.status === "Pending") ?? activeOwnRequests[0];
+  const pendingOwnRequests = activeOwnRequests.filter((request) => request.status === "Pending" || request.status === BALANCE_PENDING_STATUS);
+  const homeOwnRequests = pendingOwnRequests.length ? pendingOwnRequests : activeOwnRequests.slice(0, 1);
+  const ownLeaveCards = homeOwnRequests.map((request) => (
+    <button key={request.id} className={styles.nextLeaveSimple} type="button" onClick={() => onSelect(request.id, "requests")}>
+      <span><StatusPill status={request.status} /><strong>{request.leaveType}</strong><small>{request.dateLabel} · {formatDurationWithTime(request)}</small></span>
+      <ChevronRight size={17} />
+    </button>
+  ));
   const attentionRequests = canReview ? pending : requests.filter((request) => request.status === "Pending" && request.personId !== profile.id);
   const attentionTitle = canReview ? "Needs review" : "Pending leave";
   const recordSection: LeaveSection = canReview ? "approvals" : "requests";
@@ -2128,12 +2135,7 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
         {workSchedule}
         <section className={`${styles.panel} ${styles.myLeavePanel} ${styles.personalLeavePanel}`}>
           <PanelHeader title="My leave" action="Open my leave" onAction={() => onNavigate("leave")} />
-          {nextOwn ? (
-            <button className={styles.nextLeaveSimple} type="button" onClick={() => onSelect(nextOwn.id, "requests")}>
-              <span><StatusPill status={nextOwn.status} /><strong>{nextOwn.leaveType}</strong><small>{nextOwn.dateLabel} · {formatDurationWithTime(nextOwn)}</small></span>
-              <ChevronRight size={17} />
-            </button>
-          ) : <div className={styles.emptyState}><CalendarDays size={24} /><strong>No leave requests</strong></div>}
+          {ownLeaveCards.length ? ownLeaveCards : <div className={styles.emptyState}><CalendarDays size={24} /><strong>No leave requests</strong></div>}
         </section>
       </div>
     );
@@ -2153,7 +2155,7 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
 
         <section className={`${styles.panel} ${styles.myLeavePanel}`}>
           <PanelHeader title="My leave" action="Open my leave" onAction={() => onNavigate("leave")} />
-          {nextOwn ? <button className={styles.nextLeaveSimple} type="button" onClick={() => onSelect(nextOwn.id, "requests")}><span><StatusPill status={nextOwn.status} /><strong>{nextOwn.leaveType}</strong><small>{nextOwn.dateLabel} · {formatDurationWithTime(nextOwn)}</small></span><ChevronRight size={17} /></button> : <div className={styles.emptyState}><CalendarDays size={24} /><strong>No leave requests yet</strong></div>}
+          {ownLeaveCards.length ? ownLeaveCards : <div className={styles.emptyState}><CalendarDays size={24} /><strong>No leave requests yet</strong></div>}
         </section>
       </div>
     </div>

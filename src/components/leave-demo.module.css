@@ -6937,3 +6937,5 @@
   .formRow { grid-template-columns: minmax(0, 1fr); }
 }
 .statusBalancePending { color: #745700; background: #fff2b3; border-color: #dfc650; white-space: normal; }
+
+.nextLeaveSimple + .nextLeaveSimple { border-top: 1px solid #d5dfdc; }
