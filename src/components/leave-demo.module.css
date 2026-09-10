@@ -6960,3 +6960,7 @@
   line-height: 1.3;
 }
 .approvalDuration .balanceCoverage[data-sufficient="true"] { background: #deeee5; color: #246b50; }
+
+.viewMoreButton {
+  margin-top: 16px;
+}
