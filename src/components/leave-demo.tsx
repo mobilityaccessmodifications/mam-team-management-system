@@ -1,6 +1,6 @@
 "use client";
 
-import { approvalRequestHours } from "@/lib/leave-priority";
+import { approvalBalanceCoverage, approvalRequestHours } from "@/lib/leave-priority";
 
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 
@@ -2314,6 +2314,13 @@ function AttachmentList({ attachments }: { attachments: LeaveAttachment[] }) {
 }
 
 function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, onNote, onSelect, onDecision }: { leavePriority?: LeavePriorityWorkspace; onBalancesSaved: () => Promise<void>; pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: LeaveDecision) => void }) {
+  const person = leavePriority?.people.find((person) => person.personId === selected?.personId);
+  const coverage = selected ? approvalBalanceCoverage(person, selected.leaveType, approvalRequestHours(selected)) : null;
+  const annual = selected?.leaveType === "Annual leave";
+  const insufficient = annual && coverage === "Not enough balance";
+  const needsCheck = annual && coverage !== "Enough balance" && !insufficient;
+  const waiting = insufficient && selected?.status === BALANCE_PENDING_STATUS;
+  const approvalLabel = needsCheck ? "Check balance" : waiting ? "Waiting for balance" : insufficient ? "Approve pending balance" : "Approve";
   const showQueue = pending.length > 1 || !selected;
   return <div className={`${styles.approvalGrid} ${!selected ? styles.approvalGridEmpty : ""} ${!showQueue ? styles.approvalGridSingle : ""}`}>
     {showQueue ? <section className={`${styles.panel} ${styles.queue}`}><PanelHeader title="Requests" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} disabled={busy} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Nothing needs review</strong></div>}</section> : null}
@@ -2329,8 +2336,7 @@ function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, sele
         <label><span>Note <small>Required to decline</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} disabled={busy || readOnly} /></label>
         <div>
           <button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")} disabled={busy || readOnly}><XCircle size={16} /> Decline</button>
-          {selected.leaveType === "Annual leave" && selected.status === "Pending" ? <button className={styles.secondaryButton} type="button" onClick={() => onDecision(BALANCE_PENDING_STATUS)} disabled={busy || readOnly}>Approve pending balance</button> : null}
-          <button className={styles.approveButton} type="button" onClick={() => onDecision("Approved")} disabled={busy || readOnly}><CheckCircle2 size={16} /> {busy ? "Sending…" : selected.status === BALANCE_PENDING_STATUS ? "Balance confirmed · Approve" : "Approve"}</button>
+          <button className={styles.approveButton} type="button" onClick={() => onDecision(insufficient ? BALANCE_PENDING_STATUS : "Approved")} disabled={busy || readOnly || needsCheck || waiting}><CheckCircle2 size={16} /> {busy ? "Sending…" : approvalLabel}</button>
         </div>
       </div> : null}
     </section> : null}

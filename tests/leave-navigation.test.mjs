@@ -45,3 +45,26 @@ test('View more is available only for an authorised approvable request and opens
     if(count) { actions[0].props.onClick(); assert.deepEqual(calls,['second']); }
   }
 });
+
+test('annual approval has one balance-aware action and preserves conditional decisions', () => {
+  const lib = {exports:{}};
+  const compiled = ts.transpileModule(fs.readFileSync('src/lib/leave-priority.ts','utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  new Function('exports',compiled)(lib.exports);
+  const conditional = lib.exports.BALANCE_PENDING_STATUS;
+  const View = load('ApprovalsView', { ...lib.exports, styles:{approveButton:'approve'}, StatusPill:'status', CalendarDays:'icon', Clock3:'icon', ClipboardList:'icon', CheckCircle2:'icon', XCircle:'icon', ApprovalBalancePill:'pill', ApprovalLeaveBalances:'balances', AttachmentList:'attachments', SickEvidenceNotice:'evidence', ApprovalCalendar:'calendar', formatDuration:()=> '2 days', formatTimeRange:()=> '' });
+  for(const [balance,status,label,disabled,decision] of [
+    [15,'Pending','Approve',false,'Approved'],
+    [14.9999,'Pending','Approve pending balance',false,conditional],
+    [10,conditional,'Waiting for balance',true,null],
+    [15,conditional,'Approve',false,'Approved'],
+    [null,'Pending','Check balance',true,null],
+  ]) {
+    const calls=[];
+    const selected={id:'request',personId:'person',leaveType:'Annual leave',days:2,status};
+    const tree=View({selected,pending:[selected],leavePriority:{people:[{personId:'person',canViewBalance:true,hours:balance}]},attachmentsByRequestId:new Map(),busy:false,readOnly:false,onDecision:d=>calls.push(d)});
+    const actions=buttons(tree); assert.equal(actions.length,2);
+    const approve=actions.find(b=>b.props.className==='approve');
+    assert.equal(approve.props.children[2],label); assert.equal(Boolean(approve.props.disabled),disabled);
+    if(!disabled){approve.props.onClick();assert.deepEqual(calls,[decision]);}
+  }
+});
