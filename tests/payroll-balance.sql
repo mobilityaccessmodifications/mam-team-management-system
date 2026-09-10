@@ -16,12 +16,18 @@ values('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000
 select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
 select public.set_employee_annual_leave_balance('10000000-0000-4000-8000-000000000003',119.9999,current_date,false);
 select public.set_employee_sick_leave_balance('10000000-0000-4000-8000-000000000003',45.1234,current_date);
+insert into private.payroll_balance_imports(company_key,employee_name,annual_hours,sick_hours,as_of,source_file,source_sha256,match_status)
+values('mam','Unmatched Test Employee',10,20,current_date,'synthetic.xlsx',repeat('a',64),'unmatched');
+do $$begin
+  assert jsonb_array_length(public.get_leave_priority_workspace()->'payrollImports')=1, 'Admin can review all imported records';
+end$$;
 select set_config('test.uid','10000000-0000-4000-8000-000000000003',false);
 do $$declare w jsonb; begin
   w:=public.get_leave_priority_workspace();
   assert jsonb_array_length(w->'people')=1;
   assert (w->'people'->0->>'hours')::numeric=119.9999, 'Keep payroll precision';
   assert not (w->'people'->0->>'canViewSickBalance')::boolean;
+  assert jsonb_array_length(w->'payrollImports')=0, 'Staff cannot read the import register';
   assert w->'people'->0->>'sickHours' is null and w->'people'->0->>'sickAsOf' is null;
   begin
     perform public.set_employee_sick_leave_balance('10000000-0000-4000-8000-000000000003',10,current_date);
@@ -31,6 +37,7 @@ end$$;
 select set_config('test.uid','10000000-0000-4000-8000-000000000004',false);
 do $$declare w jsonb; begin
   w:=public.get_leave_priority_workspace();
+  assert jsonb_array_length(w->'payrollImports')=0, 'Managers cannot read the unscoped import register';
   assert not exists(select 1 from jsonb_array_elements(w->'people') p where p->>'personId'='10000000-0000-4000-8000-000000000003');
 end$$;
 select set_config('test.uid','10000000-0000-4000-8000-000000000002',false);
@@ -81,6 +88,7 @@ do $$declare r uuid; definition text; delivery record; retry record; begin
   assert not has_function_privilege('authenticated','private.leave_payroll_balance_sufficient(uuid)','EXECUTE');
   assert not has_table_privilege('authenticated','private.employee_sick_leave_balances','SELECT');
   assert not has_function_privilege('anon','public.set_employee_sick_leave_balance(uuid,numeric,date)','EXECUTE');
+  assert not has_table_privilege('authenticated','private.payroll_balance_imports','SELECT');
 end$$;
 select set_config('test.uid','10000000-0000-4000-8000-000000000003',false);
 do $$declare r uuid; begin
@@ -95,5 +103,6 @@ do $$declare w jsonb; begin
   w:=public.get_leave_priority_workspace('10000000-0000-4000-8000-000000000003');
   assert jsonb_array_length(w->'people')=1;
   assert w->'people'->0->>'sickHours' is null, 'Employee preview cannot expose sick balances';
+  assert jsonb_array_length(w->'payrollImports')=0, 'Employee preview cannot expose payroll imports';
 end$$;
 rollback;

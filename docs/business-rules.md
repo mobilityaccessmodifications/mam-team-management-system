@@ -60,6 +60,7 @@
 - Full-day request duration remains in days. A reviewer records the paid hours required for the reminder; the system does not invent a standard hours-per-day conversion. Timed requests may use their existing recorded hours. Recording reminder hours does not change payroll duration or deduct balances.
 - Sufficient balance does not automatically approve leave. The manager still reviews and makes the final decision. The reminder compares the individual request with the supplied balance; it does not reserve hours across competing requests or forecast accrual.
 - No live payroll sync is configured by this change. Payroll must supply refreshed balances for future accrual to be detected. The supplied snapshots are dated 10 September 2026; import and release require the project's production approval process.
+- The owner authorised the full release and import on 10 September. Every supplied payroll record is retained in a private administrator-only import register, including unmatched, inactive and company-mismatched rows. Only unambiguous active same-company matches update employee balances. Name comparison may ignore whitespace and punctuation; it must not guess nicknames, change a person's company, reactivate an employee or create a duplicate person. Imported snapshots/history reference the source record instead of attributing the operation to an impersonated portal account.
 
 ## Priority leave workflow — 7 September 2026
 

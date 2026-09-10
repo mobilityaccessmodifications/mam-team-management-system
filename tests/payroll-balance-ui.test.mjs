@@ -47,3 +47,13 @@ test('missing sick snapshot is not displayed as a zero balance', () => {
   assert.match(html, /Sick: Not supplied/);
   assert.doesNotMatch(html, /Sick: 0/);
 });
+
+test('administrator can review payroll rows that have no employee match', () => {
+  const html = renderToStaticMarkup(createElement(loaded.exports.LeavePriorityControls, {
+    workspace: { ...workspace([]), canManageBalances: true, payrollImports: [{ id: 'import', employeeName: 'Unmatched Test Employee', company: 'mam', annualHours: 10, sickHours: 20, asOf: '2026-09-10', status: 'unmatched', linkedName: null, sourceFile: 'synthetic.xlsx' }] },
+    busy: false, onRequest() {}, async onSaved() {},
+  }));
+  assert.match(html, /Payroll import · 1 records/);
+  assert.match(html, /Employee match required/);
+  assert.match(html, /Annual: 10 hours · Sick: 20 hours/);
+});
