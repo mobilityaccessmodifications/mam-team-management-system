@@ -618,3 +618,12 @@
   .modal select,
   .modal textarea { font-size: 16px; }
 }
+
+/* Shared People Hub page rhythm. */
+.workspace { gap: 20px; }
+.primaryAction, .secondaryAction { min-height: 40px; font-size: 13px; font-weight: 600; box-shadow: none; }
+.sheetViewport { border-radius: 12px; box-shadow: none; }
+.modal { border-radius: 14px; }
+.header, .tools { gap: 12px; }
+
+.accessDetails summary { cursor: pointer; padding: 12px 0; font-weight: 600; font-size: 13px; }

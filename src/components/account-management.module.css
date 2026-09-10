@@ -29,7 +29,7 @@
 
 .header h2 {
   margin: 0;
-  font-family: var(--font-display, sans-serif);
+  font-family: var(--font-geist-sans), sans-serif;
   font-size: clamp(28px, 4vw, 36px);
   font-weight: 600;
   letter-spacing: -0.025em;
@@ -1220,3 +1220,8 @@
   .actionMenuPopover .textButton { min-height: 48px; }
   .field input, .passwordInput { min-height: 48px; }
 }
+
+/* Shared People Hub page rhythm. */
+.workspace { gap: 20px; }
+.primaryButton, .secondaryButton { min-height: 40px; font-size: 13px; font-weight: 600; box-shadow: none; }
+.header { gap: 12px; }

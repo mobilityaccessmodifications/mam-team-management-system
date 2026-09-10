@@ -68,3 +68,12 @@ test('annual approval has one balance-aware action and preserves conditional dec
     if(!disabled){approve.props.onClick();assert.deepEqual(calls,[decision]);}
   }
 });
+
+test('approval calendar shows complete request weeks without six weeks of padding', () => {
+  const daysFor = load('getApprovalCalendarDays', { toIsoDate:d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` });
+  for(const [startDate,endDate,first,last,length] of [
+    ['2027-01-22','2027-01-25','2027-01-18','2027-01-31',14],
+    ['2026-09-11','2026-09-11','2026-09-07','2026-09-13',7],
+    ['2026-09-28','2026-10-09','2026-09-28','2026-10-11',14],
+  ]) { const days=daysFor({startDate,endDate}); assert.equal(days.length,length); assert.equal(days[0].iso,first); assert.equal(days.at(-1).iso,last); assert(days.some(d=>d.iso===startDate)); assert(days.some(d=>d.iso===endDate)); }
+});

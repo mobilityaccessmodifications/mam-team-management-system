@@ -340,8 +340,6 @@ function getApprovalCalendarDays(request: LeaveRequest) {
   const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const first = new Date(`${request.startDate}T12:00:00`);
   const last = new Date(`${request.endDate}T12:00:00`);
-  first.setDate(first.getDate() - 21);
-  last.setDate(last.getDate() + 21);
 
   const firstWeekday = first.getDay();
   first.setDate(first.getDate() - (firstWeekday === 0 ? 6 : firstWeekday - 1));
@@ -1873,6 +1871,7 @@ export function LeaveDemo({
 
       <div className={styles.workspace}>
         <header className={styles.topbar}>
+          <h1 className={styles.pageTitle}>{navItems.find((item) => item.id === activeView)?.label}</h1>
           <div className={styles.mobileBrand}><BrandMark compact /></div>
           <div className={styles.topActions}>
             {organisationState !== "live" ? (
@@ -1886,7 +1885,7 @@ export function LeaveDemo({
             {canPreviewEmployeeAccess ? <button className={styles.mobileProfileTrigger} type="button" onClick={() => { setProfilePickerQuery(""); setProfilePickerOpen(true); }} aria-label={`Change profile. ${previewProfile ? `Viewing ${previewProfile.name}` : "Super Admin"}`} title="Change profile"><span>{previewProfile?.initials ?? "SA"}</span><ChevronDown size={14} aria-hidden="true" /></button> : null}
             {isNonRosterAdminHrWorkspace ? (
               <span className={styles.demoStatus} title="This platform administrator is not an employee profile.">
-                <ShieldCheck aria-hidden="true" size={15} /> Platform administrator
+                <ShieldCheck aria-hidden="true" size={15} /> Admin
               </span>
             ) : <SelfProfileMenu
                 disabled={topbarProfileLoading || Boolean(selectedEmployeeProfileError)}
@@ -2046,14 +2045,16 @@ export function LeaveDemo({
               </p> : null}
               <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" defaultValue={nextAvailableLeaveDate()} required /></label><label><span>End date</span><input name="endDate" type="date" value={formEndDate} onChange={(event) => setFormEndDate(event.target.value)} required /></label></div>
               {formLeaveType === "Sick leave" ? <SickEvidenceNotice dueDate={sickEvidenceDeadline(formEndDate)} hasEvidence={false} /> : null}
-              <details className={styles.timeRange}><summary>Add times <small>Optional</small></summary><div className={styles.formRow}><label><span>Starts</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>Ends</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>First and last day only. Leave blank for full days.</p></details>
-              <label><span>Note for your reviewer <small>Optional</small></span><textarea name="employeeNote" rows={3} placeholder="Add only what your reviewer needs to decide." /></label>
+              <details className={styles.timeRange}><summary>Part-day leave</summary><div className={styles.formRow}><label><span>Starts</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>Ends</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>First and last day only.</p></details>
+              <details className={styles.requestExtras}><summary>Note & files</summary>
+              <label><span>Note</span><textarea name="employeeNote" rows={3} /></label>
               <label className={styles.attachmentField}>
                 <span>Supporting files <small>Optional</small></span>
                 <input className={styles.fileInput} name="attachments" type="file" accept={LEAVE_ATTACHMENT_ACCEPT} multiple disabled={isMutating} />
                 <small>PDF or image · up to 10 files, 5 MB each.</small>
               </label>
-              <div className={styles.privacyNote}><ShieldCheck size={17} /><span>Private to you, your approver and HR.</span></div>
+              <small className={styles.privacyNote}>Visible to your approver and HR.</small>
+              </details>
               {formError ? <p className={styles.formError} role="alert">{formError}</p> : null}
               <footer><button className={styles.secondaryButton} type="button" onClick={closeLeaveRequestForm} disabled={isMutating}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : "Send request"}</button></footer>
             </form>
@@ -2105,7 +2106,7 @@ function DirectoryLoading({
 }
 
 function StatusPill({ status }: { status: RequestStatus }) {
-  return <span className={`${styles.status} ${status === BALANCE_PENDING_STATUS ? styles.statusBalancePending : styles[`status${status}`]}`}><i />{status}</span>;
+  return <span className={`${styles.status} ${status === BALANCE_PENDING_STATUS ? styles.statusBalancePending : styles[`status${status}`]}`}><i />{status === BALANCE_PENDING_STATUS ? "Waiting for balance" : status}</span>;
 }
 
 function HomeView({ profile, requests, myRequests, pending, canReview, onNavigate, onSelect, isNonRosterSystemAdmin = false, workSchedule }: { profile: Profile; requests: LeaveRequest[]; myRequests: LeaveRequest[]; pending: LeaveRequest[]; canReview: boolean; onNavigate: (view: AppView, section?: LeaveSection) => void; onSelect: (id: string, section?: LeaveSection) => void; isNonRosterSystemAdmin?: boolean; workSchedule?: ReactNode }) {
@@ -2115,8 +2116,8 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
         {workSchedule}
         <section className={styles.panel}>
           <div className={styles.emptyState}>
-            <ShieldCheck size={24} />
-            <strong>Choose a profile or open People</strong>
+            {canReview && pending.length ? <button className={styles.primaryButton} type="button" onClick={() => onNavigate("leave", "approvals")}>Review leave ({pending.length})</button> : null}
+            <button className={styles.secondaryButton} type="button" onClick={() => onNavigate("people")}>Open People</button>
           </div>
         </section>
       </div>
@@ -2219,7 +2220,7 @@ function RequestsView({ profile, requests, allRequests, selected, filter, canRev
   return (
     <section className={styles.recordsWorkspace}>
       <div className={styles.viewToolbar}>
-        <div className={styles.filterTabs} role="group" aria-label="Leave request status">{filters.map((item) => <button aria-pressed={filter === item} className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => request.status === item).length}</span></button>)}</div>
+        <div className={styles.filterTabs} role="group" aria-label="Leave request status">{filters.map((item) => <button aria-pressed={filter === item} className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item === BALANCE_PENDING_STATUS ? "Waiting for balance" : item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => request.status === item).length}</span></button>)}</div>
       </div>
       <div className={`${styles.recordsGrid} ${isEmployee ? styles.employeeRecordsGrid : ""} ${!selected ? styles.recordsGridNoDetail : ""} ${mobileDetailDialogOpen ? styles.recordsGridMobileDetailOpen : ""}`}>
         <div className={styles.recordsTable} role="table" aria-label="Leave requests">
@@ -2259,7 +2260,7 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
     {showEmployee ? <>
       <header>
         <span className={styles.avatarOrange}>{request.initials}</span>
-        <span><h2 id={detailTitleId}>{request.employee}</h2><p>{request.team}</p></span>
+        <span><h2 id={detailTitleId}>{request.employee}</h2></span>
       </header>
       <StatusPill status={request.status} />
     </> : null}
@@ -2276,10 +2277,10 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
     {!hidePrivateDetails ? <AttachmentList attachments={attachments} /> : null}
     {!hidePrivateDetails && request.status !== "Declined" && request.status !== "Cancelled" ? <SickEvidenceNotice dueDate={request.evidenceDueDate} hasEvidence={attachments.length > 0} /> : null}
     {!hidePrivateDetails && canAddAttachments ? <section className={styles.attachmentUpload}>
-      <span>Add files</span>
+
       {attachments.length ? <p>{attachments.length} of {MAX_LEAVE_ATTACHMENTS} files</p> : null}
       <label className={styles.attachmentUploadButton} data-busy={busy ? "true" : "false"}>
-        <Upload aria-hidden="true" size={15} /> {busy ? "Uploading…" : "Add supporting files"}
+        <Upload aria-hidden="true" size={15} /> {busy ? "Uploading…" : "Add files"}
         <input
           className={styles.srOnly}
           type="file"
@@ -2293,7 +2294,7 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
           }}
         />
       </label>
-      <small>PDF or image · 5 MB each · not malware-scanned.</small>
+      <small>PDF or image · Max 5 MB</small>
     </section> : null}
     {canReview && request.canDecide ? <button className={`${styles.primaryButton} ${styles.viewMoreButton}`} type="button" disabled={busy} onClick={() => onViewMore(request.id)}>View more <ChevronRight size={16} aria-hidden="true" /></button> : null}
   </aside>;
@@ -2309,7 +2310,6 @@ function AttachmentList({ attachments }: { attachments: LeaveAttachment[] }) {
       <span><strong>{attachment.fileName}</strong><small>{formatFileSize(attachment.sizeBytes)} · Download</small></span>
       <ArrowUpRight aria-hidden="true" size={15} />
     </a>)}
-    <small><ShieldCheck aria-hidden="true" size={13} /> Private to the employee, approver and HR.</small>
   </section>;
 }
 
@@ -2328,17 +2328,17 @@ function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, sele
       <header className={styles.approvalHeader}><span className={styles.avatarOrange}>{selected.initials}</span><span><h2>{selected.employee}</h2></span><StatusPill status={selected.status} /></header>
       <div className={styles.factGrid}><article><CalendarDays size={17} /><span><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><span className={styles.approvalDuration}><strong>{formatDuration(selected)}</strong>{selected.hours == null && approvalRequestHours(selected) != null ? <span>{approvalRequestHours(selected)} hours</span> : null}<ApprovalBalancePill workspace={leavePriority} personId={selected.personId} leaveType={selected.leaveType} requiredHours={approvalRequestHours(selected)} /></span>{formatTimeRange(selected) ? <small>{formatTimeRange(selected)}</small> : null}</span></article><article><ClipboardList size={17} /><span><strong>{selected.leaveType}</strong></span></article></div>
       <ApprovalLeaveBalances key={selected.id} workspace={leavePriority} personId={selected.personId} requestId={selected.id} busy={busy || readOnly} onSaved={onBalancesSaved} />
-      {selected.employeeNote ? <div className={styles.privateNote}><span><ShieldCheck size={14} /> Employee note · private</span><p>{selected.employeeNote}</p></div> : null}
+      {selected.employeeNote ? <div className={styles.privateNote}><span>Note</span><p>{selected.employeeNote}</p></div> : null}
       <AttachmentList attachments={attachmentsByRequestId.get(selected.id) ?? []} />
       <SickEvidenceNotice dueDate={selected.evidenceDueDate} hasEvidence={(attachmentsByRequestId.get(selected.id)?.length ?? 0) > 0} />
-      <ApprovalCalendar selected={selected} requests={calendarRequests} checkIns={calendarCheckIns} />
       {selected.status === "Pending" || selected.status === BALANCE_PENDING_STATUS ? <div className={styles.decisionBox}>
-        <label><span>Note <small>Required to decline</small></span><textarea rows={3} value={note} onChange={(event) => onNote(event.target.value)} disabled={busy || readOnly} /></label>
+        <label><span>Note <small>Required to decline</small></span><textarea rows={2} value={note} onChange={(event) => onNote(event.target.value)} disabled={busy || readOnly} /></label>
         <div>
           <button className={styles.declineButton} type="button" onClick={() => onDecision("Declined")} disabled={busy || readOnly}><XCircle size={16} /> Decline</button>
           <button className={styles.approveButton} type="button" onClick={() => onDecision(insufficient ? BALANCE_PENDING_STATUS : "Approved")} disabled={busy || readOnly || needsCheck || waiting}><CheckCircle2 size={16} /> {busy ? "Sending…" : approvalLabel}</button>
         </div>
       </div> : null}
+      <ApprovalCalendar selected={selected} requests={calendarRequests} checkIns={calendarCheckIns} />
     </section> : null}
   </div>;
 }
@@ -2386,11 +2386,11 @@ function ApprovalCalendar({ selected, requests, checkIns }: { selected: LeaveReq
           </div>
         </div>
       </div>
-      <div className={styles.impactAgenda} aria-label="Direct calendar impact">
-        <article className={styles.reviewEventApplicant}><i>{selected.initials}</i><span><strong>{selected.employee}</strong><small>{selected.dateLabel} · This request</small></span></article>
+      {overlaps.length || impactedCheckIns.length ? <details className={styles.impactAgenda}>
+        <summary>Overlapping events ({overlaps.length + impactedCheckIns.length})</summary>
         {overlaps.map((request) => <article className={request.status === "Approved" ? styles.reviewEventApproved : styles.reviewEventPending} key={`impact:${request.id}`}><i>{request.initials}</i><span><strong>{request.employee}</strong><small>{request.dateLabel} · {request.status}</small></span></article>)}
         {impactedCheckIns.map((entry) => <article className={styles.reviewEventCheckIn} key={`impact:checkin:${entry.reminderId}`}><i>CI</i><span><strong>{entry.employee}</strong><small>{formatDateRange(entry.dueDate, entry.dueDate)} · {checkInMilestoneLabel(entry.milestone)}</small></span></article>)}
-      </div>
+      </details> : null}
     </section>
   );
 }

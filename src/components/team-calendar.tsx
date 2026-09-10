@@ -2,7 +2,7 @@
 
 import "@dayflow/core/dist/styles.components.css";
 
-import { CalendarDays, CheckCircle2, Clock3, Gift, Search, ShieldCheck, WalletCards, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, Gift, Search, WalletCards, X } from "lucide-react";
 import {
   DayFlowCalendar,
   ViewType,
@@ -189,7 +189,6 @@ function EventDetail({ event, onClose }: EventDetailContentProps) {
         <button type="button" onClick={onClose} aria-label="Close event details"><X size={18} /></button>
       </div>
       <div className={styles.eventDetailDate}><Clock3 size={16} /><span>{meta.dateLabel}</span></div>
-      <p><ShieldCheck size={15} />Private leave notes are not shown in the calendar.</p>
     </div>
   );
 }

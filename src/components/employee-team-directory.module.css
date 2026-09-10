@@ -222,3 +222,7 @@
   .detailGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detailItem:last-child { grid-column: 1 / -1; }
 }
+
+/* Shared People Hub page rhythm. */
+.directoryDesk { border-radius: 12px; box-shadow: none; }
+.header { gap: 12px; }

@@ -4,7 +4,6 @@ import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 
 import {
   AlertCircle,
-  CalendarCheck2,
   Laptop,
   LoaderCircle,
   Pencil,
@@ -202,7 +201,6 @@ function ReturnDeviceModal({
           <span>Hardware returned on <b aria-hidden="true">*</b></span>
           <input ref={returnedOnRef} name="returnedOn" type="date" defaultValue={melbourneToday()} max={melbourneToday()} required />
         </label>
-        <p className={styles.modalHelp}><CalendarCheck2 size={15} /> Once recorded, this device no longer blocks end employment for this employee.</p>
         {error ? <p className={styles.modalError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         <footer>
           <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
@@ -254,7 +252,7 @@ function RemoveDeviceModal({
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close remove device"><X size={17} /></button>
       </header>
       <div className={styles.modalBody}>
-        <p>Use this only for a duplicate or mistaken record. For an employee leaving or handing hardware back, record a hardware return instead so the custody timeline stays complete.</p>
+        <p>Remove duplicate or incorrect records only. Otherwise, use Return device.</p>
         {error ? <p className={styles.modalError} role="alert"><AlertCircle size={15} />{error}</p> : null}
       </div>
       <footer className={styles.modalFooter}>

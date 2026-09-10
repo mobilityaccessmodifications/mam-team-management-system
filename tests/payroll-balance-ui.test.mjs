@@ -69,7 +69,7 @@ test('administrator can review payroll rows that have no employee match', () => 
     workspace: { ...workspace([]), canManageBalances: true, payrollImports: [{ id: 'import', employeeName: 'Unmatched Test Employee', company: 'mam', annualHours: 10, sickHours: 20, asOf: '2026-09-10', status: 'unmatched', linkedName: null, sourceFile: 'synthetic.xlsx' }] },
     busy: false, onRequest() {}, async onSaved() {},
   }));
-  assert.match(html, /Payroll import · 1 records/);
+  assert.match(html, /Payroll records · 1/);
   assert.match(html, /Employee match required/);
   assert.match(html, /Annual: 10 hours · Sick: 20 hours/);
 });

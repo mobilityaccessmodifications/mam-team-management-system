@@ -417,3 +417,7 @@
   .modal input,
   .modal select { font-size: 16px; }
 }
+
+/* Shared People Hub page rhythm. */
+.primaryAction, .secondaryAction, .dangerAction { min-height: 40px; font-size: 13px; font-weight: 600; box-shadow: none; }
+.modal { border-radius: 14px; }

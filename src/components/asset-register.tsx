@@ -6,8 +6,6 @@ import { MobileRegisterTools } from "@/components/ui/mobile-register-tools";
 import {
   AlertCircle,
   ArrowDownUp,
-  Barcode,
-  CalendarCheck2,
   ClipboardClock,
   Download,
   Filter,
@@ -307,7 +305,6 @@ function AssetLabelModal({
         <div><span>MAM IT asset</span><strong>{asset.assetCode}</strong><small>{assetTypeLabel(asset.assetType)} · {asset.assignedTo?.fullName ?? "Assignment required"}</small></div>
         <BarcodePreview value={asset.barcodeValue} />
       </div>
-      <p className={styles.labelPrivacy}>The barcode contains the asset number only.</p>
       {actionError ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{actionError}</p> : null}
       <footer>
         <button className={styles.secondaryAction} type="button" onClick={onAddAnother ?? onClose}>{onAddAnother ? "Add another" : "Close"}</button>
@@ -403,7 +400,6 @@ function AddDeviceModal({
           <label><span>Model <small>Optional</small></span><input name="model" maxLength={120} placeholder="MacBook Air, iPhone 16…" /></label>
         </div>
         <label><span>Serial number <small>Optional</small></span><input name="serialNumber" maxLength={128} placeholder="Enter the manufacturer serial number" /></label>
-        <p className={styles.formHelp}><Barcode size={15} /> An asset number and barcode are created when you save.</p>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         <footer>
           <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
@@ -478,7 +474,6 @@ function ChangeDeviceOwnerModal({
           <span>Assigned to <b aria-hidden="true">*</b></span>
           <EmployeePicker assignees={assignees} defaultValue={asset.assignedTo?.personId ?? ""} disabled={!assignees.length} inputRef={assigneeRef} />
         </label>
-        <p className={styles.formHelp}><Pencil size={15} /> Ownership history is kept.</p>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         <footer>
           <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
@@ -547,7 +542,6 @@ function ReturnDeviceModal({
           <span>Hardware returned on <b aria-hidden="true">*</b></span>
           <input ref={returnedOnRef} name="returnedOn" type="date" defaultValue={melbourneToday()} max={melbourneToday()} required />
         </label>
-        <p className={styles.formHelp}><CalendarCheck2 size={15} /> Device and ownership history are kept.</p>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         <footer>
           <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
@@ -656,7 +650,7 @@ function RemoveDeviceModal({
         <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close remove device"><X size={19} /></button>
       </header>
       <div className={styles.modalBody}>
-        <p>Use this only for a duplicate or mistaken record. For an employee leaving or handing hardware back, record a hardware return instead so the custody timeline stays complete.</p>
+        <p>Remove duplicate or incorrect records only. Otherwise, use Return device.</p>
         <div className={styles.currentCustodian}><UsersRound size={16} /><div><span>Current owner</span><strong>{asset.assignedTo ? custodianDescription(asset) : "No current owner"}</strong></div></div>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
       </div>

@@ -468,3 +468,9 @@
     font-size: 16px;
   }
 }
+
+/* Shared People Hub page rhythm. */
+.workspace { gap: 20px; }
+.primaryAction { min-height: 40px; font-size: 13px; font-weight: 600; box-shadow: none; }
+.workflowDesk, .checkInDesk { border-radius: 12px; box-shadow: none; }
+.modal { border-radius: 14px; }

@@ -37,7 +37,7 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
   const [error, setError] = useState("");
   if (!workspace || (!workspace.people.length && !workspace.payrollImports?.length)) return null;
   return <details className={styles.leaveBalances}>
-    <summary>Leave balances{workspace.people.some((p) => p.canSubmit) ? " & team requests" : ""}</summary>
+    <summary>Balances</summary>
     {workspace.people.map((person) => <div className={styles.leaveBalanceRow} key={person.personId}>
       <div><strong>{person.name}</strong>{person.canViewBalance ? <small>{person.paidLeave ? `Annual: ${person.hours == null ? "Not supplied" : `${balanceHours(person.hours)} hours`}` : "Unpaid leave only"}</small> : null}
         {person.canViewSickBalance ? <small>Sick: {person.sickHours == null ? "Not supplied" : `${balanceHours(person.sickHours)} hours`}</small> : null}
@@ -70,8 +70,7 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
       {workspace.canManageBalances && person.paidLeave && person.accrualPolicy !== undefined ? <LeaveAccrualControls person={person} busy={busy || saving} onSaved={onSaved} /> : null}
     </div>)}
     {workspace.canManageBalances && workspace.payrollImports?.length ? <details className={styles.payrollImportRegister}>
-      <summary>Payroll import · {workspace.payrollImports.length} records</summary>
-      <p>Original payroll balances in hours. Unlinked records are retained here until the employee match is resolved.</p>
+      <summary>Payroll records · {workspace.payrollImports.length}</summary>
       {workspace.payrollImports.map((row) => <div className={styles.leaveBalanceRow} key={row.id}>
         <div><strong>{row.employeeName}</strong><small>{row.company === "mam" ? "MAM" : "Equipsy"} · As of {leaveDateLabel(row.asOf)}</small>
           <small>Annual: {row.annualHours} hours · Sick: {row.sickHours} hours</small>

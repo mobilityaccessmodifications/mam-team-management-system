@@ -69,3 +69,15 @@
   .modal > header, .modal form, .dialogBody { padding-right: 16px; padding-left: 16px; }
   .modal input { font-size: 16px; }
 }
+
+/* Shared People Hub page rhythm. */
+.workspace { gap: 20px; }
+.primaryAction, .secondaryAction, .dangerAction { min-height: 40px; font-size: 13px; font-weight: 600; box-shadow: none; }
+.keyPanel { border-radius: 12px; box-shadow: none; }
+.modal { border-radius: 14px; }
+.header { gap: 12px; }
+
+.guide { display: block; background: var(--surface-raised); padding: 16px; }
+.guide summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.guide[open] summary { margin-bottom: 16px; }
+.guideGrid { margin-bottom: 12px; }
