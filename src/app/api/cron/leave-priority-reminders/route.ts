@@ -29,7 +29,8 @@ export async function GET(request: Request) {
   // Bounded groups avoid overloading the provider while keeping the daily run short.
   for (let offset = 0; offset < data.length; offset += 10) {
     await Promise.all(data.slice(offset, offset + 10).map(async (r) => {
-      if (!r.manager_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.manager_email)) { failed++; return; }
+      if (typeof r.manager_email !== "string" || !r.manager_email || r.manager_email.split(",").length > 10
+        || !r.manager_email.split(",").every((email: string) => email.length <= 254 && /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(email))) { failed++; return; }
       const eventKey = `leave:${r.source_id}:${r.event}:${createHash("sha256").update(r.delivery_id).digest("hex").slice(0,24)}`;
       try {
         const result = await fetch(url, { method: "POST", redirect: "error", signal: AbortSignal.timeout(15_000),

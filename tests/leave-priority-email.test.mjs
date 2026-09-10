@@ -18,7 +18,7 @@ test('missing employee email never blocks the manager submission notice',()=>{
   assert.equal(out.outcome,'send');assert.equal(out.deliveryRecipient,'manager@example.test');
 });
 test('multiline textarea notes are accepted and HTML remains escaped',()=>{
-  const out=run('leave-approved',{status:'Approved',employeeNote:'First line\nSecond line',managerNote:'Approved\r\n<unsafe>\ttext'});
+  const out=run('leave-declined',{status:'Declined',employeeNote:'First line\nSecond line',managerNote:'Approved\r\n<unsafe>\ttext'});
   assert.equal(out.outcome,'send');
   assert(out.emailHtml.includes('&lt;unsafe&gt;'));
   assert(!out.emailHtml.includes('<unsafe>'));
@@ -29,7 +29,7 @@ for(const event of ['leave-approved','leave-declined','leave-conditionally-appro
   const out=run(event,{status:event==='leave-conditionally-approved'?'Approved – pending leave balance':event==='leave-approved'?'Approved':'Declined',managerNote:'<unsafe>'});
   assert.equal(out.deliveryRecipient,'employee@example.test');
   assert.equal(out.ccRecipients,event==='leave-approved'?'hr@mobilityaccess.com.au,accounts@mobilityaccess.com.au':'hr@mobilityaccess.com.au');
-  assert(!out.emailHtml.includes('<unsafe>')); assert(out.emailHtml.includes('&lt;unsafe&gt;'));
+  assert(!out.emailHtml.includes('<unsafe>')); assert.equal(out.emailHtml.includes('&lt;unsafe&gt;'),event!=='leave-approved');
 });
 test('Accounts receives only approved cancellation',()=>{
   assert.equal(run('leave-cancelled',{wasApproved:true}).ccRecipients,'hr@mobilityaccess.com.au,accounts@mobilityaccess.com.au');
@@ -52,4 +52,25 @@ test('conditional approval reminder asks the manager to finalise the balance',()
 });
 test('reminder cannot re-enable HR CC through the payload',()=>{
   assert.equal(run('leave-reminder',{ccEmails:['hr@mobilityaccess.com.au']}).ccRecipients,'');
+});
+test('manager requests notify every group reviewer and do not duplicate HR in CC',()=>{
+  const group='reviewer1@example.test,reviewer2@example.test,hr@mobilityaccess.com.au';
+  const out=run('leave-submitted',{managerEmail:group});
+  assert.equal(out.outcome,'send');
+  assert.equal(out.confirmationRecipient,group);
+  assert.equal(out.deliveryRecipient,group+',employee@example.test');
+  assert.equal(out.ccRecipients,'');
+  assert.equal(run('leave-reminder',{managerEmail:group}).deliveryRecipient,group);
+  assert.equal(run('leave-cancelled',{managerEmail:group,wasApproved:true}).ccRecipients,'accounts@mobilityaccess.com.au');
+});
+test('group recipients reject partial, malformed and header-injected lists',()=>{
+  for(const value of ['a@example.test,','a@example.test,broken','a@example.test;other@example.test','a@example.test,\r\nb@example.test']) {
+    assert.equal(run('leave-submitted',{managerEmail:value}).outcome,'rejected');
+  }
+});
+
+test('preserves deployed MAM Accounts note minimisation and delivery flag',()=>{
+  const out=run('leave-approved',{status:'Approved',managerNote:'Private approval note'});
+  assert.equal(out.mamDelivery,true);
+  assert(!out.emailHtml.includes('Private approval note'));
 });
