@@ -79,7 +79,7 @@ export async function GET() {
     return new Response(contents, {
       headers: {
         "Cache-Control": "private, no-store, max-age=0",
-        "Content-Disposition": `attachment; filename="Safer People Employees ${filenameDate()}.csv"`,
+        "Content-Disposition": `attachment; filename="People Hub Employees ${filenameDate()}.csv"`,
         "Content-Type": "text/csv; charset=utf-8",
         "Pragma": "no-cache",
         "X-Content-Type-Options": "nosniff",

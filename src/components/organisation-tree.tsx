@@ -290,7 +290,7 @@ function buildOrganisationPdfDocument(
     <main class="page">
       <div class="controls"><button type="button" onclick="window.print()">Print / Save as PDF</button></div>
       <header class="masthead">
-        <div><span class="eyebrow">Safer People System</span><h1>${escapedTitle}</h1></div>
+        <div><span class="eyebrow">People Hub</span><h1>${escapedTitle}</h1></div>
         <div class="meta">${escapedScope}<br />${personCount} ${personCount === 1 ? "person" : "people"} · Generated ${escapeExportMarkup(generatedOn)}<div class="legend"><span><i aria-hidden="true"></i>MAM</span><span><i aria-hidden="true" data-company="equipsy"></i>Equipsy</span></div></div>
       </header>
       <section class="chart" aria-label="Organisation chart">
