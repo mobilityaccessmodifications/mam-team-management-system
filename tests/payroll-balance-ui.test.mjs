@@ -10,12 +10,19 @@ const loaded = { exports: {} };
 const code = ts.transpileModule(fs.readFileSync('src/components/leave-priority-controls.tsx', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-new Function('require', 'module', 'exports', code)((id) => {
+function resolveImport(id) {
   if (id === '@/app/leave/actions') return {};
   if (id === '@/lib/leave-priority') return { leaveDateLabel: (date) => date, melbourneToday: () => '2026-09-10' };
+  if (id === '@/components/leave-accrual-controls') {
+    const component = { exports: {} };
+    const js = ts.transpileModule(fs.readFileSync('src/components/leave-accrual-controls.tsx', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+    new Function('require', 'module', 'exports', js)(resolveImport, component, component.exports);
+    return component.exports;
+  }
   if (id.endsWith('.module.css')) return { default: {} };
   return require(id);
-}, loaded, loaded.exports);
+}
+new Function('require', 'module', 'exports', code)(resolveImport, loaded, loaded.exports);
 const person = { personId: 'employee', name: 'Test Employee', canSubmit: false, paidLeave: true, canViewBalance: true, hours: 60, asOf: '2026-09-10', isExample: false };
 const workspace = (people, requests = []) => ({ people, requests, canManageBalances: false, pendingBalanceCalendarIds: [] });
 
@@ -56,4 +63,24 @@ test('administrator can review payroll rows that have no employee match', () => 
   assert.match(html, /Payroll import · 1 records/);
   assert.match(html, /Employee match required/);
   assert.match(html, /Annual: 10 hours · Sick: 20 hours/);
+});
+
+
+test('current accrual and review hold are visible without exposing staff sick balance', () => {
+  const p = { ...person, hours: 61, accrualStatus: 'needs_review', annualPayrollDate: '2026-09-10' };
+  const html = renderToStaticMarkup(createElement(loaded.exports.LeavePriorityControls, {
+    workspace: workspace([p]), busy: false, onRequest() {}, async onSaved() {},
+  }));
+  assert.match(html, /Payroll reconciliation needed/);
+  assert.doesNotMatch(html, /Personal\/carer|Save confirmed hours|Accrual settings/);
+});
+
+test('actual administrator gets policy and audited day reconciliation controls', () => {
+  const p = { ...person, accrualStatus: 'current', accrualPolicy: { weeklyHours: 38, annualWeeks: 4, personalWeeks: 2, enabled: true, shiftworker: false } };
+  const html = renderToStaticMarkup(createElement(loaded.exports.LeavePriorityControls, {
+    workspace: { ...workspace([p]), canManageBalances: true }, busy: false, onRequest() {}, async onSaved() {},
+  }));
+  assert.match(html, /38 ordinary hours\/week/);
+  assert.match(html, /Save confirmed hours/);
+  assert.match(html, /Changes apply from today/);
 });

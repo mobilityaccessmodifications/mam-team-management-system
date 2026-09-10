@@ -13,6 +13,16 @@ export type LeaveBalancePerson = {
   canViewSickBalance?: boolean;
   sickHours?: number | null;
   sickAsOf?: string | null;
+  annualPayrollHours?: number | null;
+  annualPayrollDate?: string | null;
+  sickPayrollHours?: number | null;
+  sickPayrollDate?: string | null;
+  accrualStatus?: "current" | "needs_review" | "not_configured";
+  accrualReviewDate?: string | null;
+  accrualPolicy?: {
+    weeklyHours: number; annualWeeks: number; personalWeeks: number;
+    shiftworker: boolean; enabled: boolean;
+  } | null;
 };
 export type LeavePriorityWorkspace = {
   people: LeaveBalancePerson[];

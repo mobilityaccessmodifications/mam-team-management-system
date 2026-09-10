@@ -52,7 +52,11 @@
 12. What credential handover and forced-password-change process is required when an administrator creates or resets an account?
 13. Payroll balances are supplied as dated snapshots. The owner confirmed on 10 September that the supplied MAM and Equipsy workbooks use hours. Reconcile each employee within their company before importing; unmatched names require confirmation. The existing temporary 80-hour fallback remains only until an authoritative balance is supplied and never triggers an accrual reminder or payroll deduction.
 
-## Payroll balance visibility and reminders — 10 September 2026 (pending release)
+## Automatic accrual — 10 September 2026
+
+The owner confirmed 38 ordinary hours per week and automatic future accrual. The initial rollout covers 24 active Full Time payroll employees; Casual and inactive profiles do not accrue. [Accrual rules and operation](leave-accrual.md) describe the verified Fair Work sources, effective-dated policy, completed-day calculation, payroll cut-offs and administrator reconciliation of actual leave hours. The earlier refreshed-payroll-only approach below is superseded for configured employees. Staff/manager balance permissions and one-time manager reminders remain in force. All 28 payroll identities are confirmed and linked, with directory company membership preserved.
+
+## Payroll balance visibility and reminders — 10 September 2026 (released)
 
 - Staff see their own annual leave balance. Active team leaders with database Manager permission see annual and sick balances for their scoped employees, including employees whose pending requests they are authorised to review. Staff cannot retrieve sick balances. System Admin retains its existing administration capability; an employee preview does not reveal sick balances.
 - The approval page shows the selected employee's annual and authorised sick balance with each snapshot date. Only System Admin updates payroll balances; updates retain an audit history and four decimal places of hours.

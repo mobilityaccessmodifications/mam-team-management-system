@@ -979,6 +979,49 @@ export async function saveLeaveBalanceRequiredHours(requestId: string, hours: nu
   return { ok: true };
 }
 
+export async function saveLeaveAccrualPolicy(personId: string, input: {
+  weeklyHours: number; annualWeeks: number; personalWeeks: number;
+  shiftworker: boolean; enabled: boolean; note: string;
+}) {
+  const supabase = await requireLeaveSession();
+  if (![input.weeklyHours, input.annualWeeks, input.personalWeeks].every(Number.isFinite)
+    || input.weeklyHours <= 0 || input.weeklyHours > 38
+    || input.annualWeeks < (input.shiftworker ? 5 : 4) || input.annualWeeks > 52
+    || input.personalWeeks < 2 || input.personalWeeks > 52
+    || typeof input.shiftworker !== "boolean" || typeof input.enabled !== "boolean"
+    || typeof input.note !== "string" || !input.note.trim() || input.note.length > 1000) {
+    return { ok: false, message: "Enter ordinary hours, valid entitlements and a policy note." };
+  }
+  const { error } = await supabase.rpc("set_employee_leave_accrual_policy", {
+    p_person_id: selectedPersonId(personId), p_weekly_hours: input.weeklyHours,
+    p_annual_weeks: input.annualWeeks, p_personal_weeks: input.personalWeeks,
+    p_shiftworker: input.shiftworker, p_enabled: input.enabled, p_note: input.note.trim(),
+  });
+  if (error) return { ok: false, message: "Policy could not be saved. Check administrator access and employment type; first activation needs opening payroll balances covering yesterday." };
+  revalidatePath("/");
+  return { ok: true };
+}
+
+export async function saveLeaveAccrualDay(personId: string, input: {
+  date: string; annualEligible: number; personalEligible: number;
+  annualTaken: number; personalTaken: number; note: string;
+}) {
+  const supabase = await requireLeaveSession();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)
+    || ![input.annualEligible, input.personalEligible, input.annualTaken, input.personalTaken].every((n) => Number.isFinite(n) && n >= 0 && n <= 24)
+    || typeof input.note !== "string" || !input.note.trim() || input.note.length > 1000) {
+    return { ok: false, message: "Enter a completed date, confirmed hours and a reconciliation note." };
+  }
+  const { error } = await supabase.rpc("review_employee_leave_accrual_day", {
+    p_person_id: selectedPersonId(personId), p_date: input.date,
+    p_annual_eligible: input.annualEligible, p_personal_eligible: input.personalEligible,
+    p_annual_taken: input.annualTaken, p_personal_taken: input.personalTaken, p_note: input.note.trim(),
+  });
+  if (error) return { ok: false, message: "Hours could not be saved. Check administrator access and the completed date." };
+  revalidatePath("/");
+  return { ok: true };
+}
+
 export async function submitLeaveRequest(input: SubmitLeaveInput) {
   const checked = normaliseLeaveInput(input);
   const supabase = await requireLeaveSession();

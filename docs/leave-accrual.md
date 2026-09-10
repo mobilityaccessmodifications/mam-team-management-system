@@ -1,0 +1,40 @@
+# Automatic leave accrual — 38-hour rollout
+
+The owner requested automatic future annual and sick leave accrual on 10 September 2026, superseding the earlier refreshed-payroll-only direction. The existing 10 September payroll snapshots remain the opening balances. All 28 payroll identities have been confirmed and linked; directory company membership is authoritative for portal scope, while the original source workbook remains intact.
+
+## Verified rules
+
+Checked on 10 September 2026 against the Fair Work Ombudsman:
+
+- [Annual leave](https://www.fairwork.gov.au/leave/annual-leave): permanent full-time and part-time employees receive four ordinary working weeks each year, with progressive accrual and carryover. Qualifying NES shiftworkers receive an additional week. More generous applicable instruments must be retained.
+- [Paid sick and carer's leave](https://www.fairwork.gov.au/leave/sick-and-carers-leave/paid-sick-and-carers-leave): the shared personal/carer's entitlement accrues at 1/26 of ordinary hours (two ordinary working weeks annually); part-time accrual is proportional. Do not give sick leave and carer's leave separate allowances.
+- [Annual leave fact sheet](https://www.fairwork.gov.au/tools-and-resources/fact-sheets/minimum-workplace-entitlements/annual-leave): paid leave and qualifying service continue accrual; ordinary unpaid leave and overtime are not eligible ordinary service hours. Community service and qualifying stand-down periods require the applicable service treatment.
+- [Workers compensation](https://www.fairwork.gov.au/tools-and-resources/library/k600454_annual-leave-sick-leave-during-workers-compensation): jurisdiction-specific exceptions must be resolved rather than classifying all such absences as ordinary unpaid leave.
+
+The arithmetic kernel takes separately confirmed eligible ordinary hours for annual and personal leave. Four weeks means an annual increment of eligible hours × 4 / 52. Personal leave uses eligible hours × 2 / 52. It never infers a 38-hour week, an 8-hour day, award coverage or contractor status from an ABN. It rejects missing classification/coverage and below-minimum permanent entitlements. Calculations retain precision; incremental posting must preserve fractional remainders.
+
+## Confirmed rollout and calculation
+
+The owner confirmed Full Time classification for the previously unclassified payroll employee and a 38-hour ordinary week. The rollout therefore enables the 24 active Full Time employees with authoritative payroll snapshots; the two Casual and two inactive payroll profiles do not receive new accrual policies. New employees and Part Time employees require an administrator policy with their confirmed ordinary hours. The initial NES base is four annual weeks and two personal/carer's weeks, with an administrator setting for qualifying shiftworkers and higher applicable benefits.
+
+The 10 September 2026 snapshot is treated as the closing balance for that date, with accrual starting 11 September. Ordinary weekly hours are spread equally over saved working weekdays, or Monday–Friday when no weekdays are recorded. Only completed Melbourne dates accrue. Under the default five-day schedule each eligible day contributes 7.6 / 13 annual hours and 7.6 / 26 personal hours. Paid public holidays remain ordinary service; there is no deduction merely because the day is a public holiday. Accrual carries forward without an annual reset. Overtime is never added.
+
+Policy history is append-only and effective-dated. Administrator changes apply from today, or the future initial start if later, so the rollout seed cannot override a pre-activation edit. A change to a permanent employment classification pauses automatic accrual until new hours are confirmed; completed days awaiting confirmation are flagged and can be credited through audited day reviews. Explicitly non-accruing periods cannot receive accrual credits. Deactivation also stops future accrual without rewriting already-earned history. Schedule changes create a new prospective policy. Reactivation does not silently re-enable an old entitlement.
+
+## Absences and reconciliation
+
+An approved absence after either payroll baseline pauses calculation at that date until the administrator confirms eligible ordinary hours and actual annual/personal leave taken for the day, or supplies a newer payroll snapshot covering the absence. No blanket 8-hour deduction, guessed break deduction or invented public-holiday calendar is used. This is a deliberate reconciliation boundary: routine service accrues automatically; leave consumption and exceptional unpaid/compensation periods need confirmed payroll hours. Unrecorded absences must be recorded by HR to affect balances.
+
+The day form supports different eligible hours for each entitlement, actual paid leave usage and a required audit note. Sick and carer's usage share the personal balance. An ordinary unpaid day has zero eligible hours; paid leave and qualifying service retain eligible ordinary hours. A changed/cancelled approved request invalidates the prior day review using a fingerprint and pauses further calculation until re-reviewed. Multiple requests on one day are reviewed together, avoiding double deductions. Future leave is not treated as already taken. Only System Admin can set policies or reconcile hours, through independently authorised database functions.
+
+## Source reconciliation, visibility and scheduler
+
+First activation requires authoritative opening balances covering the preceding day. If a subsequently edited snapshot leaves an uncovered interval before the first policy, calculation pauses until payroll supplies a closing balance covering that interval; unknown past usage is never silently skipped. The original payroll balance tables and import register stay unchanged by calculation. Current balances are derived from each entitlement's own payroll date plus subsequent exact-precision accrual less confirmed usage. Fresh snapshots automatically supersede all earlier increments and deductions. Annual and personal payroll dates can differ. Either entitlement accrues independently when only its own authoritative snapshot is available; a missing entitlement remains unknown. Calculations are rounded only at display output; sufficient-balance checks use the unrounded numeric amount. The payroll editing form defaults to the original snapshot rather than the calculated amount/date.
+
+`/api/cron/leave-accrual` records append-only calculation checkpoints daily at 16:35 UTC (02:35/03:35 Melbourne). It requires the existing CRON_SECRET and the database RPC is service-role-only. Checkpoints are idempotent, and reads recompute against current source inputs, so a delayed scheduled run does not stale displayed balances. No real test mail is needed for release verification.
+
+The existing authenticated projection and employee-preview permissions are preserved. Staff receive only their annual amount and a neutral reconciliation status; scoped managers receive personal leave too. Only the real non-preview System Admin receives configuration and review dates. A reconciliation hold prevents the one-time sufficient-balance reminder; otherwise it uses the current accrued balance. No final leave approval is automatic.
+
+## Verification and release
+
+Synthetic tests cover 38-hour and part-time calculations, higher/shiftworker entitlements, invalid inputs, fractional precision, policy changes, deactivation, paid/unpaid days, cancellation invalidation, new payroll cut-offs, repeated checkpoints, private-table/RPC access and staff sick-balance minimisation. The existing payroll/priority/reminder SQL regressions must continue to pass. GitHub review and the configured main-branch Vercel deployment remain the release path. Legal sources were verified on the date above; future legislative changes require a reviewed policy update, not an unverified automatic rule change.

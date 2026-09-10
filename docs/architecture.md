@@ -137,3 +137,8 @@ The pending payroll-balance migration adds private sick balance snapshots/histor
 - Production: MAM-managed accounts, the privately imported roster and approved policies only.
 
 Production secrets are never copied into Development or Preview for convenience.
+
+
+## Automatic accrual projection
+
+`20260910023719_automatic_leave_accrual` adds private RLS-enabled policy, day-review and immutable calculation-checkpoint tables. `private.calculate_employee_leave_accrual` derives balances from payroll snapshots and effective-dated inputs without rewriting source balances. The existing leave projection is retained as a revoked internal wrapper; its permitted annual/personal fields are augmented with current values. Administrator policy/day-review RPCs reauthorise every mutation. The bearer-gated daily `/api/cron/leave-accrual` calls a service-only checkpoint RPC; live reads recompute to avoid stale results after payroll/leave changes. See [operating rules](leave-accrual.md), including the explicit pause for unconfirmed absence hours and changed request fingerprints.
