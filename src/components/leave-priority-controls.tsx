@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { saveAnnualLeaveBalance } from "@/app/leave/actions";
+import { saveAnnualLeaveBalance, saveSickLeaveBalance, saveLeaveBalanceRequiredHours } from "@/app/leave/actions";
 import { leaveDateLabel, melbourneToday, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import styles from "@/components/leave-demo.module.css";
 
@@ -10,35 +10,75 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
   onRequest: (personId: string) => void; onSaved: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
+  const [balanceType, setBalanceType] = useState<"annual" | "sick">("annual");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   if (!workspace?.people.length) return null;
   return <details className={styles.leaveBalances}>
-    <summary>Annual leave balances{workspace.people.some((p) => p.canSubmit) ? " & team requests" : ""}</summary>
+    <summary>Leave balances{workspace.people.some((p) => p.canSubmit) ? " & team requests" : ""}</summary>
     {workspace.people.map((person) => <div className={styles.leaveBalanceRow} key={person.personId}>
-      <div><strong>{person.name}</strong>{person.canViewBalance ? <small>{person.paidLeave ? `${person.hours ?? 0} hours${person.asOf ? ` · As of ${leaveDateLabel(person.asOf)}` : ""}` : "Unpaid leave only"}</small> : null}</div>
+      <div><strong>{person.name}</strong>{person.canViewBalance ? <small>{person.paidLeave ? `Annual: ${person.hours ?? 0} hours${person.asOf ? ` · As of ${leaveDateLabel(person.asOf)}` : ""}` : "Unpaid leave only"}</small> : null}
+        {person.canViewSickBalance ? <small>Sick: {person.sickHours == null ? "Not supplied" : `${person.sickHours} hours`}{person.sickAsOf ? ` · As of ${leaveDateLabel(person.sickAsOf)}` : ""}</small> : null}
+      </div>
       <div className={styles.leaveBalanceActions}>
         {person.canSubmit ? <button type="button" className={styles.secondaryButton} disabled={busy || saving} onClick={() => onRequest(person.personId)}>Request leave</button> : null}
-        {person.paidLeave && person.canViewBalance && workspace.canManageBalances ? <button type="button" className={styles.secondaryButton} disabled={busy || saving} onClick={() => { setEditing(editing === person.personId ? null : person.personId); setError(""); }}>Edit balance</button> : null}
+        {person.paidLeave && person.canViewBalance && workspace.canManageBalances ? <button type="button" className={styles.secondaryButton} disabled={busy || saving} onClick={() => { setEditing(person.personId); setBalanceType("annual"); setError(""); }}>Edit annual</button> : null}
+        {person.canViewSickBalance && workspace.canManageBalances ? <button type="button" className={styles.secondaryButton} disabled={busy || saving} onClick={() => { setEditing(person.personId); setBalanceType("sick"); setError(""); }}>Edit sick</button> : null}
       </div>
-      {editing === person.personId && person.canViewBalance && workspace.canManageBalances ? <form className={styles.leaveBalanceEditor} onSubmit={async (event) => {
+      {editing === person.personId && person.canViewBalance && workspace.canManageBalances ? <form key={balanceType} className={styles.leaveBalanceEditor} onSubmit={async (event) => {
         event.preventDefault(); if (saving) return;
         const data = new FormData(event.currentTarget);
         setSaving(true); setError("");
         try {
-          const result = await saveAnnualLeaveBalance(person.personId, Number(data.get("hours")), String(data.get("asOf")), false);
+          const result = balanceType === "annual"
+            ? await saveAnnualLeaveBalance(person.personId, Number(data.get("hours")), String(data.get("asOf")), false)
+            : await saveSickLeaveBalance(person.personId, Number(data.get("hours")), String(data.get("asOf")));
           if (!result.ok) { setError(result.message ?? "Balance could not be saved."); return; }
           await onSaved(); setEditing(null);
         } catch { setError("Balance could not be saved. Please try again."); }
         finally { setSaving(false); }
       }}>
-        <label>Hours<input name="hours" type="number" step="0.01" min="-10000" max="100000" defaultValue={person.hours ?? 0} required /></label>
-        <label>Balance date<input name="asOf" type="date" defaultValue={person.asOf ?? melbourneToday()} max={melbourneToday()} required /></label>
+        <label>{balanceType === "annual" ? "Annual" : "Sick"} payroll hours<input name="hours" type="number" step="0.0001" min="-10000" max="100000" defaultValue={(balanceType === "annual" ? person.hours : person.sickHours) ?? ""} required /></label>
+        <label>Balance date<input name="asOf" type="date" defaultValue={(balanceType === "annual" ? person.asOf : person.sickAsOf) ?? melbourneToday()} max={melbourneToday()} required /></label>
         <button className={styles.primaryButton} disabled={saving} type="submit">{saving ? "Saving…" : "Save"}</button>
+        <button className={styles.secondaryButton} disabled={saving} type="button" onClick={() => setEditing(null)}>Cancel</button>
         {error ? <p role="alert" className={styles.formError}>{error}</p> : null}
       </form> : null}
     </div>)}
   </details>;
+}
+
+export function ApprovalLeaveBalances({ workspace, personId, requestId, busy, onSaved }: {
+  workspace?: LeavePriorityWorkspace; personId?: string; requestId: string; busy: boolean; onSaved: () => Promise<void>;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const person = workspace?.people.find((p) => p.personId === personId);
+  const request = workspace?.requests.find((r) => r.id === requestId);
+  return <section className={styles.approvalBalances} aria-label="Employee leave balances">
+    <strong>Leave balances</strong>
+    {person?.canViewBalance ? <p>Annual: {person.hours == null ? "Not supplied" : `${person.hours} hours`}{person.asOf ? ` · As of ${leaveDateLabel(person.asOf)}` : ""}</p> : <p>Annual balance unavailable.</p>}
+    {person?.canViewSickBalance ? <p>Sick: {person.sickHours == null ? "Not supplied" : `${person.sickHours} hours`}{person.sickAsOf ? ` · As of ${leaveDateLabel(person.sickAsOf)}` : ""}</p> : null}
+    {request?.pendingBalance ? <>
+      <p>{request.balanceSufficient ? "The updated payroll balance covers the recorded hours. Review and approve when ready." : "Routine reminders are paused. A payroll balance update covering the required hours will trigger one manager reminder."}</p>
+      <form className={styles.leaveBalanceEditor} onSubmit={async (event) => {
+        event.preventDefault(); if (saving || busy) return;
+        const hours = Number(new FormData(event.currentTarget).get("requiredHours"));
+        setSaving(true); setError("");
+        try {
+          const result = await saveLeaveBalanceRequiredHours(requestId, hours);
+          if (!result.ok) { setError(result.message ?? "Required hours could not be saved."); return; }
+          await onSaved();
+        } catch { setError("Required hours could not be saved. Please try again."); }
+        finally { setSaving(false); }
+      }}>
+        <label>Paid hours required<input name="requiredHours" type="number" min="0.0001" max="100000" step="0.0001" defaultValue={request.requiredHours ?? ""} required disabled={busy || saving} /></label>
+        <button className={styles.secondaryButton} type="submit" disabled={busy || saving}>{saving ? "Saving…" : "Save required hours"}</button>
+        {request.requiredHours == null ? <p>Confirm the paid hours for this request to enable the balance reminder.</p> : null}
+        {error ? <p role="alert" className={styles.formError}>{error}</p> : null}
+      </form>
+    </> : null}
+  </section>;
 }
 
 export function SickEvidenceNotice({ dueDate, hasEvidence }: { dueDate?: string; hasEvidence: boolean }) {

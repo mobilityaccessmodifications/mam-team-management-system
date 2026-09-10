@@ -130,6 +130,8 @@ The former shared fake-profile/fake-leave tables and their public mutation funct
 
 ## Environments
 
+The pending payroll-balance migration adds private sick balance snapshots/history and extends the authenticated leave-priority projection. Annual balances are visible to self and authorised team reviewers; sick fields are null for employees. A private sufficiency predicate gates one durable conditional-approval reminder per request, using refreshed payroll hours and reviewer-confirmed required hours. Existing daily reminders exclude conditional approvals, including previously queued rows. The existing notification event and recipient routing are reused; no n8n workflow change or automatic payroll accrual is introduced.
+
 - Development: local application with a development Supabase project or branch.
 - Preview: Vercel branch deployment with isolated, non-production Supabase data.
 - Production: MAM-managed accounts, the privately imported roster and approved policies only.

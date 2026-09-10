@@ -10,11 +10,14 @@ export type LeaveBalancePerson = {
   hours: number | null;
   asOf: string | null;
   isExample: boolean;
+  canViewSickBalance?: boolean;
+  sickHours?: number | null;
+  sickAsOf?: string | null;
 };
 export type LeavePriorityWorkspace = {
   people: LeaveBalancePerson[];
   canManageBalances: boolean;
-  requests: Array<{ id: string; pendingBalance: boolean; evidenceDueDate: string | null; canAttach: boolean }>;
+  requests: Array<{ id: string; pendingBalance: boolean; evidenceDueDate: string | null; canAttach: boolean; requiredHours?: number | null; balanceSufficient?: boolean }>;
   pendingBalanceCalendarIds: string[];
 };
 
