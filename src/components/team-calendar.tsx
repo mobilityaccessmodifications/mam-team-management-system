@@ -27,6 +27,11 @@ import type { BirthdayCalendarEntry, CheckInCalendarEntry, SubscriptionReviewCal
 import styles from "@/components/team-calendar.module.css";
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
+import {
+  activateDayFlowEventFromKeyboard,
+  focusDayFlowEventFromTarget,
+  makeDayFlowEventsAccessible,
+} from "@/lib/dayflow-event-accessibility";
 import { BALANCE_PENDING_STATUS } from "@/lib/leave-priority";
 
 type CalendarLeaveRequest = {
@@ -224,6 +229,7 @@ function MobileEventDetail({ draftEvent, isOpen, onClose }: MobileEventProps) {
 
 function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews, reviewOnly, loading }: TeamCalendarProps) {
   const year = new Date().getFullYear();
+  const calendarFrameRef = useRef<HTMLDivElement>(null);
   const [visibleYears, setVisibleYears] = useState([year - 1, year, year + 1]);
   const events = useMemo(() => buildEvents(birthdays, checkIns, requests, subscriptionReviews, visibleYears), [birthdays, checkIns, requests, subscriptionReviews, visibleYears]);
   // Keep the calendar instance stable while its event data syncs. Recreating it
@@ -266,6 +272,15 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
       if (calendarAppRef.current === calendar.app) calendarAppRef.current = null;
     };
   }, [calendar.app]);
+  useEffect(() => {
+    const frame = calendarFrameRef.current;
+    if (!frame) return;
+    const refreshEventSemantics = () => makeDayFlowEventsAccessible(frame);
+    refreshEventSemantics();
+    const observer = new MutationObserver(refreshEventSemantics);
+    observer.observe(frame, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
   const customSearch = useCallback(({ keyword, events: items }: { keyword: string; events: CalendarSearchEvent[] }) => {
     const query = keyword.trim().toLowerCase();
     return query ? items.filter((event) => `${event.title} ${event.description ?? ""}`.toLowerCase().includes(query)) : items;
@@ -273,7 +288,15 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
 
   return (
     <section className={styles.calendarSection} aria-label={reviewOnly ? "Subscription review calendar" : "Team calendar"}>
-      <div className={styles.calendarFrame} aria-busy={loading}>
+      <div
+        className={styles.calendarFrame}
+        aria-busy={loading}
+        ref={calendarFrameRef}
+        onPointerDownCapture={(event) => focusDayFlowEventFromTarget(event.target)}
+        onKeyDownCapture={(event) => {
+          if (activateDayFlowEventFromKeyboard(event.target, event.key)) event.preventDefault();
+        }}
+      >
         <DayFlowCalendar
           calendar={calendar}
           eventDetailContent={(props) => <EventDetail {...props} />}
