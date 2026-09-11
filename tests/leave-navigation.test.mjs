@@ -69,6 +69,24 @@ test('annual approval has one balance-aware action and preserves conditional dec
   }
 });
 
+test('approval selection reset keys are unique and scoped to the selected request', () => {
+  const lib = {exports:{}};
+  const compiled = ts.transpileModule(fs.readFileSync('src/lib/leave-priority.ts','utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  new Function('exports',compiled)(lib.exports);
+  const View = load('ApprovalsView', { ...lib.exports, styles:{}, StatusPill:'status', CalendarDays:'icon', Clock3:'icon', ClipboardList:'icon', CheckCircle2:'icon', XCircle:'icon', ApprovalBalancePill:'pill', ApprovalLeaveBalances:'balances', AttachmentList:()=>null, SickEvidenceNotice:()=>null, ApprovalCalendar:'calendar', formatDuration:()=> '2 days', formatTimeRange:()=> '' });
+  const resetKeys = (id) => {
+    const selected = {id,personId:'person',employee:'Employee',initials:'E',leaveType:'Annual leave',dateLabel:'12–13 Oct',days:2,status:'Pending'};
+    const tree = View({selected,pending:[selected],leavePriority:{people:[{personId:'person',canViewBalance:true,hours:15}]},attachmentsByRequestId:new Map(),calendarRequests:[],calendarCheckIns:[],busy:false,readOnly:false,note:'',onBalancesSaved:async()=>{},onNote:()=>{},onSelect:()=>{},onDecision:()=>{}});
+    const record = tree.props.children.find((child) => child?.type === 'section');
+    return record.props.children
+      .filter((child) => child?.type === 'balances' || child?.type === 'calendar')
+      .map((child) => child.key);
+  };
+
+  assert.deepEqual(resetKeys('request-one'), ['balances:request-one', 'calendar:request-one']);
+  assert.deepEqual(resetKeys('request-two'), ['balances:request-two', 'calendar:request-two']);
+});
+
 test('approval calendar shows complete request weeks without six weeks of padding', () => {
   const daysFor = load('getApprovalCalendarDays', { toIsoDate:d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` });
   for(const [startDate,endDate,first,last,length] of [
