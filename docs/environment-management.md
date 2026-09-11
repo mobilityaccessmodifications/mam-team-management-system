@@ -23,6 +23,16 @@ NEXT_PUBLIC_APP_URL
 
 The values change by environment; the names and code do not.
 
+## Disposable local E2E guard
+
+`MAM_SANDBOX_E2E=true` is reserved for a disposable local browser-test process.
+It requires loopback application and Supabase origins plus local publishable and
+server keys. Startup fails closed if any n8n webhook, cron, analytics,
+SharePoint resource-link, Supabase Management API or n8n operator credential is
+present. While the flag is active, server-side `fetch` accepts loopback URLs
+only. This guard supplements a sanitised process environment and browser-level
+network interception; it is not a Development, Preview or Production setting.
+
 ## Storage rules
 
 - `.env.example`: committed names and safe explanations only.
