@@ -77,3 +77,38 @@ test('approval calendar shows complete request weeks without six weeks of paddin
     ['2026-09-28','2026-10-09','2026-09-28','2026-10-11',14],
   ]) { const days=daysFor({startDate,endDate}); assert.equal(days.length,length); assert.equal(days[0].iso,first); assert.equal(days.at(-1).iso,last); assert(days.some(d=>d.iso===startDate)); assert(days.some(d=>d.iso===endDate)); }
 });
+
+test('expanded approval calendar includes three weeks either side across year and leap-day boundaries', () => {
+  const daysFor = load('getApprovalCalendarDays', { toIsoDate:d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` });
+  for (const [startDate,endDate,first,last] of [
+    ['2027-01-22','2027-01-25','2026-12-28','2027-02-21'],
+    ['2028-02-29','2028-02-29','2028-02-07','2028-03-26'],
+  ]) {
+    const compact = daysFor({startDate,endDate});
+    const expanded = daysFor({startDate,endDate}, true);
+    assert.equal(expanded.length, compact.length + 42);
+    assert.equal(expanded[0].iso, first);
+    assert.equal(expanded.at(-1).iso, last);
+    assert.deepEqual(expanded.slice(21,-21), compact);
+  }
+});
+
+test('calendar toggle expands and collapses the same calendar even without overlapping events', () => {
+  let expanded = false;
+  const Calendar = load('ApprovalCalendar', {
+    useState: () => [expanded, value => { expanded = value; }], useId: () => 'calendar',
+    styles: {}, getApprovalCalendarDays: (_, value) => value ? [{iso:'2026-12-28'}, {iso:'2027-02-21'}] : [{iso:'2027-01-18'}, {iso:'2027-01-31'}],
+    formatDateRange: (start,end) => `${start}–${end}`, formatTimeRange: () => '', checkInMilestoneLabel: () => '',
+  });
+  const props = {selected:{id:'request',startDate:'2027-01-22',endDate:'2027-01-25'},requests:[],checkIns:[]};
+  for (const [label, expected] of [['Expand calendar',false],['Collapse calendar',true],['Expand calendar',false]]) {
+    const tree = Calendar(props);
+    const action = buttons(tree)[0];
+    assert.equal(action.props.children,label);
+    assert.equal(action.props['aria-expanded'],expected);
+    assert.equal(action.props['aria-controls'],'calendar');
+    const viewport = tree.props.children.find(child => child?.props?.id === 'calendar');
+    assert.match(viewport.props.children.props['aria-label'], expected ? /2026-12-28–2027-02-21/ : /2027-01-18–2027-01-31/);
+    action.props.onClick();
+  }
+});

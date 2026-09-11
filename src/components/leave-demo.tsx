@@ -336,10 +336,15 @@ function scrollPageToTop() {
   window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
 }
 
-function getApprovalCalendarDays(request: LeaveRequest) {
+function getApprovalCalendarDays(request: LeaveRequest, expanded = false) {
   const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const first = new Date(`${request.startDate}T12:00:00`);
   const last = new Date(`${request.endDate}T12:00:00`);
+
+  if (expanded) {
+    first.setDate(first.getDate() - 21);
+    last.setDate(last.getDate() + 21);
+  }
 
   const firstWeekday = first.getDay();
   first.setDate(first.getDate() - (firstWeekday === 0 ? 6 : firstWeekday - 1));
@@ -357,20 +362,6 @@ function getApprovalCalendarDays(request: LeaveRequest) {
       isWeekend: current.getDay() === 0 || current.getDay() === 6,
     };
   });
-}
-
-function requestsOverlap(first: LeaveRequest, second: LeaveRequest) {
-  if (first.endDate < second.startDate || second.endDate < first.startDate) return false;
-
-  const sharedStart = first.startDate > second.startDate ? first.startDate : second.startDate;
-  const sharedEnd = first.endDate < second.endDate ? first.endDate : second.endDate;
-  if (sharedStart !== sharedEnd) return true;
-
-  const firstIsPartial = first.startDate === first.endDate && first.startTime && first.endTime;
-  const secondIsPartial = second.startDate === second.endDate && second.startTime && second.endTime;
-  if (!firstIsPartial || !secondIsPartial) return true;
-
-  return first.startTime! < second.endTime! && second.startTime! < first.endTime!;
 }
 
 function checkInMilestoneLabel(milestone: CheckInCalendarEntry["milestone"]) {
@@ -2334,6 +2325,7 @@ function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, sele
     {showQueue ? <section className={`${styles.panel} ${styles.queue}`}><PanelHeader title="Requests" />{pending.length ? pending.map((request) => <button className={selectedId === request.id ? styles.queueActive : ""} type="button" onClick={() => onSelect(request.id)} disabled={busy} key={request.id}><span className={styles.avatarSoft}>{request.initials}</span><span><strong>{request.employee}</strong><small>{request.leaveType} · {request.dateLabel}</small></span><ChevronRight size={16} /></button>) : <div className={styles.emptyState}><CheckCircle2 size={25} /><strong>Nothing needs review</strong></div>}</section> : null}
     {selected ? <section className={`${styles.panel} ${styles.approvalRecord}`}>
       <header className={styles.approvalHeader}><span className={styles.avatarOrange}>{selected.initials}</span><span><h2>{selected.employee}</h2></span><StatusPill status={selected.status} /></header>
+      <strong className={styles.requestDetailsHeading}>Request details</strong>
       <div className={styles.factGrid}><article><CalendarDays size={17} /><span><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><span className={styles.approvalDuration}><strong>{formatDuration(selected)}</strong>{selected.hours == null && approvalRequestHours(selected) != null ? <span>{approvalRequestHours(selected)} hours</span> : null}<ApprovalBalancePill workspace={leavePriority} personId={selected.personId} leaveType={selected.leaveType} requiredHours={approvalRequestHours(selected)} /></span>{formatTimeRange(selected) ? <small>{formatTimeRange(selected)}</small> : null}</span></article><article><ClipboardList size={17} /><span><strong>{selected.leaveType}</strong></span></article></div>
       <ApprovalLeaveBalances key={selected.id} workspace={leavePriority} personId={selected.personId} requestId={selected.id} busy={busy || readOnly} onSaved={onBalancesSaved} />
       {selected.employeeNote ? <div className={styles.privateNote}><span>Note</span><p>{selected.employeeNote}</p></div> : null}
@@ -2346,19 +2338,19 @@ function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, sele
           <button className={styles.approveButton} type="button" onClick={() => onDecision(insufficient ? BALANCE_PENDING_STATUS : "Approved")} disabled={busy || readOnly || needsCheck || waiting}><CheckCircle2 size={16} /> {busy ? "Sending…" : approvalLabel}</button>
         </div>
       </div> : null}
-      <ApprovalCalendar selected={selected} requests={calendarRequests} checkIns={calendarCheckIns} />
+      <ApprovalCalendar key={selected.id} selected={selected} requests={calendarRequests} checkIns={calendarCheckIns} />
     </section> : null}
   </div>;
 }
 
 function ApprovalCalendar({ selected, requests, checkIns }: { selected: LeaveRequest; requests: LeaveRequest[]; checkIns: CheckInCalendarEntry[] }) {
-  const days = getApprovalCalendarDays(selected);
+  const [expanded, setExpanded] = useState(false);
+  const calendarId = useId();
+  const days = getApprovalCalendarDays(selected, expanded);
   const rangeStart = days[0].iso;
   const rangeEnd = days[days.length - 1].iso;
   const teamLeave = requests.filter((request) => request.id !== selected.id && request.personId !== selected.personId && request.team === selected.team && request.status !== "Declined" && request.status !== "Cancelled" && request.endDate >= rangeStart && request.startDate <= rangeEnd);
   const rangeCheckIns = checkIns.filter((entry) => entry.dueDate >= rangeStart && entry.dueDate <= rangeEnd);
-  const overlaps = teamLeave.filter((request) => requestsOverlap(selected, request));
-  const impactedCheckIns = rangeCheckIns.filter((entry) => entry.dueDate >= selected.startDate && entry.dueDate <= selected.endDate);
 
   return (
     <section className={styles.calendarImpact} aria-label="Team calendar">
@@ -2368,7 +2360,7 @@ function ApprovalCalendar({ selected, requests, checkIns }: { selected: LeaveReq
         <span><i className={styles.legendPending} />Pending leave</span>
         <span><i className={styles.legendCheckIn} />Check-in</span>
       </div>
-      <div className={styles.reviewCalendarViewport} tabIndex={0} aria-label="Scrollable team calendar comparison">
+      <div id={calendarId} role="region" className={styles.reviewCalendarViewport} tabIndex={0} aria-label="Scrollable team calendar comparison">
         <div className={styles.reviewCalendar} role="grid" aria-label={`Team calendar from ${formatDateRange(rangeStart, rangeEnd)}`}>
           <div className={styles.reviewCalendarWeek} role="row">
             {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((weekday) => <span role="columnheader" key={weekday}>{weekday}</span>)}
@@ -2378,27 +2370,21 @@ function ApprovalCalendar({ selected, requests, checkIns }: { selected: LeaveReq
               const isRequestedDay = day.iso >= selected.startDate && day.iso <= selected.endDate;
               const otherLeave = teamLeave.filter((request) => day.iso >= request.startDate && day.iso <= request.endDate);
               const dayCheckIns = rangeCheckIns.filter((entry) => entry.dueDate === day.iso);
-              const visibleOtherLeave = otherLeave.slice(0, 2);
-              const visibleCheckIns = dayCheckIns.slice(0, 2);
-              const hiddenCount = Math.max(0, otherLeave.length - visibleOtherLeave.length) + Math.max(0, dayCheckIns.length - visibleCheckIns.length);
               return (
                 <div className={`${styles.reviewCalendarDay} ${day.isWeekend ? styles.reviewCalendarWeekend : ""} ${isRequestedDay ? styles.reviewCalendarRequestedDay : ""}`} role="gridcell" key={day.iso}>
                   <time dateTime={day.iso}><b>{day.day}</b>{day.day === 1 || index === 0 ? <span>{day.month}</span> : null}</time>
                   {isRequestedDay ? <article className={styles.reviewEventApplicant}><i>{selected.initials}</i><span><strong>{selected.employee}</strong><small>{formatTimeRange(selected) || "This request"}</small></span></article> : null}
-                  {visibleOtherLeave.map((request) => <article className={request.status === "Approved" ? styles.reviewEventApproved : styles.reviewEventPending} key={request.id}><i>{request.initials}</i><span><strong>{request.employee}</strong><small>{formatTimeRange(request) || `${request.status} leave`}</small></span></article>)}
-                  {visibleCheckIns.map((entry) => <article className={styles.reviewEventCheckIn} key={`checkin:${entry.reminderId}`}><i>CI</i><span><strong>{entry.employee}</strong><small>{checkInMilestoneLabel(entry.milestone)}{entry.sequence === "final" ? " · final reminder" : ""}</small></span></article>)}
-                  {hiddenCount ? <span className={styles.reviewMoreLeave}>+{hiddenCount} more</span> : null}
+                  {otherLeave.map((request) => <article className={request.status === "Approved" ? styles.reviewEventApproved : styles.reviewEventPending} key={request.id}><i>{request.initials}</i><span><strong>{request.employee}</strong><small>{formatTimeRange(request) || `${request.status} leave`}</small></span></article>)}
+                  {dayCheckIns.map((entry) => <article className={styles.reviewEventCheckIn} key={`checkin:${entry.reminderId}`}><i>CI</i><span><strong>{entry.employee}</strong><small>{checkInMilestoneLabel(entry.milestone)}{entry.sequence === "final" ? " · final reminder" : ""}</small></span></article>)}
                 </div>
               );
             })}
           </div>
         </div>
       </div>
-      {overlaps.length || impactedCheckIns.length ? <details className={styles.impactAgenda}>
-        <summary>Overlapping events ({overlaps.length + impactedCheckIns.length})</summary>
-        {overlaps.map((request) => <article className={request.status === "Approved" ? styles.reviewEventApproved : styles.reviewEventPending} key={`impact:${request.id}`}><i>{request.initials}</i><span><strong>{request.employee}</strong><small>{request.dateLabel} · {request.status}</small></span></article>)}
-        {impactedCheckIns.map((entry) => <article className={styles.reviewEventCheckIn} key={`impact:checkin:${entry.reminderId}`}><i>CI</i><span><strong>{entry.employee}</strong><small>{formatDateRange(entry.dueDate, entry.dueDate)} · {checkInMilestoneLabel(entry.milestone)}</small></span></article>)}
-      </details> : null}
+      <button className={styles.calendarExpandButton} type="button" aria-expanded={expanded} aria-controls={calendarId} onClick={() => setExpanded(!expanded)}>
+        {expanded ? "Collapse calendar" : "Expand calendar"}
+      </button>
     </section>
   );
 }
