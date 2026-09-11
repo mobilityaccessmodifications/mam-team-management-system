@@ -47,3 +47,10 @@ jobs:
           -f supabase/migrations/20260908015416_security_notification_outbox_and_grant_audit.sql
           -f tests/security-remediation.sql
           -f tests/leave-email-balances.sql
+
+      - name: Test reviewer balance permissions in disposable database
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres reviewer_balance_test
+          psql -h localhost -U postgres -d reviewer_balance_test -v ON_ERROR_STOP=1 -f tests/reviewer-balance-access.sql
