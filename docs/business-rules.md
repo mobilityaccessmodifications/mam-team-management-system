@@ -124,3 +124,7 @@ Approval duration display uses 7.5 hours per full day (confirmed 10 September 20
 Submission emails show requested hours, the current accrued balance, and the balance remaining if that request is approved. Full days use 7.5 hours; an explicit hourly request takes precedence. Values are captured when the request is submitted, so retries use the same figures. Missing, example, or review-held balances show “Check balance”.
 
 Annual leave balances can appear in the employee and reviewer copies. Sick/carer’s leave submission emails are split: only reviewers (including HR) receive the balance; the employee receives a separate confirmation. Each copy has a stable delivery key, and the outbox completes only when every required copy is acknowledged. Existing queued legacy emails retain their original delivery contract. Approval/cancellation emails do not subtract the requested hours again.
+
+### Reviewer balance visibility (11 September 2026)
+
+Every active, currently authorised reviewer of a pending request may see that applicant’s annual and sick leave balances, regardless of the reviewer’s account role. This also applies when System Admin previews the reviewer’s employee workspace. The current request assignment remains authoritative; revoked assignments, inactive accounts and unrelated employees do not gain access. Existing manager visibility and administrator-only balance editing remain unchanged.
