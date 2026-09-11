@@ -25,3 +25,9 @@ The owner requested a simpler interface across every page: direct actions, minim
 Verification uses synthetic approval, account, directory, Home and sign-in fixtures. Desktop and phone layouts were inspected; the production build and unit tests cover the full application.
 
 No authorization, record visibility, payroll calculation, notification or persistence changes. Required labels, input constraints, error recovery, destructive consequences, focus handling and accessible names remain part of the interface.
+
+## Follow-up layout corrections
+
+Restore the pre-redesign Home content and work-schedule presentation, retaining every pending personal leave request. Leave balances and team requests are expanded by default with the complete heading. The Apply for leave action shares the status-filter row instead of reserving a row above it. Calendar uses the entire available workspace, with navigation and the top bar retaining their natural heights; DayFlow’s wrapper and calendar both fill that space.
+
+Verified with synthetic people at 1274 × 963 and 390 × 844: the calendar meets the right and bottom viewport edges, Leave has no horizontal page overflow, and Home retains both pending personal requests.

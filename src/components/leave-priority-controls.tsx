@@ -36,8 +36,8 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   if (!workspace || (!workspace.people.length && !workspace.payrollImports?.length)) return null;
-  return <details className={styles.leaveBalances}>
-    <summary>Balances</summary>
+  return <details className={styles.leaveBalances} open>
+    <summary>Leave balances{workspace.people.some((p) => p.canSubmit) ? " & team requests" : ""}</summary>
     {workspace.people.map((person) => <div className={styles.leaveBalanceRow} key={person.personId}>
       <div><strong>{person.name}</strong>{person.canViewBalance ? <small>{person.paidLeave ? `Annual: ${person.hours == null ? "Not supplied" : `${balanceHours(person.hours)} hours`}` : "Unpaid leave only"}</small> : null}
         {person.canViewSickBalance ? <small>Sick: {person.sickHours == null ? "Not supplied" : `${balanceHours(person.sickHours)} hours`}</small> : null}

@@ -7020,3 +7020,26 @@
   .decisionBox > div { width: 100%; }
   .decisionBox > div button { flex: 1; min-height: 44px; }
 }
+
+/* Keep the request action beside the filter row instead of reserving a row. */
+.leaveHeader, .requestToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.leaveHeader { flex-wrap: wrap; }
+.leaveHeader:empty { display: none; }
+.requestToolbar > .viewToolbar { flex: 1; min-width: 0; margin: 0; }
+.dashboard .emptyState { min-height: 152px; }
+.dashboard .emptyState > svg { width: 42px; height: 42px; padding: 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-muted); }
+
+/* Calendar owns the remaining viewport; header/nav take only their actual size. */
+.calendarShell { height: 100dvh; min-height: 0; overflow: hidden; }
+.calendarWorkspace { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.calendarWorkspace > .topbar { flex: 0 0 auto; }
+.main.calendarMain { width: 100%; max-width: none; min-height: 0; margin: 0; padding: 0; flex: 1; display: flex; flex-direction: column; }
+@media (max-width: 900px) {
+  .calendarShell { display: flex; flex-direction: column; }
+  .calendarShell > .sidebar { flex: 0 0 auto; }
+  .calendarWorkspace { flex: 1; height: auto; min-height: 0; }
+}
+@media (max-width: 680px) {
+  .requestToolbar { gap: 8px; }
+  .requestToolbar > .applyForLeaveButton { width: auto; padding-inline: 12px; }
+}
