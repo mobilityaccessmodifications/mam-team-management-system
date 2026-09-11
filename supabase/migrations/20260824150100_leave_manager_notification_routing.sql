@@ -1,5 +1,9 @@
 begin;
 
+-- This migration originally shared version 20260824150000 with the preceding
+-- directory filter. Supabase records one migration per version, so keep this
+-- change on its own version while preserving its original ordering.
+
 -- Leave approval assignments and notification recipients are different
 -- concerns. Approval grants may nominate a global reviewer, but the email
 -- for a newly submitted request must go to the employee's nearest active

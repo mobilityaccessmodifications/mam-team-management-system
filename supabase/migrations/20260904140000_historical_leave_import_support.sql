@@ -274,7 +274,12 @@ $$;
 comment on function public.list_leave_workspace_requests() is
   'Returns authorised leave records using a stable employee identity, including read-only history for retained archived profiles.';
 
-create or replace function public.list_leave_calendar_entries()
+-- The historical projection removes the stable person_id OUT column from the
+-- preceding function contract. PostgreSQL cannot change a table-returning
+-- function's OUT row type with CREATE OR REPLACE, so recreate it explicitly.
+drop function public.list_leave_calendar_entries();
+
+create function public.list_leave_calendar_entries()
 returns table (
   id uuid,
   employee_name text,

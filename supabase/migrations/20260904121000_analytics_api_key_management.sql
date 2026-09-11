@@ -1,5 +1,10 @@
 begin;
 
+-- This migration originally shared version 20260904120000 with the employee
+-- work-schedule migration. Production already contains these objects while its
+-- migration history records only the work-schedule version, so every statement
+-- below is safe to replay when this unique version is first recorded.
+
 do $$
 begin
   perform pg_advisory_xact_lock(
@@ -15,7 +20,7 @@ $$;
 -- Only one active dashboard key is permitted. The raw bearer token never
 -- reaches this table: the application persists a SHA-256 hash and safe audit
 -- metadata only. Direct table access is denied to browser roles.
-create table private.analytics_api_keys (
+create table if not exists private.analytics_api_keys (
   id uuid primary key default gen_random_uuid(),
   key_prefix text not null check (key_prefix ~ '^mam_analytics_[A-Za-z0-9_-]{6,24}$'),
   label text not null check (char_length(label) between 1 and 80),
@@ -34,14 +39,14 @@ comment on table private.analytics_api_keys is
 alter table private.analytics_api_keys enable row level security;
 revoke all on table private.analytics_api_keys from public, anon, authenticated;
 
-create unique index analytics_api_keys_one_active_idx
+create unique index if not exists analytics_api_keys_one_active_idx
   on private.analytics_api_keys ((true))
   where revoked_at is null;
 
-create index analytics_api_keys_created_idx
+create index if not exists analytics_api_keys_created_idx
   on private.analytics_api_keys (created_at desc);
 
-create function public.can_manage_analytics_api()
+create or replace function public.can_manage_analytics_api()
 returns boolean
 language sql
 stable
@@ -54,7 +59,7 @@ $$;
 comment on function public.can_manage_analytics_api() is
   'Returns true only for the active System Admin that may manage MAM Analytics API keys.';
 
-create function public.list_analytics_api_keys()
+create or replace function public.list_analytics_api_keys()
 returns table (
   id uuid,
   key_prefix text,
@@ -80,7 +85,7 @@ begin
 end;
 $$;
 
-create function public.create_analytics_api_key_record(
+create or replace function public.create_analytics_api_key_record(
   p_key_hash text,
   p_key_prefix text,
   p_label text
@@ -115,9 +120,9 @@ begin
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended('mam:analytics-api-key-rotation', 0));
-  update private.analytics_api_keys
+  update private.analytics_api_keys as existing_key
   set revoked_at = clock_timestamp(), revoked_by = v_actor_user_id
-  where revoked_at is null;
+  where existing_key.revoked_at is null;
 
   return query
   insert into private.analytics_api_keys (key_hash, key_prefix, label, created_by)
@@ -127,7 +132,7 @@ begin
 end;
 $$;
 
-create function public.revoke_analytics_api_key(p_key_id uuid)
+create or replace function public.revoke_analytics_api_key(p_key_id uuid)
 returns boolean
 language plpgsql
 volatile
@@ -156,7 +161,7 @@ $$;
 -- secret role. NULL means no managed key has ever existed, so the pre-existing
 -- encrypted Vercel environment key remains the safe migration fallback. Once
 -- a managed key is created, a later revocation must fail closed.
-create function public.validate_analytics_api_key(p_key_hash text)
+create or replace function public.validate_analytics_api_key(p_key_hash text)
 returns boolean
 language plpgsql
 volatile
@@ -166,9 +171,9 @@ as $$
 declare
   v_key_id uuid;
 begin
-  if (select auth.role()) <> 'service_role' then
-    raise exception 'Analytics API key validation is restricted.' using errcode = '42501';
-  end if;
+  -- EXECUTE remains restricted to service_role below. Supabase secret keys are
+  -- not guaranteed to expose an auth.role() JWT claim, so the database grant is
+  -- the reliable authorization boundary here.
   if lower(trim(coalesce(p_key_hash, ''))) !~ '^[a-f0-9]{64}$' then
     return false;
   end if;
