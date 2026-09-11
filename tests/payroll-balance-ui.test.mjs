@@ -31,12 +31,14 @@ new Function('require', 'module', 'exports', code)(resolveImport, loaded, loaded
 const person = { personId: 'employee', name: 'Test Employee', canSubmit: false, paidLeave: true, canViewBalance: true, hours: 60, asOf: '2026-09-10', isExample: false };
 const workspace = (people, requests = []) => ({ people, requests, canManageBalances: false, pendingBalanceCalendarIds: [] });
 
-test('employee balance section contains annual hours and no sick fields or edit controls', () => {
-  const html = renderToStaticMarkup(createElement(loaded.exports.LeavePriorityControls, {
-    workspace: workspace([person]), busy: false, onRequest() {}, async onSaved() {},
-  }));
-  assert.match(html, /Annual: 60 hours/);
-  assert.doesNotMatch(html, /Sick:|Edit sick|Edit annual/);
+test('balance management section is hidden from staff, reviewers and employee previews', () => {
+  for (const [canManageBalances, previewPersonId] of [[false, undefined], [false, 'reviewer'], [true, 'reviewer']]) {
+    const html = renderToStaticMarkup(createElement(loaded.exports.LeavePriorityControls, {
+      workspace: {...workspace([{...person, canSubmit:true, canViewSickBalance:true, sickHours:25}]), canManageBalances},
+      previewPersonId, busy:false, onRequest() {}, async onSaved() {},
+    }));
+    assert.equal(html, '');
+  }
 });
 
 test('approval panel shows concise rounded balances with icons and no bookkeeping dates', () => {
@@ -74,16 +76,6 @@ test('administrator can review payroll rows that have no employee match', () => 
   assert.match(html, /Annual: 10 hours · Sick: 20 hours/);
 });
 
-
-test('current accrual and review hold are visible without exposing staff sick balance', () => {
-  const p = { ...person, hours: 61, accrualStatus: 'needs_review', annualPayrollDate: '2026-09-10' };
-  const html = renderToStaticMarkup(createElement(loaded.exports.LeavePriorityControls, {
-    workspace: workspace([p]), busy: false, onRequest() {}, async onSaved() {},
-  }));
-  assert.match(html, /Balance needs checking/);
-  assert.doesNotMatch(html, /As of|Payroll baseline/);
-  assert.doesNotMatch(html, /Personal\/carer|Save confirmed hours|Accrual settings/);
-});
 
 test('actual administrator gets policy and audited day reconciliation controls', () => {
   const p = { ...person, accrualStatus: 'current', accrualPolicy: { weeklyHours: 38, annualWeeks: 4, personalWeeks: 2, enabled: true, shiftworker: false } };
@@ -129,4 +121,25 @@ test('duration pill reports the requested balance, including sick leave', () => 
     assert.ok(html.includes(expected));
     assert.ok(html.includes(`data-sufficient="${expected === 'Enough balance'}"`));
   }
+});
+
+test('self-service shows only own annual balance and eligible team request choices', () => {
+  const html = renderToStaticMarkup(createElement(loaded.exports.LeaveSelfServiceControls, {
+    workspace: workspace([{...person,sickHours:99,canViewSickBalance:true}, {...person,personId:'team',name:'Test Teammate',canSubmit:true,hours:987}]),
+    personId:'employee',busy:false,onRequest() {},
+  }));
+  assert.match(html,/My annual leave/);
+  assert.match(html,/<strong>60<\/strong>/);
+  assert.match(html,/Request for team/);
+  assert.match(html,/<option value="team">Test Teammate<\/option>/);
+  assert.doesNotMatch(html,/Sick|99|987|Edit annual|Edit sick|Accrual settings/);
+});
+
+test('administrator preview retains self service but not management, and own balance hold remains visible', () => {
+  const props = {workspace:{...workspace([{...person,accrualStatus:'needs_review'}]),canManageBalances:true},personId:'employee',busy:false,onRequest() {}};
+  assert.equal(renderToStaticMarkup(createElement(loaded.exports.LeaveSelfServiceControls,props)), '');
+  const html=renderToStaticMarkup(createElement(loaded.exports.LeaveSelfServiceControls,{...props,previewPersonId:'employee'}));
+  assert.match(html,/My annual leave/);
+  assert.match(html,/Balance needs checking/);
+  assert.doesNotMatch(html,/Edit annual|Edit sick|Accrual settings/);
 });

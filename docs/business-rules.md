@@ -128,3 +128,7 @@ Annual leave balances can appear in the employee and reviewer copies. Sick/carer
 ### Reviewer balance visibility (11 September 2026)
 
 Every active, currently authorised reviewer of a pending request may see that applicant’s annual and sick leave balances, regardless of the reviewer’s account role. This also applies when System Admin previews the reviewer’s employee workspace. The current request assignment remains authoritative; revoked assignments, inactive accounts and unrelated employees do not gain access. Existing manager visibility and administrator-only balance editing remain unchanged.
+
+The bottom “Leave balances & team requests” management section is available only in the actual Super Admin workspace. It is hidden from employee and reviewer workspaces, including Change profile previews. Reviewers still receive the relevant annual and sick balances beside the specific request they are authorised to review; this does not grant access to the bulk management section.
+
+Employees’ own annual leave balance and the existing authorised manager team-request action appear separately as compact self-service controls. They do not expose the bulk balance list, payroll import register, balance editors or accrual settings.
