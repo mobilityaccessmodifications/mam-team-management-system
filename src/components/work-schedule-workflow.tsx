@@ -179,6 +179,7 @@ function ScheduleCard({
   }
 
   function toggleDay(day: EmployeeWorkingWeekday) {
+    setError("");
     setSelectedDays((current) => current.includes(day)
       ? current.filter((candidate) => candidate !== day)
       : [...current, day].sort((first, second) => first - second));
@@ -268,7 +269,10 @@ function ScheduleCard({
             <textarea
               ref={requestReasonRef}
               value={reason}
-              onChange={(event) => setReason(event.target.value)}
+              onChange={(event) => {
+                setReason(event.target.value);
+                setError("");
+              }}
               maxLength={1000}
               rows={4}
               required
