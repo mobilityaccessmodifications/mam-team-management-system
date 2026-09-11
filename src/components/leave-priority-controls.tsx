@@ -27,15 +27,35 @@ function BalanceCard({ label, hours, sick = false }: { label: string; hours?: nu
   </div>;
 }
 
-export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
-  workspace?: LeavePriorityWorkspace; busy: boolean;
+export function LeaveSelfServiceControls({ workspace, personId, previewPersonId, busy, onRequest }: {
+  workspace?: LeavePriorityWorkspace; personId: string; previewPersonId?: string;
+  busy: boolean; onRequest: (personId: string) => void;
+}) {
+  if (!workspace || (workspace.canManageBalances && !previewPersonId)) return null;
+  const ownBalance = workspace.people.find((person) => person.personId === personId && person.canViewBalance && person.paidLeave);
+  const team = workspace.people.filter((person) => person.canSubmit);
+  if (!ownBalance && !team.length) return null;
+  return <div className={styles.leaveSelfService}>
+    {ownBalance ? <div><BalanceCard label="My annual leave" hours={ownBalance.hours} /><LeaveAccrualNotice person={ownBalance} /></div> : null}
+    {team.length ? <select aria-label="Request leave for a team member" value="" disabled={busy} onChange={(event) => {
+      const personId = event.currentTarget.value;
+      if (team.some((person) => person.personId === personId)) onRequest(personId);
+    }}>
+      <option value="" disabled>Request for team</option>
+      {team.map((person) => <option value={person.personId} key={person.personId}>{person.name}</option>)}
+    </select> : null}
+  </div>;
+}
+
+export function LeavePriorityControls({ workspace, busy, onRequest, onSaved, previewPersonId }: {
+  workspace?: LeavePriorityWorkspace; busy: boolean; previewPersonId?: string;
   onRequest: (personId: string) => void; onSaved: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [balanceType, setBalanceType] = useState<"annual" | "sick">("annual");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  if (!workspace || (!workspace.people.length && !workspace.payrollImports?.length)) return null;
+  if (!workspace?.canManageBalances || previewPersonId || (!workspace.people.length && !workspace.payrollImports?.length)) return null;
   return <details className={styles.leaveBalances} open>
     <summary>Leave balances{workspace.people.some((p) => p.canSubmit) ? " & team requests" : ""}</summary>
     {workspace.people.map((person) => <div className={styles.leaveBalanceRow} key={person.personId}>
