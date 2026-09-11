@@ -2029,7 +2029,7 @@ export function LeaveDemo({
           <section className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
             <header><div><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={closeLeaveRequestForm} aria-label="Close request form"><X size={19} /></button></header>
             <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{requestForPersonId ? leavePriority?.people.find((person) => person.personId === requestForPersonId)?.name : activeProfile.name}</strong><small>{requestForPersonId ? "On behalf of your team member" : activeProfile.team}</small></span></div>
-            <form className={styles.form} onSubmit={submitRequest}>
+            <form className={styles.form} onSubmit={submitRequest} onChange={() => setFormError("")}>
               <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" value={formLeaveType} onChange={(event) => setFormLeaveType(event.target.value)} required>{(requestForPersonId ? (leavePriority?.people.find((person) => person.personId === requestForPersonId)?.paidLeave ? ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"] : ["Unpaid leave"]).map((value) => ({ value, label: value })) : availableLeaveTypes).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
               {!requestForPersonId && !hasPaidLeaveEntitlement ? <p className={styles.leavePolicyNote} role="note">
                 {employmentType === "abn" ? "ABN" : employmentType === "casual" ? "Casual" : "Unclassified"} employees can record Unpaid leave only.
