@@ -23,3 +23,10 @@ test("editable organisation connectors use a wide invisible pointer target", () 
     /\.connectorTarget:hover \+ \.connector,[\s\S]*?\.connectorTarget:focus \+ \.connector\s*\{[\s\S]*?stroke-width: 4;/,
   );
 });
+
+test("chart panning leaves ARIA button pointer events on connector targets", () => {
+  assert.match(
+    component,
+    /const startPan = [\s\S]*?const target = event\.target as Element;[\s\S]*?target\.closest\([\s\S]*?\[role=button\][\s\S]*?\)[\s\S]*?return;/,
+  );
+});

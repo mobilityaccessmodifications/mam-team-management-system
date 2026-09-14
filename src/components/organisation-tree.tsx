@@ -1652,7 +1652,7 @@ export function OrganisationTree({
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
-    const target = event.target as HTMLElement;
+    const target = event.target as Element;
     if (linkGuide && !target.closest("[data-link-target]")) {
       pendingLinkPointerRef.current = null;
       if (linkFrameRef.current !== null) {
@@ -1664,7 +1664,13 @@ export function OrganisationTree({
       setInteractionMessage("Add line cancelled.");
       return;
     }
-    if (target.closest("button, input, select, label, aside")) return;
+    if (
+      target.closest(
+        "button, input, select, label, aside, [role=button]",
+      )
+    ) {
+      return;
+    }
     const viewport = viewportRef.current;
     if (!viewport) return;
     panRef.current = {
