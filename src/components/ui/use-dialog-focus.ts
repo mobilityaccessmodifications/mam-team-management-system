@@ -11,6 +11,18 @@ const DIALOG_FOCUSABLE = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+type FocusTarget = Element & {
+  focus(options?: FocusOptions): void;
+};
+
+function isFocusTarget(element: Element | null): element is FocusTarget {
+  return Boolean(
+    element
+      && "focus" in element
+      && typeof element.focus === "function",
+  );
+}
+
 // One stack owns Escape and the page scroll lock, including nested dialogs.
 const dialogStack: HTMLElement[] = [];
 let pageOverflow = "";
@@ -30,7 +42,7 @@ export function useDialogFocus(
   onClose: () => void,
   fallbackFocusRef: RefObject<HTMLElement | null> | null = null,
 ) {
-  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const returnFocusRef = useRef<FocusTarget | null>(null);
   const onCloseRef = useRef(onClose);
 
   useEffect(() => {
@@ -42,7 +54,7 @@ export function useDialogFocus(
     const dialog = dialogRef.current;
     if (!dialog) return;
 
-    returnFocusRef.current = document.activeElement instanceof HTMLElement
+    returnFocusRef.current = isFocusTarget(document.activeElement)
       ? document.activeElement
       : null;
     const fallbackReturnTarget = fallbackFocusRef?.current ?? null;

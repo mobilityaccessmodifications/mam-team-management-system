@@ -110,6 +110,18 @@ test("uses a fallback when a chained dialog opens from the page body", () => {
   assert.equal(h.document.activeElement, fallback);
 });
 
+test("restores focus to a focusable SVG trigger", () => {
+  const h = harness();
+  const trigger = {
+    isConnected: true,
+    focus() { h.document.activeElement = this; },
+  };
+  h.document.activeElement = trigger;
+  const close = h.mount(new h.Element());
+  close(); h.flush();
+  assert.equal(h.document.activeElement, trigger);
+});
+
 test("out-of-order unmount does not unlock a still-open child", () => {
   const h = harness();
   const parent = h.mount(new h.Element()), child = h.mount(new h.Element());
