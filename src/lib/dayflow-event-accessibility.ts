@@ -5,6 +5,7 @@ export const DAYFLOW_SEARCH_TRIGGER_SELECTOR = ".df-icon-btn[title='Search']";
 
 const DAYFLOW_VIEW_SWITCHER_SELECTOR = ".df-view-switcher";
 const DAYFLOW_VIEW_SELECTOR = ".df-view-switcher-btn";
+const DAYFLOW_DESKTOP_SEARCH_GROUP_SELECTOR = ".df-search-group";
 const DAYFLOW_DESKTOP_SEARCH_CLEAR_SELECTOR = ".df-search-group-clear";
 const DAYFLOW_DESKTOP_SEARCH_INPUT_SELECTOR = ".df-search-group-input";
 const DAYFLOW_SEARCH_DIALOG_SELECTOR = ".df-mobile-fullscreen";
@@ -106,6 +107,20 @@ export function makeDayFlowSearchAccessible(root: ParentNode) {
     ?.setAttribute("aria-label", "Close calendar search");
   dialog.querySelector<HTMLElement>(DAYFLOW_SEARCH_CLEAR_SELECTOR)
     ?.setAttribute("aria-label", "Clear calendar search");
+}
+
+export function restoreDayFlowDesktopSearchFocusAfterClear(
+  target: EventTarget | null,
+  schedule: (callback: () => void) => unknown = (callback) => window.requestAnimationFrame(callback),
+) {
+  if (!(target instanceof Element)) return false;
+  const clearButton = target.closest<HTMLElement>(DAYFLOW_DESKTOP_SEARCH_CLEAR_SELECTOR);
+  const input = clearButton
+    ?.closest<HTMLElement>(DAYFLOW_DESKTOP_SEARCH_GROUP_SELECTOR)
+    ?.querySelector<HTMLElement>(DAYFLOW_DESKTOP_SEARCH_INPUT_SELECTOR);
+  if (!input) return false;
+  schedule(() => input.focus({ preventScroll: true }));
+  return true;
 }
 
 export function closeDayFlowSearchFromKeyboard(target: EventTarget | null, key: string) {

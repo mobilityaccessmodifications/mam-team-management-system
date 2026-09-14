@@ -49,6 +49,7 @@ const {
   makeDayFlowNavigationAccessible,
   makeDayFlowSearchAccessible,
   makeDayFlowViewSwitcherAccessible,
+  restoreDayFlowDesktopSearchFocusAfterClear,
 } = loaded.exports;
 
 function eventElement(title = "Alice Employee · Annual leave (12/10/2026 - 13/10/2026)") {
@@ -140,6 +141,7 @@ test("calendar view switcher exposes and updates its selected state", () => {
 test("calendar semantics observe active-view changes", () => {
   const component = readFileSync("src/components/team-calendar.tsx", "utf8");
   assert.match(component, /makeDayFlowViewSwitcherAccessible\(frame\)/);
+  assert.match(component, /document\.addEventListener\("click", handleSearchClick, true\)/);
   assert.match(component, /attributes:\s*true/);
   assert.match(component, /attributeFilter:\s*\["data-active"\]/);
 });
@@ -147,8 +149,9 @@ test("calendar semantics observe active-view changes", () => {
 function searchFixture() {
   const dialog = new FakeElement({ selectors: [".df-mobile-fullscreen"] });
   const back = new FakeElement({ parent: dialog, selectors: [".df-search-dialog-back-btn"] });
-  const desktopClear = new FakeElement();
-  const desktopInput = new FakeElement();
+  const desktopGroup = new FakeElement({ selectors: [".df-search-group"] });
+  const desktopClear = new FakeElement({ parent: desktopGroup, selectors: [".df-search-group-clear"] });
+  const desktopInput = new FakeElement({ parent: desktopGroup });
   const input = new FakeElement({ parent: dialog });
   const clear = new FakeElement({ parent: dialog });
   const trigger = new FakeElement();
@@ -156,6 +159,7 @@ function searchFixture() {
   dialog.queries.set(".df-search-dialog-input", input);
   dialog.queries.set(".df-search-dialog-input-clear", clear);
   dialog.queryLists.set("button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex='-1'])", [back, input, clear]);
+  desktopGroup.queries.set(".df-search-group-input", desktopInput);
   const root = {
     querySelector: (selector) => ({
       ".df-icon-btn[title='Search']": trigger,
@@ -165,7 +169,7 @@ function searchFixture() {
     })[selector] ?? null,
     querySelectorAll: () => [],
   };
-  return { back, clear, desktopClear, desktopInput, dialog, input, root, trigger };
+  return { back, clear, desktopClear, desktopGroup, desktopInput, dialog, input, root, trigger };
 }
 
 test("calendar search gets explicit input, dialog and control names", () => {
@@ -180,6 +184,21 @@ test("calendar search gets explicit input, dialog and control names", () => {
   assert.equal(input.getAttribute("aria-label"), "Search calendar");
   assert.equal(back.getAttribute("aria-label"), "Close calendar search");
   assert.equal(clear.getAttribute("aria-label"), "Clear calendar search");
+});
+
+test("desktop search clear restores focus to the input after the button is removed", () => {
+  const { desktopClear, desktopInput } = searchFixture();
+  let scheduled;
+
+  assert.equal(restoreDayFlowDesktopSearchFocusAfterClear(
+    desktopClear,
+    (callback) => { scheduled = callback; },
+  ), true);
+  assert.equal(desktopInput.focusOptions, null);
+
+  scheduled();
+  assert.equal(desktopInput.focusOptions?.preventScroll, true);
+  assert.equal(restoreDayFlowDesktopSearchFocusAfterClear(desktopInput, () => {}), false);
 });
 
 test("Escape closes mobile calendar search through its back control", () => {

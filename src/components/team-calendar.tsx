@@ -38,6 +38,7 @@ import {
   makeDayFlowNavigationAccessible,
   makeDayFlowSearchAccessible,
   makeDayFlowViewSwitcherAccessible,
+  restoreDayFlowDesktopSearchFocusAfterClear,
 } from "@/lib/dayflow-event-accessibility";
 import { navigateFromDayFlowSearchResult } from "@/lib/dayflow-search-navigation";
 import { BALANCE_PENDING_STATUS } from "@/lib/leave-priority";
@@ -322,10 +323,15 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
       }
       if (closeDayFlowSearchFromKeyboard(event.target, event.key)) event.preventDefault();
     };
+    const handleSearchClick = (event: MouseEvent) => {
+      restoreDayFlowDesktopSearchFocusAfterClear(event.target);
+    };
+    document.addEventListener("click", handleSearchClick, true);
     document.addEventListener("keydown", handleSearchKeyDown, true);
     return () => {
       observer.disconnect();
       searchObserver.disconnect();
+      document.removeEventListener("click", handleSearchClick, true);
       document.removeEventListener("keydown", handleSearchKeyDown, true);
     };
   }, []);
