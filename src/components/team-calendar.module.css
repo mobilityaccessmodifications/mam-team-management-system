@@ -232,7 +232,7 @@
   .calendarFrame :global(button), .calendarFrame :global([role="button"]) { min-height: 44px; min-width: 44px; }
   .calendarFrame :global(.df-header) { min-height: 54px; }
   .calendarFrame :global(.df-view-switcher) { width: 100%; }
-  .calendarFrame :global(.df-view-switcher-btn) { flex: 1 1 0; font-size: 12px; min-width: 0; padding-inline: 6px; }
+  .calendarFrame :global(.df-view-switcher-btn) { flex: 1 1 0; font-size: 12px; min-width: 44px; padding-inline: 6px; }
   .calendarFrame :global(.df-mobile-event-detail), .calendarFrame :global(.df-mobile-event-drawer) { border-radius: 22px 22px 0 0; max-height: 78dvh; }
   .mobileDetailBackdrop { display: flex; }
   .mobileHint { display: inline-flex; padding-inline: 2px; }
