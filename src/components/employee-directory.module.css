@@ -1124,4 +1124,20 @@
     min-height: 44px;
     touch-action: manipulation;
   }
+
+  .editor input:not([type="checkbox"]),
+  .editor select,
+  .editor textarea,
+  .modal input:not([type="checkbox"]),
+  .modal select,
+  .modal textarea,
+  .formFooter button,
+  .modalActions button {
+    min-height: 44px;
+  }
+
+  .formFooter button,
+  .modalActions button {
+    touch-action: manipulation;
+  }
 }
