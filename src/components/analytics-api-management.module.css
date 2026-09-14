@@ -78,7 +78,7 @@
 .header { gap: 12px; }
 
 .guide { display: block; background: var(--surface-raised); padding: 16px; }
-.guide summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.guide summary { display: flex; min-height: 44px; align-items: center; cursor: pointer; font-size: 14px; font-weight: 600; touch-action: manipulation; }
 .guide[open] summary { margin-bottom: 16px; }
 .guideGrid { margin-bottom: 12px; }
 
