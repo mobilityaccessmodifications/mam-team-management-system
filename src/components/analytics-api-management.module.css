@@ -81,3 +81,11 @@
 .guide summary { cursor: pointer; font-size: 14px; font-weight: 600; }
 .guide[open] summary { margin-bottom: 16px; }
 .guideGrid { margin-bottom: 12px; }
+
+/* Keep the expanded phone guide action at the documented touch-target height. */
+@media (max-width: 760px) {
+  .copyGuide {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+}
