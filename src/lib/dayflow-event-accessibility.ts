@@ -7,6 +7,7 @@ const DAYFLOW_SEARCH_DIALOG_SELECTOR = ".df-mobile-fullscreen";
 const DAYFLOW_SEARCH_INPUT_SELECTOR = ".df-search-dialog-input";
 const DAYFLOW_SEARCH_BACK_SELECTOR = ".df-search-dialog-back-btn";
 const DAYFLOW_SEARCH_CLEAR_SELECTOR = ".df-search-dialog-input-clear";
+const DAYFLOW_SEARCH_RESULT_SELECTOR = ".df-search-results-event";
 const DAYFLOW_SEARCH_FOCUSABLE_SELECTOR = "button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex='-1'])";
 
 const DAYFLOW_NAVIGATION_LABELS: Record<string, readonly [string, string]> = {
@@ -53,9 +54,27 @@ function getDayFlowSearchDialogFromTarget(target: EventTarget | null) {
   return dialog?.querySelector(DAYFLOW_SEARCH_INPUT_SELECTOR) ? dialog : null;
 }
 
+function compactText(element: Element | null | undefined) {
+  return element?.textContent?.replace(/\s+/g, " ").trim() || "";
+}
+
+function prepareSearchResult(element: HTMLElement) {
+  const group = element.closest<HTMLElement>(".df-search-results-group");
+  const title = compactText(element.querySelector(".df-search-results-event-title"));
+  const date = compactText(group?.querySelector(".df-search-results-date-header"));
+  const time = compactText(element.querySelector(".df-search-results-event-time"));
+  if (!element.hasAttribute("role")) element.setAttribute("role", "button");
+  if (!element.hasAttribute("tabindex")) element.tabIndex = 0;
+  if (!element.hasAttribute("aria-label")) {
+    element.setAttribute("aria-label", [title, date, time].filter(Boolean).join(", ") || "Calendar search result");
+  }
+  return element;
+}
+
 export function makeDayFlowSearchAccessible(root: ParentNode) {
   root.querySelector<HTMLElement>(DAYFLOW_SEARCH_TRIGGER_SELECTOR)
     ?.setAttribute("aria-label", "Search calendar");
+  root.querySelectorAll<HTMLElement>(DAYFLOW_SEARCH_RESULT_SELECTOR).forEach(prepareSearchResult);
 
   const input = root.querySelector<HTMLElement>(DAYFLOW_SEARCH_INPUT_SELECTOR);
   if (!input) return;
@@ -70,10 +89,6 @@ export function makeDayFlowSearchAccessible(root: ParentNode) {
     ?.setAttribute("aria-label", "Close calendar search");
   dialog.querySelector<HTMLElement>(DAYFLOW_SEARCH_CLEAR_SELECTOR)
     ?.setAttribute("aria-label", "Clear calendar search");
-}
-
-export function isDayFlowSearchCloseTarget(target: EventTarget | null) {
-  return target instanceof Element && Boolean(target.closest(DAYFLOW_SEARCH_BACK_SELECTOR));
 }
 
 export function closeDayFlowSearchFromKeyboard(target: EventTarget | null, key: string) {
@@ -102,6 +117,20 @@ export function containDayFlowSearchFocus(target: EventTarget | null, key: strin
     return true;
   }
   return false;
+}
+
+function getDayFlowSearchResultFromTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return null;
+  const result = target.closest<HTMLElement>(DAYFLOW_SEARCH_RESULT_SELECTOR);
+  return result ? prepareSearchResult(result) : null;
+}
+
+export function activateDayFlowSearchResultFromKeyboard(target: EventTarget | null, key: string) {
+  if (key !== "Enter" && key !== " ") return false;
+  const result = getDayFlowSearchResultFromTarget(target);
+  if (!result) return false;
+  result.click();
+  return true;
 }
 
 export function getDayFlowEventFromTarget(target: EventTarget | null) {

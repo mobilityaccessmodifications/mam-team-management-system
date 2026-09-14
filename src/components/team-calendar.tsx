@@ -30,10 +30,10 @@ import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   DAYFLOW_SEARCH_TRIGGER_SELECTOR,
   activateDayFlowEventFromKeyboard,
+  activateDayFlowSearchResultFromKeyboard,
   closeDayFlowSearchFromKeyboard,
   containDayFlowSearchFocus,
   focusDayFlowEventFromTarget,
-  isDayFlowSearchCloseTarget,
   makeDayFlowEventsAccessible,
   makeDayFlowNavigationAccessible,
   makeDayFlowSearchAccessible,
@@ -294,29 +294,35 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
       childList: true,
       subtree: true,
     });
-    const searchObserver = new MutationObserver(() => makeDayFlowSearchAccessible(document));
-    searchObserver.observe(document.body, { childList: true, subtree: true });
-
     const restoreSearchTriggerFocus = () => {
       const searchTrigger = frame.querySelector<HTMLElement>(DAYFLOW_SEARCH_TRIGGER_SELECTOR);
       window.requestAnimationFrame(() => searchTrigger?.focus({ preventScroll: true }));
     };
-    const handleSearchCloseClick = (event: MouseEvent) => {
-      if (isDayFlowSearchCloseTarget(event.target)) restoreSearchTriggerFocus();
+    let searchWasOpen = Boolean(document.querySelector(".df-mobile-fullscreen .df-search-dialog-input"));
+    const refreshSearchSemantics = () => {
+      const searchIsOpen = Boolean(document.querySelector(".df-mobile-fullscreen .df-search-dialog-input"));
+      makeDayFlowSearchAccessible(document);
+      if (searchWasOpen && !searchIsOpen) restoreSearchTriggerFocus();
+      searchWasOpen = searchIsOpen;
     };
+    const searchObserver = new MutationObserver(refreshSearchSemantics);
+    searchObserver.observe(document.body, { childList: true, subtree: true });
+
     const handleSearchKeyDown = (event: KeyboardEvent) => {
+      if (activateDayFlowSearchResultFromKeyboard(event.target, event.key)) {
+        event.preventDefault();
+        return;
+      }
       if (containDayFlowSearchFocus(event.target, event.key, event.shiftKey)) {
         event.preventDefault();
         return;
       }
       if (closeDayFlowSearchFromKeyboard(event.target, event.key)) event.preventDefault();
     };
-    document.addEventListener("click", handleSearchCloseClick, true);
     document.addEventListener("keydown", handleSearchKeyDown, true);
     return () => {
       observer.disconnect();
       searchObserver.disconnect();
-      document.removeEventListener("click", handleSearchCloseClick, true);
       document.removeEventListener("keydown", handleSearchKeyDown, true);
     };
   }, []);

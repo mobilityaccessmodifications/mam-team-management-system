@@ -41,6 +41,7 @@ const loaded = { exports: {} };
 vm.runInNewContext(compiled, { exports: loaded.exports, module: loaded, Element: FakeElement });
 const {
   activateDayFlowEventFromKeyboard,
+  activateDayFlowSearchResultFromKeyboard,
   closeDayFlowSearchFromKeyboard,
   containDayFlowSearchFocus,
   focusDayFlowEventFromTarget,
@@ -130,6 +131,7 @@ function searchFixture() {
       ".df-icon-btn[title='Search']": trigger,
       ".df-search-dialog-input": input,
     })[selector] ?? null,
+    querySelectorAll: () => [],
   };
   return { back, clear, dialog, input, root, trigger };
 }
@@ -167,4 +169,44 @@ test("mobile search close restores focus to its trigger", () => {
   const component = readFileSync("src/components/team-calendar.tsx", "utf8");
   assert.match(component, /makeDayFlowSearchAccessible\(document\)/);
   assert.match(component, /requestAnimationFrame\(\(\) => searchTrigger\?\.focus\(\{ preventScroll: true \}\)\)/);
+});
+
+function searchResultFixture() {
+  const group = new FakeElement({ selectors: [".df-search-results-group"] });
+  const heading = new FakeElement({ text: "Sunday 2 February 2025" });
+  const result = new FakeElement({ parent: group, selectors: [".df-search-results-event"] });
+  const title = new FakeElement({ text: "Una Linked · Birthday" });
+  const time = new FakeElement({ text: "All day" });
+  group.queries.set(".df-search-results-date-header", heading);
+  result.queries.set(".df-search-results-event-title", title);
+  result.queries.set(".df-search-results-event-time", time);
+  return { group, result };
+}
+
+test("calendar search results gain keyboard semantics and date-aware names", () => {
+  const { result } = searchResultFixture();
+  makeDayFlowSearchAccessible({
+    querySelector: () => null,
+    querySelectorAll: (selector) => selector === ".df-search-results-event" ? [result] : [],
+  });
+  assert.equal(result.getAttribute("role"), "button");
+  assert.equal(result.tabIndex, 0);
+  assert.equal(result.getAttribute("aria-label"), "Una Linked · Birthday, Sunday 2 February 2025, All day");
+});
+
+test("Enter and Space activate focused calendar search results", () => {
+  for (const key of ["Enter", " "]) {
+    const { result } = searchResultFixture();
+    const child = new FakeElement({ parent: result });
+    assert.equal(activateDayFlowSearchResultFromKeyboard(child, key), true);
+    assert.equal(result.clicked, true);
+  }
+  const { result } = searchResultFixture();
+  assert.equal(activateDayFlowSearchResultFromKeyboard(result, "Escape"), false);
+  assert.equal(result.clicked, false);
+});
+
+test("closing search through a selected result also restores focus", () => {
+  const component = readFileSync("src/components/team-calendar.tsx", "utf8");
+  assert.match(component, /searchWasOpen && !searchIsOpen/);
 });
