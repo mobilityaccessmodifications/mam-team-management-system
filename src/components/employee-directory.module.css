@@ -1105,3 +1105,13 @@
 .directoryDesk { border-radius: 12px; box-shadow: none; }
 .modal { border-radius: 14px; }
 .header, .headerActions { gap: 12px; }
+
+/* Keep the compact phone header actions at the documented 44px touch target. */
+@media (max-width: 640px) {
+  .headerActions > .primaryAction,
+  .headerActions > .secondaryAction {
+    min-width: 44px;
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+}
