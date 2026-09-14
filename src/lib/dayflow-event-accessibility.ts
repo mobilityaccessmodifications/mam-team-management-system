@@ -3,6 +3,8 @@ export const DAYFLOW_ACTIVE_VIEW_SELECTOR = ".df-view-switcher-btn[data-active='
 export const DAYFLOW_NAVIGATION_SELECTOR = ".df-calendar-nav-button";
 export const DAYFLOW_SEARCH_TRIGGER_SELECTOR = ".df-icon-btn[title='Search']";
 
+const DAYFLOW_VIEW_SWITCHER_SELECTOR = ".df-view-switcher";
+const DAYFLOW_VIEW_SELECTOR = ".df-view-switcher-btn";
 const DAYFLOW_SEARCH_DIALOG_SELECTOR = ".df-mobile-fullscreen";
 const DAYFLOW_SEARCH_INPUT_SELECTOR = ".df-search-dialog-input";
 const DAYFLOW_SEARCH_BACK_SELECTOR = ".df-search-dialog-back-btn";
@@ -34,6 +36,15 @@ function prepareEvent(element: HTMLElement) {
 
 export function makeDayFlowEventsAccessible(root: ParentNode) {
   root.querySelectorAll<HTMLElement>(DAYFLOW_EVENT_SELECTOR).forEach(prepareEvent);
+}
+
+export function makeDayFlowViewSwitcherAccessible(root: ParentNode) {
+  const switcher = root.querySelector<HTMLElement>(DAYFLOW_VIEW_SWITCHER_SELECTOR);
+  switcher?.setAttribute("role", "group");
+  switcher?.setAttribute("aria-label", "Calendar view");
+  root.querySelectorAll<HTMLElement>(DAYFLOW_VIEW_SELECTOR).forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.getAttribute("data-active") === "true"));
+  });
 }
 
 export function makeDayFlowNavigationAccessible(root: ParentNode) {

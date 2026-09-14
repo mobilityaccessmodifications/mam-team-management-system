@@ -37,6 +37,7 @@ import {
   makeDayFlowEventsAccessible,
   makeDayFlowNavigationAccessible,
   makeDayFlowSearchAccessible,
+  makeDayFlowViewSwitcherAccessible,
 } from "@/lib/dayflow-event-accessibility";
 import { navigateFromDayFlowSearchResult } from "@/lib/dayflow-search-navigation";
 import { BALANCE_PENDING_STATUS } from "@/lib/leave-priority";
@@ -286,6 +287,7 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
       makeDayFlowEventsAccessible(frame);
       makeDayFlowNavigationAccessible(frame);
       makeDayFlowSearchAccessible(document);
+      makeDayFlowViewSwitcherAccessible(frame);
     };
     refreshCalendarSemantics();
     const observer = new MutationObserver(refreshCalendarSemantics);

@@ -48,6 +48,7 @@ const {
   makeDayFlowEventsAccessible,
   makeDayFlowNavigationAccessible,
   makeDayFlowSearchAccessible,
+  makeDayFlowViewSwitcherAccessible,
 } = loaded.exports;
 
 function eventElement(title = "Alice Employee · Annual leave (12/10/2026 - 13/10/2026)") {
@@ -110,8 +111,35 @@ test("calendar navigation names match the active DayFlow view", () => {
   }
 });
 
+test("calendar view switcher exposes and updates its selected state", () => {
+  const switcher = new FakeElement();
+  const day = new FakeElement({ text: "Day" });
+  const month = new FakeElement({ text: "Month" });
+  day.setAttribute("data-active", "false");
+  month.setAttribute("data-active", "true");
+  const root = {
+    querySelector: (selector) => selector === ".df-view-switcher" ? switcher : null,
+    querySelectorAll: (selector) => selector === ".df-view-switcher-btn" ? [day, month] : [],
+  };
+
+  makeDayFlowViewSwitcherAccessible(root);
+
+  assert.equal(switcher.getAttribute("role"), "group");
+  assert.equal(switcher.getAttribute("aria-label"), "Calendar view");
+  assert.equal(day.getAttribute("aria-pressed"), "false");
+  assert.equal(month.getAttribute("aria-pressed"), "true");
+
+  day.setAttribute("data-active", "true");
+  month.setAttribute("data-active", "false");
+  makeDayFlowViewSwitcherAccessible(root);
+
+  assert.equal(day.getAttribute("aria-pressed"), "true");
+  assert.equal(month.getAttribute("aria-pressed"), "false");
+});
+
 test("calendar semantics observe active-view changes", () => {
   const component = readFileSync("src/components/team-calendar.tsx", "utf8");
+  assert.match(component, /makeDayFlowViewSwitcherAccessible\(frame\)/);
   assert.match(component, /attributes:\s*true/);
   assert.match(component, /attributeFilter:\s*\["data-active"\]/);
 });
