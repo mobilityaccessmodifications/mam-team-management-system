@@ -33,8 +33,8 @@ function harness(mobile = true) {
       removeEventListener: (_, fn) => listeners.delete(fn),
     },
   });
-  function mount(dialog, close = () => {}) {
-    exports.useDialogFocus(true, { current: dialog }, null, close);
+  function mount(dialog, close = () => {}, fallbackFocusRef = null) {
+    exports.useDialogFocus(true, { current: dialog }, null, close, fallbackFocusRef);
     const cleanup = effects.splice(0).map(fn => fn()).filter(Boolean);
     return () => cleanup.forEach(fn => fn());
   }
@@ -85,6 +85,18 @@ test("combobox-consumed Escape does not close its dialog", () => {
   h.mount(new h.Element(), () => { closed = true; });
   h.key("Escape", { defaultPrevented: true });
   assert.equal(closed, false);
+});
+
+test("uses a connected fallback when a mutation removes the opening control", () => {
+  const h = harness(), trigger = new h.Element(), fallback = new h.Element();
+  const parent = new h.Element([trigger, fallback]);
+  const closeParent = h.mount(parent);
+  trigger.focus();
+  const closeChild = h.mount(new h.Element(), () => {}, { current: fallback });
+  trigger.isConnected = false;
+  closeChild(); h.flush();
+  assert.equal(h.document.activeElement, fallback);
+  closeParent(); h.flush();
 });
 
 test("out-of-order unmount does not unlock a still-open child", () => {

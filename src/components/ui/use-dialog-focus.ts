@@ -28,6 +28,7 @@ export function useDialogFocus(
   dialogRef: RefObject<HTMLElement | null>,
   initialFocusRef: RefObject<HTMLElement | null> | null,
   onClose: () => void,
+  fallbackFocusRef: RefObject<HTMLElement | null> | null = null,
 ) {
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -44,6 +45,7 @@ export function useDialogFocus(
     returnFocusRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
+    const fallbackReturnTarget = fallbackFocusRef?.current ?? null;
     if (!dialogStack.length) pageOverflow = document.body.style.overflow;
     dialogStack.push(dialog);
     document.body.style.overflow = "hidden";
@@ -102,16 +104,19 @@ export function useDialogFocus(
       if (index >= 0) dialogStack.splice(index, 1);
       if (!dialogStack.length) document.body.style.overflow = pageOverflow;
       if (originalTabIndex === null) dialog.removeAttribute("tabindex");
-      const returnTarget = returnFocusRef.current;
+      const preferredReturnTarget = returnFocusRef.current;
       // A backgrounded or automation-controlled Chromium page can throttle
       // requestAnimationFrame to roughly one callback per second. Focus
       // restoration only needs to run after this cleanup stack, so a
       // microtask restores keyboard focus promptly without depending on paint.
       queueMicrotask(() => {
+        const returnTarget = preferredReturnTarget?.isConnected
+          ? preferredReturnTarget
+          : fallbackReturnTarget;
         if (!wasTop || !returnTarget?.isConnected) return;
         const top = dialogStack.at(-1);
         if (!top || top.contains(returnTarget)) returnTarget.focus({ preventScroll: true });
       });
     };
-  }, [dialogRef, initialFocusRef, open]);
+  }, [dialogRef, fallbackFocusRef, initialFocusRef, open]);
 }

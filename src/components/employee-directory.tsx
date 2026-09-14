@@ -309,7 +309,7 @@ export function EmployeeDirectory({
     setSaveError("");
   }, [deleting]);
 
-  useDialogFocus(Boolean(endDatePrompt), endDateDialogRef, endDateInputRef, closeEndDatePrompt);
+  useDialogFocus(Boolean(endDatePrompt), endDateDialogRef, endDateInputRef, closeEndDatePrompt, editorDialogRef);
   useDialogFocus(Boolean(deleteTarget), deleteDialogRef, deleteCancelRef, closeDeletePrompt);
 
   useEffect(() => {
@@ -808,7 +808,7 @@ function EmployeeEditor({
   const isCreate = editor.mode === "create";
   const [editingSchedule, setEditingSchedule] = useState(isCreate);
 
-  return <section className={styles.editor} ref={dialogRef} role={mobileModal ? "dialog" : undefined} aria-modal={mobileModal ? "true" : undefined} aria-label={isCreate ? "Add employee" : "Edit employee"} tabIndex={mobileModal ? -1 : undefined}>
+  return <section className={styles.editor} ref={dialogRef} role={mobileModal ? "dialog" : undefined} aria-modal={mobileModal ? "true" : undefined} aria-label={isCreate ? "Add employee" : "Edit employee"} tabIndex={-1}>
     <header className={styles.editorHeader}>
       <div>
         <h3>{isCreate ? "Add employee" : editor.draft.firstName || currentRecord?.fullName || "Employee"}</h3>
