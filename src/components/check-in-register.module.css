@@ -197,6 +197,7 @@
 .privateDetails summary::-webkit-details-marker { display: none; }
 .privateDetails summary span { font-size: 12px; font-weight: 750; }
 .privateDetails > div { align-items: stretch; gap: 8px; border-top: 1px solid #e6ecea; padding: 9px; }
+.privateDetails:not([open]) > :not(summary) { display: none; }
 .privateDetails .info { flex: 1; }
 
 .timeline { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 18px; }
