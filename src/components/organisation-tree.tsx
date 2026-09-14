@@ -880,6 +880,7 @@ export function OrganisationTree({
   const disconnectKeepButtonRef = useRef<HTMLButtonElement>(null);
   const inspectorDialogRef = useRef<HTMLElement>(null);
   const inspectorCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const chartWorldRef = useRef<HTMLDivElement>(null);
   const initialViewportRef = useRef(false);
@@ -2407,13 +2408,23 @@ export function OrganisationTree({
             ) : null}
           </div>
 
-          <div className={styles.filterMenu}>
+          <div
+            className={styles.filterMenu}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || !filterOpen) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setFilterOpen(false);
+              filterButtonRef.current?.focus();
+            }}
+          >
             <button
               aria-label="Filter organisation"
               aria-expanded={filterOpen}
               aria-haspopup="menu"
               className={styles.filterButton}
               onClick={() => setFilterOpen((current) => !current)}
+              ref={filterButtonRef}
               title="Filter"
               type="button"
             >
