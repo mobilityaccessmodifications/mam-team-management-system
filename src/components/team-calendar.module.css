@@ -48,6 +48,10 @@
 }
 
 .calendarFrame :global(.df-calendar-nav-button) { min-width: 36px; }
+.calendarFrame :global(.df-search-group-clear) {
+  min-height: 28px;
+  min-width: 28px;
+}
 .calendarFrame :global(.df-month-day-cell[data-today="true"]) { background: #fff9f5; }
 
 /* The virtual month rows can be shorter than DayFlow's fixed 40px offset
