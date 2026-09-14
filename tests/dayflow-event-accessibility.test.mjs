@@ -147,6 +147,7 @@ test("calendar semantics observe active-view changes", () => {
 function searchFixture() {
   const dialog = new FakeElement({ selectors: [".df-mobile-fullscreen"] });
   const back = new FakeElement({ parent: dialog, selectors: [".df-search-dialog-back-btn"] });
+  const desktopClear = new FakeElement();
   const desktopInput = new FakeElement();
   const input = new FakeElement({ parent: dialog });
   const clear = new FakeElement({ parent: dialog });
@@ -158,18 +159,20 @@ function searchFixture() {
   const root = {
     querySelector: (selector) => ({
       ".df-icon-btn[title='Search']": trigger,
+      ".df-search-group-clear": desktopClear,
       ".df-search-group-input": desktopInput,
       ".df-search-dialog-input": input,
     })[selector] ?? null,
     querySelectorAll: () => [],
   };
-  return { back, clear, desktopInput, dialog, input, root, trigger };
+  return { back, clear, desktopClear, desktopInput, dialog, input, root, trigger };
 }
 
 test("calendar search gets explicit input, dialog and control names", () => {
-  const { back, clear, desktopInput, dialog, input, root, trigger } = searchFixture();
+  const { back, clear, desktopClear, desktopInput, dialog, input, root, trigger } = searchFixture();
   makeDayFlowSearchAccessible(root);
   assert.equal(trigger.getAttribute("aria-label"), "Search calendar");
+  assert.equal(desktopClear.getAttribute("aria-label"), "Clear calendar search");
   assert.equal(desktopInput.getAttribute("aria-label"), "Search calendar");
   assert.equal(dialog.getAttribute("role"), "dialog");
   assert.equal(dialog.getAttribute("aria-modal"), "true");

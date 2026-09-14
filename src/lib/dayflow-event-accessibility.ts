@@ -5,6 +5,7 @@ export const DAYFLOW_SEARCH_TRIGGER_SELECTOR = ".df-icon-btn[title='Search']";
 
 const DAYFLOW_VIEW_SWITCHER_SELECTOR = ".df-view-switcher";
 const DAYFLOW_VIEW_SELECTOR = ".df-view-switcher-btn";
+const DAYFLOW_DESKTOP_SEARCH_CLEAR_SELECTOR = ".df-search-group-clear";
 const DAYFLOW_DESKTOP_SEARCH_INPUT_SELECTOR = ".df-search-group-input";
 const DAYFLOW_SEARCH_DIALOG_SELECTOR = ".df-mobile-fullscreen";
 const DAYFLOW_SEARCH_INPUT_SELECTOR = ".df-search-dialog-input";
@@ -86,6 +87,8 @@ function prepareSearchResult(element: HTMLElement) {
 export function makeDayFlowSearchAccessible(root: ParentNode) {
   root.querySelector<HTMLElement>(DAYFLOW_SEARCH_TRIGGER_SELECTOR)
     ?.setAttribute("aria-label", "Search calendar");
+  root.querySelector<HTMLElement>(DAYFLOW_DESKTOP_SEARCH_CLEAR_SELECTOR)
+    ?.setAttribute("aria-label", "Clear calendar search");
   root.querySelector<HTMLElement>(DAYFLOW_DESKTOP_SEARCH_INPUT_SELECTOR)
     ?.setAttribute("aria-label", "Search calendar");
   root.querySelectorAll<HTMLElement>(DAYFLOW_SEARCH_RESULT_SELECTOR).forEach(prepareSearchResult);
