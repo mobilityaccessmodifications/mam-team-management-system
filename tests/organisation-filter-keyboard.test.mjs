@@ -16,6 +16,6 @@ test("organisation filter closes on Escape and restores trigger focus", () => {
 test("organisation filter selection restores trigger focus", () => {
   assert.match(
     source,
-    /onClick=\{\(\) => \{\s*setCompanyFilter\(filter\);\s*setFilterOpen\(false\);[\s\S]*?requestAnimationFrame\(\(\) => filterButtonRef\.current\?\.focus\(\)\);/,
+    /onClick=\{\(\) => \{\s*setCompanyFilter\(filter\);\s*setFilterOpen\(false\);[\s\S]*?setWorkContact\(null\);\s*filterButtonRef\.current\?\.focus\(\);/,
   );
 });
