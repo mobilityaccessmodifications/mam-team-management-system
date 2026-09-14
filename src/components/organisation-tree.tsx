@@ -2637,37 +2637,41 @@ export function OrganisationTree({
                     (relatedIds.has(connector.fromId) &&
                       relatedIds.has(connector.toId));
                   const child = profileById.get(connector.toId);
+                  const connectorPath = getConnectorPath(
+                    connector,
+                    layoutNodesById,
+                    manualOffsets,
+                  );
                   return (
-                    <path
-                      aria-label={
-                        canUseRelationshipEditor
-                          ? `Edit reporting line for ${child?.name ?? "this employee"}`
-                          : undefined
-                      }
-                      className={styles.connector}
-                      d={getConnectorPath(
-                        connector,
-                        layoutNodesById,
-                        manualOffsets,
-                      )}
-                      data-active={active}
-                      data-arranging={arranging}
-                      data-company={connector.company}
-                      data-editable={canUseRelationshipEditor ? "true" : "false"}
-                      key={connector.id}
-                      markerEnd={`url(#${markerPrefix}-${connector.company})`}
-                      onClick={() => {
-                        if (!canUseRelationshipEditor) return;
-                        if (child) openReportingLinkEditor(child);
-                      }}
-                      onKeyDown={(event) => {
-                        if (!canUseRelationshipEditor || (event.key !== "Enter" && event.key !== " ")) return;
-                        event.preventDefault();
-                        if (child) openReportingLinkEditor(child);
-                      }}
-                      role={canUseRelationshipEditor ? "button" : undefined}
-                      tabIndex={canUseRelationshipEditor ? 0 : -1}
-                    />
+                    <g key={connector.id}>
+                      {canUseRelationshipEditor ? (
+                        <path
+                          aria-label={`Edit reporting line for ${child?.name ?? "this employee"}`}
+                          className={styles.connectorTarget}
+                          d={connectorPath}
+                          onClick={() => {
+                            if (child) openReportingLinkEditor(child);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            if (child) openReportingLinkEditor(child);
+                          }}
+                          role="button"
+                          tabIndex={0}
+                        />
+                      ) : null}
+                      <path
+                        aria-hidden={canUseRelationshipEditor ? "true" : undefined}
+                        className={styles.connector}
+                        d={connectorPath}
+                        data-active={active}
+                        data-arranging={arranging}
+                        data-company={connector.company}
+                        data-editable={canUseRelationshipEditor ? "true" : "false"}
+                        markerEnd={`url(#${markerPrefix}-${connector.company})`}
+                      />
+                    </g>
                   );
                 })}
                 {linkGuidePath ? <path className={styles.linkGuide} d={linkGuidePath} data-snapped={dropTarget ? "true" : "false"} /> : null}

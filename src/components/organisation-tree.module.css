@@ -746,16 +746,25 @@
   opacity: 0.32;
 }
 
-.connectors[data-editable="true"] .connector[data-editable="true"] {
+.connectorTarget {
+  fill: none;
+  stroke: transparent;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 24;
+  vector-effect: non-scaling-stroke;
   pointer-events: stroke;
   cursor: pointer;
 }
 
-.connectors[data-editable="true"] .connector[data-editable="true"]:hover,
-.connectors[data-editable="true"] .connector[data-editable="true"]:focus {
+.connectorTarget:focus {
+  outline: none;
+}
+
+.connectorTarget:hover + .connector,
+.connectorTarget:focus + .connector {
   stroke-width: 4;
   filter: drop-shadow(0 2px 3px rgb(24 36 33 / 0.18));
-  outline: none;
 }
 
 .nodeWrap {
