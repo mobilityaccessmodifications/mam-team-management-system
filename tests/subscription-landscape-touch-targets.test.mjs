@@ -13,7 +13,7 @@ test("short-screen landscape subscription controls retain full touch targets", (
   assert.ok(credentialOverride > credentialSource.indexOf("/* Shared People Hub page rhythm. */"));
   assert.match(
     registerSource.slice(registerOverride),
-    /@media \(max-width: 1000px\) and \(max-height: 500px\)[\s\S]*?\.headerActionGroup > button,[\s\S]*?\.searchField input,[\s\S]*?\.sheetFilterMenu button,[\s\S]*?\.subscriptionActions button,[\s\S]*?\.accessDetails summary\s*\{[\s\S]*?min-height: 44px;[\s\S]*?\.sheetHeaderCell\s*\{[\s\S]*?padding: 2px 6px;[\s\S]*?\.sheetHeaderButton\s*\{[\s\S]*?width: 44px;[\s\S]*?min-width: 44px;[\s\S]*?min-height: 44px;/,
+    /@media \(max-width: 1000px\) and \(max-height: 500px\)[\s\S]*?\.headerActionGroup > button\s*\{[\s\S]*?min-width: 44px;[\s\S]*?\.headerActionGroup > button,[\s\S]*?\.searchField input,[\s\S]*?\.sheetFilterMenu button,[\s\S]*?\.subscriptionActions button,[\s\S]*?\.accessDetails summary\s*\{[\s\S]*?min-height: 44px;[\s\S]*?\.sheetHeaderCell\s*\{[\s\S]*?padding: 2px 6px;[\s\S]*?\.sheetHeaderButton\s*\{[\s\S]*?width: 44px;[\s\S]*?min-width: 44px;[\s\S]*?min-height: 44px;/,
   );
   assert.match(
     credentialSource.slice(credentialOverride),

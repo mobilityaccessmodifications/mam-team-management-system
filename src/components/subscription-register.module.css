@@ -630,6 +630,10 @@
 
 /* Keep the spreadsheet and disclosure controls touch-safe on short landscape screens. */
 @media (max-width: 1000px) and (max-height: 500px) {
+  .headerActionGroup > button {
+    min-width: 44px;
+  }
+
   .headerActionGroup > button,
   .searchField input,
   .sheetFilterMenu button,
