@@ -31,6 +31,7 @@ import {
   activateDayFlowEventFromKeyboard,
   focusDayFlowEventFromTarget,
   makeDayFlowEventsAccessible,
+  makeDayFlowNavigationAccessible,
 } from "@/lib/dayflow-event-accessibility";
 import { BALANCE_PENDING_STATUS } from "@/lib/leave-priority";
 
@@ -275,10 +276,18 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
   useEffect(() => {
     const frame = calendarFrameRef.current;
     if (!frame) return;
-    const refreshEventSemantics = () => makeDayFlowEventsAccessible(frame);
-    refreshEventSemantics();
-    const observer = new MutationObserver(refreshEventSemantics);
-    observer.observe(frame, { childList: true, subtree: true });
+    const refreshCalendarSemantics = () => {
+      makeDayFlowEventsAccessible(frame);
+      makeDayFlowNavigationAccessible(frame);
+    };
+    refreshCalendarSemantics();
+    const observer = new MutationObserver(refreshCalendarSemantics);
+    observer.observe(frame, {
+      attributes: true,
+      attributeFilter: ["data-active"],
+      childList: true,
+      subtree: true,
+    });
     return () => observer.disconnect();
   }, []);
   const customSearch = useCallback(({ keyword, events: items }: { keyword: string; events: CalendarSearchEvent[] }) => {

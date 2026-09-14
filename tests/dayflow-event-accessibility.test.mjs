@@ -38,6 +38,7 @@ const {
   activateDayFlowEventFromKeyboard,
   focusDayFlowEventFromTarget,
   makeDayFlowEventsAccessible,
+  makeDayFlowNavigationAccessible,
 } = loaded.exports;
 
 function eventElement(title = "Alice Employee · Annual leave (12/10/2026 - 13/10/2026)") {
@@ -71,4 +72,37 @@ test("Enter and Space activate a focused event", () => {
   const event = eventElement();
   assert.equal(activateDayFlowEventFromKeyboard(event, "Escape"), false);
   assert.equal(event.clicked, false);
+});
+
+test("calendar navigation names match the active DayFlow view", () => {
+  const expectations = new Map([
+    ["Day", ["Previous day", "Next day"]],
+    ["Week", ["Previous week", "Next week"]],
+    ["Month", ["Previous month", "Next month"]],
+    ["Year", ["Previous year", "Next year"]],
+    ["Agenda", ["Previous 14 days", "Next 14 days"]],
+  ]);
+
+  for (const [view, labels] of expectations) {
+    const activeView = new FakeElement({ text: view });
+    const previous = new FakeElement();
+    const next = new FakeElement();
+    previous.setAttribute("aria-label", "Previous month");
+    next.setAttribute("aria-label", "Next month");
+    const root = {
+      querySelector: (selector) => selector === ".df-view-switcher-btn[data-active='true']" ? activeView : null,
+      querySelectorAll: (selector) => selector === ".df-calendar-nav-button" ? [previous, next] : [],
+    };
+
+    makeDayFlowNavigationAccessible(root);
+
+    assert.equal(previous.getAttribute("aria-label"), labels[0], `${view} previous button`);
+    assert.equal(next.getAttribute("aria-label"), labels[1], `${view} next button`);
+  }
+});
+
+test("calendar semantics observe active-view changes", () => {
+  const component = readFileSync("src/components/team-calendar.tsx", "utf8");
+  assert.match(component, /attributes:\s*true/);
+  assert.match(component, /attributeFilter:\s*\["data-active"\]/);
 });
