@@ -1234,6 +1234,25 @@
     min-height: 44px;
     touch-action: manipulation;
   }
+
+  .fieldLabel button {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .passwordInput {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .passwordInput input,
+  .passwordInput button {
+    height: 44px;
+  }
+
+  .passwordInput button {
+    width: 44px;
+    touch-action: manipulation;
+  }
 }
 
 /* Keep account controls usable when compact phones rotate to landscape. */
