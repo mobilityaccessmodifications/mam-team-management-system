@@ -1,6 +1,7 @@
 \set ON_ERROR_STOP on
 do $$begin assert current_database() ~ '^priority_v[0-9]+$', 'Synthetic database only';end$$;
 begin;
+\ir sql-test-auth.sql
 insert into public.profiles(id,full_name,app_role,login_name,credentials_valid_after) values
 ('10000000-0000-4000-8000-000000000001','Test Admin','system_admin','testadmin',now()-interval '1 day'),
 ('10000000-0000-4000-8000-000000000002','Test Employee','employee','testemployee',now()-interval '1 day'),
@@ -16,7 +17,7 @@ do $$begin
       and scope_root_person_id='10000000-0000-4000-8000-000000000003'
       and revoked_at is null), 'Manager fixture receives one automatic subtree approval grant';
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000001');
 select public.set_employee_annual_leave_balance('10000000-0000-4000-8000-000000000002',10,(now() at time zone 'Australia/Melbourne')::date-365,false);
 select public.set_employee_sick_leave_balance('10000000-0000-4000-8000-000000000002',20,(now() at time zone 'Australia/Melbourne')::date-365);
 insert into private.leave_accrual_policies(person_id,effective_from,weekly_hours,weekdays,annual_weeks,personal_weeks,enabled,note)
@@ -79,7 +80,7 @@ do $$declare r uuid;begin
  assert not private.leave_payroll_balance_sufficient(r),'Never round a near-threshold balance into sufficiency';
  update public.leave_requests set status='cancelled' where id=r;
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000002',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000002');
 do $$declare w jsonb;begin
  w:=public.get_leave_priority_workspace();
  assert (w->'people'->0->>'hours')::numeric=162;
@@ -92,7 +93,7 @@ do $$declare w jsonb;begin
  assert not has_function_privilege('authenticated','public.get_leave_priority_workspace_before_accrual(uuid)','EXECUTE');
  assert not has_table_privilege('authenticated','private.leave_accrual_calculations','SELECT');
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000001');
 do $$declare r uuid;c jsonb;day date:=(now() at time zone 'Australia/Melbourne')::date-1; before_hours numeric;begin
  while extract(isodow from day)>5 loop day:=day-1;end loop;
  select id into r from public.submit_selected_employee_leave_request('10000000-0000-4000-8000-000000000002','Annual leave',day,day);

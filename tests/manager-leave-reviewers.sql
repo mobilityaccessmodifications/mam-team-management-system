@@ -2,6 +2,7 @@
 \set ON_ERROR_STOP on
 do $$begin assert current_database() ~ '^priority_v[0-9]+$', 'Synthetic database only';end$$;
 begin;
+\ir sql-test-auth.sql
 insert into public.profiles(id,full_name,app_role,login_name,credentials_valid_after) values
 ('10000000-0000-4000-8000-000000000001','Reviewer One','system_admin','reviewer1',now()-interval '1 day'),
 ('10000000-0000-4000-8000-000000000002','Reviewer Two','system_admin','reviewer2',now()-interval '1 day'),
@@ -21,7 +22,7 @@ select id,case when app_role='system_admin' then 'global' else 'subtree' end,
 from public.profiles p where app_role in ('manager','system_admin')
   and not exists(select 1 from private.leave_approval_grants g where g.reviewer_user_id=p.id and g.revoked_at is null);
 insert into private.manager_leave_reviewers select id,row_number() over(order by id) from public.profiles where app_role='system_admin';
-select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000001');
 create temp table submitted as select id from public.submit_selected_employee_leave_request('10000000-0000-4000-8000-000000000004','Annual leave','2030-12-09','2030-12-13');
 do $$declare r uuid:=(select id from submitted); reviewer record; recipients text;begin
  assert (select count(*)=3 from private.leave_request_reviewer_assignments where leave_request_id=r),'All group accounts assigned';
@@ -31,7 +32,7 @@ do $$declare r uuid:=(select id from submitted); reviewer record; recipients tex
  assert recipients='reviewer1@example.test,reviewer2@example.test,reviewer3@example.test','All group email addresses';
  for reviewer in select reviewer_user_id from private.manager_leave_reviewers loop
   assert private.is_current_leave_request_reviewer(r,reviewer.reviewer_user_id);
-  perform set_config('test.uid',reviewer.reviewer_user_id::text,false);
+  perform pg_temp.set_test_actor(reviewer.reviewer_user_id);
   assert private.can_review_leave_request(r),'Reviewer account can open approval';
   -- Each real decision function must succeed, then rollback just that decision.
   begin
@@ -42,12 +43,12 @@ do $$declare r uuid:=(select id from submitted); reviewer record; recipients tex
    if sqlerrm <> 'rollback synthetic decision' then raise;end if;
   end;
  end loop;
- perform set_config('test.uid','10000000-0000-4000-8000-000000000004',false);
+ perform pg_temp.set_test_actor('10000000-0000-4000-8000-000000000004');
  begin
   perform public.decide_leave_with_balance(r,'Approved',null);
   raise exception 'Self approval succeeded';
  exception when insufficient_privilege then null;end;
- perform set_config('test.uid','10000000-0000-4000-8000-000000000005',false);
+ perform pg_temp.set_test_actor('10000000-0000-4000-8000-000000000005');
  begin
   perform public.decide_leave_with_balance(r,'Approved',null);
   raise exception 'Former reporting manager approved';
@@ -69,7 +70,7 @@ select r.id,g.reviewer_user_id,g.id,g.scope_kind,g.reviewer_label,true from subm
 cross join private.leave_approval_grants g where g.reviewer_user_id='10000000-0000-4000-8000-000000000005';
 select private.reroute_pending_leave_requests_to_current_manager();
 do $$begin assert (select count(*)=3 from private.leave_request_reviewer_assignments where leave_request_id in(select id from submitted));end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000001');
 create temp table ordinary as select id from public.submit_selected_employee_leave_request('10000000-0000-4000-8000-000000000006','Annual leave','2031-12-08','2031-12-12');
 do $$begin
  assert (select manager_email='applicant@example.test' from public.resolve_leave_notification_manager((select id from ordinary))),'Employee goes to nearest manager';

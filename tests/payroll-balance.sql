@@ -2,6 +2,7 @@
 \set ON_ERROR_STOP on
 do $$begin assert current_database() ~ '^priority_v[0-9]+$', 'Never run fixtures in production'; end$$;
 begin;
+\ir sql-test-auth.sql
 insert into public.profiles(id,full_name,app_role,login_name,credentials_valid_after)
 values ('10000000-0000-4000-8000-000000000001','Test Admin','system_admin','testadmin',now()-interval '1 day'),
 ('10000000-0000-4000-8000-000000000002','Test Manager','manager','testmanager',now()-interval '1 day'),
@@ -18,7 +19,7 @@ do $$begin
       and scope_root_person_id='10000000-0000-4000-8000-000000000002'
       and revoked_at is null), 'Manager fixture receives one automatic subtree approval grant';
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000001');
 select public.set_employee_annual_leave_balance('10000000-0000-4000-8000-000000000003',119.9999,current_date,false);
 select public.set_employee_sick_leave_balance('10000000-0000-4000-8000-000000000003',45.1234,current_date);
 insert into private.payroll_balance_imports(company_key,employee_name,annual_hours,sick_hours,as_of,source_file,source_sha256,match_status)
@@ -26,7 +27,7 @@ values('mam','Unmatched Test Employee',10,20,current_date,'synthetic.xlsx',repea
 do $$begin
   assert jsonb_array_length(public.get_leave_priority_workspace()->'payrollImports')=1, 'Admin can review all imported records';
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000003',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000003');
 do $$declare w jsonb; begin
   w:=public.get_leave_priority_workspace();
   assert jsonb_array_length(w->'people')=1;
@@ -39,13 +40,13 @@ do $$declare w jsonb; begin
     raise exception 'Employee changed sick balance';
   exception when insufficient_privilege then null; end;
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000004',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000004');
 do $$declare w jsonb; begin
   w:=public.get_leave_priority_workspace();
   assert jsonb_array_length(w->'payrollImports')=0, 'Managers cannot read the unscoped import register';
   assert not exists(select 1 from jsonb_array_elements(w->'people') p where p->>'personId'='10000000-0000-4000-8000-000000000003');
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000002',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000002');
 do $$declare p jsonb; begin
   select e into strict p from jsonb_array_elements(public.get_leave_priority_workspace()->'people') e
   where e->>'personId'='10000000-0000-4000-8000-000000000003';
@@ -95,7 +96,7 @@ do $$declare r uuid; definition text; delivery record; retry record; begin
   assert not has_function_privilege('anon','public.set_employee_sick_leave_balance(uuid,numeric,date)','EXECUTE');
   assert not has_table_privilege('authenticated','private.payroll_balance_imports','SELECT');
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000003',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000003');
 do $$declare r uuid; begin
   select id into strict r from public.leave_requests;
   begin
@@ -103,7 +104,7 @@ do $$declare r uuid; begin
     raise exception 'Employee changed own reminder threshold';
   exception when insufficient_privilege then null; end;
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000001');
 do $$declare w jsonb; begin
   w:=public.get_leave_priority_workspace('10000000-0000-4000-8000-000000000003');
   assert jsonb_array_length(w->'people')=1;

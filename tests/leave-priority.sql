@@ -2,6 +2,7 @@
 \set ON_ERROR_STOP on
 do $$begin assert current_database() ~ '^priority_v[0-9]+$', 'Never run fixtures in production'; end$$;
 begin;
+\ir sql-test-auth.sql
 insert into public.profiles(id,full_name,app_role,login_name,credentials_valid_after)
 values ('10000000-0000-4000-8000-000000000001','Test Admin','system_admin','testadmin',now()-interval '1 day'),
 ('10000000-0000-4000-8000-000000000002','Test Manager','manager','testmanager',now()-interval '1 day'),
@@ -18,7 +19,7 @@ do $$begin
       and scope_root_person_id='10000000-0000-4000-8000-000000000002'
       and revoked_at is null), 'Manager fixture receives one automatic subtree approval grant';
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000002',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000002');
 do $$begin
   assert private.can_submit_team_leave('10000000-0000-4000-8000-000000000003');
   assert not private.can_submit_team_leave('10000000-0000-4000-8000-000000000004');
@@ -32,7 +33,7 @@ do $$declare r public.leave_requests; plan record; begin
   select * into strict plan from public.prepare_my_leave_request_attachment_upload(r.id,'proof.pdf','application/pdf',100);
   assert plan.storage_path is not null;
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000004',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000004');
 do $$declare r uuid; begin
   select id into r from public.leave_requests;
   assert not private.can_add_my_leave_request_attachment(r);
@@ -41,7 +42,7 @@ do $$declare r uuid; begin
     raise exception 'Unauthorised submission was accepted';
   exception when insufficient_privilege then null; end;
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000002',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000002');
 select * from public.submit_selected_employee_leave_request('10000000-0000-4000-8000-000000000003','Annual leave','2026-11-09','2026-11-10');
 do $$declare r uuid; begin
   select id into r from public.leave_requests where request_type_label='Annual leave';
@@ -51,19 +52,19 @@ do $$declare r uuid; begin
   perform public.decide_leave_with_balance(r,'Approved',null);
   assert (select status='approved' from public.leave_requests where id=r);
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000003',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000003');
 do $$begin
   begin
     perform public.set_employee_annual_leave_balance('10000000-0000-4000-8000-000000000003',60,current_date,false);
     raise exception 'Employee changed a balance';
   exception when insufficient_privilege then null; end;
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000001');
 select public.set_employee_annual_leave_balance('10000000-0000-4000-8000-000000000003',60,current_date,false);
 do $$begin assert (select hours=60 from private.employee_annual_leave_balances); end$$;
 
 -- Projection isolation and normal numeric balances.
-select set_config('test.uid','10000000-0000-4000-8000-000000000003',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000003');
 do $$declare w jsonb; begin
   w:=public.get_leave_priority_workspace();
   assert jsonb_array_length(w->'people')=1;
@@ -71,7 +72,7 @@ do $$declare w jsonb; begin
   assert (w->'people'->0->>'canViewBalance')::boolean;
   assert not (w->>'canManageBalances')::boolean;
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000002',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000002');
 do $$declare w jsonb; p text; begin
   w:=public.get_leave_priority_workspace();
   assert jsonb_array_length(w->'people')=2;
@@ -90,7 +91,7 @@ do $$declare w jsonb; p text; begin
   perform public.complete_my_leave_request_attachment_upload(p);
   assert (select count(*)=1 from public.leave_request_attachments);
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000001');
 do $$declare w jsonb; begin
   w:=public.get_leave_priority_workspace();
   assert (w->>'canManageBalances')::boolean;

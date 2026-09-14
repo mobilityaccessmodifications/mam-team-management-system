@@ -2,6 +2,7 @@
 \set ON_ERROR_STOP on
 do $$begin assert current_database() ~ '^priority_v[0-9]+$', 'Never run fixtures in production'; end$$;
 begin;
+\ir sql-test-auth.sql
 insert into public.profiles(id,full_name,app_role,login_name,credentials_valid_after)
 values ('10000000-0000-4000-8000-000000000001','Test Admin','system_admin','testadmin',now()-interval '1 day'),
 ('10000000-0000-4000-8000-000000000002','Test Manager','manager','testmanager',now()-interval '1 day'),
@@ -18,7 +19,7 @@ do $$begin
       and scope_root_person_id='10000000-0000-4000-8000-000000000002'
       and revoked_at is null), 'Manager fixture receives one automatic subtree approval grant';
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000002',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000002');
 do $$begin
   assert private.can_submit_team_leave('10000000-0000-4000-8000-000000000003');
   assert not private.can_submit_team_leave('10000000-0000-4000-8000-000000000004');
