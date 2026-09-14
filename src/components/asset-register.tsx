@@ -24,6 +24,7 @@ import {
 import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -220,10 +221,12 @@ function BarcodePreview({ value }: { value: string }) {
 
 function AssetLabelModal({
   asset,
+  fallbackFocusRef,
   onClose,
   onAddAnother,
 }: {
   asset: ItAsset;
+  fallbackFocusRef: RefObject<HTMLElement | null> | null;
   onClose: () => void;
   onAddAnother?: () => void;
 }) {
@@ -231,7 +234,7 @@ function AssetLabelModal({
   const initialFocusRef = useRef<HTMLButtonElement>(null);
   const [busyAction, setBusyAction] = useState<BarcodeAction | null>(null);
   const [actionError, setActionError] = useState("");
-  useDialogFocus(true, dialogRef, initialFocusRef, onClose);
+  useDialogFocus(true, dialogRef, initialFocusRef, onClose, fallbackFocusRef);
 
   async function downloadLabel() {
     setBusyAction("download");
@@ -745,6 +748,8 @@ export function AssetRegister() {
   });
   const [rowError, setRowError] = useState("");
   const [notice, setNotice] = useState("");
+  const addDeviceButtonRef = useRef<HTMLButtonElement>(null);
+  const labelReturnFocusRef = useRef<HTMLElement | null>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const actionTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const actionMenuInitialFocus = useRef<"first" | "last">("first");
@@ -898,6 +903,7 @@ export function AssetRegister() {
   }
 
   function assetCreated(asset: ItAsset) {
+    labelReturnFocusRef.current = addDeviceButtonRef.current;
     setAssets((current) => [asset, ...current]);
     setShowAddDevice(false);
     setLabelTarget({ asset, isNew: true });
@@ -945,6 +951,7 @@ export function AssetRegister() {
   }
 
   function showLabelFromRow(asset: ItAsset) {
+    labelReturnFocusRef.current = actionTriggerRefs.current.get(asset.id) ?? null;
     setExpandedActionsId(null);
     setLabelTarget({ asset, isNew: false });
   }
@@ -982,7 +989,7 @@ export function AssetRegister() {
       <div className={styles.headerActions}>
         <a className={styles.secondaryAction} href="/assets/export?format=csv" aria-label="Download devices as CSV" title="Download CSV"><Download size={16} aria-hidden="true" /><span>CSV</span></a>
         <a className={styles.secondaryAction} href="/assets/export?format=xlsx" aria-label="Download devices as Excel" title="Download Excel"><Download size={16} aria-hidden="true" /><span>Excel</span></a>
-        <button className={styles.primaryAction} type="button" onClick={() => setShowAddDevice(true)}><PackagePlus size={17} /> Add device</button>
+        <button className={styles.primaryAction} type="button" onClick={() => setShowAddDevice(true)} ref={addDeviceButtonRef}><PackagePlus size={17} /> Add device</button>
       </div>
     </header>
 
@@ -1097,7 +1104,7 @@ export function AssetRegister() {
     </div> : null}
 
     {showAddDevice ? <AddDeviceModal assignees={assignees} onClose={() => setShowAddDevice(false)} onCreated={assetCreated} /> : null}
-    {labelTarget ? <AssetLabelModal asset={labelTarget.asset} onClose={() => setLabelTarget(null)} onAddAnother={labelTarget.isNew ? () => { setLabelTarget(null); setShowAddDevice(true); } : undefined} /> : null}
+    {labelTarget ? <AssetLabelModal asset={labelTarget.asset} fallbackFocusRef={labelReturnFocusRef} onClose={() => setLabelTarget(null)} onAddAnother={labelTarget.isNew ? () => { setLabelTarget(null); setShowAddDevice(true); } : undefined} /> : null}
     {assignmentTarget ? <ChangeDeviceOwnerModal asset={assignmentTarget} assignees={assignees} onClose={() => setAssignmentTarget(null)} onSaved={assetOwnerChanged} /> : null}
     {returnTarget ? <ReturnDeviceModal asset={returnTarget} onClose={() => setReturnTarget(null)} onReturned={assetReturned} /> : null}
     {historyTarget ? <CustodyHistoryModal asset={historyTarget} onClose={() => setHistoryTarget(null)} /> : null}

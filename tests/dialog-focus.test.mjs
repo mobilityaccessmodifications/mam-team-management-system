@@ -9,7 +9,7 @@ const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.Modu
 
 function harness(mobile = true) {
   const effects = [], listeners = new Set(), microtasks = [];
-  const document = { activeElement: null, body: { style: { overflow: "auto" } } };
+  const document = { activeElement: null, body: null, documentElement: null };
   class Element {
     constructor(controls = []) { this.controls = controls; this.attrs = {}; this.tabIndex = 0; this.isConnected = true; this.visible = true; }
     focus() { document.activeElement = this; }
@@ -21,6 +21,9 @@ function harness(mobile = true) {
     closest() { return null; }
     contains(element) { return element === this || this.controls.includes(element); }
   }
+  document.body = new Element();
+  document.body.style = { overflow: "auto" };
+  document.documentElement = new Element();
   const exports = {};
   vm.runInNewContext(compiled, {
     exports, HTMLElement: Element, document,
@@ -97,6 +100,14 @@ test("uses a connected fallback when a mutation removes the opening control", ()
   closeChild(); h.flush();
   assert.equal(h.document.activeElement, fallback);
   closeParent(); h.flush();
+});
+
+test("uses a fallback when a chained dialog opens from the page body", () => {
+  const h = harness(), fallback = new h.Element();
+  h.document.body.focus();
+  const close = h.mount(new h.Element(), () => {}, { current: fallback });
+  close(); h.flush();
+  assert.equal(h.document.activeElement, fallback);
 });
 
 test("out-of-order unmount does not unlock a still-open child", () => {

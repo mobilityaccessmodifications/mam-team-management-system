@@ -110,7 +110,10 @@ export function useDialogFocus(
       // restoration only needs to run after this cleanup stack, so a
       // microtask restores keyboard focus promptly without depending on paint.
       queueMicrotask(() => {
-        const returnTarget = preferredReturnTarget?.isConnected
+        const preferredIsMeaningful = preferredReturnTarget?.isConnected
+          && preferredReturnTarget !== document.body
+          && preferredReturnTarget !== document.documentElement;
+        const returnTarget = preferredIsMeaningful
           ? preferredReturnTarget
           : fallbackReturnTarget;
         if (!wasTop || !returnTarget?.isConnected) return;
