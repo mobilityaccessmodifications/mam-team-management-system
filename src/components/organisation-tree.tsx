@@ -2455,6 +2455,7 @@ export function OrganisationTree({
                       setSelectedId(null);
                       workContactRequestRef.current += 1;
                       setWorkContact(null);
+                      requestAnimationFrame(() => filterButtonRef.current?.focus());
                     }}
                     key={filter}
                     role="menuitemradio"

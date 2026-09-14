@@ -12,3 +12,10 @@ test("organisation filter closes on Escape and restores trigger focus", () => {
   );
   assert.match(source, /aria-label="Filter organisation"[\s\S]*?ref=\{filterButtonRef\}/);
 });
+
+test("organisation filter selection restores trigger focus", () => {
+  assert.match(
+    source,
+    /onClick=\{\(\) => \{\s*setCompanyFilter\(filter\);\s*setFilterOpen\(false\);[\s\S]*?requestAnimationFrame\(\(\) => filterButtonRef\.current\?\.focus\(\)\);/,
+  );
+});
