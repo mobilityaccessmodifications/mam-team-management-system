@@ -258,3 +258,16 @@
 .calendarPlaceholder { flex: 1; min-height: 0; border: 0; border-radius: 0; }
 .mobileHint { display: none; }
 .calendarFrame :global(.df-calendar-wrapper) { height: 100%; min-height: 0; }
+
+/* Short-screen phone calendars retain full controls without changing desktop density. */
+@media (max-width: 1000px) and (max-height: 500px) {
+  .calendarFrame :global(button),
+  .calendarFrame :global([role="button"]) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .calendarFrame :global(.df-search-group-input) {
+    min-height: 44px;
+  }
+}
