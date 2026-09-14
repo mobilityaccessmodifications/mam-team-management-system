@@ -21,6 +21,12 @@ test('Leave navigation defaults to Pending register while explicit approvals rem
   navigate('leave'); assert.deepEqual(calls, ['Pending', 'requests', 'leave']);
   calls.length = 0; navigate('leave', 'approvals'); assert.deepEqual(calls, ['approvals', 'leave']);
 });
+test('unauthorised approval deep links resolve to the requests register', () => {
+  const resolveSection = load('resolveAuthorisedLeaveSection', {});
+  assert.equal(resolveSection('approvals', false), 'requests');
+  assert.equal(resolveSection('approvals', true), 'approvals');
+  assert.equal(resolveSection('requests', false), 'requests');
+});
 test('record selection preserves the current filter, but opens out-of-filter deep links', () => {
   for (const [id, expected] of [['pending', []], ['approved', ['All']]]) {
     const filters = [], selections = [];

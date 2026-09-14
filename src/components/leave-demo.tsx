@@ -122,6 +122,11 @@ import type {
 
 type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals";
+
+function resolveAuthorisedLeaveSection(section: LeaveSection, canReview: boolean): LeaveSection {
+  return section === "approvals" && !canReview ? "requests" : section;
+}
+
 type RequestStatus = "Pending" | "Approved" | "Declined" | "Cancelled" | typeof BALANCE_PENDING_STATUS;
 type AccessRole = "hr" | "manager" | "employee";
 
@@ -1306,7 +1311,8 @@ export function LeaveDemo({
   const selectedApprovalRequest = selectedRequestId
     ? approvalQueue.find((request) => request.id === selectedRequestId)
     : approvalQueue[0];
-  const selectedRequest = leaveSection === "approvals" ? selectedApprovalRequest : selectedRegisterRequest;
+  const authorisedLeaveSection = resolveAuthorisedLeaveSection(leaveSection, canReviewLeave);
+  const selectedRequest = authorisedLeaveSection === "approvals" ? selectedApprovalRequest : selectedRegisterRequest;
   const attachmentsByRequestId = new Map<string, LeaveAttachment[]>();
   leaveAttachments.forEach((attachment) => {
     const current = attachmentsByRequestId.get(attachment.leaveRequestId) ?? [];
@@ -1911,7 +1917,7 @@ export function LeaveDemo({
               onReview={reviewWorkScheduleRequest}
             />}
           /> : null}
-          {activeView === "leave" ? <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={leaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
+          {activeView === "leave" ? <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
           {activeView === "leave" && !leaveDataLoading ? <LeavePriorityControls key={previewPersonId || "self"} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /> : null}
           {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <TeamCalendar birthdays={calendarIsSubscriptionReviewOnly ? [] : calendarBirthdays} checkIns={calendarIsSubscriptionReviewOnly ? [] : calendarCheckIns} requests={calendarIsSubscriptionReviewOnly ? [] : calendarRequests} subscriptionReviews={calendarSubscriptionReviews} reviewOnly={calendarIsSubscriptionReviewOnly} loading={leaveDataLoading} /> : null}
           <div hidden={activeView !== "people"}>
