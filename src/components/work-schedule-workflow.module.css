@@ -679,3 +679,20 @@
     transform: none;
   }
 }
+
+/* Short-screen phone layouts keep every schedule action comfortably tappable. */
+@media (max-width: 1000px) and (max-height: 500px) {
+  .iconButton,
+  .modalHeader button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .reviewActions button,
+  .primaryButton,
+  .secondaryButton,
+  .declineButton,
+  .loadError button {
+    min-height: 44px;
+  }
+}
