@@ -396,7 +396,7 @@ export async function retireItAsset(input: RetireItAssetInput): Promise<ItAsset>
   const supabase = await requireItAssetAdministrator();
   const values = validateRetirementInput(input);
   const { data, error } = await supabase.rpc("retire_it_asset", values);
-  if (error || !Array.isArray(data)) throw mutationError(error, "The device could not be removed. Refresh and try again.");
+  if (error || !Array.isArray(data)) throw mutationError(error, "The device could not be retired. Refresh and try again.");
   const asset = mapItAsset(data[0]);
   revalidatePath("/");
   return asset;
