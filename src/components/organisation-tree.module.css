@@ -2038,7 +2038,8 @@
 
 /* Preserve the 44px phone target after the compact shared action rule. */
 @media (max-width: 640px) {
-  .headerActions > button {
+  .headerActions > button,
+  .filterOption {
     min-height: 44px;
     touch-action: manipulation;
   }
