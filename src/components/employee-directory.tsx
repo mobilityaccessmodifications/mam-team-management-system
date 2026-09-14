@@ -297,6 +297,7 @@ export function EmployeeDirectory({
   const deleteDialogRef = useRef<HTMLElement>(null);
   const deleteCancelRef = useRef<HTMLButtonElement>(null);
   const editorDialogRef = useRef<HTMLElement>(null);
+  const directorySearchRef = useRef<HTMLInputElement>(null);
   const isMobileSheet = useMediaQuery("(max-width: 900px)");
   const closeEndDatePrompt = useCallback(() => {
     if (archiving) return;
@@ -417,6 +418,7 @@ export function EmployeeDirectory({
     editorDialogRef,
     null,
     closeEditor,
+    directorySearchRef,
   );
 
   function closeEditor() {
@@ -597,6 +599,7 @@ export function EmployeeDirectory({
               <Search size={17} aria-hidden="true" />
               <span className={styles.visuallyHidden}>Search employee records</span>
               <input
+                ref={directorySearchRef}
                 value={query}
                 onChange={(event) => {
                   setQuery(event.target.value);
