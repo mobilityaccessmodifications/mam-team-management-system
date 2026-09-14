@@ -27,6 +27,18 @@ test('unauthorised approval deep links resolve to the requests register', () => 
   assert.equal(resolveSection('approvals', true), 'approvals');
   assert.equal(resolveSection('requests', false), 'requests');
 });
+test('leave links show an honest loading state before their authorised workspace resolves', () => {
+  const Boundary = load('LeaveWorkspaceLoadBoundary', { LeaveLoadingState: 'loading-state' });
+  assert.equal(Boundary({ loading: true, children: 'leave-workspace' }).type, 'loading-state');
+  assert.equal(Boundary({ loading: false, children: 'leave-workspace' }), 'leave-workspace');
+  const Loading = load('LeaveLoadingState', { styles: { panel: 'panel', emptyState: 'empty' }, Clock3: 'clock' });
+  const status = Loading();
+  assert.equal(status.props.role, 'status');
+  assert.equal(status.props['aria-live'], 'polite');
+  assert.equal(status.props['aria-busy'], 'true');
+  assert.equal(status.props.children[1].props.children, 'Loading leave');
+  assert.match(source, /<LeaveWorkspaceLoadBoundary loading=\{leaveDataLoading\}>/);
+});
 test('record selection preserves the current filter, but opens out-of-filter deep links', () => {
   for (const [id, expected] of [['pending', []], ['approved', ['All']]]) {
     const filters = [], selections = [];

@@ -1917,7 +1917,9 @@ export function LeaveDemo({
               onReview={reviewWorkScheduleRequest}
             />}
           /> : null}
-          {activeView === "leave" ? <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} /> : null}
+          {activeView === "leave" ? <LeaveWorkspaceLoadBoundary loading={leaveDataLoading}>
+            <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} />
+          </LeaveWorkspaceLoadBoundary> : null}
           {activeView === "leave" && !leaveDataLoading ? <LeavePriorityControls key={previewPersonId || "self"} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /> : null}
           {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <TeamCalendar birthdays={calendarIsSubscriptionReviewOnly ? [] : calendarBirthdays} checkIns={calendarIsSubscriptionReviewOnly ? [] : calendarCheckIns} requests={calendarIsSubscriptionReviewOnly ? [] : calendarRequests} subscriptionReviews={calendarSubscriptionReviews} reviewOnly={calendarIsSubscriptionReviewOnly} loading={leaveDataLoading} /> : null}
           <div hidden={activeView !== "people"}>
@@ -2171,6 +2173,20 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
 
 function PanelHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   return <header className={styles.panelHeader}><h2>{title}</h2>{action && onAction ? <button type="button" onClick={onAction} aria-label={action} title={action}><ChevronRight size={18} aria-hidden="true" /></button> : null}</header>;
+}
+
+function LeaveWorkspaceLoadBoundary({ loading, children }: { loading: boolean; children: ReactNode }) {
+  return loading ? <LeaveLoadingState /> : children;
+}
+
+function LeaveLoadingState() {
+  return (
+    <section className={`${styles.panel} ${styles.emptyState}`} role="status" aria-live="polite" aria-busy="true">
+      <Clock3 size={24} aria-hidden="true" />
+      <strong>Loading leave</strong>
+      <span>Fetching your authorised leave workspace…</span>
+    </section>
+  );
 }
 
 function LeaveView({ leavePriority, onBalancesSaved, profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canApplyForLeave, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, onRequestLeave, onFilter, onSection, onNote, onSelect, onCloseMobileDetail, onDecision, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { leavePriority?: LeavePriorityWorkspace; onBalancesSaved: () => Promise<void>; profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canApplyForLeave: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onRequestLeave: () => void; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onCloseMobileDetail: () => void; onDecision: (status: LeaveDecision) => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
