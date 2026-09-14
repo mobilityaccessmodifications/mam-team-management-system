@@ -658,13 +658,17 @@
 }
 
 .emptyState button {
+  min-height: 44px;
   border: 0;
+  border-radius: 10px;
   background: transparent;
   color: var(--account-accent-deep);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
   font-weight: 800;
+  padding: 10px 12px;
+  touch-action: manipulation;
 }
 
 .pagination {
@@ -1225,3 +1229,65 @@
 .workspace { gap: 20px; }
 .primaryButton, .secondaryButton { min-height: 40px; font-size: 13px; font-weight: 600; box-shadow: none; }
 .header { gap: 12px; }
+
+/* Restore full touch targets after the compact shared button rhythm. */
+@media (max-width: 720px) {
+  .primaryButton,
+  .secondaryButton,
+  .dangerButton {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .fieldLabel button {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .passwordInput {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .passwordInput input,
+  .passwordInput button {
+    height: 44px;
+  }
+
+  .passwordInput button {
+    width: 44px;
+    touch-action: manipulation;
+  }
+}
+
+/* Keep account controls usable when compact phones rotate to landscape. */
+@media (max-width: 1000px) and (max-height: 500px) {
+  .primaryButton,
+  .secondaryButton,
+  .fieldLabel button,
+  .searchField input,
+  .sortField select {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .pageControls button {
+    min-width: 44px;
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .passwordInput {
+    height: 46px;
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .passwordInput input,
+  .passwordInput button {
+    height: 44px;
+  }
+
+  .passwordInput button {
+    width: 44px;
+    touch-action: manipulation;
+  }
+}

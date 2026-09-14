@@ -78,6 +78,36 @@
 .header { gap: 12px; }
 
 .guide { display: block; background: var(--surface-raised); padding: 16px; }
-.guide summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.guide summary { display: flex; min-height: 44px; align-items: center; cursor: pointer; font-size: 14px; font-weight: 600; touch-action: manipulation; }
 .guide[open] summary { margin-bottom: 16px; }
 .guideGrid { margin-bottom: 12px; }
+
+/* Keep the expanded phone guide action at the documented touch-target height. */
+@media (max-width: 760px) {
+  .copyGuide {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .guide summary {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    touch-action: manipulation;
+  }
+}
+
+/* Short landscape screens need the same complete guide controls as phones. */
+@media (max-width: 1000px) and (max-height: 500px) {
+  .copyGuide {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .guide summary {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    touch-action: manipulation;
+  }
+}

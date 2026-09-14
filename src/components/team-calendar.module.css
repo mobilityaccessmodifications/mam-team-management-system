@@ -48,6 +48,10 @@
 }
 
 .calendarFrame :global(.df-calendar-nav-button) { min-width: 36px; }
+.calendarFrame :global(.df-search-group-clear) {
+  min-height: 28px;
+  min-width: 28px;
+}
 .calendarFrame :global(.df-month-day-cell[data-today="true"]) { background: #fff9f5; }
 
 /* The virtual month rows can be shorter than DayFlow's fixed 40px offset
@@ -232,7 +236,7 @@
   .calendarFrame :global(button), .calendarFrame :global([role="button"]) { min-height: 44px; min-width: 44px; }
   .calendarFrame :global(.df-header) { min-height: 54px; }
   .calendarFrame :global(.df-view-switcher) { width: 100%; }
-  .calendarFrame :global(.df-view-switcher-btn) { flex: 1 1 0; font-size: 12px; min-width: 0; padding-inline: 6px; }
+  .calendarFrame :global(.df-view-switcher-btn) { flex: 1 1 0; font-size: 12px; min-width: 44px; padding-inline: 6px; }
   .calendarFrame :global(.df-mobile-event-detail), .calendarFrame :global(.df-mobile-event-drawer) { border-radius: 22px 22px 0 0; max-height: 78dvh; }
   .mobileDetailBackdrop { display: flex; }
   .mobileHint { display: inline-flex; padding-inline: 2px; }
@@ -258,3 +262,16 @@
 .calendarPlaceholder { flex: 1; min-height: 0; border: 0; border-radius: 0; }
 .mobileHint { display: none; }
 .calendarFrame :global(.df-calendar-wrapper) { height: 100%; min-height: 0; }
+
+/* Short-screen phone calendars retain full controls without changing desktop density. */
+@media (max-width: 1000px) and (max-height: 500px) {
+  .calendarFrame :global(button),
+  .calendarFrame :global([role="button"]) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .calendarFrame :global(.df-search-group-input) {
+    min-height: 44px;
+  }
+}

@@ -21,6 +21,24 @@ test('Leave navigation defaults to Pending register while explicit approvals rem
   navigate('leave'); assert.deepEqual(calls, ['Pending', 'requests', 'leave']);
   calls.length = 0; navigate('leave', 'approvals'); assert.deepEqual(calls, ['approvals', 'leave']);
 });
+test('unauthorised approval deep links resolve to the requests register', () => {
+  const resolveSection = load('resolveAuthorisedLeaveSection', {});
+  assert.equal(resolveSection('approvals', false), 'requests');
+  assert.equal(resolveSection('approvals', true), 'approvals');
+  assert.equal(resolveSection('requests', false), 'requests');
+});
+test('leave links show an honest loading state before their authorised workspace resolves', () => {
+  const Boundary = load('LeaveWorkspaceLoadBoundary', { LeaveLoadingState: 'loading-state' });
+  assert.equal(Boundary({ loading: true, children: 'leave-workspace' }).type, 'loading-state');
+  assert.equal(Boundary({ loading: false, children: 'leave-workspace' }), 'leave-workspace');
+  const Loading = load('LeaveLoadingState', { styles: { panel: 'panel', emptyState: 'empty' }, Clock3: 'clock' });
+  const status = Loading();
+  assert.equal(status.props.role, 'status');
+  assert.equal(status.props['aria-live'], 'polite');
+  assert.equal(status.props['aria-busy'], 'true');
+  assert.equal(status.props.children[1].props.children, 'Loading leave');
+  assert.match(source, /<LeaveWorkspaceLoadBoundary loading=\{leaveDataLoading\}>/);
+});
 test('record selection preserves the current filter, but opens out-of-filter deep links', () => {
   for (const [id, expected] of [['pending', []], ['approved', ['All']]]) {
     const filters = [], selections = [];
@@ -67,6 +85,24 @@ test('annual approval has one balance-aware action and preserves conditional dec
     assert.equal(approve.props.children[2],label); assert.equal(Boolean(approve.props.disabled),disabled);
     if(!disabled){approve.props.onClick();assert.deepEqual(calls,[decision]);}
   }
+});
+
+test('approval selection reset keys are unique and scoped to the selected request', () => {
+  const lib = {exports:{}};
+  const compiled = ts.transpileModule(fs.readFileSync('src/lib/leave-priority.ts','utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  new Function('exports',compiled)(lib.exports);
+  const View = load('ApprovalsView', { ...lib.exports, styles:{}, StatusPill:'status', CalendarDays:'icon', Clock3:'icon', ClipboardList:'icon', CheckCircle2:'icon', XCircle:'icon', ApprovalBalancePill:'pill', ApprovalLeaveBalances:'balances', AttachmentList:()=>null, SickEvidenceNotice:()=>null, ApprovalCalendar:'calendar', formatDuration:()=> '2 days', formatTimeRange:()=> '' });
+  const resetKeys = (id) => {
+    const selected = {id,personId:'person',employee:'Employee',initials:'E',leaveType:'Annual leave',dateLabel:'12–13 Oct',days:2,status:'Pending'};
+    const tree = View({selected,pending:[selected],leavePriority:{people:[{personId:'person',canViewBalance:true,hours:15}]},attachmentsByRequestId:new Map(),calendarRequests:[],calendarCheckIns:[],busy:false,readOnly:false,note:'',onBalancesSaved:async()=>{},onNote:()=>{},onSelect:()=>{},onDecision:()=>{}});
+    const record = tree.props.children.find((child) => child?.type === 'section');
+    return record.props.children
+      .filter((child) => child?.type === 'balances' || child?.type === 'calendar')
+      .map((child) => child.key);
+  };
+
+  assert.deepEqual(resetKeys('request-one'), ['balances:request-one', 'calendar:request-one']);
+  assert.deepEqual(resetKeys('request-two'), ['balances:request-two', 'calendar:request-two']);
 });
 
 test('approval calendar shows complete request weeks without six weeks of padding', () => {

@@ -21,7 +21,7 @@ export type LeaveBalancePerson = {
   accrualReviewDate?: string | null;
   accrualPolicy?: {
     weeklyHours: number; annualWeeks: number; personalWeeks: number;
-    shiftworker: boolean; enabled: boolean;
+    shiftworker: boolean; enabled: boolean; note: string;
   } | null;
 };
 export type LeavePriorityWorkspace = {

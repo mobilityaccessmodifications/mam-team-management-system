@@ -8,8 +8,8 @@ const source = readFileSync(new URL("../src/components/ui/use-dialog-focus.ts", 
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
 
 function harness(mobile = true) {
-  const effects = [], listeners = new Set(), frames = [];
-  const document = { activeElement: null, body: { style: { overflow: "auto" } } };
+  const effects = [], listeners = new Set(), microtasks = [];
+  const document = { activeElement: null, body: null, documentElement: null };
   class Element {
     constructor(controls = []) { this.controls = controls; this.attrs = {}; this.tabIndex = 0; this.isConnected = true; this.visible = true; }
     focus() { document.activeElement = this; }
@@ -21,20 +21,23 @@ function harness(mobile = true) {
     closest() { return null; }
     contains(element) { return element === this || this.controls.includes(element); }
   }
+  document.body = new Element();
+  document.body.style = { overflow: "auto" };
+  document.documentElement = new Element();
   const exports = {};
   vm.runInNewContext(compiled, {
     exports, HTMLElement: Element, document,
+    queueMicrotask: fn => microtasks.push(fn),
     require: () => ({ useRef: value => ({ current: value }), useEffect: fn => effects.push(fn) }),
     window: {
       matchMedia: () => ({ matches: mobile }),
       getComputedStyle: () => ({ visibility: "visible" }),
       addEventListener: (_, fn) => listeners.add(fn),
       removeEventListener: (_, fn) => listeners.delete(fn),
-      requestAnimationFrame: fn => frames.push(fn),
     },
   });
-  function mount(dialog, close = () => {}) {
-    exports.useDialogFocus(true, { current: dialog }, null, close);
+  function mount(dialog, close = () => {}, fallbackFocusRef = null) {
+    exports.useDialogFocus(true, { current: dialog }, null, close, fallbackFocusRef);
     const cleanup = effects.splice(0).map(fn => fn()).filter(Boolean);
     return () => cleanup.forEach(fn => fn());
   }
@@ -42,7 +45,7 @@ function harness(mobile = true) {
     const event = { key, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {}, ...options };
     for (const listener of listeners) listener(event);
   }
-  return { Element, document, mount, key, flush: () => frames.splice(0).forEach(fn => fn()) };
+  return { Element, document, mount, key, flush: () => microtasks.splice(0).forEach(fn => fn()) };
 }
 
 test("phone dialog takes focus without opening the input keyboard", () => {
@@ -85,6 +88,38 @@ test("combobox-consumed Escape does not close its dialog", () => {
   h.mount(new h.Element(), () => { closed = true; });
   h.key("Escape", { defaultPrevented: true });
   assert.equal(closed, false);
+});
+
+test("uses a connected fallback when a mutation removes the opening control", () => {
+  const h = harness(), trigger = new h.Element(), fallback = new h.Element();
+  const parent = new h.Element([trigger, fallback]);
+  const closeParent = h.mount(parent);
+  trigger.focus();
+  const closeChild = h.mount(new h.Element(), () => {}, { current: fallback });
+  trigger.isConnected = false;
+  closeChild(); h.flush();
+  assert.equal(h.document.activeElement, fallback);
+  closeParent(); h.flush();
+});
+
+test("uses a fallback when a chained dialog opens from the page body", () => {
+  const h = harness(), fallback = new h.Element();
+  h.document.body.focus();
+  const close = h.mount(new h.Element(), () => {}, { current: fallback });
+  close(); h.flush();
+  assert.equal(h.document.activeElement, fallback);
+});
+
+test("restores focus to a focusable SVG trigger", () => {
+  const h = harness();
+  const trigger = {
+    isConnected: true,
+    focus() { h.document.activeElement = this; },
+  };
+  h.document.activeElement = trigger;
+  const close = h.mount(new h.Element());
+  close(); h.flush();
+  assert.equal(h.document.activeElement, trigger);
 });
 
 test("out-of-order unmount does not unlock a still-open child", () => {

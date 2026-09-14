@@ -1,16 +1,30 @@
 \set ON_ERROR_STOP on
 do $$begin assert current_database() ~ '^priority_v[0-9]+$', 'Synthetic database only';end$$;
 begin;
+\ir sql-test-auth.sql
+insert into auth.users(id) values
+('10000000-0000-4000-8000-000000000001'),
+('10000000-0000-4000-8000-000000000002'),
+('10000000-0000-4000-8000-000000000003');
 insert into public.profiles(id,full_name,app_role,login_name,credentials_valid_after) values
 ('10000000-0000-4000-8000-000000000001','Test Admin','system_admin','testadmin',now()-interval '1 day'),
 ('10000000-0000-4000-8000-000000000002','Test Employee','employee','testemployee',now()-interval '1 day'),
 ('10000000-0000-4000-8000-000000000003','Test Manager','manager','testmanager',now()-interval '1 day');
+-- Parent validation fires per row, so roots must exist before their reports.
 insert into public.internal_org_people(id,full_name,company_key,position_title,auth_user_id,parent_id)
-select id,full_name,'mam','Test role',id,case when app_role='employee' then '10000000-0000-4000-8000-000000000003'::uuid else null end from public.profiles;
+select id,full_name,'mam','Test role',id,null from public.profiles where app_role<>'employee';
+insert into public.internal_org_people(id,full_name,company_key,position_title,auth_user_id,parent_id)
+select id,full_name,'mam','Test role',id,'10000000-0000-4000-8000-000000000003' from public.profiles where app_role='employee';
 insert into private.employee_directory_details(person_id,employment_type,work_email)
 select id,'full_time',login_name||'@example.test' from public.profiles;
-insert into private.leave_approval_grants(id,reviewer_user_id,scope_kind,scope_root_person_id,reviewer_label) values('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000003','subtree','10000000-0000-4000-8000-000000000003','Test Manager');
-select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
+do $$begin
+  assert (select count(*)=1 from private.leave_approval_grants
+    where reviewer_user_id='10000000-0000-4000-8000-000000000003'
+      and scope_kind='subtree'
+      and scope_root_person_id='10000000-0000-4000-8000-000000000003'
+      and revoked_at is null), 'Manager fixture receives one automatic subtree approval grant';
+end$$;
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000001');
 select public.set_employee_annual_leave_balance('10000000-0000-4000-8000-000000000002',10,(now() at time zone 'Australia/Melbourne')::date-365,false);
 select public.set_employee_sick_leave_balance('10000000-0000-4000-8000-000000000002',20,(now() at time zone 'Australia/Melbourne')::date-365);
 insert into private.leave_accrual_policies(person_id,effective_from,weekly_hours,weekdays,annual_weeks,personal_weeks,enabled,note)
@@ -73,7 +87,7 @@ do $$declare r uuid;begin
  assert not private.leave_payroll_balance_sufficient(r),'Never round a near-threshold balance into sufficiency';
  update public.leave_requests set status='cancelled' where id=r;
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000002',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000002');
 do $$declare w jsonb;begin
  w:=public.get_leave_priority_workspace();
  assert (w->'people'->0->>'hours')::numeric=162;
@@ -86,7 +100,12 @@ do $$declare w jsonb;begin
  assert not has_function_privilege('authenticated','public.get_leave_priority_workspace_before_accrual(uuid)','EXECUTE');
  assert not has_table_privilege('authenticated','private.leave_accrual_calculations','SELECT');
 end$$;
-select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000001');
+do $$declare w jsonb;p jsonb;begin
+ w:=public.get_leave_priority_workspace();
+ select value into p from jsonb_array_elements(w->'people') where value->>'personId'='10000000-0000-4000-8000-000000000002';
+ assert p->'accrualPolicy'->>'note'='Synthetic fixture','Administrator projection round-trips the policy note';
+end$$;
 do $$declare r uuid;c jsonb;day date:=(now() at time zone 'Australia/Melbourne')::date-1; before_hours numeric;begin
  while extract(isodow from day)>5 loop day:=day-1;end loop;
  select id into r from public.submit_selected_employee_leave_request('10000000-0000-4000-8000-000000000002','Annual leave',day,day);

@@ -27,6 +27,20 @@ import type { BirthdayCalendarEntry, CheckInCalendarEntry, SubscriptionReviewCal
 import styles from "@/components/team-calendar.module.css";
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
+import {
+  DAYFLOW_SEARCH_TRIGGER_SELECTOR,
+  activateDayFlowEventFromKeyboard,
+  activateDayFlowSearchResultFromKeyboard,
+  closeDayFlowSearchFromKeyboard,
+  containDayFlowSearchFocus,
+  focusDayFlowEventFromTarget,
+  makeDayFlowEventsAccessible,
+  makeDayFlowNavigationAccessible,
+  makeDayFlowSearchAccessible,
+  makeDayFlowViewSwitcherAccessible,
+  restoreDayFlowDesktopSearchFocusAfterClear,
+} from "@/lib/dayflow-event-accessibility";
+import { navigateFromDayFlowSearchResult } from "@/lib/dayflow-search-navigation";
 import { BALANCE_PENDING_STATUS } from "@/lib/leave-priority";
 
 type CalendarLeaveRequest = {
@@ -224,6 +238,7 @@ function MobileEventDetail({ draftEvent, isOpen, onClose }: MobileEventProps) {
 
 function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews, reviewOnly, loading }: TeamCalendarProps) {
   const year = new Date().getFullYear();
+  const calendarFrameRef = useRef<HTMLDivElement>(null);
   const [visibleYears, setVisibleYears] = useState([year - 1, year, year + 1]);
   const events = useMemo(() => buildEvents(birthdays, checkIns, requests, subscriptionReviews, visibleYears), [birthdays, checkIns, requests, subscriptionReviews, visibleYears]);
   // Keep the calendar instance stable while its event data syncs. Recreating it
@@ -266,6 +281,60 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
       if (calendarAppRef.current === calendar.app) calendarAppRef.current = null;
     };
   }, [calendar.app]);
+  useEffect(() => {
+    const frame = calendarFrameRef.current;
+    if (!frame) return;
+    const refreshCalendarSemantics = () => {
+      makeDayFlowEventsAccessible(frame);
+      makeDayFlowNavigationAccessible(frame);
+      makeDayFlowSearchAccessible(document);
+      makeDayFlowViewSwitcherAccessible(frame);
+    };
+    refreshCalendarSemantics();
+    const observer = new MutationObserver(refreshCalendarSemantics);
+    observer.observe(frame, {
+      attributes: true,
+      attributeFilter: ["data-active"],
+      childList: true,
+      subtree: true,
+    });
+    const restoreSearchTriggerFocus = () => {
+      const searchTrigger = frame.querySelector<HTMLElement>(DAYFLOW_SEARCH_TRIGGER_SELECTOR);
+      window.requestAnimationFrame(() => searchTrigger?.focus({ preventScroll: true }));
+    };
+    let searchWasOpen = Boolean(document.querySelector(".df-mobile-fullscreen .df-search-dialog-input"));
+    const refreshSearchSemantics = () => {
+      const searchIsOpen = Boolean(document.querySelector(".df-mobile-fullscreen .df-search-dialog-input"));
+      makeDayFlowSearchAccessible(document);
+      if (searchWasOpen && !searchIsOpen) restoreSearchTriggerFocus();
+      searchWasOpen = searchIsOpen;
+    };
+    const searchObserver = new MutationObserver(refreshSearchSemantics);
+    searchObserver.observe(document.body, { childList: true, subtree: true });
+
+    const handleSearchKeyDown = (event: KeyboardEvent) => {
+      if (activateDayFlowSearchResultFromKeyboard(event.target, event.key)) {
+        event.preventDefault();
+        return;
+      }
+      if (containDayFlowSearchFocus(event.target, event.key, event.shiftKey)) {
+        event.preventDefault();
+        return;
+      }
+      if (closeDayFlowSearchFromKeyboard(event.target, event.key)) event.preventDefault();
+    };
+    const handleSearchClick = (event: MouseEvent) => {
+      restoreDayFlowDesktopSearchFocusAfterClear(event.target);
+    };
+    document.addEventListener("click", handleSearchClick, true);
+    document.addEventListener("keydown", handleSearchKeyDown, true);
+    return () => {
+      observer.disconnect();
+      searchObserver.disconnect();
+      document.removeEventListener("click", handleSearchClick, true);
+      document.removeEventListener("keydown", handleSearchKeyDown, true);
+    };
+  }, []);
   const customSearch = useCallback(({ keyword, events: items }: { keyword: string; events: CalendarSearchEvent[] }) => {
     const query = keyword.trim().toLowerCase();
     return query ? items.filter((event) => `${event.title} ${event.description ?? ""}`.toLowerCase().includes(query)) : items;
@@ -273,12 +342,20 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
 
   return (
     <section className={styles.calendarSection} aria-label={reviewOnly ? "Subscription review calendar" : "Team calendar"}>
-      <div className={styles.calendarFrame} aria-busy={loading}>
+      <div
+        className={styles.calendarFrame}
+        aria-busy={loading}
+        ref={calendarFrameRef}
+        onPointerDownCapture={(event) => focusDayFlowEventFromTarget(event.target)}
+        onKeyDownCapture={(event) => {
+          if (activateDayFlowEventFromKeyboard(event.target, event.key)) event.preventDefault();
+        }}
+      >
         <DayFlowCalendar
           calendar={calendar}
           eventDetailContent={(props) => <EventDetail {...props} />}
           mobileEventDetail={(props) => <MobileEventDetail {...props} />}
-          search={{ customSearch, debounceDelay: 120, emptyText: "No matching events", timeFormat: "12h" }}
+          search={{ customSearch, debounceDelay: 120, emptyText: "No matching events", onResultClick: navigateFromDayFlowSearchResult, timeFormat: "12h" }}
         />
         {loading ? <div className={styles.loading} role="status"><span /><strong>Refreshing calendar…</strong></div> : null}
       </div>

@@ -626,4 +626,42 @@
 .modal { border-radius: 14px; }
 .header, .tools { gap: 12px; }
 
-.accessDetails summary { cursor: pointer; padding: 12px 0; font-weight: 600; font-size: 13px; }
+.accessDetails summary {
+  min-height: 44px;
+  cursor: pointer;
+  padding: 12px 0;
+  font-weight: 600;
+  font-size: 13px;
+  touch-action: manipulation;
+}
+
+/* Keep the spreadsheet and disclosure controls touch-safe on short landscape screens. */
+@media (max-width: 1000px) and (max-height: 500px) {
+  .headerActionGroup > button {
+    min-width: 44px;
+  }
+
+  .headerActionGroup > button,
+  .searchField input,
+  .sheetFilterMenu button,
+  .subscriptionActions button,
+  .accessDetails summary {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .sheetHeaderCell {
+    padding: 2px 6px;
+  }
+
+  .sheetHeaderTools {
+    gap: 0;
+  }
+
+  .sheetHeaderButton {
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+}

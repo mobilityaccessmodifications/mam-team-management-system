@@ -76,6 +76,14 @@ Open `http://localhost:3001`.
 
 The authenticated portal requires all three Supabase variables shown below. A disconnected local shell is not a substitute for the real directory and account boundary.
 
+For disposable browser E2E testing, set `MAM_SANDBOX_E2E=true` and supply only
+loopback `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_APP_URL` values plus local
+Supabase keys. Next.js then refuses to start when outbound webhook, cron,
+analytics, resource-link or operator credentials are present, and server-side
+`fetch` is restricted to loopback destinations. Keep the flag disabled in
+ordinary Development, Preview and Production; it is an explicit test-process
+guard.
+
 ## Verification
 
 ```bash
@@ -93,6 +101,7 @@ This runs lint, type-checking and the production build.
 | `SUPABASE_SECRET_KEY` | Server-only | Supabase Auth Admin access used by authorised account-management Server Actions |
 | `MAM_ANALYTICS_API_KEY` | Server-only | Dedicated bearer key for the read-only server-to-server dashboard API |
 | `NEXT_PUBLIC_APP_URL` | Browser-safe | Exact application origin used for in-app links |
+| `MAM_SANDBOX_E2E` | Server-only | Explicit local E2E startup and outbound-network kill switch |
 
 `SUPABASE_SECRET_KEY` must never use a `NEXT_PUBLIC_*` name, enter client code, appear in logs or be committed. Production keeps it only in the MAM Vercel project's encrypted Production environment. Login passwords are not application environment variables.
 

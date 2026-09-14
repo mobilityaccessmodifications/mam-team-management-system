@@ -197,6 +197,7 @@
 .privateDetails summary::-webkit-details-marker { display: none; }
 .privateDetails summary span { font-size: 12px; font-weight: 750; }
 .privateDetails > div { align-items: stretch; gap: 8px; border-top: 1px solid #e6ecea; padding: 9px; }
+.privateDetails:not([open]) > :not(summary) { display: none; }
 .privateDetails .info { flex: 1; }
 
 .timeline { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 18px; }
@@ -366,3 +367,22 @@
 .workspace { gap: 20px; }
 .primaryAction, .secondaryAction { min-height: 40px; font-size: 13px; font-weight: 600; box-shadow: none; }
 .header, .toolbar { gap: 12px; }
+
+/* Preserve complete controls when a phone rotates into a short landscape viewport. */
+@media (max-width: 1000px) and (max-height: 500px) {
+  .secondaryAction,
+  .privateDetails summary {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .pagination {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+  }
+
+  .pagination button {
+    width: 44px;
+    height: 44px;
+    touch-action: manipulation;
+  }
+}

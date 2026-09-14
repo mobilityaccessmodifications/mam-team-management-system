@@ -469,42 +469,62 @@ do $$
 declare
   target record;
 begin
-  for target in
-    with desired(full_name) as (
-      values
-        ('luke symes'),
-        ('sujant chettri'),
-        ('serene sharma'),
-        ('kieran kose'),
-        ('europe karki'),
-        ('todd rogerson'),
-        ('penny makris'),
-        ('steven makris'),
-        ('jiwesh jaiswal')
+  -- Fresh and disposable databases intentionally have no production roster.
+  -- Run this historical reconciliation only when at least one member of that
+  -- roster is present; a partially imported legacy roster must still fail
+  -- closed rather than granting authority ambiguously.
+  if exists (
+    select 1
+    from public.internal_org_people person
+    where lower(btrim(person.full_name)) in (
+      'luke symes',
+      'sujant chettri',
+      'serene sharma',
+      'kieran kose',
+      'europe karki',
+      'todd rogerson',
+      'penny makris',
+      'steven makris',
+      'jiwesh jaiswal'
     )
-    select
-      desired.full_name,
-      count(profile.id) as matched_count
-    from desired
-    left join public.internal_org_people person
-      on lower(btrim(person.full_name)) = desired.full_name
-      and person.node_kind = 'person'
-      and person.is_active
-      and person.auth_user_id is not null
-    left join public.profiles profile
-      on profile.id = person.auth_user_id
-      and profile.account_status = 'active'
-      and profile.login_name is not null
-    group by desired.full_name
-  loop
-    if target.matched_count <> 1 then
-      raise exception
-        'Role target % must resolve to exactly one active linked person; found %.',
-        target.full_name,
-        target.matched_count
-        using errcode = 'P0001';
-    end if;
-  end loop;
+  ) then
+    for target in
+      with desired(full_name) as (
+        values
+          ('luke symes'),
+          ('sujant chettri'),
+          ('serene sharma'),
+          ('kieran kose'),
+          ('europe karki'),
+          ('todd rogerson'),
+          ('penny makris'),
+          ('steven makris'),
+          ('jiwesh jaiswal')
+      )
+      select
+        desired.full_name,
+        count(profile.id) as matched_count
+      from desired
+      left join public.internal_org_people person
+        on lower(btrim(person.full_name)) = desired.full_name
+        and person.node_kind = 'person'
+        and person.is_active
+        and person.auth_user_id is not null
+      left join public.profiles profile
+        on profile.id = person.auth_user_id
+        and profile.account_status = 'active'
+        and profile.login_name is not null
+      group by desired.full_name
+    loop
+      if target.matched_count <> 1 then
+        raise exception
+          'Role target % must resolve to exactly one active linked person; found %.',
+          target.full_name,
+          target.matched_count
+          using errcode = 'P0001';
+      end if;
+    end loop;
+  end if;
 end;
 $$;
 
@@ -567,6 +587,7 @@ update public.profiles profile
 set app_role = 'employee',
     updated_at = clock_timestamp()
 where profile.app_role = 'manager'
+  and exists (select 1 from approved_manager_profile_ids)
   and not exists (
     select 1
     from approved_manager_profile_ids approved

@@ -17,7 +17,7 @@ import {
   UserRoundX,
   X,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import styles from "@/components/account-management.module.css";
 import { AnimatedStatusBadge } from "@/components/ui/animated-status-badge";
@@ -262,6 +262,9 @@ export function AccountManagement({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const editorPanelRef = useRef<HTMLDivElement>(null);
+  const editorReturnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!openActionMenuId) return;
@@ -281,6 +284,33 @@ export function AccountManagement({
     document.addEventListener("pointerdown", closeActionMenu);
     return () => document.removeEventListener("pointerdown", closeActionMenu);
   }, [openActionMenuId]);
+
+  useEffect(() => {
+    if (editor) {
+      const frame = window.requestAnimationFrame(() => {
+        const panel = editorPanelRef.current;
+        const initialTarget = panel?.querySelector<HTMLElement>(
+          "[data-account-editor-initial-focus]",
+        );
+        (initialTarget ?? panel)?.focus({ preventScroll: true });
+      });
+
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    const returnTarget = editorReturnFocusRef.current;
+    editorReturnFocusRef.current = null;
+    if (!returnTarget) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const target = returnTarget.isConnected
+        ? returnTarget
+        : searchInputRef.current;
+      target?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [editor]);
 
   const records = useMemo(
     () =>
@@ -334,6 +364,11 @@ export function AccountManagement({
     setPage(1);
   }
 
+  function clearSearch() {
+    updateQuery("");
+    searchInputRef.current?.focus({ preventScroll: true });
+  }
+
   function updateSort(value: AccountSort) {
     setSort(value);
     setPage(1);
@@ -357,7 +392,16 @@ export function AccountManagement({
     clearEditor();
   }
 
-  function openEditor(account: AccountDto, action: EditorAction) {
+  function openEditor(
+    account: AccountDto,
+    action: EditorAction,
+    returnFocusTarget?: HTMLElement | null,
+  ) {
+    editorReturnFocusRef.current =
+      returnFocusTarget ??
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : searchInputRef.current);
     setOpenActionMenuId(null);
     setEditor({ personId: account.personId, action });
     setLoginName(action === "login" ? (account.loginName ?? "") : "");
@@ -366,6 +410,17 @@ export function AccountManagement({
     setOneTimePassword(null);
     setError("");
     setNotice("");
+  }
+
+  function openActionEditor(
+    event: MouseEvent<HTMLButtonElement>,
+    account: AccountDto,
+    action: Exclude<EditorAction, "create">,
+  ) {
+    const menu = event.currentTarget.closest("details");
+    const returnFocusTarget = menu?.querySelector<HTMLElement>("summary");
+    menu?.removeAttribute("open");
+    openEditor(account, action, returnFocusTarget);
   }
 
   function applyResult(result?: AccountMutationResult | void) {
@@ -545,6 +600,7 @@ export function AccountManagement({
           <input
             onChange={(event) => updateQuery(event.target.value)}
             placeholder="Search name, role or login"
+            ref={searchInputRef}
             type="search"
             value={query}
           />
@@ -631,7 +687,9 @@ export function AccountManagement({
                   {!linked ? (
                     <button
                       className={styles.primaryButton}
-                      onClick={() => openEditor(account, "create")}
+                      onClick={(event) =>
+                        openEditor(account, "create", event.currentTarget)
+                      }
                       type="button"
                     >
                       <UserRoundPlus aria-hidden="true" size={15} />
@@ -655,9 +713,9 @@ export function AccountManagement({
                     >
                       <summary aria-label={`Manage ${account.name}'s login`} title="Manage login"><MoreHorizontal aria-hidden="true" size={18} /></summary>
                       <div className={styles.actionMenuPopover}>
-                        <button className={styles.textButton} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openEditor(account, "login"); }} type="button">Change login</button>
-                        <button className={styles.textButton} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openEditor(account, "password"); }} type="button">Reset password</button>
-                        <button className={styles.textButton} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openEditor(account, "toggle"); }} type="button">
+                        <button className={styles.textButton} onClick={(event) => openActionEditor(event, account, "login")} type="button">Change login</button>
+                        <button className={styles.textButton} onClick={(event) => openActionEditor(event, account, "password")} type="button">Reset password</button>
+                        <button className={styles.textButton} onClick={(event) => openActionEditor(event, account, "toggle")} type="button">
                           {account.status === "disabled" ? <UserRoundCheck aria-hidden="true" size={16} /> : <UserRoundX aria-hidden="true" size={16} />}
                           {account.status === "disabled" ? "Enable login" : "Disable login"}
                         </button>
@@ -668,7 +726,12 @@ export function AccountManagement({
               </div>
 
               {activeEditor ? (
-                <div className={styles.editor} aria-busy={saving}>
+                <div
+                  aria-busy={saving}
+                  className={styles.editor}
+                  ref={editorPanelRef}
+                  tabIndex={-1}
+                >
                   <div className={styles.editorHeader}>
                     <div>
                       <KeyRound aria-hidden="true" size={17} />
@@ -792,6 +855,7 @@ export function AccountManagement({
                       <div>
                         <button
                           className={styles.secondaryButton}
+                          data-account-editor-initial-focus
                           disabled={saving}
                           onClick={closeEditor}
                           type="button"
@@ -827,7 +891,7 @@ export function AccountManagement({
           <div className={styles.emptyState}>
             <Search aria-hidden="true" size={20} />
             <strong>No accounts match this search.</strong>
-            <button onClick={() => updateQuery("")} type="button">
+            <button onClick={clearSearch} type="button">
               Clear search
             </button>
           </div>
@@ -887,6 +951,7 @@ function LoginField({
       <input
         autoCapitalize="none"
         autoComplete="off"
+        data-account-editor-initial-focus
         maxLength={80}
         minLength={3}
         onChange={(event) => onChange(event.target.value)}
@@ -926,6 +991,7 @@ function PasswordField({
         <input
           aria-label="New password"
           autoComplete="new-password"
+          data-account-editor-initial-focus
           minLength={12}
           onChange={(event) => onChange(event.target.value)}
           placeholder="At least 12 characters"

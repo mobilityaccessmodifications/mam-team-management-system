@@ -11,6 +11,18 @@ const DIALOG_FOCUSABLE = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+type FocusTarget = Element & {
+  focus(options?: FocusOptions): void;
+};
+
+function isFocusTarget(element: Element | null): element is FocusTarget {
+  return Boolean(
+    element
+      && "focus" in element
+      && typeof element.focus === "function",
+  );
+}
+
 // One stack owns Escape and the page scroll lock, including nested dialogs.
 const dialogStack: HTMLElement[] = [];
 let pageOverflow = "";
@@ -28,8 +40,9 @@ export function useDialogFocus(
   dialogRef: RefObject<HTMLElement | null>,
   initialFocusRef: RefObject<HTMLElement | null> | null,
   onClose: () => void,
+  fallbackFocusRef: RefObject<HTMLElement | null> | null = null,
 ) {
-  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const returnFocusRef = useRef<FocusTarget | null>(null);
   const onCloseRef = useRef(onClose);
 
   useEffect(() => {
@@ -41,9 +54,10 @@ export function useDialogFocus(
     const dialog = dialogRef.current;
     if (!dialog) return;
 
-    returnFocusRef.current = document.activeElement instanceof HTMLElement
+    returnFocusRef.current = isFocusTarget(document.activeElement)
       ? document.activeElement
       : null;
+    const fallbackReturnTarget = fallbackFocusRef?.current ?? null;
     if (!dialogStack.length) pageOverflow = document.body.style.overflow;
     dialogStack.push(dialog);
     document.body.style.overflow = "hidden";
@@ -102,12 +116,22 @@ export function useDialogFocus(
       if (index >= 0) dialogStack.splice(index, 1);
       if (!dialogStack.length) document.body.style.overflow = pageOverflow;
       if (originalTabIndex === null) dialog.removeAttribute("tabindex");
-      const returnTarget = returnFocusRef.current;
-      window.requestAnimationFrame(() => {
+      const preferredReturnTarget = returnFocusRef.current;
+      // A backgrounded or automation-controlled Chromium page can throttle
+      // requestAnimationFrame to roughly one callback per second. Focus
+      // restoration only needs to run after this cleanup stack, so a
+      // microtask restores keyboard focus promptly without depending on paint.
+      queueMicrotask(() => {
+        const preferredIsMeaningful = preferredReturnTarget?.isConnected
+          && preferredReturnTarget !== document.body
+          && preferredReturnTarget !== document.documentElement;
+        const returnTarget = preferredIsMeaningful
+          ? preferredReturnTarget
+          : fallbackReturnTarget;
         if (!wasTop || !returnTarget?.isConnected) return;
         const top = dialogStack.at(-1);
         if (!top || top.contains(returnTarget)) returnTarget.focus({ preventScroll: true });
       });
     };
-  }, [dialogRef, initialFocusRef, open]);
+  }, [dialogRef, fallbackFocusRef, initialFocusRef, open]);
 }

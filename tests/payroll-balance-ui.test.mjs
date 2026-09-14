@@ -78,11 +78,12 @@ test('administrator can review payroll rows that have no employee match', () => 
 
 
 test('actual administrator gets policy and audited day reconciliation controls', () => {
-  const p = { ...person, accrualStatus: 'current', accrualPolicy: { weeklyHours: 38, annualWeeks: 4, personalWeeks: 2, enabled: true, shiftworker: false } };
+  const p = { ...person, accrualStatus: 'current', accrualPolicy: { weeklyHours: 38, annualWeeks: 4, personalWeeks: 2, enabled: true, shiftworker: false, note: 'Synthetic policy note' } };
   const html = renderToStaticMarkup(createElement(loaded.exports.LeavePriorityControls, {
     workspace: { ...workspace([p]), canManageBalances: true }, busy: false, onRequest() {}, async onSaved() {},
   }));
   assert.match(html, /38 ordinary hours\/week/);
+  assert.match(html, /name="note"[^>]*value="Synthetic policy note"/);
   assert.match(html, /Save confirmed hours/);
   assert.match(html, /Changes apply from today/);
 });

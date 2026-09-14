@@ -297,6 +297,7 @@ export function EmployeeDirectory({
   const deleteDialogRef = useRef<HTMLElement>(null);
   const deleteCancelRef = useRef<HTMLButtonElement>(null);
   const editorDialogRef = useRef<HTMLElement>(null);
+  const directorySearchRef = useRef<HTMLInputElement>(null);
   const isMobileSheet = useMediaQuery("(max-width: 900px)");
   const closeEndDatePrompt = useCallback(() => {
     if (archiving) return;
@@ -309,7 +310,7 @@ export function EmployeeDirectory({
     setSaveError("");
   }, [deleting]);
 
-  useDialogFocus(Boolean(endDatePrompt), endDateDialogRef, endDateInputRef, closeEndDatePrompt);
+  useDialogFocus(Boolean(endDatePrompt), endDateDialogRef, endDateInputRef, closeEndDatePrompt, editorDialogRef);
   useDialogFocus(Boolean(deleteTarget), deleteDialogRef, deleteCancelRef, closeDeletePrompt);
 
   useEffect(() => {
@@ -417,6 +418,7 @@ export function EmployeeDirectory({
     editorDialogRef,
     null,
     closeEditor,
+    directorySearchRef,
   );
 
   function closeEditor() {
@@ -597,6 +599,7 @@ export function EmployeeDirectory({
               <Search size={17} aria-hidden="true" />
               <span className={styles.visuallyHidden}>Search employee records</span>
               <input
+                ref={directorySearchRef}
                 value={query}
                 onChange={(event) => {
                   setQuery(event.target.value);
@@ -808,7 +811,7 @@ function EmployeeEditor({
   const isCreate = editor.mode === "create";
   const [editingSchedule, setEditingSchedule] = useState(isCreate);
 
-  return <section className={styles.editor} ref={dialogRef} role={mobileModal ? "dialog" : undefined} aria-modal={mobileModal ? "true" : undefined} aria-label={isCreate ? "Add employee" : "Edit employee"} tabIndex={mobileModal ? -1 : undefined}>
+  return <section className={styles.editor} ref={dialogRef} role={mobileModal ? "dialog" : undefined} aria-modal={mobileModal ? "true" : undefined} aria-label={isCreate ? "Add employee" : "Edit employee"} tabIndex={-1}>
     <header className={styles.editorHeader}>
       <div>
         <h3>{isCreate ? "Add employee" : editor.draft.firstName || currentRecord?.fullName || "Employee"}</h3>

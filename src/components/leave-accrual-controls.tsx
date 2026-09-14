@@ -43,7 +43,7 @@ export function LeaveAccrualControls({ person, busy, onSaved }: {
       <label>Personal/carer’s weeks/year<input name="personalWeeks" type="number" min="2" max="52" step="0.0001" defaultValue={policy?.personalWeeks ?? 2} required /></label>
       <label><input name="shiftworker" type="checkbox" defaultChecked={policy?.shiftworker ?? false} />Qualifying NES shiftworker (at least 5 annual weeks)</label>
       <label><input name="enabled" type="checkbox" defaultChecked={policy?.enabled ?? false} />Enable accrual</label>
-      <label>Policy note<input name="note" maxLength={1000} required placeholder="Confirmed ordinary hours and applicable entitlement" /></label>
+      <label>Policy note<input name="note" maxLength={1000} required defaultValue={policy?.note ?? ""} placeholder="Confirmed ordinary hours and applicable entitlement" /></label>
       <p>Changes apply from today, or the initial accrual start if later. Ordinary hours use the employee’s saved weekdays, or Monday–Friday when no weekdays are recorded. Include any higher award or contract entitlement. First activation needs opening payroll balances covering yesterday.</p>
       <button type="submit" className={styles.secondaryButton} disabled={busy || saving}>Save accrual settings</button>
     </form>

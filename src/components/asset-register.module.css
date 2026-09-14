@@ -1046,3 +1046,40 @@
 .sheetViewport { border-radius: 12px; box-shadow: none; }
 .modal { border-radius: 14px; }
 .header, .tools, .headerActions { gap: 12px; }
+
+/* Keep every phone action at the documented minimum after the shared rhythm
+   overrides above have reduced the desktop controls. */
+@media (max-width: 760px) {
+  .headerActions > a,
+  .headerActions > button,
+  .assetActionsCell.rowActions button {
+    min-height: 44px;
+  }
+}
+
+/* Preserve touch targets in short-screen landscape without widening sheet columns. */
+@media (max-width: 1000px) and (max-height: 500px) {
+  .headerActions > a,
+  .headerActions > button,
+  .searchField input,
+  .sheetFilterMenu button,
+  .assetActionsCell.rowActions button {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .sheetHeaderCell {
+    padding: 2px 6px;
+  }
+
+  .sheetHeaderTools {
+    gap: 0;
+  }
+
+  .sheetHeaderButton {
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+}

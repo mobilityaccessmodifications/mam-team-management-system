@@ -880,6 +880,7 @@ export function OrganisationTree({
   const disconnectKeepButtonRef = useRef<HTMLButtonElement>(null);
   const inspectorDialogRef = useRef<HTMLElement>(null);
   const inspectorCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const chartWorldRef = useRef<HTMLDivElement>(null);
   const initialViewportRef = useRef(false);
@@ -1651,7 +1652,7 @@ export function OrganisationTree({
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
-    const target = event.target as HTMLElement;
+    const target = event.target as Element;
     if (linkGuide && !target.closest("[data-link-target]")) {
       pendingLinkPointerRef.current = null;
       if (linkFrameRef.current !== null) {
@@ -1663,7 +1664,13 @@ export function OrganisationTree({
       setInteractionMessage("Add line cancelled.");
       return;
     }
-    if (target.closest("button, input, select, label, aside")) return;
+    if (
+      target.closest(
+        "button, input, select, label, aside, [role=button]",
+      )
+    ) {
+      return;
+    }
     const viewport = viewportRef.current;
     if (!viewport) return;
     panRef.current = {
@@ -2407,13 +2414,23 @@ export function OrganisationTree({
             ) : null}
           </div>
 
-          <div className={styles.filterMenu}>
+          <div
+            className={styles.filterMenu}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || !filterOpen) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setFilterOpen(false);
+              filterButtonRef.current?.focus();
+            }}
+          >
             <button
               aria-label="Filter organisation"
               aria-expanded={filterOpen}
               aria-haspopup="menu"
               className={styles.filterButton}
               onClick={() => setFilterOpen((current) => !current)}
+              ref={filterButtonRef}
               title="Filter"
               type="button"
             >
@@ -2444,6 +2461,7 @@ export function OrganisationTree({
                       setSelectedId(null);
                       workContactRequestRef.current += 1;
                       setWorkContact(null);
+                      filterButtonRef.current?.focus();
                     }}
                     key={filter}
                     role="menuitemradio"
@@ -2625,37 +2643,41 @@ export function OrganisationTree({
                     (relatedIds.has(connector.fromId) &&
                       relatedIds.has(connector.toId));
                   const child = profileById.get(connector.toId);
+                  const connectorPath = getConnectorPath(
+                    connector,
+                    layoutNodesById,
+                    manualOffsets,
+                  );
                   return (
-                    <path
-                      aria-label={
-                        canUseRelationshipEditor
-                          ? `Edit reporting line for ${child?.name ?? "this employee"}`
-                          : undefined
-                      }
-                      className={styles.connector}
-                      d={getConnectorPath(
-                        connector,
-                        layoutNodesById,
-                        manualOffsets,
-                      )}
-                      data-active={active}
-                      data-arranging={arranging}
-                      data-company={connector.company}
-                      data-editable={canUseRelationshipEditor ? "true" : "false"}
-                      key={connector.id}
-                      markerEnd={`url(#${markerPrefix}-${connector.company})`}
-                      onClick={() => {
-                        if (!canUseRelationshipEditor) return;
-                        if (child) openReportingLinkEditor(child);
-                      }}
-                      onKeyDown={(event) => {
-                        if (!canUseRelationshipEditor || (event.key !== "Enter" && event.key !== " ")) return;
-                        event.preventDefault();
-                        if (child) openReportingLinkEditor(child);
-                      }}
-                      role={canUseRelationshipEditor ? "button" : undefined}
-                      tabIndex={canUseRelationshipEditor ? 0 : -1}
-                    />
+                    <g key={connector.id}>
+                      {canUseRelationshipEditor ? (
+                        <path
+                          aria-label={`Edit reporting line for ${child?.name ?? "this employee"}`}
+                          className={styles.connectorTarget}
+                          d={connectorPath}
+                          onClick={() => {
+                            if (child) openReportingLinkEditor(child);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            if (child) openReportingLinkEditor(child);
+                          }}
+                          role="button"
+                          tabIndex={0}
+                        />
+                      ) : null}
+                      <path
+                        aria-hidden={canUseRelationshipEditor ? "true" : undefined}
+                        className={styles.connector}
+                        d={connectorPath}
+                        data-active={active}
+                        data-arranging={arranging}
+                        data-company={connector.company}
+                        data-editable={canUseRelationshipEditor ? "true" : "false"}
+                        markerEnd={`url(#${markerPrefix}-${connector.company})`}
+                      />
+                    </g>
                   );
                 })}
                 {linkGuidePath ? <path className={styles.linkGuide} d={linkGuidePath} data-snapped={dropTarget ? "true" : "false"} /> : null}

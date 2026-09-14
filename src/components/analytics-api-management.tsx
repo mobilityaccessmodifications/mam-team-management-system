@@ -174,7 +174,7 @@ function CreateKeyDialog({ rotating, onClose, onCreated }: { rotating: boolean; 
         <label><span>Connection label</span><input ref={labelRef} name="label" maxLength={80} defaultValue="Dashboard connection" required /></label>
         <p className={styles.warning}><ShieldAlert size={17} aria-hidden="true" />{rotating ? "The current key stops working immediately after rotation." : "The key is shown once. Save it in the dashboard platform before closing."}</p>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={16} aria-hidden="true" />{error}</p> : null}
-        <footer><button className={styles.secondaryAction} type="button" onClick={onClose} disabled={saving}>Cancel</button><button className={styles.primaryAction} type="submit" disabled={saving}>{saving ? "Generating…" : rotating ? "Rotate key" : "Generate key"}</button></footer>
+        <footer><button className={styles.secondaryAction} type="button" onClick={onClose} disabled={saving}>Cancel</button><button className={styles.primaryAction} type="submit" disabled={saving}>{saving ? rotating ? "Rotating…" : "Generating…" : rotating ? "Rotate key" : "Generate key"}</button></footer>
       </form>
     </section>
   </div>;

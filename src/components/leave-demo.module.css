@@ -6924,6 +6924,8 @@
   .modal > header, .form { padding-inline: var(--mobile-gutter, 16px); }
   .formPerson { margin-inline: var(--mobile-gutter, 16px); }
   .form footer {
+    position: static;
+    bottom: auto;
     margin-inline: calc(-1 * var(--mobile-gutter, 16px));
     padding-inline: var(--mobile-gutter, 16px);
   }
@@ -7004,8 +7006,17 @@
 .impactAgenda article small { margin-top: 2px; font-size: 11px; }
 .impactAgenda[open] article { margin-top: 10px; }
 .requestExtras { padding: 14px 0; border-top: 1px solid var(--line); }
-.requestExtras summary { cursor: pointer; font-weight: 600; }
+.requestExtras summary {
+  min-height: 44px;
+  box-sizing: border-box;
+  padding-block: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  touch-action: manipulation;
+}
 .requestExtras[open] { display: grid; gap: 14px; }
+.timeRange:not([open]) > :not(summary),
+.requestExtras:not([open]) > :not(summary) { display: none; }
 .leaveBalances { margin-top: 20px; padding: 16px; border-radius: 10px; }
 .primaryButton, .secondaryButton, .approveButton, .declineButton { font-size: 13px; font-weight: 600; box-shadow: none; }
 @media (max-width: 680px) {
@@ -7086,3 +7097,21 @@
 .leaveSelfService > div { min-width: 220px; }
 .leaveSelfService .balanceCard { padding: 12px 16px; }
 .leaveSelfService select { max-width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); font: inherit; font-size: 13px; }
+
+/* The compact desktop button rhythm is 40px; retain the documented touch
+   target for every administrator balance action on phones and short screens. */
+@media (max-width: 760px), (max-width: 1000px) and (max-height: 500px) {
+  .leaveBalanceActions .secondaryButton,
+  .leaveBalanceEditor .secondaryButton {
+    min-height: 44px;
+  }
+}
+
+/* Short-screen phones use the horizontal shell but still need full tap targets. */
+@media (max-width: 1000px) and (max-height: 500px) {
+  .navItem,
+  .filterTabs button {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+}

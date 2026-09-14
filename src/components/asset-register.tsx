@@ -24,6 +24,7 @@ import {
 import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -220,10 +221,12 @@ function BarcodePreview({ value }: { value: string }) {
 
 function AssetLabelModal({
   asset,
+  fallbackFocusRef,
   onClose,
   onAddAnother,
 }: {
   asset: ItAsset;
+  fallbackFocusRef: RefObject<HTMLElement | null> | null;
   onClose: () => void;
   onAddAnother?: () => void;
 }) {
@@ -231,7 +234,7 @@ function AssetLabelModal({
   const initialFocusRef = useRef<HTMLButtonElement>(null);
   const [busyAction, setBusyAction] = useState<BarcodeAction | null>(null);
   const [actionError, setActionError] = useState("");
-  useDialogFocus(true, dialogRef, initialFocusRef, onClose);
+  useDialogFocus(true, dialogRef, initialFocusRef, onClose, fallbackFocusRef);
 
   async function downloadLabel() {
     setBusyAction("download");
@@ -325,10 +328,12 @@ function AssetLabelModal({
 
 function AddDeviceModal({
   assignees,
+  fallbackFocusRef,
   onClose,
   onCreated,
 }: {
   assignees: ItAssetAssignee[];
+  fallbackFocusRef: RefObject<HTMLElement | null> | null;
   onClose: () => void;
   onCreated: (asset: ItAsset) => void;
 }) {
@@ -340,7 +345,13 @@ function AddDeviceModal({
   const closeWhenReady = useCallback(() => {
     if (!saving) onClose();
   }, [onClose, saving]);
-  useDialogFocus(true, dialogRef, assigneeRef, closeWhenReady);
+  useDialogFocus(
+    true,
+    dialogRef,
+    assigneeRef,
+    closeWhenReady,
+    fallbackFocusRef,
+  );
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -416,11 +427,13 @@ function AddDeviceModal({
 function ChangeDeviceOwnerModal({
   asset,
   assignees,
+  fallbackFocusRef,
   onClose,
   onSaved,
 }: {
   asset: ItAsset;
   assignees: ItAssetAssignee[];
+  fallbackFocusRef: RefObject<HTMLElement | null> | null;
   onClose: () => void;
   onSaved: (asset: ItAsset) => void;
 }) {
@@ -431,7 +444,7 @@ function ChangeDeviceOwnerModal({
   const closeWhenReady = useCallback(() => {
     if (!saving) onClose();
   }, [onClose, saving]);
-  useDialogFocus(true, dialogRef, assigneeRef, closeWhenReady);
+  useDialogFocus(true, dialogRef, assigneeRef, closeWhenReady, fallbackFocusRef);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -489,10 +502,12 @@ function ChangeDeviceOwnerModal({
 
 function ReturnDeviceModal({
   asset,
+  fallbackFocusRef,
   onClose,
   onReturned,
 }: {
   asset: ItAsset;
+  fallbackFocusRef: RefObject<HTMLElement | null> | null;
   onClose: () => void;
   onReturned: (asset: ItAsset, returnedOn: string) => void;
 }) {
@@ -503,7 +518,7 @@ function ReturnDeviceModal({
   const closeWhenReady = useCallback(() => {
     if (!saving) onClose();
   }, [onClose, saving]);
-  useDialogFocus(true, dialogRef, returnedOnRef, closeWhenReady);
+  useDialogFocus(true, dialogRef, returnedOnRef, closeWhenReady, fallbackFocusRef);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -557,9 +572,11 @@ function ReturnDeviceModal({
 
 function CustodyHistoryModal({
   asset,
+  fallbackFocusRef,
   onClose,
 }: {
   asset: ItAsset;
+  fallbackFocusRef: RefObject<HTMLElement | null> | null;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
@@ -567,7 +584,7 @@ function CustodyHistoryModal({
   const [history, setHistory] = useState<ItAssetCustodyHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  useDialogFocus(true, dialogRef, closeRef, onClose);
+  useDialogFocus(true, dialogRef, closeRef, onClose, fallbackFocusRef);
 
   useEffect(() => {
     let cancelled = false;
@@ -612,14 +629,16 @@ function CustodyHistoryModal({
   </ModalBackdrop>;
 }
 
-function RemoveDeviceModal({
+function RetireDeviceModal({
   asset,
+  fallbackFocusRef,
   onClose,
-  onRemoved,
+  onRetired,
 }: {
   asset: ItAsset;
+  fallbackFocusRef: RefObject<HTMLElement | null> | null;
   onClose: () => void;
-  onRemoved: (asset: ItAsset) => void;
+  onRetired: (asset: ItAsset) => void;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -628,37 +647,37 @@ function RemoveDeviceModal({
   const closeWhenReady = useCallback(() => {
     if (!saving) onClose();
   }, [onClose, saving]);
-  useDialogFocus(true, dialogRef, cancelRef, closeWhenReady);
+  useDialogFocus(true, dialogRef, cancelRef, closeWhenReady, fallbackFocusRef);
 
-  async function removeDevice() {
+  async function retireDevice() {
     if (saving) return;
     setSaving(true);
     setError("");
     try {
-      onRemoved(await retireItAsset({ assetId: asset.id, version: asset.version }));
+      onRetired(await retireItAsset({ assetId: asset.id, version: asset.version }));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The device could not be removed. Try again.");
+      setError(reason instanceof Error ? reason.message : "The device could not be retired. Try again.");
     } finally {
       setSaving(false);
     }
   }
 
   return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
-    <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="remove-device-title" tabIndex={-1}>
+    <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="retire-device-title" tabIndex={-1}>
       <header>
-        <div><h2 id="remove-device-title">Remove device?</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
-        <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close remove device"><X size={19} /></button>
+        <div><h2 id="retire-device-title">Retire device?</h2><p>{asset.assetCode} · {assetTypeLabel(asset.assetType)}</p></div>
+        <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close retire device"><X size={19} /></button>
       </header>
       <div className={styles.modalBody}>
-        <p>Remove duplicate or incorrect records only. Otherwise, use Return device.</p>
+        <p>Retire duplicate or incorrect records to hide them from the active register while preserving their history. Otherwise, use Return device.</p>
         <div className={styles.currentCustodian}><UsersRound size={16} /><div><span>Current owner</span><strong>{asset.assignedTo ? custodianDescription(asset) : "No current owner"}</strong></div></div>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
       </div>
       <footer className={styles.modalFooter}>
         <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving} ref={cancelRef}>Keep device</button>
-        <button className={styles.dangerAction} type="button" onClick={() => void removeDevice()} disabled={saving}>
+        <button className={styles.dangerAction} type="button" onClick={() => void retireDevice()} disabled={saving}>
           {saving ? <LoaderCircle className={styles.spinner} size={16} /> : <Trash2 size={16} />}
-          {saving ? "Removing…" : "Remove incorrect entry"}
+          {saving ? "Retiring…" : "Retire incorrect entry"}
         </button>
       </footer>
     </section>
@@ -732,7 +751,7 @@ export function AssetRegister() {
   const [assignmentTarget, setAssignmentTarget] = useState<ItAsset | null>(null);
   const [returnTarget, setReturnTarget] = useState<ItAsset | null>(null);
   const [historyTarget, setHistoryTarget] = useState<ItAsset | null>(null);
-  const [removalTarget, setRemovalTarget] = useState<ItAsset | null>(null);
+  const [retirementTarget, setRetirementTarget] = useState<ItAsset | null>(null);
   const [query, setQuery] = useState("");
   const [barcodeAction, setBarcodeAction] = useState<{ id: string; action: BarcodeAction } | null>(null);
   const [expandedActionsId, setExpandedActionsId] = useState<string | null>(null);
@@ -745,6 +764,8 @@ export function AssetRegister() {
   });
   const [rowError, setRowError] = useState("");
   const [notice, setNotice] = useState("");
+  const addDeviceButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogReturnFocusRef = useRef<HTMLElement | null>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const actionTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const actionMenuInitialFocus = useRef<"first" | "last">("first");
@@ -898,6 +919,7 @@ export function AssetRegister() {
   }
 
   function assetCreated(asset: ItAsset) {
+    dialogReturnFocusRef.current = addDeviceButtonRef.current;
     setAssets((current) => [asset, ...current]);
     setShowAddDevice(false);
     setLabelTarget({ asset, isNew: true });
@@ -916,10 +938,12 @@ export function AssetRegister() {
     setNotice(`${asset.assetCode} was returned on ${formatDate(returnedOn)} and is ready to reassign.`);
   }
 
-  function assetRemoved(asset: ItAsset) {
+  function assetRetired(asset: ItAsset) {
+    dialogReturnFocusRef.current = addDeviceButtonRef.current;
     setAssets((current) => current.filter((candidate) => candidate.id !== asset.id));
-    setRemovalTarget(null);
-    setNotice(`${asset.assetCode} was removed from the active register.`);
+    setRetirementTarget(null);
+    setNotice(`${asset.assetCode} was retired and removed from the active register.`);
+    queueMicrotask(() => addDeviceButtonRef.current?.focus({ preventScroll: true }));
   }
 
   async function downloadFromRow(asset: ItAsset) {
@@ -945,8 +969,13 @@ export function AssetRegister() {
   }
 
   function showLabelFromRow(asset: ItAsset) {
+    rememberActionTrigger(asset.id);
     setExpandedActionsId(null);
     setLabelTarget({ asset, isNew: false });
+  }
+
+  function rememberActionTrigger(assetId: string) {
+    dialogReturnFocusRef.current = actionTriggerRefs.current.get(assetId) ?? addDeviceButtonRef.current;
   }
 
   function closeActionMenu(assetId: string, restoreFocus = false) {
@@ -982,7 +1011,7 @@ export function AssetRegister() {
       <div className={styles.headerActions}>
         <a className={styles.secondaryAction} href="/assets/export?format=csv" aria-label="Download devices as CSV" title="Download CSV"><Download size={16} aria-hidden="true" /><span>CSV</span></a>
         <a className={styles.secondaryAction} href="/assets/export?format=xlsx" aria-label="Download devices as Excel" title="Download Excel"><Download size={16} aria-hidden="true" /><span>Excel</span></a>
-        <button className={styles.primaryAction} type="button" onClick={() => setShowAddDevice(true)}><PackagePlus size={17} /> Add device</button>
+        <button className={styles.primaryAction} type="button" onClick={() => setShowAddDevice(true)} ref={addDeviceButtonRef}><PackagePlus size={17} /> Add device</button>
       </div>
     </header>
 
@@ -1070,13 +1099,13 @@ export function AssetRegister() {
                   <Pencil size={15} aria-hidden="true" /><span>Edit</span>
                 </button>
                 {expandedActionsId === asset.id ? <div className={styles.moreMenu} id={`asset-actions-${asset.id}`} ref={actionMenuRef} role="menu" aria-label={`Edit actions for ${asset.assetCode}`} aria-busy={activeAction !== null} onKeyDown={(event) => handleActionMenuKeyDown(event, asset.id)}>
-                  {asset.assignedTo ? <button type="button" role="menuitem" onClick={() => { setExpandedActionsId(null); setReturnTarget(asset); }} disabled={activeAction !== null}>
+                  {asset.assignedTo ? <button type="button" role="menuitem" onClick={() => { rememberActionTrigger(asset.id); setExpandedActionsId(null); setReturnTarget(asset); }} disabled={activeAction !== null}>
                     <Undo2 size={15} /><span>Record return</span>
                   </button> : null}
-                  <button type="button" role="menuitem" onClick={() => { setExpandedActionsId(null); setAssignmentTarget(asset); }} disabled={activeAction !== null}>
+                  <button type="button" role="menuitem" onClick={() => { rememberActionTrigger(asset.id); setExpandedActionsId(null); setAssignmentTarget(asset); }} disabled={activeAction !== null}>
                     <Pencil size={15} /><span>{asset.assignedTo ? "Change owner" : "Assign owner"}</span>
                   </button>
-                  <button type="button" role="menuitem" onClick={() => { setExpandedActionsId(null); setHistoryTarget(asset); }} disabled={activeAction !== null}>
+                  <button type="button" role="menuitem" onClick={() => { rememberActionTrigger(asset.id); setExpandedActionsId(null); setHistoryTarget(asset); }} disabled={activeAction !== null}>
                     <ClipboardClock size={15} /><span>View history</span>
                   </button>
                   <button type="button" role="menuitem" onClick={() => void downloadFromRow(asset)} disabled={activeAction !== null}>
@@ -1085,8 +1114,8 @@ export function AssetRegister() {
                   <button type="button" role="menuitem" onClick={() => showLabelFromRow(asset)} disabled={activeAction !== null}>
                     <Printer size={15} /><span>Label</span>
                   </button>
-                  <button type="button" role="menuitem" className={styles.removeAction} onClick={() => { setExpandedActionsId(null); setRemovalTarget(asset); }} disabled={activeAction !== null}>
-                    <Trash2 size={15} /><span>Remove</span>
+                  <button type="button" role="menuitem" className={styles.removeAction} onClick={() => { rememberActionTrigger(asset.id); setExpandedActionsId(null); setRetirementTarget(asset); }} disabled={activeAction !== null}>
+                    <Trash2 size={15} /><span>Retire</span>
                   </button>
                 </div> : null}
               </div>
@@ -1096,11 +1125,11 @@ export function AssetRegister() {
       </div>
     </div> : null}
 
-    {showAddDevice ? <AddDeviceModal assignees={assignees} onClose={() => setShowAddDevice(false)} onCreated={assetCreated} /> : null}
-    {labelTarget ? <AssetLabelModal asset={labelTarget.asset} onClose={() => setLabelTarget(null)} onAddAnother={labelTarget.isNew ? () => { setLabelTarget(null); setShowAddDevice(true); } : undefined} /> : null}
-    {assignmentTarget ? <ChangeDeviceOwnerModal asset={assignmentTarget} assignees={assignees} onClose={() => setAssignmentTarget(null)} onSaved={assetOwnerChanged} /> : null}
-    {returnTarget ? <ReturnDeviceModal asset={returnTarget} onClose={() => setReturnTarget(null)} onReturned={assetReturned} /> : null}
-    {historyTarget ? <CustodyHistoryModal asset={historyTarget} onClose={() => setHistoryTarget(null)} /> : null}
-    {removalTarget ? <RemoveDeviceModal asset={removalTarget} onClose={() => setRemovalTarget(null)} onRemoved={assetRemoved} /> : null}
+    {showAddDevice ? <AddDeviceModal assignees={assignees} fallbackFocusRef={addDeviceButtonRef} onClose={() => setShowAddDevice(false)} onCreated={assetCreated} /> : null}
+    {labelTarget ? <AssetLabelModal asset={labelTarget.asset} fallbackFocusRef={dialogReturnFocusRef} onClose={() => setLabelTarget(null)} onAddAnother={labelTarget.isNew ? () => { setLabelTarget(null); setShowAddDevice(true); } : undefined} /> : null}
+    {assignmentTarget ? <ChangeDeviceOwnerModal asset={assignmentTarget} assignees={assignees} fallbackFocusRef={dialogReturnFocusRef} onClose={() => setAssignmentTarget(null)} onSaved={assetOwnerChanged} /> : null}
+    {returnTarget ? <ReturnDeviceModal asset={returnTarget} fallbackFocusRef={dialogReturnFocusRef} onClose={() => setReturnTarget(null)} onReturned={assetReturned} /> : null}
+    {historyTarget ? <CustodyHistoryModal asset={historyTarget} fallbackFocusRef={dialogReturnFocusRef} onClose={() => setHistoryTarget(null)} /> : null}
+    {retirementTarget ? <RetireDeviceModal asset={retirementTarget} fallbackFocusRef={dialogReturnFocusRef} onClose={() => setRetirementTarget(null)} onRetired={assetRetired} /> : null}
   </section>;
 }

@@ -520,7 +520,10 @@ export function PeopleOperationsDemo({
     return { value, label: "Accounts", icon: <KeyRound size={16} /> };
   });
 
-  const showTaskAction = canManage && visibleSection === "tasks";
+  // The server-authorised task surface is automatic and scoped by its own
+  // RPCs. Do not leak the legacy browser-only lifecycle creator into it while
+  // onboarding/offboarding authority is still unresolved.
+  const showTaskAction = !hasRealCheckInTasks && canManage && visibleSection === "tasks";
 
   const taskAction = showTaskAction ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleTaskSection === "checkins" ? "checkin" : visibleTaskSection)}><Plus size={17} /> {visibleTaskSection === "checkins" ? "Schedule check-ins" : `Start ${visibleTaskSection}`}</button> : undefined;
 
