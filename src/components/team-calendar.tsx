@@ -28,10 +28,15 @@ import styles from "@/components/team-calendar.module.css";
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
+  DAYFLOW_SEARCH_TRIGGER_SELECTOR,
   activateDayFlowEventFromKeyboard,
+  closeDayFlowSearchFromKeyboard,
+  containDayFlowSearchFocus,
   focusDayFlowEventFromTarget,
+  isDayFlowSearchCloseTarget,
   makeDayFlowEventsAccessible,
   makeDayFlowNavigationAccessible,
+  makeDayFlowSearchAccessible,
 } from "@/lib/dayflow-event-accessibility";
 import { BALANCE_PENDING_STATUS } from "@/lib/leave-priority";
 
@@ -279,6 +284,7 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
     const refreshCalendarSemantics = () => {
       makeDayFlowEventsAccessible(frame);
       makeDayFlowNavigationAccessible(frame);
+      makeDayFlowSearchAccessible(document);
     };
     refreshCalendarSemantics();
     const observer = new MutationObserver(refreshCalendarSemantics);
@@ -288,7 +294,31 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
       childList: true,
       subtree: true,
     });
-    return () => observer.disconnect();
+    const searchObserver = new MutationObserver(() => makeDayFlowSearchAccessible(document));
+    searchObserver.observe(document.body, { childList: true, subtree: true });
+
+    const restoreSearchTriggerFocus = () => {
+      const searchTrigger = frame.querySelector<HTMLElement>(DAYFLOW_SEARCH_TRIGGER_SELECTOR);
+      window.requestAnimationFrame(() => searchTrigger?.focus({ preventScroll: true }));
+    };
+    const handleSearchCloseClick = (event: MouseEvent) => {
+      if (isDayFlowSearchCloseTarget(event.target)) restoreSearchTriggerFocus();
+    };
+    const handleSearchKeyDown = (event: KeyboardEvent) => {
+      if (containDayFlowSearchFocus(event.target, event.key, event.shiftKey)) {
+        event.preventDefault();
+        return;
+      }
+      if (closeDayFlowSearchFromKeyboard(event.target, event.key)) event.preventDefault();
+    };
+    document.addEventListener("click", handleSearchCloseClick, true);
+    document.addEventListener("keydown", handleSearchKeyDown, true);
+    return () => {
+      observer.disconnect();
+      searchObserver.disconnect();
+      document.removeEventListener("click", handleSearchCloseClick, true);
+      document.removeEventListener("keydown", handleSearchKeyDown, true);
+    };
   }, []);
   const customSearch = useCallback(({ keyword, events: items }: { keyword: string; events: CalendarSearchEvent[] }) => {
     const query = keyword.trim().toLowerCase();

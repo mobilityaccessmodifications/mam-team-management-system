@@ -10,10 +10,13 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 
 class FakeElement {
-  constructor({ parent = null, text = "", title = "" } = {}) {
+  constructor({ parent = null, selectors = [], text = "", title = "" } = {}) {
     this.parent = parent;
+    this.selectors = new Set(selectors);
     this.textContent = text;
     this.attrs = new Map();
+    this.queries = new Map();
+    this.queryLists = new Map();
     this.tabIndex = -1;
     this.clicked = false;
     this.focusOptions = null;
@@ -22,9 +25,11 @@ class FakeElement {
   }
   closest(selector) {
     if (selector === "[data-event-id][data-viewable='true']" && this.attrs.has("data-event-id") && this.attrs.get("data-viewable") === "true") return this;
+    if (this.selectors.has(selector)) return this;
     return this.parent?.closest(selector) ?? null;
   }
-  querySelector(selector) { return selector === "[title]" ? this.titledChild : null; }
+  querySelector(selector) { return selector === "[title]" ? this.titledChild : this.queries.get(selector) ?? null; }
+  querySelectorAll(selector) { return this.queryLists.get(selector) ?? []; }
   hasAttribute(name) { return this.attrs.has(name); }
   getAttribute(name) { return this.attrs.get(name) ?? null; }
   setAttribute(name, value) { this.attrs.set(name, String(value)); }
@@ -36,9 +41,12 @@ const loaded = { exports: {} };
 vm.runInNewContext(compiled, { exports: loaded.exports, module: loaded, Element: FakeElement });
 const {
   activateDayFlowEventFromKeyboard,
+  closeDayFlowSearchFromKeyboard,
+  containDayFlowSearchFocus,
   focusDayFlowEventFromTarget,
   makeDayFlowEventsAccessible,
   makeDayFlowNavigationAccessible,
+  makeDayFlowSearchAccessible,
 } = loaded.exports;
 
 function eventElement(title = "Alice Employee · Annual leave (12/10/2026 - 13/10/2026)") {
@@ -105,4 +113,58 @@ test("calendar semantics observe active-view changes", () => {
   const component = readFileSync("src/components/team-calendar.tsx", "utf8");
   assert.match(component, /attributes:\s*true/);
   assert.match(component, /attributeFilter:\s*\["data-active"\]/);
+});
+
+function searchFixture() {
+  const dialog = new FakeElement({ selectors: [".df-mobile-fullscreen"] });
+  const back = new FakeElement({ parent: dialog, selectors: [".df-search-dialog-back-btn"] });
+  const input = new FakeElement({ parent: dialog });
+  const clear = new FakeElement({ parent: dialog });
+  const trigger = new FakeElement();
+  dialog.queries.set(".df-search-dialog-back-btn", back);
+  dialog.queries.set(".df-search-dialog-input", input);
+  dialog.queries.set(".df-search-dialog-input-clear", clear);
+  dialog.queryLists.set("button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex='-1'])", [back, input, clear]);
+  const root = {
+    querySelector: (selector) => ({
+      ".df-icon-btn[title='Search']": trigger,
+      ".df-search-dialog-input": input,
+    })[selector] ?? null,
+  };
+  return { back, clear, dialog, input, root, trigger };
+}
+
+test("mobile calendar search gets explicit dialog and control names", () => {
+  const { back, clear, dialog, input, root, trigger } = searchFixture();
+  makeDayFlowSearchAccessible(root);
+  assert.equal(trigger.getAttribute("aria-label"), "Search calendar");
+  assert.equal(dialog.getAttribute("role"), "dialog");
+  assert.equal(dialog.getAttribute("aria-modal"), "true");
+  assert.equal(dialog.getAttribute("aria-label"), "Calendar search");
+  assert.equal(input.getAttribute("aria-label"), "Search calendar");
+  assert.equal(back.getAttribute("aria-label"), "Close calendar search");
+  assert.equal(clear.getAttribute("aria-label"), "Clear calendar search");
+});
+
+test("Escape closes mobile calendar search through its back control", () => {
+  const { back, input } = searchFixture();
+  assert.equal(closeDayFlowSearchFromKeyboard(input, "Escape"), true);
+  assert.equal(back.clicked, true);
+  back.clicked = false;
+  assert.equal(closeDayFlowSearchFromKeyboard(input, "Enter"), false);
+  assert.equal(back.clicked, false);
+});
+
+test("Tab remains inside the mobile calendar search", () => {
+  const { back, clear } = searchFixture();
+  assert.equal(containDayFlowSearchFocus(back, "Tab", true), true);
+  assert.equal(clear.focusOptions?.preventScroll, true);
+  assert.equal(containDayFlowSearchFocus(clear, "Tab", false), true);
+  assert.equal(back.focusOptions?.preventScroll, true);
+});
+
+test("mobile search close restores focus to its trigger", () => {
+  const component = readFileSync("src/components/team-calendar.tsx", "utf8");
+  assert.match(component, /makeDayFlowSearchAccessible\(document\)/);
+  assert.match(component, /requestAnimationFrame\(\(\) => searchTrigger\?\.focus\(\{ preventScroll: true \}\)\)/);
 });
