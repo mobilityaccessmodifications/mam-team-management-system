@@ -29,7 +29,7 @@ import {
 import { FormEvent, type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
-import { ApprovalBalancePill, ApprovalLeaveBalances, LeavePriorityControls, SickEvidenceNotice } from "@/components/leave-priority-controls";
+import { ApprovalBalancePill, ApprovalLeaveBalances, LeavePriorityControls, LeaveSelfServiceControls, SickEvidenceNotice } from "@/components/leave-priority-controls";
 import { BALANCE_PENDING_STATUS, sickEvidenceDeadline, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import {
   getCurrentEmployeeSelfProfile,
@@ -1917,10 +1917,11 @@ export function LeaveDemo({
               onReview={reviewWorkScheduleRequest}
             />}
           /> : null}
+          {activeView === "leave" && !leaveDataLoading ? <LeaveSelfServiceControls workspace={leavePriority} personId={activeProfile.id} previewPersonId={previewPersonId} busy={isMutating} onRequest={openTeamLeaveRequestForm} /> : null}
           {activeView === "leave" ? <LeaveWorkspaceLoadBoundary loading={leaveDataLoading}>
             <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} />
           </LeaveWorkspaceLoadBoundary> : null}
-          {activeView === "leave" && !leaveDataLoading ? <LeavePriorityControls key={previewPersonId || "self"} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /> : null}
+          {activeView === "leave" && !leaveDataLoading ? <LeavePriorityControls key={previewPersonId || "self"} previewPersonId={previewPersonId} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /> : null}
           {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <TeamCalendar birthdays={calendarIsSubscriptionReviewOnly ? [] : calendarBirthdays} checkIns={calendarIsSubscriptionReviewOnly ? [] : calendarCheckIns} requests={calendarIsSubscriptionReviewOnly ? [] : calendarRequests} subscriptionReviews={calendarSubscriptionReviews} reviewOnly={calendarIsSubscriptionReviewOnly} loading={leaveDataLoading} /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo

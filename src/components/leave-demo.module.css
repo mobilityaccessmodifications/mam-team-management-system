@@ -7086,6 +7086,18 @@
   .impactLegend { display: flex; flex-wrap: wrap; }
 }
 
+.leaveSelfService {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.leaveSelfService > div { min-width: 220px; }
+.leaveSelfService .balanceCard { padding: 12px 16px; }
+.leaveSelfService select { max-width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); font: inherit; font-size: 13px; }
+
 /* The compact desktop button rhythm is 40px; retain the documented touch
    target for every administrator balance action on phones and short screens. */
 @media (max-width: 760px), (max-width: 1000px) and (max-height: 500px) {
