@@ -8,7 +8,7 @@ const source = readFileSync(new URL("../src/components/ui/use-dialog-focus.ts", 
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
 
 function harness(mobile = true) {
-  const effects = [], listeners = new Set(), frames = [];
+  const effects = [], listeners = new Set(), microtasks = [];
   const document = { activeElement: null, body: { style: { overflow: "auto" } } };
   class Element {
     constructor(controls = []) { this.controls = controls; this.attrs = {}; this.tabIndex = 0; this.isConnected = true; this.visible = true; }
@@ -24,13 +24,13 @@ function harness(mobile = true) {
   const exports = {};
   vm.runInNewContext(compiled, {
     exports, HTMLElement: Element, document,
+    queueMicrotask: fn => microtasks.push(fn),
     require: () => ({ useRef: value => ({ current: value }), useEffect: fn => effects.push(fn) }),
     window: {
       matchMedia: () => ({ matches: mobile }),
       getComputedStyle: () => ({ visibility: "visible" }),
       addEventListener: (_, fn) => listeners.add(fn),
       removeEventListener: (_, fn) => listeners.delete(fn),
-      requestAnimationFrame: fn => frames.push(fn),
     },
   });
   function mount(dialog, close = () => {}) {
@@ -42,7 +42,7 @@ function harness(mobile = true) {
     const event = { key, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {}, ...options };
     for (const listener of listeners) listener(event);
   }
-  return { Element, document, mount, key, flush: () => frames.splice(0).forEach(fn => fn()) };
+  return { Element, document, mount, key, flush: () => microtasks.splice(0).forEach(fn => fn()) };
 }
 
 test("phone dialog takes focus without opening the input keyboard", () => {

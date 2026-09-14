@@ -103,7 +103,11 @@ export function useDialogFocus(
       if (!dialogStack.length) document.body.style.overflow = pageOverflow;
       if (originalTabIndex === null) dialog.removeAttribute("tabindex");
       const returnTarget = returnFocusRef.current;
-      window.requestAnimationFrame(() => {
+      // A backgrounded or automation-controlled Chromium page can throttle
+      // requestAnimationFrame to roughly one callback per second. Focus
+      // restoration only needs to run after this cleanup stack, so a
+      // microtask restores keyboard focus promptly without depending on paint.
+      queueMicrotask(() => {
         if (!wasTop || !returnTarget?.isConnected) return;
         const top = dialogStack.at(-1);
         if (!top || top.contains(returnTarget)) returnTarget.focus({ preventScroll: true });
