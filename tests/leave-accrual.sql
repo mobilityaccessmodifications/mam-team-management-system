@@ -9,7 +9,13 @@ insert into public.internal_org_people(id,full_name,company_key,position_title,a
 select id,full_name,'mam','Test role',id,case when app_role='employee' then '10000000-0000-4000-8000-000000000003'::uuid else null end from public.profiles;
 insert into private.employee_directory_details(person_id,employment_type,work_email)
 select id,'full_time',login_name||'@example.test' from public.profiles;
-insert into private.leave_approval_grants(id,reviewer_user_id,scope_kind,scope_root_person_id,reviewer_label) values('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000003','subtree','10000000-0000-4000-8000-000000000003','Test Manager');
+do $$begin
+  assert (select count(*)=1 from private.leave_approval_grants
+    where reviewer_user_id='10000000-0000-4000-8000-000000000003'
+      and scope_kind='subtree'
+      and scope_root_person_id='10000000-0000-4000-8000-000000000003'
+      and revoked_at is null), 'Manager fixture receives one automatic subtree approval grant';
+end$$;
 select set_config('test.uid','10000000-0000-4000-8000-000000000001',false);
 select public.set_employee_annual_leave_balance('10000000-0000-4000-8000-000000000002',10,(now() at time zone 'Australia/Melbourne')::date-365,false);
 select public.set_employee_sick_leave_balance('10000000-0000-4000-8000-000000000002',20,(now() at time zone 'Australia/Melbourne')::date-365);
