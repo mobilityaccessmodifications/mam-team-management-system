@@ -8,8 +8,11 @@ values ('10000000-0000-4000-8000-000000000001','Test Admin','system_admin','test
 ('10000000-0000-4000-8000-000000000002','Test Manager','manager','testmanager',now()-interval '1 day'),
 ('10000000-0000-4000-8000-000000000003','Test Employee','employee','testemployee',now()-interval '1 day'),
 ('10000000-0000-4000-8000-000000000004','Test Outsider','manager','testoutsider',now()-interval '1 day');
+-- Parent validation fires per row, so roots must exist before their reports.
 insert into public.internal_org_people(id,full_name,company_key,position_title,auth_user_id,parent_id)
-select id,full_name,'mam','Test role',id,case when app_role='employee' then '10000000-0000-4000-8000-000000000002'::uuid else null end from public.profiles;
+select id,full_name,'mam','Test role',id,null from public.profiles where app_role<>'employee';
+insert into public.internal_org_people(id,full_name,company_key,position_title,auth_user_id,parent_id)
+select id,full_name,'mam','Test role',id,'10000000-0000-4000-8000-000000000002' from public.profiles where app_role='employee';
 insert into private.employee_directory_details(person_id,first_name,last_name,work_email,employment_type)
 select id,'Test','Employee',login_name||'@example.test','full_time' from public.profiles;
 do $$begin

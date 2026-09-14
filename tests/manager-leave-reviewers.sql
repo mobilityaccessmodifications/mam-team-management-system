@@ -10,10 +10,16 @@ insert into public.profiles(id,full_name,app_role,login_name,credentials_valid_a
 ('10000000-0000-4000-8000-000000000004','Manager Applicant','manager','applicant',now()-interval '1 day'),
 ('10000000-0000-4000-8000-000000000005','Parent Manager','manager','parent',now()-interval '1 day'),
 ('10000000-0000-4000-8000-000000000006','Employee Applicant','employee','employee',now()-interval '1 day');
+-- Parent validation fires per row, so build this two-level reporting chain top down.
 insert into public.internal_org_people(id,full_name,company_key,position_title,auth_user_id,parent_id)
-select id,full_name,'mam','Synthetic role',id,case
- when login_name='applicant' then '10000000-0000-4000-8000-000000000005'::uuid
- when login_name='employee' then '10000000-0000-4000-8000-000000000004'::uuid end from public.profiles;
+select id,full_name,'mam','Synthetic role',id,null
+from public.profiles where login_name not in ('applicant','employee');
+insert into public.internal_org_people(id,full_name,company_key,position_title,auth_user_id,parent_id)
+select id,full_name,'mam','Synthetic role',id,'10000000-0000-4000-8000-000000000005'
+from public.profiles where login_name='applicant';
+insert into public.internal_org_people(id,full_name,company_key,position_title,auth_user_id,parent_id)
+select id,full_name,'mam','Synthetic role',id,'10000000-0000-4000-8000-000000000004'
+from public.profiles where login_name='employee';
 insert into private.employee_directory_details(person_id,employment_type,work_email)
 select id,'full_time',login_name||'@example.test' from public.profiles;
 insert into private.leave_approval_grants(reviewer_user_id,scope_kind,scope_root_person_id,reviewer_label,priority)
