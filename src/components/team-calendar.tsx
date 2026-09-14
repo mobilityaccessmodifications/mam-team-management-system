@@ -38,6 +38,7 @@ import {
   makeDayFlowNavigationAccessible,
   makeDayFlowSearchAccessible,
 } from "@/lib/dayflow-event-accessibility";
+import { navigateFromDayFlowSearchResult } from "@/lib/dayflow-search-navigation";
 import { BALANCE_PENDING_STATUS } from "@/lib/leave-priority";
 
 type CalendarLeaveRequest = {
@@ -346,7 +347,7 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
           calendar={calendar}
           eventDetailContent={(props) => <EventDetail {...props} />}
           mobileEventDetail={(props) => <MobileEventDetail {...props} />}
-          search={{ customSearch, debounceDelay: 120, emptyText: "No matching events", timeFormat: "12h" }}
+          search={{ customSearch, debounceDelay: 120, emptyText: "No matching events", onResultClick: navigateFromDayFlowSearchResult, timeFormat: "12h" }}
         />
         {loading ? <div className={styles.loading} role="status"><span /><strong>Refreshing calendar…</strong></div> : null}
       </div>
