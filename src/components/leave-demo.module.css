@@ -7004,7 +7004,14 @@
 .impactAgenda article small { margin-top: 2px; font-size: 11px; }
 .impactAgenda[open] article { margin-top: 10px; }
 .requestExtras { padding: 14px 0; border-top: 1px solid var(--line); }
-.requestExtras summary { cursor: pointer; font-weight: 600; }
+.requestExtras summary {
+  min-height: 44px;
+  box-sizing: border-box;
+  padding-block: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  touch-action: manipulation;
+}
 .requestExtras[open] { display: grid; gap: 14px; }
 .timeRange:not([open]) > :not(summary),
 .requestExtras:not([open]) > :not(summary) { display: none; }
