@@ -1046,3 +1046,13 @@
 .sheetViewport { border-radius: 12px; box-shadow: none; }
 .modal { border-radius: 14px; }
 .header, .tools, .headerActions { gap: 12px; }
+
+/* Keep every phone action at the documented minimum after the shared rhythm
+   overrides above have reduced the desktop controls. */
+@media (max-width: 760px) {
+  .headerActions > a,
+  .headerActions > button,
+  .assetActionsCell.rowActions button {
+    min-height: 44px;
+  }
+}
