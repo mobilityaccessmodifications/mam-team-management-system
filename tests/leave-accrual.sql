@@ -2,6 +2,10 @@
 do $$begin assert current_database() ~ '^priority_v[0-9]+$', 'Synthetic database only';end$$;
 begin;
 \ir sql-test-auth.sql
+insert into auth.users(id) values
+('10000000-0000-4000-8000-000000000001'),
+('10000000-0000-4000-8000-000000000002'),
+('10000000-0000-4000-8000-000000000003');
 insert into public.profiles(id,full_name,app_role,login_name,credentials_valid_after) values
 ('10000000-0000-4000-8000-000000000001','Test Admin','system_admin','testadmin',now()-interval '1 day'),
 ('10000000-0000-4000-8000-000000000002','Test Employee','employee','testemployee',now()-interval '1 day'),
@@ -97,6 +101,11 @@ do $$declare w jsonb;begin
  assert not has_table_privilege('authenticated','private.leave_accrual_calculations','SELECT');
 end$$;
 select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000001');
+do $$declare w jsonb;p jsonb;begin
+ w:=public.get_leave_priority_workspace();
+ select value into p from jsonb_array_elements(w->'people') where value->>'personId'='10000000-0000-4000-8000-000000000002';
+ assert p->'accrualPolicy'->>'note'='Synthetic fixture','Administrator projection round-trips the policy note';
+end$$;
 do $$declare r uuid;c jsonb;day date:=(now() at time zone 'Australia/Melbourne')::date-1; before_hours numeric;begin
  while extract(isodow from day)>5 loop day:=day-1;end loop;
  select id into r from public.submit_selected_employee_leave_request('10000000-0000-4000-8000-000000000002','Annual leave',day,day);
