@@ -18,4 +18,8 @@ test("short-screen landscape organisation controls retain reachable touch target
     source.slice(landscapeOverride),
     /\.filterCard\s*\{[\s\S]*?top: auto;[\s\S]*?bottom: calc\(100% \+ 8px\);[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/,
   );
+  assert.match(
+    source.slice(landscapeOverride),
+    /\.toolbar:has\(\.filterCard\)\s*\{\s*z-index: 30;/,
+  );
 });

@@ -2047,6 +2047,10 @@
 
 /* Keep short-screen landscape tools reachable without clipping the filter menu. */
 @media (max-width: 1000px) and (max-height: 500px) {
+  .toolbar:has(.filterCard) {
+    z-index: 30;
+  }
+
   .headerActions > button,
   .filterOption,
   .inspectorActions .primaryAction,
