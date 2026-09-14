@@ -1115,3 +1115,13 @@
     touch-action: manipulation;
   }
 }
+
+/* Apply the same target sizing to short-screen phone landscape layouts. */
+@media (max-width: 1000px) and (max-height: 500px) {
+  .headerActions > .primaryAction,
+  .headerActions > .secondaryAction {
+    min-width: 44px;
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+}
