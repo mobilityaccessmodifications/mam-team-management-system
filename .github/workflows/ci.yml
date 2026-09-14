@@ -54,3 +54,13 @@ jobs:
         run: |
           createdb -h localhost -U postgres reviewer_balance_test
           psql -h localhost -U postgres -d reviewer_balance_test -v ON_ERROR_STOP=1 -f tests/reviewer-balance-access.sql
+
+      - name: Test advisor security cleanup in disposable database
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres advisor_cleanup_test
+          psql -h localhost -U postgres -d advisor_cleanup_test -v ON_ERROR_STOP=1 \
+            -f tests/advisor-security-cleanup-bootstrap.sql \
+            -f supabase/migrations/20260915010000_advisor_security_and_policy_cleanup.sql \
+            -f tests/advisor-security-cleanup.sql
