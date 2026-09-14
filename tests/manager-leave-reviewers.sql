@@ -111,8 +111,11 @@ update public.profiles set account_status='disabled',disabled_at=now() where id=
 do $$begin assert not private.is_current_leave_request_reviewer((select id from submitted),'10000000-0000-4000-8000-000000000002');end$$;
 update public.profiles set account_status='active',disabled_at=null where id='10000000-0000-4000-8000-000000000002';
 do $$begin assert private.is_current_leave_request_reviewer((select id from submitted),'10000000-0000-4000-8000-000000000002');end$$;
+-- Archive reports before their manager, then restore the hierarchy top down.
+update public.internal_org_people set is_active=false where id='10000000-0000-4000-8000-000000000006';
 update public.internal_org_people set is_active=false where id='10000000-0000-4000-8000-000000000004';
 update public.internal_org_people set is_active=true where id='10000000-0000-4000-8000-000000000004';
+update public.internal_org_people set is_active=true where id='10000000-0000-4000-8000-000000000006';
 -- An inactive or revoked reviewer loses approval and delivery authority.
 update private.leave_approval_grants set revoked_at=now(),revoked_by='10000000-0000-4000-8000-000000000001' where reviewer_user_id='10000000-0000-4000-8000-000000000002';
 do $$begin
