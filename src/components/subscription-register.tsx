@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import {
   type FormEvent,
+  type RefObject,
   useCallback,
   useEffect,
   useId,
@@ -272,6 +273,7 @@ export function SubscriptionRegister({
   const [showCredentialAccess, setShowCredentialAccess] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const addSubscriptionButtonRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
     setRegisterState({ state: "loading" });
@@ -456,7 +458,7 @@ export function SubscriptionRegister({
     <header className={`${styles.header} ${styles.headerActionsOnly}`}>
       <div className={styles.headerActionGroup}>
         {canManageCredentialGrants ? <button className={styles.secondaryAction} type="button" onClick={() => setShowCredentialAccess(true)} aria-label="Manage credential access" title="Credential access"><UsersRound size={16} aria-hidden="true" /></button> : null}
-        {!readOnly ? <button className={styles.primaryAction} type="button" onClick={() => setShowAdd(true)}><Plus size={16} /> Add</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Read only</div>}
+        {!readOnly ? <button className={styles.primaryAction} type="button" onClick={() => setShowAdd(true)} ref={addSubscriptionButtonRef}><Plus size={16} /> Add</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Read only</div>}
       </div>
     </header>
 
@@ -517,7 +519,7 @@ export function SubscriptionRegister({
       </div>
     </div> : null}
 
-    {showAdd ? <SubscriptionModal people={people} onClose={() => setShowAdd(false)} onCreated={subscriptionCreated} /> : null}
+    {showAdd ? <SubscriptionModal people={people} fallbackFocusRef={addSubscriptionButtonRef} onClose={() => setShowAdd(false)} onCreated={subscriptionCreated} /> : null}
     {editTarget ? <SubscriptionModal people={people} subscription={editTarget} onClose={() => setEditTarget(null)} onUpdated={(next) => { replaceSubscription(next, `${next.serviceName} has been updated.`); setEditTarget(null); }} onReview={() => recordReview(editTarget)} /> : null}
     {credentialTarget ? <SubscriptionCredentialEditor
       subscriptionId={credentialTarget.id}
@@ -535,6 +537,7 @@ export function SubscriptionRegister({
 function SubscriptionModal({
   people,
   subscription,
+  fallbackFocusRef = null,
   onClose,
   onCreated,
   onUpdated,
@@ -542,6 +545,7 @@ function SubscriptionModal({
 }: {
   people: SubscriptionPerson[];
   subscription?: Subscription;
+  fallbackFocusRef?: RefObject<HTMLElement | null> | null;
   onClose: () => void;
   onCreated?: (subscription: Subscription) => void;
   onUpdated?: (subscription: Subscription) => void;
@@ -556,7 +560,7 @@ function SubscriptionModal({
   const [error, setError] = useState("");
   const closeWhenReady = useCallback(() => { if (!saving) onClose(); }, [onClose, saving]);
   const passwordReminder = passwordReviewInstruction(subscription);
-  useDialogFocus(true, dialogRef, initialFocusRef, closeWhenReady);
+  useDialogFocus(true, dialogRef, initialFocusRef, closeWhenReady, fallbackFocusRef);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
