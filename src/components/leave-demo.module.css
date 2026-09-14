@@ -7006,6 +7006,8 @@
 .requestExtras { padding: 14px 0; border-top: 1px solid var(--line); }
 .requestExtras summary { cursor: pointer; font-weight: 600; }
 .requestExtras[open] { display: grid; gap: 14px; }
+.timeRange:not([open]) > :not(summary),
+.requestExtras:not([open]) > :not(summary) { display: none; }
 .leaveBalances { margin-top: 20px; padding: 16px; border-radius: 10px; }
 .primaryButton, .secondaryButton, .approveButton, .declineButton { font-size: 13px; font-weight: 600; box-shadow: none; }
 @media (max-width: 680px) {
