@@ -364,6 +364,11 @@ export function AccountManagement({
     setPage(1);
   }
 
+  function clearSearch() {
+    updateQuery("");
+    searchInputRef.current?.focus({ preventScroll: true });
+  }
+
   function updateSort(value: AccountSort) {
     setSort(value);
     setPage(1);
@@ -886,7 +891,7 @@ export function AccountManagement({
           <div className={styles.emptyState}>
             <Search aria-hidden="true" size={20} />
             <strong>No accounts match this search.</strong>
-            <button onClick={() => updateQuery("")} type="button">
+            <button onClick={clearSearch} type="button">
               Clear search
             </button>
           </div>
