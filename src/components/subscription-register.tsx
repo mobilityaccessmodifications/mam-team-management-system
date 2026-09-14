@@ -274,6 +274,7 @@ export function SubscriptionRegister({
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const addSubscriptionButtonRef = useRef<HTMLButtonElement>(null);
+  const subscriptionDialogReturnFocusRef = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
     setRegisterState({ state: "loading" });
@@ -458,7 +459,7 @@ export function SubscriptionRegister({
     <header className={`${styles.header} ${styles.headerActionsOnly}`}>
       <div className={styles.headerActionGroup}>
         {canManageCredentialGrants ? <button className={styles.secondaryAction} type="button" onClick={() => setShowCredentialAccess(true)} aria-label="Manage credential access" title="Credential access"><UsersRound size={16} aria-hidden="true" /></button> : null}
-        {!readOnly ? <button className={styles.primaryAction} type="button" onClick={() => setShowAdd(true)} ref={addSubscriptionButtonRef}><Plus size={16} /> Add</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Read only</div>}
+        {!readOnly ? <button className={styles.primaryAction} type="button" onClick={() => { subscriptionDialogReturnFocusRef.current = addSubscriptionButtonRef.current; setShowAdd(true); }} ref={addSubscriptionButtonRef}><Plus size={16} /> Add</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Read only</div>}
       </div>
     </header>
 
@@ -488,7 +489,7 @@ export function SubscriptionRegister({
       ] as const).map(filter => ({ ...filter, value: subscriptionFilters[filter.key], options: subscriptionFilterOptions[filter.key] }))}
       onFilter={setSubscriptionFilter}
     /> : null}
-    {registerState.state === "ready" && !filteredSubscriptions.length ? <div className={styles.emptyState}><CreditCard size={25} aria-hidden="true" /><strong>{query || hasSubscriptionFilters ? "No subscriptions match those filters" : "No subscriptions have been added"}</strong><span>{readOnly ? "Subscription records will appear here when they are created by a System Admin." : "Start with the systems your staff use, then assign their owner and access."}</span>{!readOnly && !query && !hasSubscriptionFilters ? <button className={styles.secondaryAction} type="button" onClick={() => setShowAdd(true)}><Plus size={15} /> Add subscription</button> : null}</div> : null}
+    {registerState.state === "ready" && !filteredSubscriptions.length ? <div className={styles.emptyState}><CreditCard size={25} aria-hidden="true" /><strong>{query || hasSubscriptionFilters ? "No subscriptions match those filters" : "No subscriptions have been added"}</strong><span>{readOnly ? "Subscription records will appear here when they are created by a System Admin." : "Start with the systems your staff use, then assign their owner and access."}</span>{!readOnly && !query && !hasSubscriptionFilters ? <button className={styles.secondaryAction} type="button" onClick={() => { subscriptionDialogReturnFocusRef.current = addSubscriptionButtonRef.current; setShowAdd(true); }}><Plus size={15} /> Add subscription</button> : null}</div> : null}
     {registerState.state === "ready" && filteredSubscriptions.length ? <div className={styles.sheetViewport}>
       <div className={styles.subscriptionSheet} role="table" aria-label="Subscriptions">
         <div className={`${styles.subscriptionSheetRow} ${styles.subscriptionSheetHeader}`} role="row">
@@ -512,15 +513,15 @@ export function SubscriptionRegister({
           <div className={`${styles.sheetCell} ${styles.membersCell}`} role="cell" data-label="Access"><strong title={`${subscription.memberNames.length} ${subscription.memberNames.length === 1 ? "person" : "people"} assigned`}>{subscription.memberNames.length || "—"}</strong></div>
           <div className={`${styles.sheetCell} ${styles.subscriptionActions}`} role="cell" data-label="Actions">
             {canManageCredentials ? <button type="button" onClick={() => setCredentialTarget(subscription)} disabled={reviewingId !== null}><KeyRound size={15} /> Credentials</button> : null}
-            {!readOnly ? <button type="button" onClick={() => setEditTarget(subscription)} disabled={reviewingId !== null}><Pencil size={15} /> Edit</button> : null}
+            {!readOnly ? <button type="button" onClick={(event) => { subscriptionDialogReturnFocusRef.current = event.currentTarget; setEditTarget(subscription); }} disabled={reviewingId !== null}><Pencil size={15} /> Edit</button> : null}
             {!canManageCredentials && readOnly ? <span className={styles.readOnlyCell} aria-label="Read only">—</span> : null}
           </div>
         </div>)}
       </div>
     </div> : null}
 
-    {showAdd ? <SubscriptionModal people={people} fallbackFocusRef={addSubscriptionButtonRef} onClose={() => setShowAdd(false)} onCreated={subscriptionCreated} /> : null}
-    {editTarget ? <SubscriptionModal people={people} subscription={editTarget} onClose={() => setEditTarget(null)} onUpdated={(next) => { replaceSubscription(next, `${next.serviceName} has been updated.`); setEditTarget(null); }} onReview={() => recordReview(editTarget)} /> : null}
+    {showAdd ? <SubscriptionModal people={people} fallbackFocusRef={subscriptionDialogReturnFocusRef} onClose={() => setShowAdd(false)} onCreated={subscriptionCreated} /> : null}
+    {editTarget ? <SubscriptionModal people={people} subscription={editTarget} fallbackFocusRef={subscriptionDialogReturnFocusRef} onClose={() => setEditTarget(null)} onUpdated={(next) => { replaceSubscription(next, `${next.serviceName} has been updated.`); setEditTarget(null); }} onReview={() => recordReview(editTarget)} /> : null}
     {credentialTarget ? <SubscriptionCredentialEditor
       subscriptionId={credentialTarget.id}
       serviceName={credentialTarget.serviceName}
