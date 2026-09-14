@@ -6924,6 +6924,8 @@
   .modal > header, .form { padding-inline: var(--mobile-gutter, 16px); }
   .formPerson { margin-inline: var(--mobile-gutter, 16px); }
   .form footer {
+    position: static;
+    bottom: auto;
     margin-inline: calc(-1 * var(--mobile-gutter, 16px));
     padding-inline: var(--mobile-gutter, 16px);
   }
