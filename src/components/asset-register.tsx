@@ -328,10 +328,12 @@ function AssetLabelModal({
 
 function AddDeviceModal({
   assignees,
+  fallbackFocusRef,
   onClose,
   onCreated,
 }: {
   assignees: ItAssetAssignee[];
+  fallbackFocusRef: RefObject<HTMLElement | null> | null;
   onClose: () => void;
   onCreated: (asset: ItAsset) => void;
 }) {
@@ -343,7 +345,13 @@ function AddDeviceModal({
   const closeWhenReady = useCallback(() => {
     if (!saving) onClose();
   }, [onClose, saving]);
-  useDialogFocus(true, dialogRef, assigneeRef, closeWhenReady);
+  useDialogFocus(
+    true,
+    dialogRef,
+    assigneeRef,
+    closeWhenReady,
+    fallbackFocusRef,
+  );
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1117,7 +1125,7 @@ export function AssetRegister() {
       </div>
     </div> : null}
 
-    {showAddDevice ? <AddDeviceModal assignees={assignees} onClose={() => setShowAddDevice(false)} onCreated={assetCreated} /> : null}
+    {showAddDevice ? <AddDeviceModal assignees={assignees} fallbackFocusRef={addDeviceButtonRef} onClose={() => setShowAddDevice(false)} onCreated={assetCreated} /> : null}
     {labelTarget ? <AssetLabelModal asset={labelTarget.asset} fallbackFocusRef={dialogReturnFocusRef} onClose={() => setLabelTarget(null)} onAddAnother={labelTarget.isNew ? () => { setLabelTarget(null); setShowAddDevice(true); } : undefined} /> : null}
     {assignmentTarget ? <ChangeDeviceOwnerModal asset={assignmentTarget} assignees={assignees} fallbackFocusRef={dialogReturnFocusRef} onClose={() => setAssignmentTarget(null)} onSaved={assetOwnerChanged} /> : null}
     {returnTarget ? <ReturnDeviceModal asset={returnTarget} fallbackFocusRef={dialogReturnFocusRef} onClose={() => setReturnTarget(null)} onReturned={assetReturned} /> : null}
