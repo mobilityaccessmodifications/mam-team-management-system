@@ -111,3 +111,18 @@
     touch-action: manipulation;
   }
 }
+
+/* Apple workspace v2 */
+.workspace { gap: 16px; }
+.header { min-height: 60px; align-items: center; }
+.header h2 { font-size: 24px; font-weight: 670; letter-spacing: -.035em; }
+.keyPanel, .guide { border-color: var(--surface-border); border-radius: 18px; background: var(--surface-raised); box-shadow: var(--shadow-xs); }
+.keyPanel { min-height: 78px; padding: 18px; }
+.guide { padding: 18px; }
+.guideGrid > div { border-color: var(--surface-border); border-radius: 13px; background: var(--surface-muted); }
+.primaryAction, .secondaryAction, .dangerAction, .copyGuide, .iconButton { border-radius: 11px; }
+.modal { border-color: var(--surface-border); border-radius: 22px; box-shadow: var(--shadow-md); }
+@media (max-width: 760px) {
+  .keyPanel, .guide { border-radius: 16px; }
+  .modal { border-radius: 24px 24px 0 0; }
+}

@@ -70,29 +70,39 @@ export function MotionTabs<T extends string>({
 
   useEffect(() => {
     const root = rootRef.current;
-    const active = root?.querySelector<HTMLElement>('[data-active="true"]');
-    if (!root || !active) return;
+    if (!root) return;
+    const tabList = root;
 
-    if (resolvedOrientation === "vertical") {
-      const top = active.offsetTop;
-      const bottom = top + active.offsetHeight;
-      if (top < root.scrollTop || bottom > root.scrollTop + root.clientHeight) {
-        root.scrollTo({
-          top: Math.max(0, top - (root.clientHeight - active.offsetHeight) / 2),
+    function revealActiveTab() {
+      const active = tabList.querySelector<HTMLElement>('[data-active="true"]');
+      if (!active) return;
+
+      if (resolvedOrientation === "vertical") {
+        const top = active.offsetTop;
+        const bottom = top + active.offsetHeight;
+        if (top < tabList.scrollTop || bottom > tabList.scrollTop + tabList.clientHeight) {
+          tabList.scrollTo({
+            top: Math.max(0, top - (tabList.clientHeight - active.offsetHeight) / 2),
+            behavior: "auto",
+          });
+        }
+        return;
+      }
+
+      const left = active.offsetLeft;
+      const right = left + active.offsetWidth;
+      if (left < tabList.scrollLeft || right > tabList.scrollLeft + tabList.clientWidth) {
+        tabList.scrollTo({
+          left: Math.max(0, left - (tabList.clientWidth - active.offsetWidth) / 2),
           behavior: "auto",
         });
       }
-      return;
     }
 
-    const left = active.offsetLeft;
-    const right = left + active.offsetWidth;
-    if (left < root.scrollLeft || right > root.scrollLeft + root.clientWidth) {
-      root.scrollTo({
-        left: Math.max(0, left - (root.clientWidth - active.offsetWidth) / 2),
-        behavior: "auto",
-      });
-    }
+    revealActiveTab();
+    const resizeObserver = new ResizeObserver(revealActiveTab);
+    resizeObserver.observe(tabList);
+    return () => resizeObserver.disconnect();
   }, [resolvedOrientation, value]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {

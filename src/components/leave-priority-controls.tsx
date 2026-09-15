@@ -27,23 +27,39 @@ function BalanceCard({ label, hours, sick = false }: { label: string; hours?: nu
   </div>;
 }
 
-export function LeaveSelfServiceControls({ workspace, personId, previewPersonId, busy, onRequest }: {
+export function LeaveRequestBalance({ workspace, personId, self = false }: {
+  workspace?: LeavePriorityWorkspace;
+  personId: string;
+  self?: boolean;
+}) {
+  const person = workspace?.people.find((candidate) => (
+    candidate.personId === personId
+    && candidate.canViewBalance
+    && candidate.paidLeave
+  ));
+  if (!person) return null;
+
+  return <div className={styles.requestBalance}>
+    <BalanceCard label={self ? "My annual leave" : "Annual leave balance"} hours={person.hours} />
+    <LeaveAccrualNotice person={person} />
+  </div>;
+}
+
+export function LeaveSelfServiceControls({ workspace, previewPersonId, busy, onRequest }: {
   workspace?: LeavePriorityWorkspace; personId: string; previewPersonId?: string;
   busy: boolean; onRequest: (personId: string) => void;
 }) {
   if (!workspace || (workspace.canManageBalances && !previewPersonId)) return null;
-  const ownBalance = workspace.people.find((person) => person.personId === personId && person.canViewBalance && person.paidLeave);
   const team = workspace.people.filter((person) => person.canSubmit);
-  if (!ownBalance && !team.length) return null;
+  if (!team.length) return null;
   return <div className={styles.leaveSelfService}>
-    {ownBalance ? <div><BalanceCard label="My annual leave" hours={ownBalance.hours} /><LeaveAccrualNotice person={ownBalance} /></div> : null}
-    {team.length ? <select aria-label="Request leave for a team member" value="" disabled={busy} onChange={(event) => {
+    <select aria-label="Request leave for a team member" value="" disabled={busy} onChange={(event) => {
       const personId = event.currentTarget.value;
       if (team.some((person) => person.personId === personId)) onRequest(personId);
     }}>
       <option value="" disabled>Request for team</option>
       {team.map((person) => <option value={person.personId} key={person.personId}>{person.name}</option>)}
-    </select> : null}
+    </select>
   </div>;
 }
 

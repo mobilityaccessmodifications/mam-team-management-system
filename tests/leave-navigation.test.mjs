@@ -72,6 +72,21 @@ test('register comes first and View more forwards the exact request to approvals
   const records = tree.props.children.find(c=>c?.type==='records');
   records.props.onViewMore('second'); assert.deepEqual(calls, [['second','approvals']]);
 });
+test('Apply for leave stays in the shared header for register and approvals', () => {
+  const LeaveView = load('LeaveView', { styles: { leaveHeader: 'leave-header', primaryButton: 'primary', applyForLeaveButton: 'apply' }, RequestsView: 'records', ApprovalsView: 'approvals', Plus: 'plus' });
+  for (const section of ['requests', 'approvals']) {
+    const tree = LeaveView({ section, allRequests: [], pending: [], canReview: true, canApplyForLeave: true, busy: false });
+    const header = tree.props.children[0];
+    const action = buttons(header).find((button) => button.props['aria-label'] === 'Apply for leave');
+    assert.equal(header.props.className, 'leave-header');
+    assert.equal(action.props.className, 'primary apply');
+    assert.equal(header.props.children[1], action);
+    if (section === 'requests') {
+      const records = tree.props.children.find((child) => child?.type === 'records');
+      assert.equal(Object.hasOwn(records.props, 'action'), false);
+    }
+  }
+});
 test('View more is available only for an authorised approvable request and opens that record', () => {
   const Detail = load('RequestDetail', { useId:()=> 'detail', styles:{}, StatusPill:'status', formatDurationWithTime:()=> '2 days', AttachmentList:()=>null, SickEvidenceNotice:()=>null, ChevronRight:'icon' });
   for (const [canReview, canDecide, count] of [[true,true,1],[true,false,0],[false,true,0]]) {

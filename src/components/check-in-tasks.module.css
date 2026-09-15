@@ -459,3 +459,17 @@
 /* Shared People Hub page rhythm. */
 .workspace { gap: 20px; }
 .header, .headerActions { gap: 12px; }
+
+/* Apple workspace v2 */
+.workspace { gap: 16px; }
+.header { min-height: 60px; align-items: center; }
+.header h2 { font-size: 24px; font-weight: 670; letter-spacing: -.035em; }
+.header > div > span { font-family: var(--font-geist-sans), sans-serif; font-size: 10px; letter-spacing: .08em; }
+.filters { padding: 6px; border: 1px solid var(--surface-border); border-radius: 16px; background: rgb(255 255 255 / 76%); box-shadow: var(--shadow-xs); }
+.taskList, .reviewPanel { border-color: var(--surface-border); border-radius: 18px; background: var(--surface-raised); box-shadow: var(--shadow-xs); }
+.task { min-height: 68px; border-color: var(--surface-border); }
+.task[data-selected="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent); }
+.headerActions button, .filters button, .task button { border-radius: 11px; }
+@media (max-width: 720px) {
+  .filters, .taskList, .reviewPanel { border-radius: 16px; }
+}

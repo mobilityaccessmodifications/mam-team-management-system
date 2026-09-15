@@ -198,7 +198,7 @@
 .subscriptionIdentity span,
 .responsible small,
 .reviewDate small { color: var(--subscription-muted); font-size: 11px; }
-.subscriptionIdentity code { color: var(--subscription-accent-deep); font-size: 9px; }
+.subscriptionIdentity code { color: var(--subscription-accent-deep); font-size: 10px; }
 .subscriptionTerms > span { color: var(--text-secondary, #53625e); font-size: 12px; font-weight: 700; }
 .subscriptionTerms > strong { width: fit-content; border: 1px solid #c8ddd3; border-radius: 999px; background: #eff8f3; color: #28745b; font-size: 10px; font-weight: 800; padding: 3px 7px; text-transform: capitalize; }
 .subscriptionTerms > strong[data-status="paused"] { border-color: #ead2ab; background: #fff8e9; color: #95621b; }
@@ -247,8 +247,8 @@
 }
 
 .subscriptionSheet {
-  --subscription-sheet-columns: minmax(214px, 1.2fr) minmax(122px, .64fr) minmax(108px, .5fr) minmax(210px, .95fr) minmax(150px, .72fr) minmax(142px, .72fr) minmax(152px, .78fr) minmax(102px, .5fr) minmax(78px, .36fr) 194px;
-  min-width: 1570px;
+  --subscription-sheet-columns: minmax(214px, 1.2fr) minmax(148px, .68fr) minmax(166px, .68fr) minmax(210px, .95fr) minmax(156px, .72fr) minmax(180px, .8fr) minmax(184px, .82fr) minmax(142px, .58fr) minmax(104px, .42fr) 194px;
+  min-width: 1802px;
 }
 
 .subscriptionSheetRow {
@@ -291,7 +291,7 @@
 }
 
 .sheetHeaderCell:last-child { border-right: 0; }
-.sheetHeaderCell > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheetHeaderCell > span:first-child { flex: 0 0 auto; overflow: visible; text-overflow: clip; white-space: nowrap; }
 .sheetHeaderTools { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 2px; margin-left: auto; }
 
 .sheetHeaderButton {
@@ -394,7 +394,7 @@
 .reviewCell small,
 .responsibleCell small,
 .membersCell small { color: var(--subscription-muted); font-size: 11px; }
-.serviceCell .subscriptionIdentity code { color: var(--subscription-accent-deep); font-size: 9px; }
+.serviceCell .subscriptionIdentity code { color: var(--subscription-accent-deep); font-size: 10px; }
 
 .monthlyCell,
 .detailCell,
@@ -671,5 +671,31 @@
     min-width: 44px;
     min-height: 44px;
     touch-action: manipulation;
+  }
+}
+
+/* Apple workspace v2 */
+.workspace { gap: 16px; }
+.header { min-height: 60px; align-items: center; }
+.header h2 { font-size: 24px; font-weight: 670; letter-spacing: -.035em; }
+.header > div > span { font-family: var(--font-geist-sans), sans-serif; font-size: 10px; letter-spacing: .08em; }
+.tools { min-height: 56px; padding: 6px; border: 1px solid var(--surface-border); border-radius: 16px; background: rgb(255 255 255 / 76%); box-shadow: var(--shadow-xs); }
+.searchField, .memberSearch { border: 0; border-radius: 11px; background: var(--surface-raised); box-shadow: none; }
+.sheetViewport, .subscriptionList { border-radius: 18px; box-shadow: var(--shadow-xs); }
+.subscriptionSheetHeader { min-height: 50px; background: color-mix(in srgb, var(--surface-muted) 76%, var(--surface-raised)); }
+.subscriptionSheetRow:not(.subscriptionSheetHeader) { min-height: 72px; }
+.subscriptionIcon { width: 38px; height: 38px; border-radius: 12px; }
+.primaryAction, .secondaryAction, .subscriptionActions button { border-radius: 11px; }
+.modal { border-color: var(--surface-border); border-radius: 22px; box-shadow: var(--shadow-md); }
+.accessDetails { border: 1px solid var(--surface-border); border-radius: 14px; background: var(--surface-muted); padding-inline: 14px; }
+@media (max-width: 760px) {
+  .tools { border-radius: 14px; }
+  .sheetViewport, .subscriptionList { border-radius: 16px; }
+  .modal { border-radius: 24px 24px 0 0; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .modalBackdrop {
+    backdrop-filter: none;
   }
 }

@@ -386,3 +386,21 @@
     touch-action: manipulation;
   }
 }
+
+/* Apple workspace v2 */
+.workspace { gap: 16px; }
+.header { min-height: 60px; align-items: center; }
+.header h2 { font-size: 24px; font-weight: 670; letter-spacing: -.035em; }
+.header > div > span { font-family: var(--font-geist-sans), sans-serif; font-size: 10px; letter-spacing: .08em; }
+.toolbar { min-height: 56px; padding: 6px; border: 1px solid var(--surface-border); border-radius: 16px; background: rgb(255 255 255 / 76%); box-shadow: var(--shadow-xs); }
+.desk { overflow: hidden; border-color: var(--surface-border); border-radius: 18px; box-shadow: var(--shadow-xs); }
+.employeeList { background: color-mix(in srgb, var(--surface-muted) 58%, var(--surface-raised)); }
+.employeeRow { min-height: 68px; border-color: var(--surface-border); }
+.employeeRow[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent); }
+.detail { padding: 24px; }
+.summaryGrid, .timeline, .privateDetails { border-color: var(--surface-border); border-radius: 14px; }
+.secondaryAction, .timeline button, .pagination button, .listToolbar select, .resources a { border-radius: 11px; }
+@media (max-width: 900px) {
+  .desk { border-radius: 16px; }
+  .detail { padding: 16px; }
+}
