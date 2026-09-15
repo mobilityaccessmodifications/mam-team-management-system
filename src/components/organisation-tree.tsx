@@ -7,7 +7,6 @@ import {
   Columns3,
   Download,
   Focus,
-  ListFilter,
   GripVertical,
   Link2,
   Link2Off,
@@ -21,6 +20,7 @@ import {
   Plus,
   Rows3,
   Search,
+  SlidersHorizontal,
   Undo2,
   UserPlus,
   WandSparkles,
@@ -2434,7 +2434,7 @@ export function OrganisationTree({
               title="Filter"
               type="button"
             >
-              <ListFilter aria-hidden="true" size={15} />
+              <SlidersHorizontal aria-hidden="true" size={17} />
               <span>Filter</span>
               {companyFilter !== "all" ? <span className={styles.filterBadge}>1</span> : null}
             </button>
@@ -2505,82 +2505,91 @@ export function OrganisationTree({
             </div>
 
             <div aria-label="Chart view controls" className={styles.chartControls}>
-              {canArrange ? (
+              {canArrange || canUseRelationshipEditor ? (
+                <div aria-label="Chart editing" className={styles.chartControlGroup} role="group">
+                  {canArrange ? (
+                    <button
+                      aria-label="Clean up chart and restore the reporting layout"
+                      className={styles.cleanUpControl}
+                      disabled={!Object.keys(manualOffsets).length && !arrangeMode}
+                      onClick={cleanUpChart}
+                      title="Clean up chart"
+                      type="button"
+                    >
+                      <WandSparkles aria-hidden="true" size={16} />
+                      <span>Clean up</span>
+                    </button>
+                  ) : null}
+                  {canUseRelationshipEditor ? (
+                    <button
+                      aria-label="Undo last reporting-line change"
+                      disabled={!relationshipHistory.length || saving}
+                      onClick={() => void undoLastRelationship()}
+                      title="Undo last reporting-line change"
+                      type="button"
+                    >
+                      <Undo2 aria-hidden="true" size={16} />
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+              <div aria-label="Zoom" className={`${styles.chartControlGroup} ${styles.zoomControlGroup}`} role="group">
                 <button
-                  aria-label="Clean up chart and restore the reporting layout"
-                  className={styles.cleanUpControl}
-                  disabled={!Object.keys(manualOffsets).length && !arrangeMode}
-                  onClick={cleanUpChart}
-                  title="Clean up chart"
+                  aria-label="Zoom out"
+                  disabled={zoom <= MIN_ZOOM}
+                  onClick={() =>
+                    setZoom((current) =>
+                      Math.max(MIN_ZOOM, Math.round((current - 0.1) * 100) / 100),
+                    )
+                  }
                   type="button"
                 >
-                  <WandSparkles aria-hidden="true" size={15} />
-                  <span>Clean up</span>
+                  <Minus aria-hidden="true" size={16} />
                 </button>
-              ) : null}
-              {canUseRelationshipEditor ? (
+                <span aria-label={`${Math.round(zoom * 100)} percent zoom`}>
+                  {Math.round(zoom * 100)}%
+                </span>
                 <button
-                  aria-label="Undo last reporting-line change"
-                  disabled={!relationshipHistory.length || saving}
-                  onClick={() => void undoLastRelationship()}
-                  title="Undo last reporting-line change"
+                  aria-label="Zoom in"
+                  disabled={zoom >= MAX_ZOOM}
+                  onClick={() =>
+                    setZoom((current) =>
+                      Math.min(MAX_ZOOM, Math.round((current + 0.1) * 100) / 100),
+                    )
+                  }
                   type="button"
                 >
-                  <Undo2 aria-hidden="true" size={15} />
+                  <Plus aria-hidden="true" size={16} />
                 </button>
-              ) : null}
-              <button
-                aria-label="Zoom out"
-                disabled={zoom <= MIN_ZOOM}
-                onClick={() =>
-                  setZoom((current) =>
-                    Math.max(MIN_ZOOM, Math.round((current - 0.1) * 100) / 100),
-                  )
-                }
-                type="button"
-              >
-                <Minus aria-hidden="true" size={15} />
-              </button>
-              <span aria-label={`${Math.round(zoom * 100)} percent zoom`}>
-                {Math.round(zoom * 100)}%
-              </span>
-              <button
-                aria-label="Zoom in"
-                disabled={zoom >= MAX_ZOOM}
-                onClick={() =>
-                  setZoom((current) =>
-                    Math.min(MAX_ZOOM, Math.round((current + 0.1) * 100) / 100),
-                  )
-                }
-                type="button"
-              >
-                <Plus aria-hidden="true" size={15} />
-              </button>
-              <button
-                aria-label="Fit chart to screen"
-                className={styles.namedChartControl}
-                onClick={fitChart}
-                title="Fit chart to screen"
-                type="button"
-              >
-                <LocateFixed aria-hidden="true" size={15} />
-                <span>Fit</span>
-              </button>
-              <button aria-label="Reset chart view" onClick={resetView} type="button">
-                <Focus aria-hidden="true" size={15} />
-              </button>
-              <button
-                aria-label={fullscreen ? "Exit full screen" : "Open full screen"}
-                aria-pressed={fullscreen}
-                onClick={toggleFullscreen}
-                type="button"
-              >
-                {fullscreen ? (
-                  <Minimize2 aria-hidden="true" size={15} />
-                ) : (
-                  <Maximize2 aria-hidden="true" size={15} />
-                )}
-              </button>
+              </div>
+              <div aria-label="Chart framing" className={styles.chartControlGroup} role="group">
+                <button
+                  aria-label="Fit chart to screen"
+                  className={styles.namedChartControl}
+                  onClick={fitChart}
+                  title="Fit chart to screen"
+                  type="button"
+                >
+                  <LocateFixed aria-hidden="true" size={16} />
+                  <span>Fit</span>
+                </button>
+                <button aria-label="Reset chart view" onClick={resetView} title="Reset chart view" type="button">
+                  <Focus aria-hidden="true" size={16} />
+                </button>
+                <button
+                  aria-label={fullscreen ? "Exit full screen" : "Open full screen"}
+                  aria-pressed={fullscreen}
+                  onClick={toggleFullscreen}
+                  title={fullscreen ? "Exit full screen" : "Open full screen"}
+                  type="button"
+                >
+                  {fullscreen ? (
+                    <Minimize2 aria-hidden="true" size={16} />
+                  ) : (
+                    <Maximize2 aria-hidden="true" size={16} />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 

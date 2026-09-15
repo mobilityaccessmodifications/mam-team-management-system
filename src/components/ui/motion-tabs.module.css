@@ -255,13 +255,18 @@
 }
 
 .indicator::after {
-  right: auto;
-  bottom: 7px;
-  left: 9px;
+  display: none;
+  content: none;
+}
+
+.root[data-orientation="vertical"] .indicator::after {
+  inset: 8px auto 8px 0;
+  display: block;
   width: 3px;
-  height: 3px;
-  border-radius: 50%;
+  height: auto;
+  border-radius: 0 99px 99px 0;
   background: var(--accent, var(--mam-orange));
+  content: "";
 }
 
 .label {

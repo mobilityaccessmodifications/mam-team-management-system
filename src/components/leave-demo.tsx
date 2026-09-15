@@ -29,7 +29,7 @@ import {
 import { FormEvent, type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
-import { ApprovalBalancePill, ApprovalLeaveBalances, LeavePriorityControls, LeaveRequestBalance, LeaveSelfServiceControls, SickEvidenceNotice } from "@/components/leave-priority-controls";
+import { ApprovalBalancePill, ApprovalLeaveBalances, LeavePriorityControls, LeaveRequestBalance, SickEvidenceNotice } from "@/components/leave-priority-controls";
 import { BALANCE_PENDING_STATUS, sickEvidenceDeadline, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import {
   getCurrentEmployeeSelfProfile,
@@ -1286,6 +1286,14 @@ export function LeaveDemo({
   // audit authority remain with the real Super Admin account.
   const canApplyForLeave = availableLeaveTypes.length > 0
     && (!isNonRosterSystemAdminWorkspace || isPreviewingEmployeeAccess);
+  const teamRequestPeople = leavePriority?.people.filter((person) => person.canSubmit) ?? [];
+  const requestedTeamMember = requestForPersonId
+    ? teamRequestPeople.find((person) => person.personId === requestForPersonId)
+    : undefined;
+  const leaveRequestPersonName = requestedTeamMember?.name ?? activeProfile.name;
+  const leaveRequestPersonInitials = requestedTeamMember
+    ? initialsForName(requestedTeamMember.name)
+    : activeProfile.initials;
   // The server-projected per-request capability remains the source of truth.
   // This only prevents a Change profile or non-roster platform workspace from
   // presenting an impossible cancellation control.
@@ -1563,13 +1571,25 @@ export function LeaveDemo({
     openTeamLeaveRequestForm("");
   }
 
-  function openTeamLeaveRequestForm(personId: string) {
-    const target = personId ? leavePriority?.people.find((person) => person.personId === personId && person.canSubmit) : undefined;
-    if (isMutating || (personId ? !target : !canApplyForLeave)) return;
+  function changeLeaveRequestPerson(personId: string) {
+    const target = personId
+      ? teamRequestPeople.find((person) => person.personId === personId)
+      : undefined;
+    if ((personId && !target) || (!personId && !canApplyForLeave)) return;
     setRequestForPersonId(personId);
-    setFormLeaveType(target ? target.paidLeave ? "Annual leave" : "Unpaid leave" : availableLeaveTypes[0]?.value ?? "Unpaid leave");
-    setFormEndDate(nextAvailableLeaveDate());
+    setFormLeaveType(
+      target
+        ? target.paidLeave ? "Annual leave" : "Unpaid leave"
+        : availableLeaveTypes[0]?.value ?? "Unpaid leave",
+    );
     setFormError("");
+  }
+
+  function openTeamLeaveRequestForm(personId: string) {
+    const target = personId ? teamRequestPeople.find((person) => person.personId === personId) : undefined;
+    if (isMutating || (personId ? !target : !canApplyForLeave)) return;
+    changeLeaveRequestPerson(personId);
+    setFormEndDate(nextAvailableLeaveDate());
     setShowRequestForm(true);
   }
 
@@ -1933,7 +1953,6 @@ export function LeaveDemo({
               onReview={reviewWorkScheduleRequest}
             />}
           /> : null}
-          {activeView === "leave" && !leaveDataLoading ? <LeaveSelfServiceControls workspace={leavePriority} personId={activeProfile.id} previewPersonId={previewPersonId} busy={isMutating} onRequest={openTeamLeaveRequestForm} /> : null}
           {activeView === "leave" ? <LeaveWorkspaceLoadBoundary loading={leaveDataLoading}>
             <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} />
           </LeaveWorkspaceLoadBoundary> : null}
@@ -2064,10 +2083,35 @@ export function LeaveDemo({
         <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeLeaveRequestForm()}>
           <section className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
             <header><div><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={closeLeaveRequestForm} aria-label="Close request form"><X size={19} /></button></header>
-            <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{requestForPersonId ? leavePriority?.people.find((person) => person.personId === requestForPersonId)?.name : activeProfile.name}</strong><small>{requestForPersonId ? "On behalf of your team member" : activeProfile.team}</small></span></div>
+            <div className={styles.formPerson}>
+              <span className={styles.avatarOrange}>{leaveRequestPersonInitials}</span>
+              <span className={styles.formPersonCopy}>
+                <strong>{leaveRequestPersonName}</strong>
+                <small>{requestForPersonId ? "On behalf of your team member" : activeProfile.team}</small>
+              </span>
+              {teamRequestPeople.length ? (
+                <label className={styles.requestPersonPicker}>
+                  <UsersRound aria-hidden="true" size={15} />
+                  <span className={styles.srOnly}>Request leave for</span>
+                  <select
+                    aria-label="Request leave for"
+                    disabled={isMutating}
+                    onChange={(event) => changeLeaveRequestPerson(event.currentTarget.value)}
+                    title="Change request person"
+                    value={requestForPersonId}
+                  >
+                    {canApplyForLeave ? <option value="">Myself</option> : null}
+                    {teamRequestPeople.map((person) => (
+                      <option key={person.personId} value={person.personId}>{person.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown aria-hidden="true" size={14} />
+                </label>
+              ) : null}
+            </div>
             {formLeaveType === "Annual leave" ? <LeaveRequestBalance workspace={leavePriority} personId={requestForPersonId || activeProfile.id} self={!requestForPersonId} /> : null}
             <form className={styles.form} onSubmit={submitRequest} onChange={() => setFormError("")}>
-              <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" value={formLeaveType} onChange={(event) => setFormLeaveType(event.target.value)} required>{(requestForPersonId ? (leavePriority?.people.find((person) => person.personId === requestForPersonId)?.paidLeave ? ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"] : ["Unpaid leave"]).map((value) => ({ value, label: value })) : availableLeaveTypes).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+              <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" value={formLeaveType} onChange={(event) => setFormLeaveType(event.target.value)} required>{(requestedTeamMember ? (requestedTeamMember.paidLeave ? ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"] : ["Unpaid leave"]).map((value) => ({ value, label: value })) : availableLeaveTypes).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
               {!requestForPersonId && !hasPaidLeaveEntitlement ? <p className={styles.leavePolicyNote} role="note">
                 {employmentType === "abn" ? "ABN" : employmentType === "casual" ? "Casual" : "Unclassified"} employees can record Unpaid leave only.
               </p> : null}
@@ -2141,13 +2185,6 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
   if (isNonRosterSystemAdmin) {
     return (
       <div className={styles.dashboard}>
-        <header className={styles.homeWelcome}>
-          <div>
-            <span className={styles.homeEyebrow}>System workspace</span>
-            <h2>People operations, at a glance</h2>
-            <p>Choose a staff profile to inspect their workspace, or open People to manage the organisation.</p>
-          </div>
-        </header>
         {workSchedule}
         <section className={styles.panel}>
           <div className={styles.emptyState}>
@@ -2173,26 +2210,9 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
   const attentionRequests = canReview ? pending : requests.filter((request) => request.status === "Pending" && request.personId !== profile.id);
   const attentionTitle = canReview ? "Needs review" : "Pending leave";
   const recordSection: LeaveSection = canReview ? "approvals" : "requests";
-  const firstName = profile.name?.trim().split(/\s+/)[0] || "there";
-  const overviewPending = canReview ? pending.length : pendingOwnRequests.length;
-  const overviewActive = activeOwnRequests.length;
-
-  const welcome = <header className={styles.homeWelcome}>
-    <div>
-      <span className={styles.homeEyebrow}>Today</span>
-      <h2>Welcome back, {firstName}</h2>
-      <p>{canReview ? "Review what needs attention, then move on with your day." : "Your schedule and leave activity are ready when you need them."}</p>
-    </div>
-    <div className={styles.homeSnapshot} aria-label="Workspace summary">
-      <span><strong>{overviewPending}</strong><small>{canReview ? "to review" : "pending"}</small></span>
-      <span><strong>{overviewActive}</strong><small>active leave</small></span>
-    </div>
-  </header>;
-
   if (!canReview) {
     return (
       <div className={styles.dashboard}>
-        {welcome}
         {workSchedule}
         <section className={`${styles.panel} ${styles.myLeavePanel} ${styles.personalLeavePanel}`}>
           <PanelHeader title="My leave" action="Open my leave" onAction={() => onNavigate("leave")} />
@@ -2204,7 +2224,6 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
 
   return (
     <div className={styles.dashboard}>
-      {welcome}
       {workSchedule}
       <div className={styles.homeGrid}>
         <section className={`${styles.panel} ${styles.attentionPanel}`}>

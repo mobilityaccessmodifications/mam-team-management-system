@@ -45,24 +45,6 @@ export function LeaveRequestBalance({ workspace, personId, self = false }: {
   </div>;
 }
 
-export function LeaveSelfServiceControls({ workspace, previewPersonId, busy, onRequest }: {
-  workspace?: LeavePriorityWorkspace; personId: string; previewPersonId?: string;
-  busy: boolean; onRequest: (personId: string) => void;
-}) {
-  if (!workspace || (workspace.canManageBalances && !previewPersonId)) return null;
-  const team = workspace.people.filter((person) => person.canSubmit);
-  if (!team.length) return null;
-  return <div className={styles.leaveSelfService}>
-    <select aria-label="Request leave for a team member" value="" disabled={busy} onChange={(event) => {
-      const personId = event.currentTarget.value;
-      if (team.some((person) => person.personId === personId)) onRequest(personId);
-    }}>
-      <option value="" disabled>Request for team</option>
-      {team.map((person) => <option value={person.personId} key={person.personId}>{person.name}</option>)}
-    </select>
-  </div>;
-}
-
 export function LeavePriorityControls({ workspace, busy, onRequest, onSaved, previewPersonId }: {
   workspace?: LeavePriorityWorkspace; busy: boolean; previewPersonId?: string;
   onRequest: (personId: string) => void; onSaved: () => Promise<void>;
