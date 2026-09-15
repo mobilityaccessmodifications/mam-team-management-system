@@ -2,10 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const validate = new Function('$input', '$getWorkflowStaticData', fs.readFileSync('workflows/leave-notification-validator.n8n.txt', 'utf8'));
+const confirm = new Function('$', '$input', '$getWorkflowStaticData', fs.readFileSync('workflows/leave-notification-confirmation.n8n.txt', 'utf8'));
 const id = '10000000-0000-4000-8000-000000000001';
 const base = { version:1,requestId:id,employeeName:'Test Employee',employeeEmail:'employee@example.test',company:'mam',leaveType:'Annual leave',startDate:'2026-09-14',endDate:'2026-09-15',startTime:null,endTime:null,days:2,hours:null,status:'Pending',employeeNote:null,managerNote:null,managerEmail:'manager@example.test' };
 function run(event, extra={}, state={}) {
   const body={...base,event,eventKey:`leave:${id}:${event}:${'a'.repeat(24)}`,...extra};
+  return validate({first:()=>({json:{headers:{'content-type':'application/json'},body}})},()=>state)[0].json;
+}
+function runPayroll(extra={}, state={}) {
+  const body={version:1,event:'payroll-balance-reminder',requestId:id,recipientName:'Gerard',
+    recipientEmail:'gerard@example.test',reminderMonth:'2026-10-01',missingCompanies:['mam','equipsy'],...extra};
+  if (!Object.prototype.hasOwnProperty.call(extra,'eventKey')) {
+    body.eventKey=`payroll-balance:${body.requestId}:${body.reminderMonth.slice(0,7)}`;
+  }
   return validate({first:()=>({json:{headers:{'content-type':'application/json'},body}})},()=>state)[0].json;
 }
 test('submission goes to manager and employee with HR copied',()=>{
@@ -116,4 +125,74 @@ test('balance contract rejects invalid values and does not subtract again after 
   }
   assert.equal(run('leave-approved',{audience:'reviewers'}).outcome,'rejected');
   assert(!run('leave-approved',{leaveBalance:{kind:'annual',status:'current',hours:10}}).emailHtml.includes('remaining if approved'));
+});
+
+test('monthly payroll reminder sends only to the server-resolved recipient',()=>{
+  const out=runPayroll();
+  assert.equal(out.outcome,'send');
+  assert.equal(out.mamDelivery,true);
+  assert.equal(out.deliveryRecipient,'gerard@example.test');
+  assert.equal(out.confirmationRecipient,'gerard@example.test');
+  assert.equal(out.ccRecipients,'');
+  assert.equal(out.eventKey,`payroll-balance:${id}:2026-10`);
+  assert.match(out.emailSubject,/Monthly banked leave update due/);
+  assert(out.emailHtml.includes('October 2026'));
+  assert(out.emailHtml.includes('MAM and Equipsy'));
+  assert(out.emailHtml.includes('/?view=leave'));
+  assert(!out.emailHtml.includes('hr@mobilityaccess.com.au'));
+  assert(!out.emailHtml.includes('accounts@mobilityaccess.com.au'));
+});
+
+test('monthly payroll reminder identifies only the outstanding company and escapes the greeting',()=>{
+  const out=runPayroll({recipientName:'Gerard <Payroll>',missingCompanies:['equipsy']});
+  assert.equal(out.outcome,'send');
+  assert(out.emailHtml.includes('Hi Gerard &lt;Payroll&gt;'));
+  assert(out.emailHtml.includes('<strong>Still required:</strong> Equipsy'));
+  assert(!out.emailHtml.includes('<strong>Still required:</strong> MAM'));
+});
+
+test('monthly payroll reminder rejects recipient injection and malformed server payloads',()=>{
+  for(const extra of [
+    {recipientEmail:'gerard@example.test\r\ncc:attacker@example.test'},
+    {recipientEmail:'Gerard@example.test'},
+    {recipientName:'Gerard\nPayroll'},
+    {reminderMonth:'2026-10-02'},
+    {missingCompanies:[]},
+    {missingCompanies:['mam','mam']},
+    {missingCompanies:['other']},
+    {eventKey:`payroll-balance:${id}:2026-09`},
+    {unexpected:'browser-controlled'},
+  ]) assert.equal(runPayroll(extra).outcome,'rejected');
+});
+
+test('monthly payroll reminder deduplicates the stable month event key',()=>{
+  const eventKey=`payroll-balance:${id}:2026-10`;
+  const out=runPayroll({}, {leaveNotificationEvents:{[eventKey]:{state:'sent',at:Date.now()}}});
+  assert.equal(out.outcome,'duplicate');
+  assert.equal(out.alreadySent,true);
+  assert.equal(out.actualRecipient,'gerard@example.test');
+  assert.equal(out.eventKey,eventKey);
+});
+
+function confirmDelivery(source, sent=[{json:{}}], state={}) {
+  const node={all:()=>[{json:source}],first:()=>({json:source})};
+  return confirm(()=>node,{all:()=>sent},()=>state)[0].json;
+}
+
+test('confirmation records both payroll and leave event families after one provider result',()=>{
+  for(const eventKey of [`payroll-balance:${id}:2026-10`,`leave:${id}:leave-approved:${'a'.repeat(24)}`]) {
+    const state={};
+    const out=confirmDelivery({mamDelivery:true,eventKey,confirmationRecipient:'recipient@example.test'},[{json:{statusCode:202}}],state);
+    assert.equal(out.ok,true);
+    assert.equal(out.sent,true);
+    assert.equal(out.actualRecipient,'recipient@example.test');
+    assert.equal(out.eventKey,eventKey);
+    assert.equal(state.leaveNotificationEvents[eventKey].state,'sent');
+  }
+});
+
+test('confirmation rejects unknown keys, count mismatches and explicit provider failures',()=>{
+  assert.throws(()=>confirmDelivery({mamDelivery:true,eventKey:'other:event',confirmationRecipient:'recipient@example.test'}),/count mismatch/);
+  assert.throws(()=>confirmDelivery({mamDelivery:true,eventKey:`payroll-balance:${id}:2026-10`,confirmationRecipient:'recipient@example.test'},[]),/count mismatch/);
+  assert.throws(()=>confirmDelivery({mamDelivery:true,eventKey:`payroll-balance:${id}:2026-10`,confirmationRecipient:'recipient@example.test'},[{json:{statusCode:500}}]),/provider explicitly rejected/);
 });

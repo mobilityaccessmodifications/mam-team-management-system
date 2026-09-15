@@ -36,6 +36,72 @@ test('missing bearer is denied before any database access', async () => {
   assert.equal((await GET(new Request('https://example.test/api/cron/leave-priority-reminders'))).status, 401);
 });
 
+test('first-day payroll claim posts the strict n8n event and completes only after an exact receipt', async () => {
+  const reminderId = '30000000-0000-4000-8000-000000000001';
+  const claimToken = '30000000-0000-4000-8000-000000000002';
+  const calls = [];
+  const client = { rpc: async (name, args) => {
+    calls.push({name,args});
+    if (name === 'claim_leave_priority_reminders') return {data:[],error:null};
+    if (name === 'claim_due_payroll_balance_email_reminders') return {data:[{reminder_id:reminderId,claim_token:claimToken}],error:null};
+    if (name === 'prepare_payroll_balance_email_reminder_delivery') return {data:[{
+      reminder_id:reminderId,delivery_required:true,recipient_name:'Gerard',recipient_email:'gerard@example.test',
+      reminder_month:'2026-10-01',missing_companies:['mam','equipsy'],
+    }],error:null};
+    if (name === 'complete_payroll_balance_email_reminder_delivery') return {data:true,error:null};
+    throw new Error(`Unexpected RPC: ${name}`);
+  }};
+  const { GET } = load('src/app/api/cron/leave-priority-reminders/route.ts', {
+    'node:crypto': require('node:crypto'),
+    '@/lib/supabase/admin': { createAdminClient: () => client },
+  });
+  const previous = {
+    cron: process.env.CRON_SECRET,
+    origin: process.env.MAM_N8N_LEAVE_WEBHOOK_ORIGIN,
+    url: process.env.MAM_N8N_LEAVE_WEBHOOK_URL,
+    webhook: process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET,
+    fetch: globalThis.fetch,
+    dateTimeFormat: Intl.DateTimeFormat,
+  };
+  process.env.CRON_SECRET='synthetic-cron-secret';
+  process.env.MAM_N8N_LEAVE_WEBHOOK_ORIGIN='https://n8n.example.test';
+  process.env.MAM_N8N_LEAVE_WEBHOOK_URL='https://n8n.example.test/webhook/mam';
+  process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET='synthetic-webhook-secret';
+  Object.defineProperty(Intl,'DateTimeFormat',{configurable:true,writable:true,value:function(){return {format:()=> '08'};}});
+  globalThis.fetch=async (url,options) => {
+    assert.equal(String(url),'https://n8n.example.test/webhook/mam');
+    assert.equal(options.headers['X-MAM-Notification-Secret'],'synthetic-webhook-secret');
+    const body=JSON.parse(options.body);
+    assert.deepEqual(body,{
+      version:1,event:'payroll-balance-reminder',
+      eventKey:`payroll-balance:${reminderId}:2026-10`,requestId:reminderId,
+      recipientName:'Gerard',recipientEmail:'gerard@example.test',reminderMonth:'2026-10-01',
+      missingCompanies:['mam','equipsy'],
+    });
+    assert.equal(options.headers['Idempotency-Key'],body.eventKey);
+    return Response.json({ok:true,sent:true,alreadySent:false,actualRecipient:body.recipientEmail,eventKey:body.eventKey});
+  };
+  try {
+    const result=await GET(new Request('https://example.test/api/cron/leave-priority-reminders',{
+      headers:{authorization:'Bearer synthetic-cron-secret'},
+    }));
+    assert.equal(result.status,200);
+    const body=await result.json();
+    assert.equal(body.ok,true);
+    assert.deepEqual(body.payrollBalanceEmail,{ok:true,claimed:1,sent:1,failed:0,notRequired:0,acceptedPendingFinalisation:0});
+    assert(calls.some((call)=>call.name==='complete_payroll_balance_email_reminder_delivery'
+      && call.args.p_provider_delivery_id===`payroll-balance:${reminderId}:2026-10`));
+    assert(!calls.some((call)=>call.name==='fail_payroll_balance_email_reminder_delivery'));
+  } finally {
+    for (const [key,value] of [['CRON_SECRET',previous.cron],['MAM_N8N_LEAVE_WEBHOOK_ORIGIN',previous.origin],
+      ['MAM_N8N_LEAVE_WEBHOOK_URL',previous.url],['MAM_N8N_LEAVE_WEBHOOK_SECRET',previous.webhook]]) {
+      if (value === undefined) delete process.env[key]; else process.env[key]=value;
+    }
+    globalThis.fetch=previous.fetch;
+    Object.defineProperty(Intl,'DateTimeFormat',{configurable:true,writable:true,value:previous.dateTimeFormat});
+  }
+});
+
 
 test('accrual cron is authenticated, records once and hides database failures', async () => {
   const before = process.env.CRON_SECRET;
