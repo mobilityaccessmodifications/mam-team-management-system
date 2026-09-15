@@ -11,13 +11,16 @@ const organisationStyles = readFileSync("src/components/organisation-tree.module
 const calendarStyles = readFileSync("src/components/team-calendar.module.css", "utf8");
 const loginSource = readFileSync("src/app/login/page.tsx", "utf8");
 const globalStyles = readFileSync("src/app/globals.css", "utf8");
+const motionTabStyles = readFileSync("src/components/ui/motion-tabs.module.css", "utf8");
 
-test("the redesigned shell uses a contextual split workspace at desktop and a safe-area bottom bar on mobile", () => {
+test("the redesigned shell uses a dark split workspace at desktop and a safe-area bottom bar on mobile", () => {
   assert.match(leaveSource, /className=\{styles\.navHeading\}>Workspace/);
   assert.match(leaveSource, /className=\{styles\.topbarHeading\}/);
-  assert.match(leaveSource, /className=\{styles\.homeWelcome\}/);
+  assert.doesNotMatch(leaveSource, /homeWelcome|Welcome back/);
   assert.match(leaveStyles, /Apple workspace v2/);
-  assert.match(leaveStyles, /\.sidebar\s*\{[\s\S]*?background: rgb\(232 238 235 \/ 94%\);/);
+  assert.match(globalStyles, /--sidebar: #182421;/);
+  assert.match(globalStyles, /--sidebar-raised: #22312d;/);
+  assert.match(leaveStyles, /\.sidebar\s*\{[\s\S]*?var\(--sidebar\);/);
   assert.match(leaveStyles, /\.topbar\s*\{[\s\S]*?backdrop-filter: blur\(24px\) saturate\(130%\);/);
 
   const mobileStart = leaveStyles.lastIndexOf("@media (max-width: 900px)");
@@ -27,7 +30,7 @@ test("the redesigned shell uses a contextual split workspace at desktop and a sa
   assert.match(mobileRules, /\.nav\s*\{[\s\S]*?grid-template-columns: repeat\(var\(--nav-count, 4\), minmax\(0, 1fr\)\);/);
 
   const ownershipLayer = leaveStyles.slice(leaveStyles.lastIndexOf("Apple workspace v2"));
-  assert.match(ownershipLayer, /\.viewPickerTrigger:hover\s*\{[^}]*background: var\(--surface-raised\);[^}]*color: var\(--text-primary\);/);
+  assert.match(ownershipLayer, /\.viewPickerTrigger:hover\s*\{[^}]*background: #293a35;[^}]*color: #fff;/);
 });
 
 test("login has a distinct workspace story and focused Apple-style sign-in card", () => {
@@ -65,6 +68,22 @@ test("leave balance is disclosed by the application flow, not the standing page"
   assert.match(leaveStyles, /\.leaveHeader > \.applyForLeaveButton\s*\{[^}]*margin-left: auto;/);
   assert.match(leaveSource, /className=\{styles\.applyCompactLabel\}>Apply<\/span>/);
   assert.match(leaveStyles, /\.leaveHeader > \.applyForLeaveButton \.applyCompactLabel\s*\{[^}]*display: inline;[^}]*position: static;[^}]*clip: auto;/);
+});
+
+test("team leave selection lives inside the request sheet and stays capability scoped", () => {
+  assert.doesNotMatch(leaveSource, /LeaveSelfServiceControls|Request for team/);
+  assert.match(leaveSource, /teamRequestPeople = leavePriority\?\.people\.filter\(\(person\) => person\.canSubmit\)/);
+  assert.match(leaveSource, /className=\{styles\.requestPersonPicker\}/);
+  assert.match(leaveSource, /aria-label="Request leave for"/);
+  assert.match(leaveSource, /<option value="">Myself<\/option>/);
+  assert.match(leaveStyles, /\.requestPersonPicker\s*\{[\s\S]*?min-height: 42px;/);
+});
+
+test("People selection and Organisation tool groups use clean, balanced affordances", () => {
+  assert.match(motionTabStyles, /\.indicator::after\s*\{[^}]*display: none;[^}]*content: none;/);
+  assert.match(organisationStyles, /\.chartControlGroup\s*\{[\s\S]*?border: 1px solid var\(--surface-border\);/);
+  assert.match(organisationStyles, /\.chartControlGroup > :not\(:first-child\)\s*\{[^}]*border-left: 1px solid var\(--surface-border\);/);
+  assert.match(organisationStyles, /\.filterButton\s*\{[\s\S]*?place-items: center;/);
 });
 
 test("transient feedback keeps an explicit high-contrast inverse surface", () => {

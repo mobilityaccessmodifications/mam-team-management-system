@@ -2095,3 +2095,146 @@
   .toolbar { border-radius: 14px; }
   .treeViewport, .mobileTree { border-radius: 16px; }
 }
+
+/* Apple toolbar refinement: three clear command groups with one control
+   geometry. The canvas controls use group borders instead of one-sided
+   button borders, so the zoom stepper reads as one balanced control. */
+.toolbar {
+  min-height: 60px;
+  gap: 10px;
+  padding: 8px;
+}
+
+.search {
+  min-height: 44px;
+  border-radius: 11px;
+}
+
+.toolbarActions,
+.headerActions {
+  align-items: center;
+  gap: 8px;
+}
+
+.headerActions > .secondaryAction,
+.headerActions > .arrangeAction,
+.filterButton {
+  height: 44px;
+  min-height: 44px;
+  border: 1px solid var(--surface-border);
+  border-radius: 11px;
+  background: var(--surface-raised);
+  box-shadow: none;
+}
+
+.headerActions > .iconAction,
+.filterButton {
+  width: 44px;
+  padding: 0;
+}
+
+.headerActions > .arrangeAction {
+  padding: 0 14px;
+}
+
+.headerActions > button > svg,
+.filterButton > svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.filterButton {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 0;
+  line-height: 0;
+}
+
+.filterBadge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--surface-raised);
+  line-height: 1;
+}
+
+.filterButton:focus-visible {
+  outline: 3px solid rgb(239 106 36 / 24%);
+  outline-offset: 2px;
+}
+
+.chartControls {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.chartControlGroup {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(16px) saturate(125%);
+}
+
+.chartControls .chartControlGroup > button {
+  width: 42px;
+  min-height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.chartControls .chartControlGroup > :not(:first-child) {
+  border-left: 1px solid var(--surface-border);
+}
+
+.chartControls .cleanUpControl,
+.chartControls .namedChartControl {
+  width: 42px;
+  grid-auto-flow: initial;
+  gap: 0;
+  padding: 0;
+}
+
+.chartControlGroup > span {
+  display: grid;
+  width: 56px;
+  min-height: 42px;
+  place-items: center;
+  color: var(--text-secondary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.zoomControlGroup > span {
+  background: var(--surface-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .headerActions > .secondaryAction:hover:not(:disabled),
+  .headerActions > .arrangeAction:hover:not(:disabled),
+  .filterButton:hover,
+  .filterButton[aria-expanded="true"] {
+    border-color: color-mix(in srgb, var(--mam) 32%, var(--surface-border));
+    background: var(--surface-warm);
+    color: var(--mam-dark);
+  }
+}
