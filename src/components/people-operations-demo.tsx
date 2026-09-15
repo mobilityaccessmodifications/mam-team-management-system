@@ -526,35 +526,47 @@ export function PeopleOperationsDemo({
   const showTaskAction = !hasRealCheckInTasks && canManage && visibleSection === "tasks";
 
   const taskAction = showTaskAction ? <button className={styles.primaryAction} type="button" onClick={() => openCreate(visibleTaskSection === "checkins" ? "checkin" : visibleTaskSection)}><Plus size={17} /> {visibleTaskSection === "checkins" ? "Schedule check-ins" : `Start ${visibleTaskSection}`}</button> : undefined;
+  const activeSectionLabel = sectionTabs.find((section) => section.value === visibleSection)?.label ?? "People";
 
   return <section className={styles.workspace} aria-label="People operations workspace">
-    <MotionTabs
-      value={visibleSection}
-      onValueChange={setSection}
-      options={sectionTabs}
-      ariaLabel="People sections"
-      className={styles.sectionSwitch}
-    />
+    <div className={styles.peopleLayout}>
+      <MotionTabs
+        value={visibleSection}
+        onValueChange={setSection}
+        options={sectionTabs}
+        ariaLabel="People sections"
+        className={styles.sectionSwitch}
+        orientation="responsive"
+        panelId="people-section-panel"
+      />
 
-    {visibleSection === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} manager={activeProfile.manager} company={activeProfile.company} /> : null}
-    {visibleSection === "directory" ? renderEmployeeDirectory : null}
-    {visibleSection === "checkins" ? renderCheckInRegister : null}
-    {visibleSection === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation} canArrange={canArrangeOrganisation && !isAccessPreview} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={onOpenEmployeeDirectoryRecord ? (personId) => {
-      onOpenEmployeeDirectoryRecord?.(personId);
-      setSection("directory");
-    } : undefined} /> : null}
-    {visibleSection === "accounts" ? renderAccounts : null}
-    {visibleSection === "assets" ? renderAssetRegister : null}
-    {visibleSection === "subscriptions" ? renderSubscriptionRegister : null}
-    {visibleSection === "analytics" ? renderAnalyticsApiManagement : null}
-    {visibleSection === "tasks" && hasRealCheckInTasks ? renderCheckInTasks?.(taskAction) : null}
-    {visibleSection === "tasks" && !hasRealCheckInTasks ? <nav className={styles.taskSwitch} aria-label="Task type">
-      {!isEmployee || employeeLifecycleSection === "onboarding" ? <button type="button" aria-pressed={visibleTaskSection === "onboarding"} onClick={() => setTaskSection("onboarding")}>Onboarding</button> : null}
-      {!renderCheckInRegister ? <button type="button" aria-pressed={visibleTaskSection === "checkins"} onClick={() => setTaskSection("checkins")}>Check-ins</button> : null}
-      {!isEmployee || employeeLifecycleSection === "offboarding" ? <button type="button" aria-pressed={visibleTaskSection === "offboarding"} onClick={() => setTaskSection("offboarding")}>Offboarding</button> : null}
-    </nav> : null}
-    {visibleSection === "tasks" && !hasRealCheckInTasks && visibleTaskSection === "checkins" && !renderCheckInRegister ? <CheckInsView people={visiblePeople} reminders={visibleReminders} selectedPerson={selectedPerson} selectedPersonId={selectedPerson?.id} activeProfile={activeProfile} canManage={canManage} formsUrl={legacyCheckInFormsUrl} onSelectPerson={setSelectedPersonId} onComplete={completeCheckIn} onSnooze={snoozeCheckIn} /> : null}
-    {visibleSection === "tasks" && !hasRealCheckInTasks && (visibleTaskSection === "onboarding" || visibleTaskSection === "offboarding") ? <WorkflowsView workflows={activeWorkflows} selected={selectedWorkflow} selectedId={selectedWorkflow?.id} activeProfile={activeProfile} onSelect={setSelectedWorkflowId} onTaskUpdate={updateTask} onAttach={attachEvidence} onAssetUpdate={updateAsset} onAccessUpdate={updateAccess} isAccessPreview={isAccessPreview} /> : null}
+      <div
+        className={styles.sectionContent}
+        id="people-section-panel"
+        role="tabpanel"
+        aria-label={`${activeSectionLabel} workspace`}
+      >
+        {visibleSection === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} manager={activeProfile.manager} company={activeProfile.company} /> : null}
+        {visibleSection === "directory" ? renderEmployeeDirectory : null}
+        {visibleSection === "checkins" ? renderCheckInRegister : null}
+        {visibleSection === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation} canArrange={canArrangeOrganisation && !isAccessPreview} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={onOpenEmployeeDirectoryRecord ? (personId) => {
+          onOpenEmployeeDirectoryRecord?.(personId);
+          setSection("directory");
+        } : undefined} /> : null}
+        {visibleSection === "accounts" ? renderAccounts : null}
+        {visibleSection === "assets" ? renderAssetRegister : null}
+        {visibleSection === "subscriptions" ? renderSubscriptionRegister : null}
+        {visibleSection === "analytics" ? renderAnalyticsApiManagement : null}
+        {visibleSection === "tasks" && hasRealCheckInTasks ? renderCheckInTasks?.(taskAction) : null}
+        {visibleSection === "tasks" && !hasRealCheckInTasks ? <nav className={styles.taskSwitch} aria-label="Task type">
+          {!isEmployee || employeeLifecycleSection === "onboarding" ? <button type="button" aria-pressed={visibleTaskSection === "onboarding"} onClick={() => setTaskSection("onboarding")}>Onboarding</button> : null}
+          {!renderCheckInRegister ? <button type="button" aria-pressed={visibleTaskSection === "checkins"} onClick={() => setTaskSection("checkins")}>Check-ins</button> : null}
+          {!isEmployee || employeeLifecycleSection === "offboarding" ? <button type="button" aria-pressed={visibleTaskSection === "offboarding"} onClick={() => setTaskSection("offboarding")}>Offboarding</button> : null}
+        </nav> : null}
+        {visibleSection === "tasks" && !hasRealCheckInTasks && visibleTaskSection === "checkins" && !renderCheckInRegister ? <CheckInsView people={visiblePeople} reminders={visibleReminders} selectedPerson={selectedPerson} selectedPersonId={selectedPerson?.id} activeProfile={activeProfile} canManage={canManage} formsUrl={legacyCheckInFormsUrl} onSelectPerson={setSelectedPersonId} onComplete={completeCheckIn} onSnooze={snoozeCheckIn} /> : null}
+        {visibleSection === "tasks" && !hasRealCheckInTasks && (visibleTaskSection === "onboarding" || visibleTaskSection === "offboarding") ? <WorkflowsView workflows={activeWorkflows} selected={selectedWorkflow} selectedId={selectedWorkflow?.id} activeProfile={activeProfile} onSelect={setSelectedWorkflowId} onTaskUpdate={updateTask} onAttach={attachEvidence} onAssetUpdate={updateAsset} onAccessUpdate={updateAccess} isAccessPreview={isAccessPreview} /> : null}
+      </div>
+    </div>
 
     {showCreate ? <CreateCaseModal mode={createMode} profiles={organisationProfiles} onClose={() => setShowCreate(false)} onSubmit={createCase} /> : null}
     <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`} role="status" aria-live="polite"><CheckCircle2 size={16} />{toast}</div>

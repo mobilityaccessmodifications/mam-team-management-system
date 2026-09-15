@@ -275,3 +275,86 @@
     min-height: 44px;
   }
 }
+
+/* DayFlow renders this label only inside MonthView virtual week rows, where
+   the sticky header already names the visible month and the label can obscure
+   events. YearView uses its separate .df-year-*-month-label/title elements. */
+.calendarFrame :global(.df-month-week > .df-month-title) {
+  display: none !important;
+}
+
+.calendarFrame :global(.df-calendar-container) {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+.calendarFrame :global(.df-header) {
+  min-height: 60px;
+  padding-inline: 10px;
+  border-bottom-color: var(--surface-border);
+  background: rgb(255 255 255 / 94%);
+  backdrop-filter: blur(14px);
+}
+
+.calendarFrame :global(.df-calendar-today-button),
+.calendarFrame :global(.df-calendar-nav-button) {
+  min-height: 40px;
+  border-color: var(--surface-border);
+  border-radius: 9px;
+  background: var(--surface-raised);
+  box-shadow: none;
+  color: var(--text-primary);
+}
+
+.calendarFrame :global(.df-calendar-nav-button) {
+  min-width: 40px;
+}
+
+.calendarFrame :global(.df-month-day-cell[data-today="true"]) {
+  background: var(--surface-warm);
+}
+
+.calendarFrame :global(.df-event-detail-panel) {
+  border-color: var(--surface-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.calendarFrame :global(.df-all-day-event-animate) {
+  animation: none;
+}
+
+.calendarFrame :global(button:focus-visible),
+.calendarFrame :global(input:focus-visible),
+.eventDetail button:focus-visible {
+  outline: 2px solid var(--mam-orange);
+  outline-offset: 2px;
+}
+
+.eventDetailDate {
+  border-color: var(--surface-border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.mobileDetailBackdrop {
+  background: rgb(11 22 19 / 56%);
+  backdrop-filter: blur(6px);
+}
+
+.mobileDetailSheet {
+  border-radius: 22px 22px 0 0;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-md);
+}
+
+@media (max-width: 760px) {
+  .calendarFrame :global(.df-header) {
+    min-height: 58px;
+    padding-inline: 6px;
+  }
+
+  .calendarFrame :global(.df-calendar-container) {
+    min-height: 0;
+  }
+}

@@ -228,8 +228,8 @@
 
 .reviewActions button[data-decision="approved"],
 .primaryButton {
-  border-color: var(--mam-orange);
-  background: var(--mam-orange);
+  border-color: var(--mam-orange-strong);
+  background: var(--mam-orange-strong);
   color: #fff;
 }
 
@@ -696,5 +696,14 @@
   .declineButton,
   .loadError button {
     min-height: 44px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .reviewActions button:hover,
+  .primaryButton:hover:not(:disabled),
+  .secondaryButton:hover:not(:disabled),
+  .declineButton:hover:not(:disabled) {
+    transform: none;
   }
 }

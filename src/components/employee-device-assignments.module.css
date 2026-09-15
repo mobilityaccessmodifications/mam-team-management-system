@@ -199,8 +199,8 @@
 }
 
 .primaryAction {
-  border: 1px solid color-mix(in srgb, var(--mam-orange) 76%, #000);
-  background: var(--mam-orange);
+  border: 1px solid var(--mam-orange-strong);
+  background: var(--mam-orange-strong);
   color: #fff;
 }
 

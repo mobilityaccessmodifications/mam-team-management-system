@@ -1,7 +1,7 @@
 .workspace,
 .modalBackdrop {
-  --subscription-accent: var(--mam-orange, #f56d25);
-  --subscription-accent-deep: var(--mam-orange-dark, #be4814);
+  --subscription-accent: var(--accent, var(--mam-orange, #ef6a24));
+  --subscription-accent-deep: var(--accent-deep, var(--mam-orange-strong, #c34d14));
   --subscription-line: var(--surface-border, #dce5df);
   --subscription-ink: var(--text-primary, #1f2e2b);
   --subscription-muted: var(--text-tertiary, #6e7d78);
@@ -92,14 +92,14 @@
 
 .primaryAction {
   flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--subscription-accent) 78%, #000);
-  background: var(--subscription-accent);
-  box-shadow: 0 5px 14px color-mix(in srgb, var(--subscription-accent) 18%, transparent);
+  border: 1px solid var(--subscription-accent-deep);
+  background: var(--subscription-accent-deep);
+  box-shadow: none;
   color: #fff;
   padding: 8px 13px;
 }
 
-.primaryAction:hover:not(:disabled) { background: var(--mam-orange-strong, #df5818); box-shadow: 0 7px 18px color-mix(in srgb, var(--subscription-accent) 24%, transparent); }
+.primaryAction:hover:not(:disabled) { background: color-mix(in srgb, var(--subscription-accent-deep) 86%, #000); box-shadow: none; }
 .secondaryAction {
   border: 1px solid var(--surface-border-strong, #cbd7d2);
   background: var(--surface-raised, #fff);
@@ -463,7 +463,7 @@
 
 .modalBackdrop { position: fixed; z-index: 70; inset: 0; display: grid; place-items: center; padding: 24px; background: rgb(15 28 25 / 58%); backdrop-filter: blur(3px); }
 .modal { width: min(720px, 100%); max-height: min(88vh, 860px); overflow-y: auto; border: 1px solid color-mix(in srgb, var(--subscription-accent) 52%, #fff); border-radius: 18px; background: var(--surface-raised, #fff); box-shadow: 0 22px 60px rgb(0 0 0 / 25%); }
-.modal header { align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px; border-bottom: 1px solid var(--subscription-line); background: linear-gradient(135deg, #fff9f5, var(--surface-raised, #fff) 56%); }
+.modal header { align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px; border-bottom: 1px solid var(--subscription-line); background: var(--surface-raised, #fff); }
 .modal header > button { width: 34px; min-height: 34px; flex: 0 0 auto; border: 1px solid var(--surface-border-strong, #cbd7d2); background: var(--surface-raised, #fff); color: #526167; }
 .modal form { display: grid; gap: 14px; padding: 20px 22px 22px; }
 .modal label { display: grid; gap: 6px; min-width: 0; color: var(--text-secondary, #53625e); font-size: 12px; font-weight: 750; }

@@ -370,8 +370,8 @@
 }
 
 .primaryButton {
-  border: 1px solid var(--account-accent);
-  background: var(--account-accent);
+  border: 1px solid var(--account-accent-deep);
+  background: var(--account-accent-deep);
   color: #fff;
 }
 
@@ -1289,5 +1289,27 @@
   .passwordInput button {
     width: 44px;
     touch-action: manipulation;
+  }
+}
+
+/* Quiet account editing surfaces and accessible primary-action contrast. */
+.primaryButton {
+  border-color: var(--account-accent-deep);
+  background: var(--account-accent-deep);
+  box-shadow: none;
+}
+
+.editor {
+  border-color: var(--surface-border);
+  background: var(--surface-raised);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .primaryButton:hover:not(:disabled),
+  .secondaryButton:hover:not(:disabled),
+  .dangerButton:hover:not(:disabled),
+  .textButton:hover:not(:disabled),
+  .iconButton:hover:not(:disabled) {
+    transform: none;
   }
 }

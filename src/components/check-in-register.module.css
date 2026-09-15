@@ -98,9 +98,9 @@
 }
 
 .primaryAction {
-  border: 1px solid color-mix(in srgb, var(--accent) 78%, #000);
-  background: var(--accent);
-  box-shadow: 0 5px 14px color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid var(--mam-orange-strong);
+  background: var(--mam-orange-strong);
+  box-shadow: none;
   color: #fff;
 }
 
@@ -141,7 +141,7 @@
 .resources small { margin-top: 3px; color: #806d64; font-size: 11px; line-height: 1.35; }
 .resources nav { flex-wrap: wrap; justify-content: flex-start; gap: 7px; }
 .resources a { display: inline-flex; min-height: 34px; align-items: center; gap: 5px; border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--surface-border)); border-radius: 999px; background: var(--surface-raised); color: var(--mam-orange-dark); font-size: 11px; font-weight: 720; padding: 7px 11px; text-decoration: none; white-space: nowrap; transition: background 150ms var(--ease-out), border-color 150ms var(--ease-out), transform 150ms var(--ease-out); }
-.resources a:hover { border-color: color-mix(in srgb, var(--accent) 54%, var(--surface-border)); background: var(--surface-warm); transform: translateY(-1px); }
+.resources a:hover { border-color: color-mix(in srgb, var(--accent) 54%, var(--surface-border)); background: var(--surface-warm); transform: none; }
 .resources a:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 28%, transparent); outline-offset: 2px; }
 
 .error { border-color: #efc5bf; background: #fff6f4; color: #9b4237; }

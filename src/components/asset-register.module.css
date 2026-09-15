@@ -1,7 +1,7 @@
 .workspace,
 .modalBackdrop {
-  --asset-accent: var(--mam-orange);
-  --asset-accent-deep: var(--mam-orange-dark);
+  --asset-accent: var(--accent, var(--mam-orange));
+  --asset-accent-deep: var(--accent-deep, var(--mam-orange-strong));
   --asset-ink: var(--text-primary);
   --asset-muted: var(--text-tertiary);
 }
@@ -132,16 +132,16 @@
 
 .primaryAction {
   flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--asset-accent) 78%, #000);
-  background: var(--asset-accent);
-  box-shadow: 0 5px 14px color-mix(in srgb, var(--asset-accent) 18%, transparent);
+  border: 1px solid var(--asset-accent-deep);
+  background: var(--asset-accent-deep);
+  box-shadow: none;
   color: #fff;
   padding: 8px 13px;
 }
 
 .primaryAction:hover:not(:disabled) {
-  background: var(--mam-orange-strong);
-  box-shadow: 0 7px 18px color-mix(in srgb, var(--asset-accent) 24%, transparent);
+  background: color-mix(in srgb, var(--asset-accent-deep) 86%, #000);
+  box-shadow: none;
 }
 
 .secondaryAction {

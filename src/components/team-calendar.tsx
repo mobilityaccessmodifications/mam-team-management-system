@@ -291,7 +291,7 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
     readOnly: { draggable: false, viewable: true },
     allDaySortComparator: (first, second) => eventMeta(first).priority - eventMeta(second).priority,
     callbacks: { onVisibleRangeChange, onMoreEventsClick },
-    theme: { mode: "light", colors: { background: "#fffdfa", foreground: "#20302c", text: "#20302c", border: "#d7e0dc", card: "#ffffff", cardForeground: "#20302c", hover: "#f5f7f5", muted: "#eef2ef", mutedForeground: "#697873", primary: "#ef6a25", primaryForeground: "#ffffff", ring: "#ef6a25" } },
+    theme: { mode: "light", colors: { background: "#ffffff", foreground: "#182421", text: "#182421", border: "#d8dfdc", card: "#ffffff", cardForeground: "#182421", hover: "#eef2f0", muted: "#eef2f0", mutedForeground: "#64736e", primary: "#c34d14", primaryForeground: "#ffffff", ring: "#ef6a24" } },
   }, calendarVersion);
   useEffect(() => {
     calendarAppRef.current = calendar.app;

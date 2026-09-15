@@ -1,8 +1,8 @@
 .workspace,
 .modalBackdrop {
-  --directory-accent: var(--mam-orange);
-  --directory-accent-deep: var(--mam-orange-dark);
-  --directory-accent-soft: var(--surface-warm);
+  --directory-accent: var(--accent, var(--mam-orange));
+  --directory-accent-deep: var(--accent-deep, var(--mam-orange-strong));
+  --directory-accent-soft: var(--accent-soft, var(--surface-warm));
   --directory-line: var(--surface-border);
   --directory-ink: var(--text-primary);
   --directory-muted: var(--text-tertiary);
@@ -83,15 +83,15 @@
 }
 
 .primaryAction {
-  border: 1px solid color-mix(in srgb, var(--directory-accent) 78%, #000);
-  background: var(--directory-accent);
-  box-shadow: 0 5px 14px color-mix(in srgb, var(--directory-accent) 17%, transparent);
+  border: 1px solid var(--directory-accent-deep);
+  background: var(--directory-accent-deep);
+  box-shadow: none;
   color: #fff;
 }
 
 .primaryAction:hover:not(:disabled) {
-  background: var(--mam-orange-strong);
-  box-shadow: 0 7px 18px color-mix(in srgb, var(--directory-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--directory-accent-deep) 86%, #000);
+  box-shadow: none;
 }
 
 .secondaryAction {
@@ -483,8 +483,8 @@
 }
 
 .paginationButton[data-current="true"] {
-  border-color: var(--directory-accent);
-  background: var(--directory-accent);
+  border-color: var(--directory-accent-deep);
+  background: var(--directory-accent-deep);
   color: #fff;
 }
 
@@ -532,7 +532,7 @@
   justify-content: space-between;
   gap: 16px;
   border-bottom: 1px solid var(--directory-line);
-  background: linear-gradient(135deg, var(--surface-warm), var(--surface-raised) 54%);
+  background: var(--surface-raised);
   padding: 20px 22px;
 }
 
@@ -734,8 +734,8 @@
 }
 
 .workdayButton[data-selected="true"] {
-  border-color: var(--directory-accent);
-  background: var(--directory-accent);
+  border-color: var(--directory-accent-deep);
+  background: var(--directory-accent-deep);
   color: #fff;
 }
 

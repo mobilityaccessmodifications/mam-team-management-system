@@ -6,8 +6,8 @@
 .header h2 { font-size: clamp(22px, 2vw, 28px); line-height: 1.1; }
 .header p, .guide header p { margin: 0; color: var(--text-tertiary, #6e7d78); font-size: 13px; line-height: 1.45; }
 .primaryAction, .secondaryAction, .dangerAction, .iconButton, .copyGuide { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--surface-border-strong, #cbd7d2); border-radius: 10px; background: var(--surface-raised, #fff); color: var(--text-secondary, #53625e); cursor: pointer; font: inherit; font-size: 13px; font-weight: 750; padding: 9px 12px; }
-.primaryAction { border-color: var(--mam-orange, #f56d25); background: var(--mam-orange, #f56d25); color: #fff; }
-.primaryAction:hover:not(:disabled) { background: var(--mam-orange-strong, #df5818); }
+.primaryAction { border-color: var(--accent-deep, var(--mam-orange-strong, #c34d14)); background: var(--accent-deep, var(--mam-orange-strong, #c34d14)); color: #fff; }
+.primaryAction:hover:not(:disabled) { background: color-mix(in srgb, var(--accent-deep, var(--mam-orange-strong, #c34d14)) 86%, #000); }
 .secondaryAction:hover:not(:disabled), .copyGuide:hover:not(:disabled) { border-color: color-mix(in srgb, var(--mam-orange, #f56d25) 54%, var(--surface-border-strong, #cbd7d2)); background: #fff7f2; color: var(--mam-orange-dark, #be4814); }
 .dangerAction { border-color: #e7b6b0; background: #fff8f7; color: #a34037; }
 .dangerAction:hover:not(:disabled) { border-color: #d6877e; background: #fff1ef; }
@@ -32,7 +32,7 @@
 .status { flex: 0 0 auto; border: 1px solid #d8e0dc; border-radius: 999px; background: #f7f9f8; color: #65746f; font-size: 10px; font-weight: 800; padding: 5px 8px; white-space: nowrap; }
 .statusActive { border-color: #c8ddd3; background: #eff8f3; color: #28745b; }
 .keyActions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.guide { display: grid; gap: 12px; border: 1px solid var(--surface-border, #dce5df); border-radius: 14px; background: linear-gradient(135deg, #fffaf7, var(--surface-raised, #fff) 64%); padding: 16px; }
+.guide { display: grid; gap: 12px; border: 1px solid var(--surface-border, #dce5df); border-radius: 14px; background: var(--surface-raised, #fff); padding: 16px; }
 .guide header { display: flex; align-items: flex-start; gap: 9px; }
 .guide header > svg { color: var(--mam-orange-dark, #be4814); }
 .guide header > div { display: grid; gap: 3px; }
@@ -46,7 +46,7 @@
 .copyGuide { justify-self: start; min-height: 38px; font-size: 12px; padding: 7px 10px; }
 .modalBackdrop { position: fixed; z-index: 90; inset: 0; display: grid; place-items: center; padding: 24px; background: rgb(15 28 25 / 58%); backdrop-filter: blur(3px); }
 .modal { width: min(540px, 100%); max-height: min(88vh, 760px); overflow-y: auto; border: 1px solid color-mix(in srgb, var(--mam-orange, #f56d25) 52%, #fff); border-radius: 18px; background: var(--surface-raised, #fff); box-shadow: 0 22px 60px rgb(0 0 0 / 25%); }
-.modal > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--surface-border, #dce5df); background: linear-gradient(135deg, #fff9f5, var(--surface-raised, #fff) 58%); padding: 20px 22px; }
+.modal > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--surface-border, #dce5df); background: var(--surface-raised, #fff); padding: 20px 22px; }
 .modal > header > div { display: grid; gap: 4px; }
 .modal h2 { font-size: 21px; line-height: 1.2; }
 .iconButton { display: grid; width: 44px; min-width: 44px; padding: 0; }

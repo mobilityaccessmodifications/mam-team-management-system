@@ -1,6 +1,6 @@
-// Motion tokens adapted from the BeUI component system.
-// Keep movement short and purposeful for a dense operations workspace.
-export const EASE_OUT = [0.16, 1, 0.3, 1] as const;
+// Motion tokens follow the People Hub interaction system: quick to respond,
+// gently eased at rest, and never used for repeated list or calendar content.
+export const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
 export const SPRING_LAYOUT = {
   type: "spring",

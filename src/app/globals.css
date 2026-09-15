@@ -2,21 +2,21 @@
 
 :root {
   --mam-orange: #ef6a24;
-  --mam-orange-strong: #d95517;
+  --mam-orange-strong: #c34d14;
   --mam-orange-dark: #a83f0d;
   --equipsy-blue: #27a8e0;
   --equipsy-blue-deep: #176f98;
-  --text-primary: #1d2926;
-  --text-secondary: #53625e;
-  --text-tertiary: #62706c;
-  --surface-canvas: #f7f8f7;
+  --text-primary: #182421;
+  --text-secondary: #4b5b56;
+  --text-tertiary: #64736e;
+  --surface-canvas: #f4f6f5;
   --surface-raised: #ffffff;
-  --surface-muted: #f3f5f4;
+  --surface-muted: #eef2f0;
   --surface-warm: #fff8f3;
-  --surface-border: #dce3de;
-  --surface-border-strong: #c9d3cd;
+  --surface-border: #d8dfdc;
+  --surface-border-strong: #c6d0cb;
   --sidebar: #182421;
-  --sidebar-raised: #21302c;
+  --sidebar-raised: #22312d;
   --success: #347c60;
   --success-strong: #225d47;
   --warning: #c08325;
@@ -26,12 +26,15 @@
   --info: #34718f;
   --radius-sm: 8px;
   --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius-xl: 14px;
-  --shadow-xs: 0 1px 2px rgba(24, 36, 33, 0.05);
-  --shadow-sm: 0 6px 18px rgba(24, 36, 33, 0.06);
-  --shadow-md: 0 18px 44px rgba(24, 36, 33, 0.12);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --shadow-xs: 0 1px 2px rgb(24 36 33 / 5%);
+  --shadow-sm: 0 8px 24px rgb(24 36 33 / 7%);
+  --shadow-md: 0 24px 64px rgb(24 36 33 / 16%);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --duration-press: 120ms;
+  --duration-ui: 170ms;
+  --duration-dialog: 210ms;
   --layer-sticky: 30;
   --layer-popover: 60;
   --layer-dialog: 100;
@@ -66,6 +69,7 @@
 html {
   scroll-behavior: smooth;
   background: var(--surface-canvas);
+  color-scheme: light;
 }
 
 body {
@@ -74,6 +78,7 @@ body {
   color: var(--text-primary);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  line-height: 1.45;
   text-rendering: optimizeLegibility;
 }
 
@@ -170,9 +175,9 @@ a {
   justify-content: center;
   gap: 3px;
   padding: 6px;
-  background: linear-gradient(145deg, #ff7d35, var(--mam-orange-strong));
+  background: var(--mam-orange);
   border-radius: 11px 3px 11px 3px;
-  box-shadow: 0 8px 18px rgba(239, 106, 36, 0.22), inset 0 1px rgba(255, 255, 255, 0.3);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 24%);
   transform: skew(-5deg);
 }
 
@@ -956,18 +961,17 @@ a {
   color: white;
   font-weight: 750;
   cursor: pointer;
-  box-shadow: 0 12px 24px rgba(217, 85, 23, 0.2);
-  transition: transform 180ms var(--ease-out), box-shadow 180ms var(--ease-out), filter 180ms var(--ease-out);
+  box-shadow: none;
+  transition: background var(--duration-ui) var(--ease-out), transform var(--duration-press) var(--ease-out);
 }
 
 .auth-form > button[type="submit"]:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 16px 30px rgba(217, 85, 23, 0.26);
-  filter: saturate(1.06);
+  background: var(--mam-orange-dark);
+  box-shadow: none;
 }
 
 .auth-form > button[type="submit"]:active:not(:disabled) {
-  transform: scale(0.985);
+  transform: scale(0.97);
 }
 
 .auth-form > button[type="submit"]:disabled {
@@ -1109,7 +1113,23 @@ a {
 /* A shared overlay layer escapes panel stacking contexts without changing desktop layout. */
 .app-modal-backdrop.app-modal-backdrop {
   z-index: 1000;
+  background: rgb(11 22 19 / 56%);
+  backdrop-filter: blur(6px);
   overscroll-behavior: contain;
+  animation: app-backdrop-in 160ms ease-out both;
+}
+
+.app-modal-backdrop.app-modal-backdrop > [role="dialog"] {
+  border-color: var(--surface-border);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-md);
+  animation: app-dialog-in var(--duration-dialog) var(--ease-out) both;
+  transform-origin: center;
+}
+
+.app-modal-backdrop.app-modal-backdrop > [role="dialog"] > header {
+  background: var(--surface-raised);
 }
 
 @media (max-width: 760px), (max-width: 1000px) and (max-height: 500px) {
@@ -1129,9 +1149,11 @@ a {
     margin: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    border-radius: 20px 20px 0 0;
+    border-radius: 22px 22px 0 0;
     padding-bottom: max(16px, env(safe-area-inset-bottom));
     scroll-padding-block: 24px;
+    animation-name: app-sheet-in;
+    transform-origin: bottom;
   }
 
   .app-modal-backdrop [role="dialog"] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea) {
@@ -1159,6 +1181,28 @@ a {
     width: 22px;
     height: 22px;
     flex-shrink: 0;
+  }
+}
+
+@keyframes app-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes app-dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes app-sheet-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-modal-backdrop.app-modal-backdrop,
+  .app-modal-backdrop.app-modal-backdrop > [role="dialog"] {
+    animation: none;
   }
 }
 
