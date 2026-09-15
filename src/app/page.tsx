@@ -119,7 +119,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     checkInResources={checkInResources}
     initialNavigation={{
     view: resolvedView,
-    section: section === "approvals" ? "approvals" : "requests",
+    section: section === "approvals" || section === "balance" ? section : "requests",
     requestId,
   }}
   />;

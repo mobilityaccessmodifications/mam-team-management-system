@@ -4,6 +4,7 @@ import { dispatchLeaveNotificationsForRequest } from "@/lib/leave-notification-o
 
 import { revalidatePath } from "next/cache";
 
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { BALANCE_PENDING_STATUS, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 
@@ -46,6 +47,8 @@ export type LeaveAttachment = {
   mimeType: string;
   sizeBytes: number;
   createdAt: string;
+  /** Database-derived ownership capability for the authenticated uploader. */
+  canDelete: boolean;
 };
 
 export type LeaveCalendarEntry = Pick<
@@ -116,6 +119,8 @@ export type LeaveWorkspaceData = {
   canViewSubscriptionReviewCalendar: boolean;
   /** Current authenticated user may open the monthly payroll reminder. */
   canViewPayrollBalanceReminderCalendar: boolean;
+  /** Current authenticated user is System Admin or an explicit payroll-import delegate. */
+  canImportPayrollBalances: boolean;
   /**
    * A capability asserted by the database for the authenticated session.
    * This intentionally remains separate from per-request `canDecide`, so an
@@ -170,6 +175,10 @@ export type CompleteLeaveAttachmentInput = {
   storagePath: string;
 };
 
+export type DeleteLeaveAttachmentInput = {
+  attachmentId: string;
+};
+
 export type LeaveAttachmentUploadPlan = {
   storagePath: string;
   fileName: string;
@@ -212,6 +221,7 @@ type AttachmentRpcRow = {
   mime_type: string;
   size_bytes: number | string;
   created_at: string;
+  can_delete?: boolean;
 };
 
 type AttachmentUploadPlanRpcRow = {
@@ -298,6 +308,7 @@ const DECISION_ERROR = "The leave decision could not be saved. Refresh and try a
 const SELECTED_PROFILE_SUBMIT_ERROR = "The selected employee leave request could not be saved. Refresh and try again.";
 const CANCEL_ERROR = "The leave request could not be cancelled. Refresh and try again.";
 const ATTACHMENT_ERROR = "The supporting file could not be attached. Refresh and try again.";
+const ATTACHMENT_DELETE_ERROR = "The supporting file could not be deleted. Refresh and try again.";
 
 function requireText(value: unknown, errorMessage: string) {
   if (typeof value !== "string" || !value.trim()) throw new Error(errorMessage);
@@ -440,6 +451,7 @@ function toLeaveAttachment(value: unknown, errorMessage = LOAD_ERROR): LeaveAtta
     mimeType: attachmentMimeType(row.mime_type, errorMessage),
     sizeBytes: attachmentSize(row.size_bytes, errorMessage),
     createdAt: requireText(row.created_at, errorMessage),
+    canDelete: row.can_delete === true,
   };
 }
 
@@ -595,6 +607,13 @@ function normaliseCompleteAttachmentInput(input: CompleteLeaveAttachmentInput) {
   const storagePath = requireText(input.storagePath, ATTACHMENT_ERROR);
   if (!ATTACHMENT_STORAGE_PATH_PATTERN.test(storagePath)) throw new Error(ATTACHMENT_ERROR);
   return { storagePath };
+}
+
+function normaliseDeleteAttachmentInput(input: DeleteLeaveAttachmentInput) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error(ATTACHMENT_DELETE_ERROR);
+  const attachmentId = requireText(input.attachmentId, ATTACHMENT_DELETE_ERROR);
+  if (!UUID_PATTERN.test(attachmentId)) throw new Error(ATTACHMENT_DELETE_ERROR);
+  return { attachmentId };
 }
 
 function toSubmitResult(value: unknown) {
@@ -867,6 +886,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
         ? false
         : canViewSubscriptionReviewCalendar === true,
       canViewPayrollBalanceReminderCalendar: false,
+      canImportPayrollBalances: false,
       isProfilePreview: true,
       warning: warnings.length ? warnings.join(" ") : undefined,
     };
@@ -959,6 +979,9 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
       ? false
       : canViewSubscriptionReviewCalendar === true,
     canViewPayrollBalanceReminderCalendar: payrollBalanceReminderPermissionError
+      ? false
+      : canViewPayrollBalanceReminderCalendar === true,
+    canImportPayrollBalances: payrollBalanceReminderPermissionError
       ? false
       : canViewPayrollBalanceReminderCalendar === true,
     canReviewLeave,
@@ -1259,4 +1282,41 @@ export async function completeLeaveRequestAttachmentUpload(input: CompleteLeaveA
   const attachment = toLeaveAttachment(rows[0], ATTACHMENT_ERROR);
   revalidatePath("/");
   return attachment;
+}
+
+export async function deleteLeaveRequestAttachment(input: DeleteLeaveAttachmentInput) {
+  const checked = normaliseDeleteAttachmentInput(input);
+  const supabase = await requireLeaveSession();
+  const { data, error } = await supabase.rpc("delete_my_leave_request_attachment", {
+    p_attachment_id: checked.attachmentId,
+  });
+  if (error) throw new Error(ATTACHMENT_DELETE_ERROR);
+
+  const row = (Array.isArray(data) ? data[0] : null) as {
+    attachment_id?: unknown;
+    storage_path?: unknown;
+  } | null;
+  const attachmentId = requireText(row?.attachment_id, ATTACHMENT_DELETE_ERROR);
+  const storagePath = requireText(row?.storage_path, ATTACHMENT_DELETE_ERROR);
+  if (
+    attachmentId !== checked.attachmentId
+    || !UUID_PATTERN.test(attachmentId)
+    || !ATTACHMENT_STORAGE_PATH_PATTERN.test(storagePath)
+  ) throw new Error(ATTACHMENT_DELETE_ERROR);
+
+  // The authorised RPC removes the public metadata first, making the object
+  // immediately inaccessible. Storage cleanup is best-effort here; the
+  // existing bounded orphan job removes any object left by a provider outage.
+  try {
+    const admin = createAdminClient();
+    const { error: removalError } = await admin.storage
+      .from("leave-evidence")
+      .remove([storagePath]);
+    if (removalError) throw removalError;
+  } catch {
+    console.warn("Leave attachment bytes were queued for orphan cleanup after metadata deletion.");
+  }
+
+  revalidatePath("/");
+  return { id: attachmentId };
 }

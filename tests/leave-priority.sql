@@ -93,6 +93,32 @@ do $$declare w jsonb; p text; begin
   insert into storage.objects(bucket_id,name,metadata) values('leave-evidence',p,'{"size":100,"mimetype":"application/pdf"}');
   perform public.complete_my_leave_request_attachment_upload(p);
   assert (select count(*)=1 from public.leave_request_attachments);
+  assert (select can_delete from public.list_leave_workspace_attachments() limit 1),
+    'Original uploader receives the attachment delete capability';
+end$$;
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000004');
+do $$declare a uuid; begin
+  select id into a from public.leave_request_attachments limit 1;
+  begin
+    perform public.delete_my_leave_request_attachment(a);
+    raise exception 'A non-uploader deleted another account''s supporting file';
+  exception when insufficient_privilege then null; end;
+  assert (select count(*)=1 from public.leave_request_attachments),
+    'Rejected deletion retains attachment metadata';
+end$$;
+select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000002');
+do $$declare a uuid; removed_path text; begin
+  select id into a from public.leave_request_attachments limit 1;
+  select deleted.storage_path into strict removed_path
+  from public.delete_my_leave_request_attachment(a) deleted;
+  assert removed_path ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}\.pdf$',
+    'Uploader deletion returns only the opaque server cleanup path';
+  assert (select count(*)=0 from public.leave_request_attachments),
+    'Uploader deletion removes attachment metadata';
+  assert (select count(*)=1 from public.leave_request_events
+    where event_type='updated' and note='Supporting file removed.'),
+    'Uploader deletion records a path-free audit event';
+  assert not has_function_privilege('anon','public.delete_my_leave_request_attachment(uuid)','EXECUTE');
 end$$;
 select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000001');
 do $$declare w jsonb; begin
