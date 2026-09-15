@@ -351,8 +351,9 @@ async function dispatchPayrollBalanceEmailReminders(
       p_provider_delivery_id: eventKey,
     });
     if (completion.error || completion.data !== true) {
-      // Keep the claim: the 30-minute n8n scheduler retry reuses eventKey, so
-      // the receiver acknowledges the duplicate and the database can finish.
+      // Keep the claim: the 30-minute n8n scheduler retry reuses this
+      // workday row's eventKey, so the receiver acknowledges the duplicate
+      // and the database can finish without sending twice that day.
       acceptedPendingFinalisation += 1;
       failed += 1;
     } else {
@@ -372,8 +373,9 @@ async function dispatchPayrollBalanceEmailReminders(
 
 /**
  * The MAM n8n scheduler calls this route at 07:00 and 08:00 Melbourne time.
- * SQL enforces each leave/birthday window and the payroll outbox enforces the
- * first calendar day, current importer authority and month-level deduplication.
+ * SQL enforces each leave/birthday window and the payroll outbox enforces a
+ * single send per Melbourne workday, current importer authority and an
+ * immediate stop once both current-month company snapshots are complete.
  */
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET?.trim();

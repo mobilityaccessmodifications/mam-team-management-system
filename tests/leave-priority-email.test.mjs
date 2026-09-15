@@ -165,7 +165,7 @@ test('monthly payroll reminder rejects recipient injection and malformed server 
   ]) assert.equal(runPayroll(extra).outcome,'rejected');
 });
 
-test('monthly payroll reminder deduplicates the stable month event key',()=>{
+test('monthly payroll reminder deduplicates its stable workday-row event key',()=>{
   const eventKey=`payroll-balance:${id}:2026-10`;
   const out=runPayroll({}, {leaveNotificationEvents:{[eventKey]:{state:'sent',at:Date.now()}}});
   assert.equal(out.outcome,'duplicate');

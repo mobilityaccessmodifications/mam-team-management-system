@@ -36,7 +36,7 @@ test('missing bearer is denied before any database access', async () => {
   assert.equal((await GET(new Request('https://example.test/api/cron/leave-priority-reminders'))).status, 401);
 });
 
-test('first-day payroll claim posts the strict n8n event and completes only after an exact receipt', async () => {
+test('workday payroll claim posts the strict n8n event and completes only after an exact receipt', async () => {
   const reminderId = '30000000-0000-4000-8000-000000000001';
   const claimToken = '30000000-0000-4000-8000-000000000002';
   const calls = [];
