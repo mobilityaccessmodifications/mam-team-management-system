@@ -4026,6 +4026,193 @@
   }
 }
 
+.balanceWorkspace {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.attachmentItem {
+  min-width: 0;
+  margin-top: 9px;
+}
+
+.attachmentItemActions {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 7px;
+}
+
+.attachmentItemActions > a {
+  min-width: 0;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: border-color var(--duration-ui) var(--ease-out), background var(--duration-ui) var(--ease-out);
+}
+
+.attachmentItemActions > a:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--surface-border));
+  background: var(--accent-soft);
+}
+
+.attachmentItemActions > a:focus-visible,
+.attachmentDeleteButton:focus-visible,
+.attachmentDeleteKeepButton:focus-visible,
+.attachmentDeleteConfirmButton:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  outline-offset: 2px;
+}
+
+.attachmentItemActions > a > svg:first-child {
+  color: var(--accent-deep);
+}
+
+.attachmentItemActions > a > svg:last-child {
+  color: var(--text-tertiary);
+}
+
+.attachmentItemActions > a strong,
+.attachmentItemActions > a small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachmentItemActions > a strong {
+  font-size: 12px;
+}
+
+.attachmentItemActions > a small {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.attachmentDeleteButton,
+.attachmentDeleteKeepButton,
+.attachmentDeleteConfirmButton {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.attachmentDeleteButton {
+  min-width: 72px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--red) 24%, var(--surface-border));
+  background: var(--surface-raised);
+  color: var(--red);
+}
+
+.attachmentDeleteButton:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--red) 48%, var(--surface-border));
+  background: color-mix(in srgb, var(--red) 7%, var(--surface-raised));
+}
+
+.attachmentDeleteConfirm {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 7px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--red) 25%, var(--surface-border));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--red) 5%, var(--surface-raised));
+}
+
+.attachmentDeleteConfirm > span strong,
+.attachmentDeleteConfirm > span small {
+  display: block;
+}
+
+.attachmentDeleteConfirm > span strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.attachmentDeleteConfirm > span small {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.attachmentDeleteConfirm > div {
+  display: flex;
+  gap: 7px;
+}
+
+.attachmentDeleteKeepButton,
+.attachmentDeleteConfirmButton {
+  padding: 0 11px;
+}
+
+.attachmentDeleteKeepButton {
+  border: 1px solid var(--surface-border);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+
+.attachmentDeleteConfirmButton {
+  border: 1px solid var(--red);
+  background: var(--red);
+  color: #fff;
+}
+
+.attachmentDeleteButton:disabled,
+.attachmentDeleteKeepButton:disabled,
+.attachmentDeleteConfirmButton:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+@media (max-width: 680px) {
+  .attachmentItemActions {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .attachmentDeleteButton {
+    min-width: 44px;
+    padding: 0;
+  }
+
+  .attachmentDeleteButton > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .attachmentDeleteConfirm {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .attachmentDeleteConfirm > div button {
+    flex: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .shell *,
   .shell *::before,

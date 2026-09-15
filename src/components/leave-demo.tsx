@@ -21,6 +21,7 @@ import {
   Search,
   ShieldCheck,
   LogOut,
+  Trash2,
   Upload,
   UsersRound,
   X,
@@ -59,6 +60,7 @@ import {
   cancelSelectedEmployeeLeaveRequest,
   completeLeaveRequestAttachmentUpload,
   decideLeaveRequest,
+  deleteLeaveRequestAttachment,
   discardLeaveRequestAttachmentUpload,
   getLeaveWorkspaceData,
   prepareLeaveRequestAttachmentUpload,
@@ -123,10 +125,28 @@ import type {
 } from "@/lib/work-schedule-types";
 
 type AppView = "home" | "leave" | "calendar" | "people";
-type LeaveSection = "requests" | "approvals";
+type LeaveSection = "requests" | "approvals" | "balance";
 
-function resolveAuthorisedLeaveSection(section: LeaveSection, canReview: boolean): LeaveSection {
-  return section === "approvals" && !canReview ? "requests" : section;
+function resolveAuthorisedLeaveSection(
+  section: LeaveSection,
+  canReview: boolean,
+  canAccessBalance: boolean,
+): LeaveSection {
+  if (section === "approvals" && !canReview) return "requests";
+  if (section === "balance" && !canAccessBalance) return "requests";
+  return section;
+}
+
+function revealSelectedLeaveTab(node: HTMLButtonElement | null) {
+  if (!node || typeof window === "undefined") return;
+  window.requestAnimationFrame(() => {
+    if (!node.isConnected) return;
+    node.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+  });
 }
 
 type RequestStatus = "Pending" | "Approved" | "Declined" | "Cancelled" | typeof BALANCE_PENDING_STATUS;
@@ -540,6 +560,7 @@ export function LeaveDemo({
   const [payrollBalanceReminderEntries, setPayrollBalanceReminderEntries] = useState<PayrollBalanceReminderCalendarEntry[]>([]);
   const [canViewSubscriptionReviewCalendarForProfile, setCanViewSubscriptionReviewCalendarForProfile] = useState(canViewSubscriptionReviewCalendar);
   const [canViewPayrollBalanceReminderCalendar, setCanViewPayrollBalanceReminderCalendar] = useState(false);
+  const [canImportPayrollBalances, setCanImportPayrollBalances] = useState(false);
   const [canReviewLeaveWorkspace, setCanReviewLeaveWorkspace] = useState(false);
   const [leavePriority, setLeavePriority] = useState<LeavePriorityWorkspace>();
   const [requestForPersonId, setRequestForPersonId] = useState("");
@@ -669,6 +690,7 @@ export function LeaveDemo({
       setPayrollBalanceReminderEntries(data.payrollBalanceReminderEntries);
       setCanViewSubscriptionReviewCalendarForProfile(data.canViewSubscriptionReviewCalendar);
       setCanViewPayrollBalanceReminderCalendar(data.canViewPayrollBalanceReminderCalendar);
+      setCanImportPayrollBalances(data.canImportPayrollBalances);
       setCanReviewLeaveWorkspace(data.canReviewLeave);
       setEmploymentType(data.employmentType);
       setHasPaidLeaveEntitlement(data.hasPaidLeaveEntitlement);
@@ -692,6 +714,7 @@ export function LeaveDemo({
       setPayrollBalanceReminderEntries([]);
       setCanViewSubscriptionReviewCalendarForProfile(false);
       setCanViewPayrollBalanceReminderCalendar(false);
+      setCanImportPayrollBalances(false);
       setSelectedRequestId("");
       setCancellationRequestId(null);
       setCancellationFocusRequestId(null);
@@ -1321,6 +1344,8 @@ export function LeaveDemo({
   const approvalQueue = canReviewLeave
     ? visibleRequests.filter((request) => request.canDecide)
     : [];
+  const canAccessBalance = !isPreviewingEmployeeAccess
+    && (canImportPayrollBalances || leavePriority?.canManageBalances === true);
   const myRequests = requests.filter((request) => request.personId === activeProfile.id);
   const filteredRequests = visibleRequests.filter((request) => {
     return statusFilter === "All" || request.status === statusFilter;
@@ -1331,7 +1356,11 @@ export function LeaveDemo({
   const selectedApprovalRequest = selectedRequestId
     ? approvalQueue.find((request) => request.id === selectedRequestId)
     : approvalQueue[0];
-  const authorisedLeaveSection = resolveAuthorisedLeaveSection(leaveSection, canReviewLeave);
+  const authorisedLeaveSection = resolveAuthorisedLeaveSection(
+    leaveSection,
+    canReviewLeave,
+    canAccessBalance,
+  );
   const selectedRequest = authorisedLeaveSection === "approvals" ? selectedApprovalRequest : selectedRegisterRequest;
   const attachmentsByRequestId = new Map<string, LeaveAttachment[]>();
   leaveAttachments.forEach((attachment) => {
@@ -1491,6 +1520,8 @@ export function LeaveDemo({
     setCheckInCalendarEntries([]);
     setSubscriptionReviewCalendarEntries([]);
     setCanViewSubscriptionReviewCalendarForProfile(false);
+    setCanViewPayrollBalanceReminderCalendar(false);
+    setCanImportPayrollBalances(false);
     setCanReviewLeaveWorkspace(false);
     setLeaveWorkspaceUsesProfileScope(false);
     setLeaveDataError("");
@@ -1524,6 +1555,7 @@ export function LeaveDemo({
 
   function chooseLeaveSection(section: LeaveSection, requestedId?: string) {
     if (section === "approvals" && !canReviewLeave) return;
+    if (section === "balance" && !canAccessBalance) return;
     setCancellationRequestId(null);
     setCancellationFocusRequestId(null);
     setCancellationError("");
@@ -1722,6 +1754,28 @@ export function LeaveDemo({
       } else {
         announce(`${result.uploaded} supporting ${result.uploaded === 1 ? "file was" : "files were"} added.`);
       }
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function deleteSupportingFile(attachmentId: string) {
+    if (isMutating) return;
+    const attachment = leaveAttachments.find((candidate) => candidate.id === attachmentId);
+    if (!attachment?.canDelete) {
+      announce("Only the person who uploaded this supporting file can delete it.");
+      return;
+    }
+
+    setIsMutating(true);
+    try {
+      await deleteLeaveRequestAttachment({ attachmentId });
+      await refreshLeaveWorkspace();
+      announce("Supporting file deleted.");
+    } catch (error) {
+      announce(error instanceof Error
+        ? error.message
+        : "The supporting file could not be deleted. Refresh and try again.");
     } finally {
       setIsMutating(false);
     }
@@ -1954,10 +2008,8 @@ export function LeaveDemo({
             />}
           /> : null}
           {activeView === "leave" ? <LeaveWorkspaceLoadBoundary loading={leaveDataLoading}>
-            <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} />
+            <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} canAccessBalance={canAccessBalance} balanceContent={<><PayrollBalanceImporter onSaved={refreshLeaveWorkspace} /><LeavePriorityControls key={previewPersonId || "self"} previewPersonId={previewPersonId} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /></>} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onDeleteSupportingFile={deleteSupportingFile} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} />
           </LeaveWorkspaceLoadBoundary> : null}
-          {activeView === "leave" && !leaveDataLoading && !isPreviewingEmployeeAccess ? <PayrollBalanceImporter onSaved={refreshLeaveWorkspace} /> : null}
-          {activeView === "leave" && !leaveDataLoading ? <LeavePriorityControls key={previewPersonId || "self"} previewPersonId={previewPersonId} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /> : null}
           {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <TeamCalendar
             birthdays={calendarHidesTeamEvents ? [] : calendarBirthdays}
             checkIns={calendarHidesTeamEvents ? [] : calendarCheckIns}
@@ -2261,30 +2313,34 @@ function LeaveLoadingState() {
   );
 }
 
-function LeaveView({ leavePriority, onBalancesSaved, profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canApplyForLeave, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, onRequestLeave, onFilter, onSection, onNote, onSelect, onCloseMobileDetail, onDecision, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { leavePriority?: LeavePriorityWorkspace; onBalancesSaved: () => Promise<void>; profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canApplyForLeave: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onRequestLeave: () => void; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onCloseMobileDetail: () => void; onDecision: (status: LeaveDecision) => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function LeaveView({ leavePriority, onBalancesSaved, profile, section, requests, allRequests, selected, filter, pending, canReview, canAccessBalance, balanceContent, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canApplyForLeave, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, onRequestLeave, onFilter, onSection, onNote, onSelect, onCloseMobileDetail, onDecision, onAddSupportingFiles, onDeleteSupportingFile, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { leavePriority?: LeavePriorityWorkspace; onBalancesSaved: () => Promise<void>; profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; canAccessBalance: boolean; balanceContent: ReactNode; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canApplyForLeave: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onRequestLeave: () => void; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onCloseMobileDetail: () => void; onDecision: (status: LeaveDecision) => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onDeleteSupportingFile: (attachmentId: string) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   const applyAction = canApplyForLeave ? <button className={`${styles.primaryButton} ${styles.applyForLeaveButton}`} type="button" onClick={onRequestLeave} disabled={busy} aria-haspopup="dialog" aria-label="Apply for leave" title="Apply for leave"><Plus aria-hidden="true" size={17} /><span className={styles.applyFullLabel}>Apply for leave</span><span className={styles.applyCompactLabel}>Apply</span></button> : null;
   return (
     <section className={styles.leaveDesk}>
       <div className={styles.leaveHeader}>
-      {canReview ? (
+      {canReview || canAccessBalance ? (
         <div className={styles.leaveSwitch} aria-label="Leave workspace">
-          <button className={section === "requests" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "requests"} onClick={() => onSection("requests")}>
+          <button className={section === "requests" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "requests"} ref={section === "requests" ? revealSelectedLeaveTab : undefined} onClick={() => onSection("requests")}>
             <strong>Leave register</strong><i>{allRequests.length}</i>
           </button>
-          <button className={section === "approvals" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "approvals"} onClick={() => onSection("approvals")}>
+          {canReview ? <button className={section === "approvals" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "approvals"} ref={section === "approvals" ? revealSelectedLeaveTab : undefined} onClick={() => onSection("approvals")}>
             <strong>Approvals</strong><i>{pending.length}</i>
-          </button>
+          </button> : null}
+          {canAccessBalance ? <button className={section === "balance" ? styles.leaveSwitchActive : ""} type="button" aria-pressed={section === "balance"} ref={section === "balance" ? revealSelectedLeaveTab : undefined} onClick={() => onSection("balance")}>
+            <strong>Balance</strong>
+          </button> : null}
         </div>
       ) : null}
       {applyAction}
       </div>
-      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} attachmentsByRequestId={attachmentsByRequestId} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onViewMore={(id) => onSelect(id, "approvals")} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
-      {section === "approvals" && canReview ? <ApprovalsView leavePriority={leavePriority} onBalancesSaved={onBalancesSaved} pending={pending} selected={selected} selectedId={selectedId} note={note} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={busy} readOnly={readOnly} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
+      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} attachmentsByRequestId={attachmentsByRequestId} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onViewMore={(id) => onSelect(id, "approvals")} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onDeleteSupportingFile={onDeleteSupportingFile} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
+      {section === "approvals" && canReview ? <ApprovalsView leavePriority={leavePriority} onBalancesSaved={onBalancesSaved} pending={pending} selected={selected} selectedId={selectedId} note={note} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={busy} readOnly={readOnly} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} onDeleteSupportingFile={onDeleteSupportingFile} /> : null}
+      {section === "balance" && canAccessBalance ? <div className={styles.balanceWorkspace}>{balanceContent}</div> : null}
     </section>
   );
 }
 
-function RequestsView({ profile, requests, allRequests, selected, filter, canReview, attachmentsByRequestId, readOnly, hidePrivateDetails, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onViewMore, onCloseMobileDetail, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; attachmentsByRequestId: Map<string, LeaveAttachment[]>; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onViewMore: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function RequestsView({ profile, requests, allRequests, selected, filter, canReview, attachmentsByRequestId, readOnly, hidePrivateDetails, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onViewMore, onCloseMobileDetail, onAddSupportingFiles, onDeleteSupportingFile, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; attachmentsByRequestId: Map<string, LeaveAttachment[]>; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onViewMore: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onDeleteSupportingFile: (attachmentId: string) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   const filters: ("All" | RequestStatus)[] = ["All", "Pending", BALANCE_PENDING_STATUS, "Approved", "Declined", "Cancelled"];
   const isEmployee = !canReview;
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -2320,14 +2376,14 @@ function RequestsView({ profile, requests, allRequests, selected, filter, canRev
         </div>
         {selected ? <>
           {mobileDetailDialogOpen ? <button className={styles.mobileDetailBackdrop} type="button" aria-label="Close leave details" onClick={onCloseMobileDetail} /> : null}
-          <RequestDetail profile={profile} request={selected} attachments={attachmentsByRequestId.get(selected.id) ?? []} canReview={canReview} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileOpen={mobileDetailDialogOpen} mobileDialogRef={mobileDetailDialogRef} mobileCloseButtonRef={mobileDetailCloseButtonRef} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancellationSucceeded={cancelledRequestId === selected.id} busy={busy} onViewMore={onViewMore} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} />
+          <RequestDetail profile={profile} request={selected} attachments={attachmentsByRequestId.get(selected.id) ?? []} canReview={canReview} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileOpen={mobileDetailDialogOpen} mobileDialogRef={mobileDetailDialogRef} mobileCloseButtonRef={mobileDetailCloseButtonRef} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancellationSucceeded={cancelledRequestId === selected.id} busy={busy} onViewMore={onViewMore} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onDeleteSupportingFile={onDeleteSupportingFile} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} />
         </> : null}
       </div>
     </section>
   );
 }
 
-function RequestDetail({ profile, request, attachments, canReview, readOnly, hidePrivateDetails, canCancelOwnLeave, mobileOpen, mobileDialogRef, mobileCloseButtonRef, cancellationRequestId, cancellationError, cancellationSucceeded, busy, onViewMore, onCloseMobileDetail, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; request: LeaveRequest; attachments: LeaveAttachment[]; canReview: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnLeave: boolean; mobileOpen: boolean; mobileDialogRef: RefObject<HTMLElement | null>; mobileCloseButtonRef: RefObject<HTMLButtonElement | null>; cancellationRequestId: string | null; cancellationError: string; cancellationSucceeded: boolean; busy: boolean; onViewMore: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function RequestDetail({ profile, request, attachments, canReview, readOnly, hidePrivateDetails, canCancelOwnLeave, mobileOpen, mobileDialogRef, mobileCloseButtonRef, cancellationRequestId, cancellationError, cancellationSucceeded, busy, onViewMore, onCloseMobileDetail, onAddSupportingFiles, onDeleteSupportingFile, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; request: LeaveRequest; attachments: LeaveAttachment[]; canReview: boolean; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnLeave: boolean; mobileOpen: boolean; mobileDialogRef: RefObject<HTMLElement | null>; mobileCloseButtonRef: RefObject<HTMLButtonElement | null>; cancellationRequestId: string | null; cancellationError: string; cancellationSucceeded: boolean; busy: boolean; onViewMore: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onDeleteSupportingFile: (attachmentId: string) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   const detailTitleId = useId();
   const showEmployee = canReview && request.personId !== profile.id;
   const isConfirmingCancellation = cancellationRequestId === request.id;
@@ -2364,7 +2420,7 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
     {canCancel ? <section className={styles.cancelLeaveAction}>{!isConfirmingCancellation ? <button id={cancelLeaveTriggerId(request.id)} className={styles.cancelLeaveButton} type="button" onClick={() => onStartCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> Cancel leave</button> : <><span>Cancel leave?</span><p>This cannot be undone.</p>{cancellationError ? <p className={styles.cancelLeaveError} role="alert">{cancellationError}</p> : null}<div className={styles.cancelLeaveControls}><button className={styles.cancelLeaveKeepButton} type="button" onClick={onDismissCancellation} disabled={busy}>Keep leave</button><button className={styles.cancelLeaveConfirmButton} type="button" onClick={() => onConfirmCancellation(request.id)} disabled={busy}><XCircle aria-hidden="true" size={16} /> {busy ? "Cancelling…" : "Cancel leave"}</button></div></>}</section> : null}
     {!hidePrivateDetails && request.employeeNote ? <section><span>{request.approvalRequired ? "Employee note" : "Private note"}</span><p>{request.employeeNote}</p></section> : null}
     {!hidePrivateDetails && request.managerNote ? <section><span>Reviewer decision note</span><p>{request.managerNote}</p></section> : null}
-    {!hidePrivateDetails ? <AttachmentList attachments={attachments} /> : null}
+    {!hidePrivateDetails ? <AttachmentList attachments={attachments} busy={busy} onDelete={onDeleteSupportingFile} /> : null}
     {!hidePrivateDetails && request.status !== "Declined" && request.status !== "Cancelled" ? <SickEvidenceNotice dueDate={request.evidenceDueDate} hasEvidence={attachments.length > 0} /> : null}
     {!hidePrivateDetails && canAddAttachments ? <section className={styles.attachmentUpload}>
 
@@ -2390,20 +2446,33 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
   </aside>;
 }
 
-function AttachmentList({ attachments }: { attachments: LeaveAttachment[] }) {
+function AttachmentList({ attachments, busy = false, onDelete }: { attachments: LeaveAttachment[]; busy?: boolean; onDelete?: (attachmentId: string) => Promise<void> }) {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   if (!attachments.length) return null;
 
   return <section className={styles.attachmentList} aria-label="Supporting files">
     <span><Paperclip aria-hidden="true" size={14} /> Supporting files</span>
-    {attachments.map((attachment) => <a href={`/leave/attachments/${attachment.id}`} key={attachment.id}>
-      <FileText aria-hidden="true" size={17} />
-      <span><strong>{attachment.fileName}</strong><small>{formatFileSize(attachment.sizeBytes)} · Download</small></span>
-      <ArrowUpRight aria-hidden="true" size={15} />
-    </a>)}
+    {attachments.map((attachment) => <div className={styles.attachmentItem} key={attachment.id}>
+      <div className={styles.attachmentItemActions}>
+        <a href={`/leave/attachments/${attachment.id}`}>
+          <FileText aria-hidden="true" size={17} />
+          <span><strong>{attachment.fileName}</strong><small>{formatFileSize(attachment.sizeBytes)} · Download</small></span>
+          <ArrowUpRight aria-hidden="true" size={15} />
+        </a>
+        {attachment.canDelete && onDelete ? <button className={styles.attachmentDeleteButton} type="button" aria-label={`Delete ${attachment.fileName}`} aria-expanded={confirmDeleteId === attachment.id} onClick={() => setConfirmDeleteId(attachment.id)} disabled={busy} title="Delete file"><Trash2 aria-hidden="true" size={15} /><span>Delete</span></button> : null}
+      </div>
+      {attachment.canDelete && onDelete && confirmDeleteId === attachment.id ? <div className={styles.attachmentDeleteConfirm} role="group" aria-label={`Confirm deletion of ${attachment.fileName}`}>
+        <span><strong>Delete this file?</strong><small>This cannot be undone.</small></span>
+        <div>
+          <button className={styles.attachmentDeleteKeepButton} type="button" onClick={() => setConfirmDeleteId(null)} disabled={busy}>Cancel</button>
+          <button className={styles.attachmentDeleteConfirmButton} type="button" onClick={() => void onDelete(attachment.id)} disabled={busy}><Trash2 aria-hidden="true" size={14} />{busy ? "Deleting…" : "Delete"}</button>
+        </div>
+      </div> : null}
+    </div>)}
   </section>;
 }
 
-function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, onNote, onSelect, onDecision }: { leavePriority?: LeavePriorityWorkspace; onBalancesSaved: () => Promise<void>; pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: LeaveDecision) => void }) {
+function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, onNote, onSelect, onDecision, onDeleteSupportingFile }: { leavePriority?: LeavePriorityWorkspace; onBalancesSaved: () => Promise<void>; pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: LeaveDecision) => void; onDeleteSupportingFile: (attachmentId: string) => Promise<void> }) {
   const person = leavePriority?.people.find((person) => person.personId === selected?.personId);
   const coverage = selected ? approvalBalanceCoverage(person, selected.leaveType, approvalRequestHours(selected)) : null;
   const annual = selected?.leaveType === "Annual leave";
@@ -2420,7 +2489,7 @@ function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, sele
       <div className={styles.factGrid}><article><CalendarDays size={17} /><span><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><span className={styles.approvalDuration}><strong>{formatDuration(selected)}</strong>{selected.hours == null && approvalRequestHours(selected) != null ? <span>{approvalRequestHours(selected)} hours</span> : null}<ApprovalBalancePill workspace={leavePriority} personId={selected.personId} leaveType={selected.leaveType} requiredHours={approvalRequestHours(selected)} /></span>{formatTimeRange(selected) ? <small>{formatTimeRange(selected)}</small> : null}</span></article><article><ClipboardList size={17} /><span><strong>{selected.leaveType}</strong></span></article></div>
       <ApprovalLeaveBalances key={`balances:${selected.id}`} workspace={leavePriority} personId={selected.personId} requestId={selected.id} busy={busy || readOnly} onSaved={onBalancesSaved} />
       {selected.employeeNote ? <div className={styles.privateNote}><span>Note</span><p>{selected.employeeNote}</p></div> : null}
-      <AttachmentList attachments={attachmentsByRequestId.get(selected.id) ?? []} />
+      <AttachmentList attachments={attachmentsByRequestId.get(selected.id) ?? []} busy={busy} onDelete={onDeleteSupportingFile} />
       <SickEvidenceNotice dueDate={selected.evidenceDueDate} hasEvidence={(attachmentsByRequestId.get(selected.id)?.length ?? 0) > 0} />
       {selected.status === "Pending" || selected.status === BALANCE_PENDING_STATUS ? <div className={styles.decisionBox}>
         <label><span>Note <small>Required to decline</small></span><textarea rows={2} value={note} onChange={(event) => onNote(event.target.value)} disabled={busy || readOnly} /></label>

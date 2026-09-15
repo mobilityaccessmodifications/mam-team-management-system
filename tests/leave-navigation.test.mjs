@@ -21,11 +21,28 @@ test('Leave navigation defaults to Pending register while explicit approvals rem
   navigate('leave'); assert.deepEqual(calls, ['Pending', 'requests', 'leave']);
   calls.length = 0; navigate('leave', 'approvals'); assert.deepEqual(calls, ['approvals', 'leave']);
 });
-test('unauthorised approval deep links resolve to the requests register', () => {
+test('unauthorised approval and balance deep links resolve to the requests register', () => {
   const resolveSection = load('resolveAuthorisedLeaveSection', {});
-  assert.equal(resolveSection('approvals', false), 'requests');
-  assert.equal(resolveSection('approvals', true), 'approvals');
-  assert.equal(resolveSection('requests', false), 'requests');
+  assert.equal(resolveSection('approvals', false, false), 'requests');
+  assert.equal(resolveSection('approvals', true, false), 'approvals');
+  assert.equal(resolveSection('balance', true, false), 'requests');
+  assert.equal(resolveSection('balance', false, true), 'balance');
+  assert.equal(resolveSection('requests', false, false), 'requests');
+});
+test('the selected leave tab scrolls into view and respects reduced motion', () => {
+  const reveal = load('revealSelectedLeaveTab', {});
+  let options;
+  const originalWindow = globalThis.window;
+  globalThis.window = {
+    requestAnimationFrame(callback) { callback(); },
+    matchMedia() { return { matches: true }; },
+  };
+  try {
+    reveal({ isConnected: true, scrollIntoView(next) { options = next; } });
+  } finally {
+    globalThis.window = originalWindow;
+  }
+  assert.deepEqual(options, { behavior: 'auto', block: 'nearest', inline: 'nearest' });
 });
 test('leave links show an honest loading state before their authorised workspace resolves', () => {
   const Boundary = load('LeaveWorkspaceLoadBoundary', { LeaveLoadingState: 'loading-state' });
@@ -42,7 +59,11 @@ test('leave links show an honest loading state before their authorised workspace
 test('payroll import controls and reminders stay out of employee access previews', () => {
   assert.match(
     source,
-    /activeView === "leave" && !leaveDataLoading && !isPreviewingEmployeeAccess \? <PayrollBalanceImporter/,
+    /canAccessBalance = !isPreviewingEmployeeAccess\s*&& \(canImportPayrollBalances \|\| leavePriority\?\.canManageBalances === true\);/,
+  );
+  assert.match(
+    source,
+    /section === "balance" && canAccessBalance \? <div className=\{styles\.balanceWorkspace\}>\{balanceContent\}<\/div>/,
   );
   assert.match(
     source,
@@ -66,16 +87,29 @@ test('record selection preserves the current filter, but opens out-of-filter dee
 });
 test('register comes first and View more forwards the exact request to approvals', () => {
   const calls = [];
-  const LeaveView = load('LeaveView', { styles: {}, RequestsView: 'records', ApprovalsView: 'approvals' });
+  const LeaveView = load('LeaveView', { styles: {}, RequestsView: 'records', ApprovalsView: 'approvals', revealSelectedLeaveTab() {} });
   const tree = LeaveView({section:'requests', allRequests:[], pending:[], canReview:true, onSelect:(...args)=>calls.push(args)});
   assert.deepEqual(buttons(tree).map(b=>b.props.children[0].props.children), ['Leave register','Approvals']);
   const records = tree.props.children.find(c=>c?.type==='records');
   records.props.onViewMore('second'); assert.deepEqual(calls, [['second','approvals']]);
 });
-test('Apply for leave stays in the shared header for register and approvals', () => {
-  const LeaveView = load('LeaveView', { styles: { leaveHeader: 'leave-header', primaryButton: 'primary', applyForLeaveButton: 'apply' }, RequestsView: 'records', ApprovalsView: 'approvals', Plus: 'plus' });
-  for (const section of ['requests', 'approvals']) {
-    const tree = LeaveView({ section, allRequests: [], pending: [], canReview: true, canApplyForLeave: true, busy: false });
+test('Balance is a sibling tab only when the server-issued capability is present', () => {
+  const LeaveView = load('LeaveView', { styles: { balanceWorkspace: 'balance-workspace' }, RequestsView: 'records', ApprovalsView: 'approvals', revealSelectedLeaveTab() {} });
+  const allowed = LeaveView({ section: 'balance', allRequests: [], pending: [], canReview: false, canAccessBalance: true, balanceContent: 'balance-tools' });
+  assert.deepEqual(buttons(allowed).map(button => {
+    const firstChild = Array.isArray(button.props.children) ? button.props.children[0] : button.props.children;
+    return firstChild.props.children;
+  }), ['Leave register', 'Balance']);
+  assert.equal(allowed.props.children.find(child => child?.props?.className === 'balance-workspace').props.children, 'balance-tools');
+
+  const denied = LeaveView({ section: 'requests', allRequests: [], pending: [], canReview: false, canAccessBalance: false, balanceContent: 'balance-tools' });
+  assert.equal(buttons(denied).length, 0);
+  assert.equal(denied.props.children.some(child => child?.props?.className === 'balance-workspace'), false);
+});
+test('Apply for leave stays in the shared header for register, approvals and balance', () => {
+  const LeaveView = load('LeaveView', { styles: { leaveHeader: 'leave-header', primaryButton: 'primary', applyForLeaveButton: 'apply' }, RequestsView: 'records', ApprovalsView: 'approvals', Plus: 'plus', revealSelectedLeaveTab() {} });
+  for (const section of ['requests', 'approvals', 'balance']) {
+    const tree = LeaveView({ section, allRequests: [], pending: [], canReview: true, canAccessBalance: true, balanceContent: 'balance-tools', canApplyForLeave: true, busy: false });
     const header = tree.props.children[0];
     const action = buttons(header).find((button) => button.props['aria-label'] === 'Apply for leave');
     assert.equal(header.props.className, 'leave-header');
@@ -86,6 +120,33 @@ test('Apply for leave stays in the shared header for register and approvals', ()
       assert.equal(Object.hasOwn(records.props, 'action'), false);
     }
   }
+});
+test('only an uploader-owned attachment offers a confirmed destructive action', async () => {
+  let confirming = null;
+  const deleted = [];
+  const AttachmentList = load('AttachmentList', {
+    useState: () => [confirming, value => { confirming = value; }],
+    styles: {},
+    Paperclip: 'paperclip',
+    FileText: 'file',
+    ArrowUpRight: 'arrow',
+    Trash2: 'trash',
+    formatFileSize: () => '1 KB',
+  });
+  const owned = { id: 'owned', fileName: 'proof.pdf', sizeBytes: 1024, canDelete: true };
+  const reviewerOnly = { id: 'reviewer', fileName: 'other.pdf', sizeBytes: 1024, canDelete: false };
+
+  let tree = AttachmentList({ attachments: [owned, reviewerOnly], onDelete: async id => { deleted.push(id); } });
+  const trigger = buttons(tree).find(button => button.props['aria-label'] === 'Delete proof.pdf');
+  assert.ok(trigger);
+  assert.equal(buttons(tree).some(button => button.props['aria-label'] === 'Delete other.pdf'), false);
+  trigger.props.onClick();
+
+  tree = AttachmentList({ attachments: [owned, reviewerOnly], onDelete: async id => { deleted.push(id); } });
+  const confirm = buttons(tree).find(button => button.props.children?.[1] === 'Delete');
+  assert.ok(confirm);
+  await confirm.props.onClick();
+  assert.deepEqual(deleted, ['owned']);
 });
 test('View more is available only for an authorised approvable request and opens that record', () => {
   const Detail = load('RequestDetail', { useId:()=> 'detail', styles:{}, StatusPill:'status', formatDurationWithTime:()=> '2 days', AttachmentList:()=>null, SickEvidenceNotice:()=>null, ChevronRight:'icon' });
