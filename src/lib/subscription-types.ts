@@ -28,7 +28,8 @@ export type Subscription = {
   currency: "AUD";
   renewalDate: string | null;
   seatCount: number | null;
-  mamCreditCardUsed: boolean | null;
+  creditCardUsed: boolean | null;
+  creditCardHolder: string | null;
   billingDate: string | null;
   nextBillingOn: string | null;
   lastReviewedOn: string | null;
@@ -60,7 +61,8 @@ export type CreateSubscriptionInput = {
   amountCents?: number | null;
   renewalDate?: string | null;
   seatCount?: number | null;
-  mamCreditCardUsed?: boolean | null;
+  creditCardUsed?: boolean | null;
+  creditCardHolder?: string | null;
   billingDate?: string | null;
   responsiblePersonId: string;
   memberPersonIds: string[];
@@ -76,3 +78,26 @@ export type ReviewSubscriptionInput = {
   subscriptionId: string;
   version: number;
 };
+
+export function subscriptionMonthlyEquivalentCents(subscription: Pick<Subscription, "pricingModel" | "billingCycle" | "amountCents">) {
+  if (subscription.pricingModel !== "paid" || subscription.amountCents === null) return null;
+  if (subscription.billingCycle === "monthly") return subscription.amountCents;
+  if (subscription.billingCycle === "quarterly") return Math.round(subscription.amountCents / 3);
+  if (subscription.billingCycle === "annual") return Math.round(subscription.amountCents / 12);
+  return null;
+}
+
+/** Keeps comparable paid costs first and Free last in both sort directions. */
+export function compareSubscriptionMonthlyCost(
+  first: Pick<Subscription, "pricingModel" | "billingCycle" | "amountCents">,
+  second: Pick<Subscription, "pricingModel" | "billingCycle" | "amountCents">,
+  direction: "ascending" | "descending",
+) {
+  const firstMonthly = subscriptionMonthlyEquivalentCents(first);
+  const secondMonthly = subscriptionMonthlyEquivalentCents(second);
+  const firstBucket = first.pricingModel === "free" ? 2 : firstMonthly === null ? 1 : 0;
+  const secondBucket = second.pricingModel === "free" ? 2 : secondMonthly === null ? 1 : 0;
+  if (firstBucket !== secondBucket) return firstBucket - secondBucket;
+  if (firstMonthly === null || secondMonthly === null) return 0;
+  return direction === "ascending" ? firstMonthly - secondMonthly : secondMonthly - firstMonthly;
+}
