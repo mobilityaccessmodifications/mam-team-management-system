@@ -44,9 +44,12 @@ import type {
 
 const EMPTY_DRAFT: SubscriptionCredentialDraft = {
   loginUrl: "",
+  accountEmail: "",
   username: "",
   password: "",
+  mfaDetails: "",
   recoveryCodes: "",
+  licenceKey: "",
   notes: "",
 };
 
@@ -200,9 +203,12 @@ export function SubscriptionCredentialEditor({
       if (credential) {
         setDraft({
           loginUrl: credential.loginUrl,
+          accountEmail: credential.accountEmail,
           username: credential.username,
           password: credential.password,
+          mfaDetails: credential.mfaDetails,
           recoveryCodes: credential.recoveryCodes,
+          licenceKey: credential.licenceKey,
           notes: credential.notes,
         });
         setCredentialVersion(credential.credentialVersion);
@@ -294,9 +300,12 @@ export function SubscriptionCredentialEditor({
       </div> : <form onSubmit={save}>
         <p className={styles.safetyNote}><LockKeyhole size={16} /> Hidden after 1 minute.</p>
         <label><span>Login URL <small>Optional</small></span><input ref={initialFocusRef} type="url" inputMode="url" autoComplete="off" data-1p-ignore="true" data-lpignore="true" value={draft.loginUrl} onChange={(event) => changeField("loginUrl", event.target.value)} placeholder="https://…" /></label>
-        <label><span>Account / username <small>Optional</small></span><input autoComplete="off" data-1p-ignore="true" data-lpignore="true" value={draft.username} onChange={(event) => changeField("username", event.target.value)} placeholder="name@example.com" /></label>
+        <label><span>Account email <small>Optional</small></span><input type="email" autoComplete="off" data-1p-ignore="true" data-lpignore="true" value={draft.accountEmail} onChange={(event) => changeField("accountEmail", event.target.value)} placeholder="billing@example.com" /></label>
+        <label><span>Username / account ID <small>Optional</small></span><input autoComplete="off" data-1p-ignore="true" data-lpignore="true" value={draft.username} onChange={(event) => changeField("username", event.target.value)} placeholder="Account name or ID" /></label>
         <label><span>Password <small>Optional</small></span><div className={styles.secretField}><input type={passwordVisible ? "text" : "password"} autoComplete="new-password" data-1p-ignore="true" data-lpignore="true" value={draft.password} onChange={(event) => changeField("password", event.target.value)} placeholder="Enter password" />{draft.password ? <><button type="button" onClick={() => setPasswordVisible((visible) => !visible)} aria-label={passwordVisible ? "Hide password" : "Show password"}>{passwordVisible ? <EyeOff size={16} /> : <Eye size={16} />}</button><button type="button" onClick={() => void copy(draft.password, "Password")} aria-label="Copy password"><ClipboardCopy size={16} /></button></> : null}</div></label>
+        <label><span>MFA / verification details <small>Optional</small></span><textarea autoComplete="off" data-1p-ignore="true" data-lpignore="true" value={draft.mfaDetails} onChange={(event) => changeField("mfaDetails", event.target.value)} placeholder="Authenticator owner, verification method or other access detail" rows={3} /></label>
         <label><span>Recovery codes <small>Optional</small></span><textarea autoComplete="off" data-1p-ignore="true" data-lpignore="true" value={draft.recoveryCodes} onChange={(event) => changeField("recoveryCodes", event.target.value)} placeholder="One code per line" rows={4} />{draft.recoveryCodes ? <button className={styles.copyTextButton} type="button" onClick={() => void copy(draft.recoveryCodes, "Recovery codes")}><ClipboardCopy size={15} /> Copy recovery codes</button> : null}</label>
+        <label><span>Licence / product key <small>Optional</small></span><textarea autoComplete="off" data-1p-ignore="true" data-lpignore="true" value={draft.licenceKey} onChange={(event) => changeField("licenceKey", event.target.value)} placeholder="Licence key or activation detail" rows={2} />{draft.licenceKey ? <button className={styles.copyTextButton} type="button" onClick={() => void copy(draft.licenceKey, "Licence key")}><ClipboardCopy size={15} /> Copy licence key</button> : null}</label>
         <label><span>Notes <small>Optional</small></span><textarea value={draft.notes} onChange={(event) => changeField("notes", event.target.value)} placeholder="Only operational notes needed to use this account" rows={3} /></label>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         {notice ? <p className={styles.notice} role="status"><CheckCircle2 size={15} />{notice}</p> : null}

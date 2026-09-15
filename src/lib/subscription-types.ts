@@ -27,6 +27,11 @@ export type Subscription = {
   amountCents: number | null;
   currency: "AUD";
   renewalDate: string | null;
+  seatCount: number | null;
+  mamCreditCardUsed: boolean | null;
+  billingDate: string | null;
+  nextBillingOn: string | null;
+  lastReviewedOn: string | null;
   nextReviewOn: string;
   responsible: Omit<SubscriptionPerson, "teamName" | "company">;
   memberPersonIds: string[];
@@ -54,6 +59,9 @@ export type CreateSubscriptionInput = {
   billingCycle?: SubscriptionBillingCycle;
   amountCents?: number | null;
   renewalDate?: string | null;
+  seatCount?: number | null;
+  mamCreditCardUsed?: boolean | null;
+  billingDate?: string | null;
   responsiblePersonId: string;
   memberPersonIds: string[];
 };

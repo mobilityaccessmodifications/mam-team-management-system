@@ -39,6 +39,24 @@ test('leave links show an honest loading state before their authorised workspace
   assert.equal(status.props.children[1].props.children, 'Loading leave');
   assert.match(source, /<LeaveWorkspaceLoadBoundary loading=\{leaveDataLoading\}>/);
 });
+test('payroll import controls and reminders stay out of employee access previews', () => {
+  assert.match(
+    source,
+    /activeView === "leave" && !leaveDataLoading && !isPreviewingEmployeeAccess \? <PayrollBalanceImporter/,
+  );
+  assert.match(
+    source,
+    /canViewPayrollBalanceReminderForActiveProfile = canViewPayrollBalanceReminderCalendar\s*&& !isPreviewingEmployeeAccess;/,
+  );
+  assert.match(
+    source,
+    /calendarPayrollBalanceReminders = isPreviewingEmployeeAccess \? \[\] : payrollBalanceReminderEntries;/,
+  );
+  assert.match(
+    source,
+    /showPayrollBalanceReminders=\{canViewPayrollBalanceReminderForActiveProfile\}/,
+  );
+});
 test('record selection preserves the current filter, but opens out-of-filter deep links', () => {
   for (const [id, expected] of [['pending', []], ['approved', ['All']]]) {
     const filters = [], selections = [];

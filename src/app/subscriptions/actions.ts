@@ -37,6 +37,11 @@ type SubscriptionRpcRow = {
   amount_cents: number | string | null;
   currency_code: string;
   renewal_date: string | null;
+  seat_count: number | string | null;
+  mam_credit_card_used: boolean | null;
+  billing_anchor_date: string | null;
+  next_billing_on: string | null;
+  last_reviewed_on: string | null;
   next_review_on: string;
   responsible_person_id: string;
   responsible_person_name: string;
@@ -122,6 +127,21 @@ function optionalAmountCents(value: unknown) {
   return parsed;
 }
 
+function optionalSeatCount(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 100_000) {
+    throw new Error("Enter a valid number of seats or licences.");
+  }
+  return parsed;
+}
+
+function optionalBoolean(value: unknown, label: string) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "boolean") throw new Error(`${label} is invalid.`);
+  return value;
+}
+
 function personIds(value: unknown) {
   if (!Array.isArray(value) || value.length > 250) throw new Error("Choose valid employees for subscription access.");
   const unique = [...new Set(value.map((personId) => requiredUuid(personId, "Choose valid employees for subscription access.")))];
@@ -136,8 +156,18 @@ function validateSubscriptionInput(input: unknown, includeStatus: boolean) {
   if (!VALID_PRICING_MODELS.has(pricingModel)) throw new Error("Choose whether this subscription is free or paid.");
   const billingCycle = pricingModel === "paid" ? text(value.billingCycle) : null;
   const amountCents = pricingModel === "paid" ? optionalAmountCents(value.amountCents) : null;
-  if (pricingModel === "paid" && (!billingCycle || !VALID_BILLING_CYCLES.has(billingCycle) || amountCents === null)) {
-    throw new Error("Paid subscriptions need a billing cycle and an amount.");
+  const seatCount = pricingModel === "paid" ? optionalSeatCount(value.seatCount) : null;
+  const mamCreditCardUsed = pricingModel === "paid" ? optionalBoolean(value.mamCreditCardUsed, "MAM credit card choice") : null;
+  const billingDate = pricingModel === "paid" ? optionalDate(value.billingDate, "Billing date") : null;
+  if (pricingModel === "paid" && (
+    !billingCycle
+    || !VALID_BILLING_CYCLES.has(billingCycle)
+    || amountCents === null
+    || seatCount === null
+    || mamCreditCardUsed === null
+    || billingDate === null
+  )) {
+    throw new Error("Paid subscriptions need billing, seat and payment-card details.");
   }
 
   return {
@@ -148,6 +178,9 @@ function validateSubscriptionInput(input: unknown, includeStatus: boolean) {
     p_billing_cycle: billingCycle as SubscriptionBillingCycle | null,
     p_amount_cents: amountCents,
     p_renewal_date: optionalDate(value.renewalDate, "Renewal date"),
+    p_seat_count: seatCount,
+    p_mam_credit_card_used: mamCreditCardUsed,
+    p_billing_anchor_date: billingDate,
     p_responsible_person_id: requiredUuid(value.responsiblePersonId, "Choose the employee responsible for this subscription."),
     p_member_person_ids: personIds(value.memberPersonIds),
   };
@@ -204,6 +237,12 @@ function mapSubscription(row: unknown): Subscription {
   const amountRaw = value?.amount_cents;
   const amountCents = amountRaw === null || amountRaw === undefined ? null : Number(amountRaw);
   const renewalDate = nullableText(value?.renewal_date);
+  const seatRaw = value?.seat_count;
+  const seatCount = seatRaw === null || seatRaw === undefined ? null : Number(seatRaw);
+  const mamCreditCardUsed = value?.mam_credit_card_used ?? null;
+  const billingDate = nullableText(value?.billing_anchor_date);
+  const nextBillingOn = nullableText(value?.next_billing_on);
+  const lastReviewedOn = nullableText(value?.last_reviewed_on);
   const version = Number(value?.version);
   const memberPersonIds = stringArray(value?.member_person_ids);
   const memberNames = stringArray(value?.member_names);
@@ -219,6 +258,12 @@ function mapSubscription(row: unknown): Subscription {
     || (pricingModel === "paid" && (amountCents === null || !billingCycle || !Number.isSafeInteger(amountCents) || amountCents < 0))
     || currency !== "AUD"
     || (renewalDate !== null && !ISO_DATE_PATTERN.test(renewalDate))
+    || (seatCount !== null && (!Number.isSafeInteger(seatCount) || seatCount < 1 || seatCount > 100_000))
+    || (mamCreditCardUsed !== null && typeof mamCreditCardUsed !== "boolean")
+    || (billingDate !== null && !ISO_DATE_PATTERN.test(billingDate))
+    || (nextBillingOn !== null && !ISO_DATE_PATTERN.test(nextBillingOn))
+    || (lastReviewedOn !== null && !ISO_DATE_PATTERN.test(lastReviewedOn))
+    || (pricingModel === "free" && (seatCount !== null || mamCreditCardUsed !== null || billingDate !== null || nextBillingOn !== null))
     || !ISO_DATE_PATTERN.test(nextReviewOn)
     || !UUID_PATTERN.test(responsiblePersonId)
     || !responsiblePersonName
@@ -243,6 +288,11 @@ function mapSubscription(row: unknown): Subscription {
     amountCents,
     currency: "AUD",
     renewalDate,
+    seatCount,
+    mamCreditCardUsed,
+    billingDate,
+    nextBillingOn,
+    lastReviewedOn,
     nextReviewOn,
     responsible: {
       personId: responsiblePersonId,
@@ -264,8 +314,8 @@ function mutationError(error: { message?: string } | null, fallback = GENERIC_SA
   if (message.includes("active employee") || message.includes("responsible") || message.includes("subscription access")) {
     return new Error("Choose active employees for the owner and access list.");
   }
-  if (message.includes("paid subscriptions") || message.includes("billing cycle") || message.includes("valid amount")) {
-    return new Error("Paid subscriptions need a billing cycle and an amount.");
+  if (message.includes("paid subscriptions") || message.includes("billing") || message.includes("seat") || message.includes("payment-card")) {
+    return new Error("Paid subscriptions need billing, seat and payment-card details.");
   }
   if (message.includes("service name") || message.includes("plan name") || message.includes("subscription status")) {
     return new Error(error?.message ?? fallback);
@@ -276,7 +326,7 @@ function mutationError(error: { message?: string } | null, fallback = GENERIC_SA
 /** Credential-free management register for System Admins and managers. */
 export async function listSubscriptions(): Promise<Subscription[]> {
   const supabase = await requireSubscriptionViewer();
-  const { data, error } = await supabase.rpc("list_subscriptions");
+  const { data, error } = await supabase.rpc("list_subscriptions_v2");
   if (error || !Array.isArray(data)) throw new Error(GENERIC_LOAD_ERROR);
   try {
     return data.map(mapSubscription);
@@ -300,9 +350,9 @@ export async function listSubscriptionPeople(): Promise<SubscriptionPerson[]> {
 export async function createSubscription(input: CreateSubscriptionInput): Promise<Subscription> {
   const supabase = await requireSubscriptionAdministrator();
   const values = validateSubscriptionInput(input, false);
-  const { data, error } = await supabase.rpc("create_subscription", values);
-  if (error || !Array.isArray(data)) throw mutationError(error, "The subscription could not be added. Refresh and try again.");
-  const subscription = mapSubscription(data[0]);
+  const { data, error } = await supabase.rpc("create_subscription_v2", values);
+  if (error || !data || Array.isArray(data)) throw mutationError(error, "The subscription could not be added. Refresh and try again.");
+  const subscription = mapSubscription(data);
   revalidatePath("/");
   return subscription;
 }
@@ -310,13 +360,13 @@ export async function createSubscription(input: CreateSubscriptionInput): Promis
 export async function updateSubscription(input: UpdateSubscriptionInput): Promise<Subscription> {
   const supabase = await requireSubscriptionAdministrator();
   const values = validateSubscriptionInput(input, true);
-  const { data, error } = await supabase.rpc("update_subscription", {
+  const { data, error } = await supabase.rpc("update_subscription_v2", {
     p_subscription_id: requiredUuid(input.subscriptionId, "The subscription record is invalid."),
     p_expected_version: requiredVersion(input.version),
     ...values,
   });
-  if (error || !Array.isArray(data)) throw mutationError(error);
-  const subscription = mapSubscription(data[0]);
+  if (error || !data || Array.isArray(data)) throw mutationError(error);
+  const subscription = mapSubscription(data);
   revalidatePath("/");
   return subscription;
 }
@@ -324,12 +374,12 @@ export async function updateSubscription(input: UpdateSubscriptionInput): Promis
 /** Records the quarterly review and lets the database set the next date. */
 export async function markSubscriptionReviewed(input: ReviewSubscriptionInput): Promise<Subscription> {
   const supabase = await requireSubscriptionAdministrator();
-  const { data, error } = await supabase.rpc("mark_subscription_reviewed", {
+  const { data, error } = await supabase.rpc("mark_subscription_reviewed_v2", {
     p_subscription_id: requiredUuid(input.subscriptionId, "The subscription record is invalid."),
     p_expected_version: requiredVersion(input.version),
   });
-  if (error || !Array.isArray(data)) throw mutationError(error, "The review could not be recorded. Refresh and try again.");
-  const subscription = mapSubscription(data[0]);
+  if (error || !data || Array.isArray(data)) throw mutationError(error, "The review could not be recorded. Refresh and try again.");
+  const subscription = mapSubscription(data);
   revalidatePath("/");
   return subscription;
 }

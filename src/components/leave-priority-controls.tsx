@@ -93,8 +93,8 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved, pre
       <summary>Payroll records · {workspace.payrollImports.length}</summary>
       {workspace.payrollImports.map((row) => <div className={styles.leaveBalanceRow} key={row.id}>
         <div><strong>{row.employeeName}</strong><small>{row.company === "mam" ? "MAM" : "Equipsy"} · As of {leaveDateLabel(row.asOf)}</small>
-          <small>Annual: {row.annualHours} hours · Sick: {row.sickHours} hours</small>
-          <small>{row.status === "linked" ? `Linked to ${row.linkedName}` : row.status === "inactive" ? "Retained for inactive employee" : row.status === "company_mismatch" ? "Employee company differs from payroll file" : "Employee match required"}</small>
+          <small>Annual: {row.annualHours == null ? "Not supplied" : `${balanceHours(row.annualHours)} hours`} · Sick: {row.sickHours == null ? "Not supplied" : `${balanceHours(row.sickHours)} hours`}</small>
+          <small>{row.status === "linked" ? `Linked to ${row.linkedName}` : row.status === "inactive" ? "Retained for inactive employee" : row.status === "company_mismatch" ? "Employee company differs from payroll file" : row.status === "ambiguous" ? "More than one employee has this payroll name" : "Employee match required"}</small>
         </div>
       </div>)}
     </details> : null}

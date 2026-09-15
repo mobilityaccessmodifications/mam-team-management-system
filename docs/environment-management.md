@@ -19,6 +19,10 @@ NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 SUPABASE_SECRET_KEY
 NEXT_PUBLIC_APP_URL
+SUBSCRIPTION_CREDENTIAL_VAULT_KEY
+SUBSCRIPTION_CREDENTIAL_VAULT_KEY_VERSION
+SUBSCRIPTION_CREDENTIAL_VAULT_PREVIOUS_KEY
+SUBSCRIPTION_CREDENTIAL_VAULT_PREVIOUS_KEY_VERSION
 ```
 
 The values change by environment; the names and code do not.
@@ -44,7 +48,8 @@ network interception; it is not a Development, Preview or Production setting.
 - Real directory rows: import directly into the verified authenticated Supabase project. Do not place them in environment files, migrations, fixtures, screenshots or client constants.
 - Private HR employee details and HR CSV exports follow the same rule: they remain in the verified protected data boundary and must not be placed in environment files, Git, fixtures, screenshots or client constants.
 - Durable leave requests and decisions are likewise protected personnel data. Do not export them to environment files, client constants, fixtures, logs or screenshots.
-- A source workbook is staged and reconciled privately before import. It must not automatically replace identities, deactivate people or relink existing portal accounts.
+- A payroll source workbook is parsed and reconciled privately before import. Raw CSV/XLSX bytes are not persisted; only bounded validated metadata, a digest, staged rows and audit history remain. It must not automatically replace identities, deactivate people or relink existing portal accounts.
+- Subscription-service account email, username, password, MFA details, recovery codes, licence key and notes belong only in the AES-256-GCM vault. The current 32-byte key and version live in the matching Vercel server environment; optional previous-key variables exist only for controlled rotation. Vault keys and plaintext credentials must never enter Git, browser code, exports, logs or screenshots.
 - A Supabase Management API credential that can apply a migration is an MAM-only operator credential, not an application environment variable. Keep it out of `.env.local`, Vercel, source, logs and screenshots; use it only for a verified, approved operation against the exact MAM project. A project REST key does not authorise arbitrary database DDL.
 - GitHub Actions: repository/environment secrets only when CI genuinely requires them.
 - Password manager or macOS Keychain: recovery copies and credentials used by approved local tooling.
@@ -69,6 +74,8 @@ Migrations `20260817120000_persist_leave_workspace` and `20260818130000_configur
 Leave records and decisions persist only through RLS-protected controlled operations and refresh in authorised sessions. Every submission starts Pending; no automatic or self-approval is permitted. The approved routing policy is held in private database grants: Major Modifications routes to Sujant, Minor Modifications to Serene and Warehouse to Kieran; HR, Penny and Steven are global leave reviewers. Reviewer assignments are snapshotted when the request is submitted, so later organisation-tree or team changes cannot reroute that request. An explicit grant revocation intentionally removes that reviewer’s access and must be followed by an authorised reassignment of affected pending work. A future subtree scope must be granted explicitly and is never inferred from the tree. The calendar is company availability only: ordinary employee peers see **Away**, not another person's leave type, reason, notes or evidence. It is not a leave-balance source; Penny must identify the authoritative leave-balance source before one is displayed. Supporting attachments use private Storage and request-scoped metadata, plus a daily Vercel Cron call to the `CRON_SECRET`-protected cleanup route. The project must retain `CRON_SECRET` and `SUPABASE_SECRET_KEY`; the release has no malware scanner and that limitation must remain visible in the UI and operating notes.
 
 The paired forward migration `20260818140000_shared_calendar_birthdays` must be deployed with its application release. Its separate calendar RPC exposes every active MAM and Equipsy employee's name plus recurring birthday month/day to signed-in internal users, never a birth year or other private data.
+
+This paired release requires payroll migration `20260915120000_payroll_balance_self_service_import` before the application starts calling its importer/reminder RPCs, followed by subscription migration `20260915130000_subscription_billing_details` before the application starts calling the V2 subscription RPCs. Apply both only to verified MAM project `xtwlrjqbusadghavchqm`, then grant the approved active payroll delegate through the audited application function. Do not encode a staff identity in a migration. Production verification must cover staged preview, held-row non-application, current-month MAM/Equipsy reminder state, subscription billing-date calculation, last-review audit derivation and vault reveal/expiry boundaries without printing real employee or credential values.
 
 ## Durable check-in boundary
 

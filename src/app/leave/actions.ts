@@ -96,6 +96,13 @@ export type SubscriptionReviewCalendarEntry = {
   status: "active" | "paused";
 };
 
+/** Minimal monthly reminder for authorised payroll-balance importers. */
+export type PayrollBalanceReminderCalendarEntry = {
+  reminderId: string;
+  dueDate: string;
+  status: "due";
+};
+
 export type LeaveWorkspaceData = {
   priority?: LeavePriorityWorkspace;
   requests: LeaveWorkspaceRequest[];
@@ -104,8 +111,11 @@ export type LeaveWorkspaceData = {
   birthdayEntries: BirthdayCalendarEntry[];
   checkInEntries: CheckInCalendarEntry[];
   subscriptionReviewEntries: SubscriptionReviewCalendarEntry[];
+  payrollBalanceReminderEntries: PayrollBalanceReminderCalendarEntry[];
   /** Current active profile may open the calendar for its own review dates. */
   canViewSubscriptionReviewCalendar: boolean;
+  /** Current authenticated user may open the monthly payroll reminder. */
+  canViewPayrollBalanceReminderCalendar: boolean;
   /**
    * A capability asserted by the database for the authenticated session.
    * This intentionally remains separate from per-request `canDecide`, so an
@@ -230,6 +240,12 @@ type CheckInCalendarRpcRow = {
 type SubscriptionReviewCalendarRpcRow = {
   subscription_id: unknown;
   service_name: unknown;
+  due_date: unknown;
+  status: unknown;
+};
+
+type PayrollBalanceReminderCalendarRpcRow = {
+  reminder_id: unknown;
   due_date: unknown;
   status: unknown;
 };
@@ -488,6 +504,19 @@ function toSubscriptionReviewCalendarEntry(value: unknown): SubscriptionReviewCa
     serviceName: requireText(row.service_name, LOAD_ERROR),
     dueDate: requiredDate(row.due_date, LOAD_ERROR),
     status: row.status,
+  };
+}
+
+function toPayrollBalanceReminderCalendarEntry(value: unknown): PayrollBalanceReminderCalendarEntry {
+  const row = value as PayrollBalanceReminderCalendarRpcRow;
+  const reminderId = requireText(row?.reminder_id, LOAD_ERROR);
+  if (!/^payroll-balance:\d{4}-\d{2}-\d{2}$/.test(reminderId) || row.status !== "due") {
+    throw new Error(LOAD_ERROR);
+  }
+  return {
+    reminderId,
+    dueDate: requiredDate(row.due_date, LOAD_ERROR),
+    status: "due",
   };
 }
 
@@ -833,9 +862,11 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
       birthdayEntries: birthdays.rows,
       checkInEntries: checkIns.rows,
       subscriptionReviewEntries: subscriptionReviews.rows,
+      payrollBalanceReminderEntries: [],
       canViewSubscriptionReviewCalendar: subscriptionReviewCalendarPermissionError
         ? false
         : canViewSubscriptionReviewCalendar === true,
+      canViewPayrollBalanceReminderCalendar: false,
       isProfilePreview: true,
       warning: warnings.length ? warnings.join(" ") : undefined,
     };
@@ -852,6 +883,8 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
     { data: canReviewLeave, error: canReviewError },
     { data: attachmentData, error: attachmentError },
     { data: entitlementPolicyData, error: entitlementPolicyError },
+    { data: payrollBalanceReminderData, error: payrollBalanceReminderError },
+    { data: canViewPayrollBalanceReminderCalendar, error: payrollBalanceReminderPermissionError },
   ] = await Promise.all([
     supabase.rpc("list_leave_workspace_requests"),
     supabase.rpc("list_leave_calendar_entries"),
@@ -863,6 +896,8 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
     supabase.rpc("can_review_leave_workspace"),
     supabase.rpc("list_leave_workspace_attachments"),
     supabase.rpc("get_my_leave_entitlement_policy"),
+    supabase.rpc("list_payroll_balance_reminder_calendar_entries"),
+    supabase.rpc("can_import_payroll_balances"),
   ]);
 
   if (workspaceError || canReviewError || !Array.isArray(workspaceData) || typeof canReviewLeave !== "boolean") {
@@ -893,6 +928,11 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
     ? parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry)
     : { available: true, rows: [] as CheckInCalendarEntry[] };
   const subscriptionReviews = parseOptionalProjection(subscriptionReviewData, subscriptionReviewError, toSubscriptionReviewCalendarEntry);
+  const payrollBalanceReminders = parseOptionalProjection(
+    payrollBalanceReminderData,
+    payrollBalanceReminderError,
+    toPayrollBalanceReminderCalendarEntry,
+  );
   const policy = leaveEntitlementPolicy(entitlementPolicyData, entitlementPolicyError);
   // Supporting files are a Leave-detail capability, not a calendar projection.
   // Keep attachment capability failures out of the global notice so a missing
@@ -903,6 +943,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
     !birthdays.available ? "birthdays" : "",
     !checkIns.available ? "check-ins" : "",
     !subscriptionReviews.available ? "subscription reviews" : "",
+    !payrollBalanceReminders.available ? "payroll balance reminders" : "",
   ].filter(Boolean);
 
   return {
@@ -913,9 +954,13 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
     birthdayEntries: birthdays.rows,
     checkInEntries: checkIns.rows,
     subscriptionReviewEntries: subscriptionReviews.rows,
+    payrollBalanceReminderEntries: payrollBalanceReminders.rows,
     canViewSubscriptionReviewCalendar: subscriptionReviewCalendarPermissionError
       ? false
       : canViewSubscriptionReviewCalendar === true,
+    canViewPayrollBalanceReminderCalendar: payrollBalanceReminderPermissionError
+      ? false
+      : canViewPayrollBalanceReminderCalendar === true,
     canReviewLeave,
     isProfilePreview: false,
     warning: unavailable.length

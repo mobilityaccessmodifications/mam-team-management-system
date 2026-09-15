@@ -62,7 +62,7 @@ type RegisterState =
   | { state: "error"; message: string };
 
 type SortDirection = "ascending" | "descending";
-type SubscriptionSortKey = "service" | "monthly" | "nextReview" | "responsible" | "status" | "members";
+type SubscriptionSortKey = "service" | "monthly" | "seats" | "nextBilling" | "lastReviewed" | "nextReview" | "responsible" | "status" | "members";
 type SubscriptionFilterKey = "billing" | "nextReview" | "responsible" | "status";
 
 type SubscriptionSort = {
@@ -379,6 +379,15 @@ export function SubscriptionRegister({
             monthlyEquivalentCents(second) === null ? null : String(monthlyEquivalentCents(second)).padStart(18, "0"),
           );
           break;
+        case "seats":
+          result = (first.seatCount ?? Number.MAX_SAFE_INTEGER) - (second.seatCount ?? Number.MAX_SAFE_INTEGER);
+          break;
+        case "nextBilling":
+          result = compareSubscriptionText(first.nextBillingOn, second.nextBillingOn);
+          break;
+        case "lastReviewed":
+          result = compareSubscriptionText(first.lastReviewedOn, second.lastReviewedOn);
+          break;
         case "nextReview":
           result = compareSubscriptionText(reviewSortValue(first), reviewSortValue(second));
           break;
@@ -480,7 +489,8 @@ export function SubscriptionRegister({
       onSort={setSubscriptionSort}
       sortOptions={[
         { value: "service", label: "Service" }, { value: "monthly", label: "Monthly cost" },
-        { value: "nextReview", label: "Next review" }, { value: "responsible", label: "Responsible" },
+        { value: "seats", label: "Seats / licences" }, { value: "nextBilling", label: "Next billing" },
+        { value: "lastReviewed", label: "Last reviewed" }, { value: "nextReview", label: "Next review" }, { value: "responsible", label: "Responsible" },
         { value: "status", label: "Status" }, { value: "members", label: "Access" },
       ]}
       filters={([
@@ -495,6 +505,9 @@ export function SubscriptionRegister({
         <div className={`${styles.subscriptionSheetRow} ${styles.subscriptionSheetHeader}`} role="row">
           <SubscriptionSheetHeader label="Service" sortKey="service" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
           <SubscriptionSheetHeader label="Monthly" sortKey="monthly" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="billing" filterOptions={subscriptionFilterOptions.billing} filterValue={subscriptionFilters.billing} isFilterOpen={activeSubscriptionFilter === "billing"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
+          <SubscriptionSheetHeader label="Seats / licences" sortKey="seats" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
+          <SubscriptionSheetHeader label="Next billing" sortKey="nextBilling" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
+          <SubscriptionSheetHeader label="Last reviewed" sortKey="lastReviewed" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
           <SubscriptionSheetHeader label="Next review" sortKey="nextReview" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="nextReview" filterOptions={subscriptionFilterOptions.nextReview} filterValue={subscriptionFilters.nextReview} isFilterOpen={activeSubscriptionFilter === "nextReview"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
           <SubscriptionSheetHeader label="Responsible" sortKey="responsible" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="responsible" filterOptions={subscriptionFilterOptions.responsible} filterValue={subscriptionFilters.responsible} isFilterOpen={activeSubscriptionFilter === "responsible"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
           <SubscriptionSheetHeader label="Status" sortKey="status" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="status" filterOptions={subscriptionFilterOptions.status} filterValue={subscriptionFilters.status} isFilterOpen={activeSubscriptionFilter === "status"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
@@ -507,6 +520,12 @@ export function SubscriptionRegister({
             <div className={styles.subscriptionIdentity}><strong>{subscription.serviceName}</strong>{subscription.planName ? <span title={subscription.planName}>{subscription.planName}</span> : null}</div>
           </div>
           <div className={`${styles.sheetCell} ${styles.monthlyCell}`} role="cell" data-label="Monthly"><strong>{monthlyCostLabel(subscription)}</strong></div>
+          <div className={`${styles.sheetCell} ${styles.detailCell} ${styles.seatCell}`} role="cell" data-label="Seats / licences"><strong>{subscription.pricingModel === "paid" ? subscription.seatCount ?? "Not recorded" : "—"}</strong></div>
+          <div className={`${styles.sheetCell} ${styles.detailCell} ${styles.billingCell}`} role="cell" data-label="Next billing">
+            <strong>{subscription.pricingModel === "paid" ? (subscription.nextBillingOn ? formatDate(subscription.nextBillingOn) : subscription.billingCycle === "other" ? "Manual schedule" : "Not recorded") : "—"}</strong>
+            {subscription.pricingModel === "paid" ? <><small>Billing date: {formatDate(subscription.billingDate)}</small><small>MAM card: {subscription.mamCreditCardUsed === null ? "Not recorded" : subscription.mamCreditCardUsed ? "Yes" : "No"}</small></> : null}
+          </div>
+          <div className={`${styles.sheetCell} ${styles.detailCell} ${styles.lastReviewedCell}`} role="cell" data-label="Last reviewed"><strong>{hasQuarterlyReview(subscription) ? (subscription.lastReviewedOn ? formatDate(subscription.lastReviewedOn) : "Not yet reviewed") : "—"}</strong></div>
           <div className={`${styles.sheetCell} ${styles.reviewCell}`} role="cell" data-label="Next review" data-due={isReviewDue(subscription)}><strong>{hasQuarterlyReview(subscription) ? formatDate(subscription.nextReviewOn) : <><span aria-hidden="true">—</span><span className={styles.visuallyHidden}>No quarterly review scheduled</span></>}</strong></div>
           <div className={`${styles.sheetCell} ${styles.responsibleCell}`} role="cell" data-label="Responsible"><strong>{subscription.responsible.fullName}</strong></div>
           <div className={`${styles.sheetCell} ${styles.statusCell}`} role="cell" data-label="Status"><span data-status={subscription.status}>{subscription.status}</span></div>
@@ -569,8 +588,11 @@ function SubscriptionModal({
     const form = new FormData(event.currentTarget);
     const amountText = String(form.get("amount") ?? "");
     const amountCents = pricingModel === "paid" ? amountToCents(amountText) : null;
-    if (pricingModel === "paid" && amountCents === null) {
-      setError("Enter a paid subscription amount using dollars and cents.");
+    const seatCount = pricingModel === "paid" ? Number(form.get("seatCount")) : null;
+    const cardChoice = pricingModel === "paid" ? String(form.get("mamCreditCardUsed") ?? "") : "";
+    const billingDate = pricingModel === "paid" ? String(form.get("billingDate") ?? "") : "";
+    if (pricingModel === "paid" && (amountCents === null || !Number.isSafeInteger(seatCount) || (seatCount ?? 0) < 1 || !["yes", "no"].includes(cardChoice) || !billingDate)) {
+      setError("Enter the amount, seats or licences, MAM card choice and billing date for this paid subscription.");
       return;
     }
     const baseInput: CreateSubscriptionInput = {
@@ -580,6 +602,9 @@ function SubscriptionModal({
       billingCycle: pricingModel === "paid" ? String(form.get("billingCycle") ?? "") as SubscriptionBillingCycle : undefined,
       amountCents,
       renewalDate: String(form.get("renewalDate") ?? "") || null,
+      seatCount,
+      mamCreditCardUsed: pricingModel === "paid" ? cardChoice === "yes" : null,
+      billingDate: billingDate || null,
       responsiblePersonId: String(form.get("responsiblePersonId") ?? ""),
       memberPersonIds,
     };
@@ -622,7 +647,7 @@ function SubscriptionModal({
           <label><span>Plan <small>Optional</small></span><input name="planName" maxLength={160} defaultValue={subscription?.planName ?? ""} placeholder="Business Standard, Teams…" /></label>
         </div>
         {isEditing ? <label><span>Status <b aria-hidden="true">*</b></span><select name="status" defaultValue={subscription?.status ?? "active"}><option value="active">Active</option><option value="paused">Paused</option><option value="cancelled">Cancelled</option></select></label> : null}
-        <fieldset className={styles.pricingFieldset}><legend>Pricing</legend><div className={styles.pricingChoices}><label><input type="radio" name="pricingModel" value="free" checked={pricingModel === "free"} onChange={() => setPricingModel("free")} /> Free</label><label><input type="radio" name="pricingModel" value="paid" checked={pricingModel === "paid"} onChange={() => setPricingModel("paid")} /> Paid</label></div>{pricingModel === "paid" ? <div className={styles.formGrid}><label><span>Billing cycle <b aria-hidden="true">*</b></span><select name="billingCycle" required defaultValue={subscription?.billingCycle ?? "monthly"}>{SUBSCRIPTION_BILLING_CYCLES.map((cycle) => <option key={cycle} value={cycle}>{billingCycleLabels[cycle]}</option>)}</select></label><label><span>Amount (AUD) <b aria-hidden="true">*</b></span><input name="amount" inputMode="decimal" required defaultValue={centsToAmount(subscription?.amountCents ?? null)} placeholder="0.00" /></label></div> : null}</fieldset>
+        <fieldset className={styles.pricingFieldset}><legend>Pricing</legend><div className={styles.pricingChoices}><label><input type="radio" name="pricingModel" value="free" checked={pricingModel === "free"} onChange={() => setPricingModel("free")} /> Free</label><label><input type="radio" name="pricingModel" value="paid" checked={pricingModel === "paid"} onChange={() => setPricingModel("paid")} /> Paid</label></div>{pricingModel === "paid" ? <><div className={styles.formGrid}><label><span>Billing cycle <b aria-hidden="true">*</b></span><select name="billingCycle" required defaultValue={subscription?.billingCycle ?? "monthly"}>{SUBSCRIPTION_BILLING_CYCLES.map((cycle) => <option key={cycle} value={cycle}>{billingCycleLabels[cycle]}</option>)}</select></label><label><span>Amount (AUD) <b aria-hidden="true">*</b></span><input name="amount" inputMode="decimal" required defaultValue={centsToAmount(subscription?.amountCents ?? null)} placeholder="0.00" /></label><label><span>Seats / licences <b aria-hidden="true">*</b></span><input name="seatCount" type="number" min="1" max="100000" step="1" required defaultValue={subscription?.seatCount ?? ""} placeholder="1" /></label><label><span>MAM credit card used <b aria-hidden="true">*</b></span><select name="mamCreditCardUsed" required defaultValue={subscription?.mamCreditCardUsed === null || subscription?.mamCreditCardUsed === undefined ? "" : subscription.mamCreditCardUsed ? "yes" : "no"}><option value="" disabled>Choose</option><option value="yes">Yes</option><option value="no">No</option></select></label><label><span>Billing date <b aria-hidden="true">*</b></span><input name="billingDate" type="date" required defaultValue={subscription?.billingDate ?? ""} /></label></div><p className={styles.formHelp}><CalendarClock size={15} /> Use a known charge date. Monthly, quarterly and annual next billing dates are calculated automatically.</p></> : null}</fieldset>
         <div className={styles.formGrid}>
           <label><span>Renewal date <small>Optional</small></span><input name="renewalDate" type="date" defaultValue={subscription?.renewalDate ?? ""} /></label>
           <label><span>Responsible person <b aria-hidden="true">*</b></span><EmployeePicker assignees={people} defaultValue={subscription?.responsible.personId ?? ""} name="responsiblePersonId" disabled={!people.length} /></label>
