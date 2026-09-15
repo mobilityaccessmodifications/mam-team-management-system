@@ -276,9 +276,10 @@
   }
 }
 
-/* Apple UI calendar pass: the header already names the active month, so the
-   virtual-row titles are redundant and can obscure event labels. */
-.calendarFrame :global(.df-month-title) {
+/* DayFlow renders this label only inside MonthView virtual week rows, where
+   the sticky header already names the visible month and the label can obscure
+   events. YearView uses its separate .df-year-*-month-label/title elements. */
+.calendarFrame :global(.df-month-week > .df-month-title) {
   display: none !important;
 }
 
