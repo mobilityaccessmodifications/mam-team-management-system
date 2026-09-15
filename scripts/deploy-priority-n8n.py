@@ -39,11 +39,15 @@ def save_snapshot(workflow):
 
 def verify_scheduler(workflow):
     nodes = {n['name']:n for n in workflow['nodes']}
+    triggers = [n for n in workflow['nodes'] if n['type'] == 'n8n-nodes-base.scheduleTrigger']
     call = nodes['Call MAM Leave and Birthday Dispatcher']
     wait = nodes['Wait 30 minutes before retry']
     retry = nodes['Retry MAM Leave and Birthday Dispatcher']
     assert workflow['active'] and workflow['settings']['executionTimeout'] == 3600
     assert workflow['settings']['timezone'] == 'Australia/Melbourne'
+    assert len(triggers) == 1 and triggers[0]['parameters'] == {
+        'rule': {'interval': [{'field': 'cronExpression', 'expression': '0 7,8 * * *'}]}
+    }
     assert call['onError'] == 'continueErrorOutput' and retry['onError'] == 'stopWorkflow'
     assert wait['type'] == 'n8n-nodes-base.wait' and wait['parameters'] == {'resume':'timeInterval','amount':30,'unit':'minutes'}
     assert retry['parameters']['url'] == call['parameters']['url'] == 'https://mam-team-management-system-ten.vercel.app/api/cron/leave-priority-reminders'
@@ -58,6 +62,10 @@ if args.operation == 'receiver':
     assert validator['type'] == 'n8n-nodes-base.code'
     assert "const HR = 'hr@mobilityaccess.com.au'" in validator['parameters']['jsCode']
     validator['parameters']['jsCode'] = (root / 'workflows/leave-notification-validator.n8n.txt').read_text()
+    confirmation = next(n for n in workflow['nodes'] if n['name'] == 'Confirm Leave HR Delivery')
+    assert confirmation['type'] == 'n8n-nodes-base.code'
+    assert "state.leaveNotificationEvents" in confirmation['parameters']['jsCode']
+    confirmation['parameters']['jsCode'] = (root / 'workflows/leave-notification-confirmation.n8n.txt').read_text()
     duplicate = next(n for n in workflow['nodes'] if n['name'] == 'Return Leave HR Duplicate')
     duplicate['parameters']['jsCode'] = "return [{ json: { ok: true, sent: false, alreadySent: true, actualRecipient: String($json.actualRecipient ?? $json.confirmationRecipient ?? ''), eventKey: String($json.eventKey ?? '') } }];"
     payload = {key: workflow[key] for key in ['name', 'nodes', 'connections', 'settings']}
@@ -66,6 +74,7 @@ if args.operation == 'receiver':
     updated = api('workflows/' + workflow['id'])
     assert updated['active']
     assert next(n for n in updated['nodes'] if n['name'] == validator['name'])['parameters']['jsCode'] == validator['parameters']['jsCode']
+    assert next(n for n in updated['nodes'] if n['name'] == confirmation['name'])['parameters']['jsCode'] == confirmation['parameters']['jsCode']
     print('Verified active leave receiver:', updated['id'])
 else:
     # A separate schedule prevents check-in failures from blocking this job.
@@ -87,6 +96,7 @@ else:
         template = api('workflows/UAQJhQHRo882lHo5')
         assert template['name'] == 'MAM People System - Check-In Reminder Dispatcher'
         trigger = copy.deepcopy(next(n for n in template['nodes'] if n['type'] == 'n8n-nodes-base.scheduleTrigger'))
+        trigger['parameters'] = {'rule': {'interval': [{'field': 'cronExpression', 'expression': '0 7,8 * * *'}]}}
         request = copy.deepcopy(next(n for n in template['nodes'] if n['name'] == 'Call MAM Check-In Dispatcher'))
         assert request['parameters']['url'] == 'https://mam-team-management-system-ten.vercel.app/api/cron/check-in-reminders'
         request['name'] = 'Call MAM Leave and Birthday Dispatcher'

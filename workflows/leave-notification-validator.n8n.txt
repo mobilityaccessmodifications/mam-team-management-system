@@ -3,7 +3,7 @@ const HR = 'hr@mobilityaccess.com.au';
 const ACCOUNTS = 'accounts@mobilityaccess.com.au';
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 const APP_URL = 'https://mam-team-management-system-ten.vercel.app';
-const EVENTS = ['leave-submitted', 'leave-approved', 'leave-declined', 'leave-cancelled', 'leave-conditionally-approved', 'leave-reminder', 'team-birthday'];
+const EVENTS = ['leave-submitted', 'leave-approved', 'leave-declined', 'leave-cancelled', 'leave-conditionally-approved', 'leave-reminder', 'team-birthday', 'payroll-balance-reminder'];
 const STATUSES = ['Pending', 'Approved', 'Declined', 'Cancelled', 'Approved – pending leave balance'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -31,6 +31,11 @@ const friendlyDate = (value) => {
   return new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Australia/Melbourne' })
     .format(new Date(Date.UTC(year, month - 1, day, 12)));
 };
+const friendlyMonth = (value) => {
+  const [year, month] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-AU', { month: 'long', year: 'numeric', timeZone: 'Australia/Melbourne' })
+    .format(new Date(Date.UTC(year, month - 1, 1, 12)));
+};
 const emailList = (value) => {
   const raw = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[;,]/) : [];
   const emails = raw.map((email) => String(email).trim().toLowerCase()).filter((email) => EMAIL.test(email));
@@ -43,7 +48,55 @@ try {
   const required = ['version', 'event', 'eventKey', 'requestId', 'employeeName', 'employeeEmail', 'company', 'leaveType',
     'startDate', 'endDate', 'startTime', 'endTime', 'days', 'hours', 'status', 'employeeNote', 'managerNote', 'managerEmail'];
   if (!String(headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) return reject('content-type');
-  if (!body || !required.every((key) => Object.prototype.hasOwnProperty.call(body, key)) || body.version !== 1 || !EVENTS.includes(body.event) || JSON.stringify(body).length > 20000) return reject('body-shape');
+  if (!body || body.version !== 1 || !EVENTS.includes(body.event) || JSON.stringify(body).length > 20000) return reject('body-shape');
+  if (body.event === 'payroll-balance-reminder') {
+    const payrollRequired = ['version', 'event', 'eventKey', 'requestId', 'recipientName', 'recipientEmail', 'reminderMonth', 'missingCompanies'];
+    if (Object.keys(body).length !== payrollRequired.length
+      || !payrollRequired.every((key) => Object.prototype.hasOwnProperty.call(body, key))) return reject('payroll-body-shape');
+    if (!UUID.test(String(body.requestId))) return reject('request-id');
+    if (!validDate(body.reminderMonth) || !String(body.reminderMonth).endsWith('-01')) return reject('payroll-month');
+    if (String(body.eventKey) !== `payroll-balance:${body.requestId}:${body.reminderMonth.slice(0, 7)}`) return reject('event-key');
+    if (!text(body.recipientName, 80)
+      || typeof body.recipientEmail !== 'string'
+      || body.recipientEmail !== body.recipientEmail.trim().toLowerCase()
+      || body.recipientEmail.length > 254
+      || !EMAIL.test(body.recipientEmail)) return reject('payroll-recipient');
+    if (!Array.isArray(body.missingCompanies)
+      || body.missingCompanies.length < 1
+      || body.missingCompanies.length > 2
+      || new Set(body.missingCompanies).size !== body.missingCompanies.length
+      || body.missingCompanies.some((company) => !['mam', 'equipsy'].includes(company))) return reject('payroll-companies');
+
+    const now = Date.now();
+    const state = $getWorkflowStaticData('global');
+    const raw = object(state.leaveNotificationEvents) ? state.leaveNotificationEvents : {};
+    const events = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (object(value) && Number.isFinite(value.at) && now - value.at <= TTL && Object.keys(events).length < 5000) {
+        events[key] = { state: value.state === 'sent' ? 'sent' : 'processing', at: value.at };
+      }
+    }
+    state.leaveNotificationEvents = events;
+    const previous = events[body.eventKey];
+    if (previous?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true,
+      actualRecipient: body.recipientEmail, eventKey: body.eventKey } }];
+    if (previous?.state === 'processing' && now - previous.at < PROCESSING) return reject('delivery-in-flight');
+    events[body.eventKey] = { state: 'processing', at: now };
+
+    const companyLabels = body.missingCompanies.map((company) => company === 'mam' ? 'MAM' : 'Equipsy');
+    const monthLabel = friendlyMonth(body.reminderMonth);
+    const emailHtml = [
+      '<p>Hi ' + escape(body.recipientName) + ',</p>',
+      '<p>The ' + escape(monthLabel) + ' banked leave balance update is due.</p>',
+      '<p><strong>Still required:</strong> ' + escape(companyLabels.join(' and ')) + '</p>',
+      '<p>Upload the latest CSV or Excel leave-balance files in People Hub, review the employee matches, then apply the update. The importer matches rows within the supplied company and holds ambiguous rows for review.</p>',
+      '<p><a href="' + APP_URL + '/?view=leave" style="display:inline-block;padding:10px 16px;background:#ef6c24;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Open payroll balance upload</a></p>',
+    ].join('');
+    return [{ json: { outcome: 'send', mamDelivery: true, deliveryRecipient: body.recipientEmail,
+      confirmationRecipient: body.recipientEmail, ccRecipients: '', eventKey: body.eventKey,
+      emailSubject: `[MAM] Monthly banked leave update due — ${monthLabel}`, emailHtml } }];
+  }
+  if (!required.every((key) => Object.prototype.hasOwnProperty.call(body, key))) return reject('body-shape');
   if (!UUID.test(String(body.requestId))) return reject('request-id');
   const eventEscaped = String(body.event).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (!new RegExp(`^leave:${body.requestId}:${eventEscaped}:[0-9a-f]{24}$`, 'i').test(String(body.eventKey))) return reject('event-key');

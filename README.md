@@ -45,7 +45,7 @@ The paired forward migration `20260818140000_shared_calendar_birthdays` adds the
 
 Check-in schedules are generated automatically from each active employee's start date. Milestone due dates that fall on Saturday or Sunday move forward to the next Monday-to-Friday working day. The agreed reminder lead time is then measured from that scheduled workday; if the resulting advance notification date falls on a weekend, it moves back to the previous working day. Due tasks appear in the authorised reviewer's Calendar. There is no manual enable or queue step. Todd/HR, Penny and Steven can review all employees; Kieran, Sujant and Serene can review only current descendants in the organisation tree. Manager views exclude HR-private contact and profile fields. Migration history before 1 July 2026 is marked complete rather than queued for catch-up.
 
-The payroll self-service release adds a first-of-month Calendar reminder and an import panel to Leave. System Admin can grant the importer capability to an active linked payroll delegate without granting the broader employee Directory or subscription register. CSV and `.xlsx` files are parsed server-side, staged into a private preview and matched only to one active person in the same company after punctuation/spacing normalisation. Inactive, unmatched, cross-company and ambiguous rows are retained for review and never update a balance. The source files themselves are not persisted.
+The payroll self-service release adds a first-of-month Calendar reminder and an import panel to Leave. System Admin can grant the importer capability to an active linked payroll delegate without granting the broader employee Directory or subscription register. CSV and `.xlsx` files are parsed server-side, staged into a private preview and matched only to one active person in the same company after punctuation/spacing normalisation. Inactive, unmatched, cross-company and ambiguous rows are retained for review and never update a balance. The source files themselves are not persisted. At the first eligible n8n run on the first Melbourne calendar day, the explicitly configured payroll recipient also receives one Outlook email naming only the company snapshots still required; no email is sent when both current-month snapshots are already complete.
 
 Paid subscription records in the same release record seats/licences, whether the MAM credit card is used, the billing anchor date and a server-calculated next billing date. Last Reviewed Date is derived from the audited review event. Service account email, username, password, MFA details, recovery codes, licence key and notes belong only in the separate encrypted credential vault, never in the subscription register or an export.
 
@@ -62,10 +62,10 @@ Paid subscription records in the same release record seats/licences, whether the
 - Leave approval is an independent private capability. Active linked employees submit their own requests; the nearest active linked `manager` profile in the reporting tree is selected first, with explicit global reviewers retained for all-company oversight. A non-manager employee cannot intercept requests from people below them. Still-pending requests are re-routed when manager permission changes, and no reviewer, including an HR or global reviewer, may decide their own request.
 - Private leave types, reasons and evidence are never shown in the shared calendar. Ordinary employee peers receive only company availability with the generic label **Away**.
 - Calendar birthdays are a deliberately narrow exception to the private date-of-birth boundary. A signed-in internal employee may receive only an active employee’s name and recurring month/day across MAM and Equipsy; no birth year, identifier, company, team or contact field is returned.
-- Leave entries remain an availability view rather than a balance ledger. Payroll balances are separate dated snapshots imported from authorised payroll exports; the monthly payroll reminder and role-scoped check-in tasks are separate Calendar entry types.
+- Leave entries remain an availability view rather than a balance ledger. Payroll balances are separate dated snapshots imported from authorised payroll exports; the monthly payroll reminder and role-scoped check-in tasks are separate Calendar entry types. The monthly email recipient is a stable configured person ID whose current active portal link, import grant and HR work email are revalidated immediately before delivery; the browser never supplies the address.
 - Check-in reminder email delivery is limited to the automatically calculated manager schedule and approved resource links.
 - Leave submission and cancellation notifications are routed to the request's server-resolved nearest active manager/admin; approval and decline notifications are routed to every HR-recorded employee address (Work and Personal, when present), with duplicate addresses removed. Every leave notification CCs `hr@mobilityaccess.com.au`; approved and cancelled leave notifications additionally CC `accounts@mobilityaccess.com.au`. The browser cannot choose a recipient; the receiver validates the signed payload and deduplicates repeated event deliveries.
-- Production reminder dispatch runs daily at 08:00 Australia/Melbourne through the MAM n8n scheduler, which calls the `CRON_SECRET`-protected People System endpoint. The endpoint accepts claims during the Melbourne 08:00–16:59 window. Check-in reminders are sent to the server-resolved manager/admin and CC `hr@mobilityaccess.com.au`. Vercel Cron is not used for check-in reminder dispatch; it runs only the bounded daily private attachment cleanup declared in `vercel.json`.
+- Production reminder dispatch runs through MAM n8n, which calls `CRON_SECRET`-protected People System endpoints. The consolidated leave/birthday/payroll route accepts payroll claims only on day 1 during the Melbourne 08:00–16:59 window, while its SQL functions enforce the separate leave and birthday timing. Payroll mail goes only to the server-resolved named recipient with no CC and reuses a stable month event key across the scheduler's 30-minute retry. Check-in reminders are sent to the server-resolved manager/admin and CC `hr@mobilityaccess.com.au`. Vercel Cron is not used for email reminder dispatch; it runs only the bounded daily private attachment cleanup declared in `vercel.json`.
 
 ## Local development
 
@@ -155,3 +155,21 @@ publish `workflows/leave-notification-validator.n8n.txt` through
 Supabase credential helper. Verify with its `inspect` operation. The migration
 captures only new submissions and never replays historical emails or changes
 payroll balances. SQL boundary tests run in CI with synthetic data.
+
+### Monthly payroll balance email
+
+Migration `20260915140000_payroll_balance_email_reminder` adds a private
+recipient configuration, durable month-level outbox and append-only delivery
+audit. The existing MAM n8n scheduler and Outlook receiver are reused; the
+receiver accepts the strict `payroll-balance-reminder` event and sends no HR or
+Accounts copy. Delivery is skipped when both MAM and Equipsy already have a
+current-month linked snapshot, and otherwise the message names only the missing
+company or companies and links to the Leave upload panel.
+
+Release the backward-compatible n8n validator with
+`scripts/deploy-priority-n8n.py ... receiver`, apply the reviewed migration with
+`scripts/deploy-payroll-balance-email-reminder.py apply <reviewed-sha256>`, then
+configure the authorised named recipient with its `configure-recipient` mode
+through the MAM Supabase credential helper. Merge the application through
+GitHub to trigger Vercel production. Verify both helpers through read-only API
+inspection; do not execute the mail workflow or send a test email.
