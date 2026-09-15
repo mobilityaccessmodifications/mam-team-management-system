@@ -24,9 +24,12 @@ const VALID_STATUSES = new Set<string>(SUBSCRIPTION_STATUSES);
 const MAXIMUM_GRANTS = 24;
 const MAXIMUMS = {
   loginUrl: 2_048,
+  accountEmail: 512,
   username: 512,
   password: 4_096,
+  mfaDetails: 2_048,
   recoveryCodes: 8_192,
+  licenceKey: 2_048,
   notes: 4_096,
 } as const;
 
@@ -105,14 +108,17 @@ function validateCredentialDraft(input: unknown): SubscriptionCredentialDraft {
   const value = inputObject(input);
   const draft: SubscriptionCredentialDraft = {
     loginUrl: optionalLoginUrl(value.loginUrl),
+    accountEmail: credentialText(value.accountEmail, "accountEmail"),
     username: credentialText(value.username, "username"),
     // A password can intentionally begin/end with whitespace, so preserve it.
     password: credentialText(value.password, "password", false),
+    mfaDetails: credentialText(value.mfaDetails, "mfaDetails", false),
     recoveryCodes: credentialText(value.recoveryCodes, "recoveryCodes", false),
+    licenceKey: credentialText(value.licenceKey, "licenceKey", false),
     notes: credentialText(value.notes, "notes"),
   };
 
-  if (![draft.loginUrl, draft.username, draft.password.trim(), draft.recoveryCodes.trim(), draft.notes].some(Boolean)) {
+  if (![draft.loginUrl, draft.accountEmail, draft.username, draft.password.trim(), draft.mfaDetails.trim(), draft.recoveryCodes.trim(), draft.licenceKey.trim(), draft.notes].some(Boolean)) {
     throw new Error("Enter at least one credential detail before saving.");
   }
   return draft;

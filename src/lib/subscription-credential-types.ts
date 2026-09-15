@@ -6,9 +6,12 @@ import type { SubscriptionStatus } from "@/lib/subscription-types";
  */
 export type SubscriptionCredentialDraft = {
   loginUrl: string;
+  accountEmail: string;
   username: string;
   password: string;
+  mfaDetails: string;
   recoveryCodes: string;
+  licenceKey: string;
   notes: string;
 };
 

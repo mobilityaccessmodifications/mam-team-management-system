@@ -19,6 +19,10 @@ Browser
        -> authorised subscription-credential Server Actions
             -> current System Admin or explicit active credential delegate
             -> server-only AES-256-GCM vault key and encrypted private payload
+       -> authorised payroll-balance import Server Actions
+            -> current System Admin or explicit active linked payroll delegate
+            -> bounded server-side CSV/XLSX parser and private staged preview
+            -> exact same-company reconciliation and audited snapshot updates
        -> deployed authenticated leave Server Actions
             -> controlled leave RPCs, RLS and Realtime invalidation
             -> private approval grants and per-request reviewer snapshots
@@ -29,7 +33,7 @@ Browser
        -> browser-session onboarding/offboarding review state
 ```
 
-There is no payroll, AroFlo or provisioning write integration. Check-in manager reminder email is the only automated outbound People workflow described here.
+There is no live payroll API, AroFlo or provisioning write integration. Payroll changes enter only through the reviewed dated-snapshot import; the monthly importer reminder is in-app and sends no email. Check-in manager reminder email remains the only automated outbound People workflow described here.
 
 ## Authenticated directory
 
@@ -69,7 +73,17 @@ Creating an HR Directory record is deliberately separate from creating a portal 
 
 Portal account passwords and subscription-service credentials are different data classes. Portal passwords remain non-recoverable Supabase Auth hashes. Subscription-service login details may be retained only through the encrypted credential vault: application server code encrypts the complete payload with a server-only AES-256-GCM key before storage, using the subscription ID and key version as authenticated associated data. The database holds ciphertext, IV, authentication tag, key version and an optimistic credential version only.
 
-`private.subscription_credential_vault` and its access/audit tables have RLS enabled and no browser table grants. Narrow `security definer` RPCs require both an active portal account and either the current System Admin role or an explicit current grant resolved through the linked active directory person. The catalogue contains only service name, plan label, status and a boolean that says whether credentials are saved. A credential record is decrypted in `server-only` code only after an explicit reveal action; neither the full subscription register nor its exports, review calendar, logs or audit events receive plaintext. A System Admin alone may replace the explicit delegate list, and all grants are keyed by current Auth user ID rather than a hard-coded name.
+`private.subscription_credential_vault` and its access/audit tables have RLS enabled and no browser table grants. Narrow `security definer` RPCs require both an active portal account and either the current System Admin role or an explicit current grant resolved through the linked active directory person. The encrypted payload can contain account email, username, password, MFA details, recovery codes, licence key and notes. The catalogue contains only service name, plan label, status and a boolean that says whether credentials are saved. A credential record is decrypted in `server-only` code only after an explicit reveal action; neither the full subscription register nor its exports, review calendar, logs or audit events receive plaintext. A System Admin alone may replace the explicit delegate list, and all grants are keyed by current Auth user ID rather than a hard-coded name.
+
+Paid subscription details are ordinary controlled register data rather than vault secrets. Migration `20260915130000_subscription_billing_details` adds seat count, a MAM-credit-card flag and billing anchor date. V2 subscription RPCs validate these paid fields, calculate the next billing occurrence from the anchor and cycle with month-end clamping, and derive Last Reviewed Date from an append-only `reviewed` audit event.
+
+## Payroll balance self-service import
+
+Migration `20260915120000_payroll_balance_self_service_import` keeps access grants, staged batches and staged rows in the private schema with RLS enabled and no direct browser table grants. The parser accepts bounded UTF-8 CSV and non-macro `.xlsx` files, rejects formulas, encrypted/unsafe ZIP packages and unsupported layouts, and sends only validated metadata plus normalised rows to controlled functions. Raw source files are not stored.
+
+The database re-authorises every stage and commit, locks a batch during commit and reconciles again against the current directory. Browser sessions cannot call the parsed-row staging function; only the trusted server client can send the parser result and validated session actor. Name matching is deliberately narrow: case, spacing and punctuation may be normalised, but company must match and there must be exactly one active person. Inactive, missing, cross-company and ambiguous records are retained in the private import register without updating balances. Multiple dates for one person remain auditable, while only the newest applicable annual and sick row in a batch can update the current balance. A source digest prevents accidental duplicate open batches without exposing another importer's history.
+
+System Admin may replace the active delegate list through a separately audited function. Delegate authority is resolved from the person's current active portal link; no name or user ID is compiled into the application. The Calendar reminder is due on the first of each month and remains visible to authorised importers until both MAM and Equipsy have a current-month imported snapshot. It has no scheduler, email or external side effect.
 
 ## HR employee directory
 
@@ -119,6 +133,8 @@ This boundary keeps onboarding and offboarding separate until their durable acce
 - `private.subscription_credential_vault`: ciphertext, IV, authentication tag, key version and optimistic version for a subscription-service credential payload; no plaintext fields.
 - `private.subscription_credential_access_grants`: explicit active linked Auth-user grants for credential delegates; System Admin access is role-derived rather than stored here.
 - `private.subscription_credential_audit_events` and `private.subscription_credential_access_audit_events`: action metadata only, without credential values or individual grant contents.
+- `private.payroll_balance_import_grants` and `private.payroll_balance_import_grant_events`: current linked delegate capability and grant-change audit metadata.
+- `private.payroll_balance_import_batches` and `private.payroll_balance_import_stage_rows`: bounded source metadata, digest, staged review state and reconciliation outcomes; no workbook bytes.
 - `teams` and `team_memberships`: controlled team relationships for future live workflows.
 - `leave_requests` and `leave_request_events`: RLS-first durable leave model used by the deployed release after migration `20260817120000_persist_leave_workspace` was applied.
 - `private.leave_approval_grants`: private, explicit team, global or future-subtree leave-review capability grants; it is not exposed through the browser data API.
@@ -130,7 +146,7 @@ The former shared fake-profile/fake-leave tables and their public mutation funct
 
 ## Environments
 
-The pending payroll-balance migration adds private sick balance snapshots/history and extends the authenticated leave-priority projection. Annual balances are visible to self and authorised team reviewers; sick fields are null for employees. A private sufficiency predicate gates one durable conditional-approval reminder per request, using refreshed payroll hours and reviewer-confirmed required hours. Existing daily reminders exclude conditional approvals, including previously queued rows. The existing notification event and recipient routing are reused; no n8n workflow change or automatic payroll accrual is introduced.
+The payroll-balance migrations add private sick balance snapshots/history, extend the authenticated leave-priority projection and add the staged self-service importer. Annual balances are visible to self and authorised team reviewers; sick fields are null for employees. A private sufficiency predicate gates one durable conditional-approval reminder per request, using refreshed payroll hours and reviewer-confirmed required hours. Existing daily reminders exclude conditional approvals, including previously queued rows. The existing notification event and recipient routing are reused; the monthly import reminder is Calendar-only, with no n8n workflow change or live payroll integration.
 
 - Development: local application with a development Supabase project or branch.
 - Preview: Vercel branch deployment with isolated, non-production Supabase data.

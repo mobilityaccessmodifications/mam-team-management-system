@@ -28,8 +28,8 @@ export type LeavePriorityWorkspace = {
   people: LeaveBalancePerson[];
   payrollImports?: Array<{
     id: string; employeeName: string; company: "mam" | "equipsy";
-    annualHours: number; sickHours: number; asOf: string;
-    status: "linked" | "inactive" | "unmatched" | "company_mismatch";
+    annualHours: number | null; sickHours: number | null; asOf: string;
+    status: "linked" | "inactive" | "unmatched" | "company_mismatch" | "ambiguous";
     linkedName: string | null; sourceFile: string;
   }>;
   canManageBalances: boolean;

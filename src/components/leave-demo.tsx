@@ -70,6 +70,7 @@ import {
   type LeaveCalendarEntry,
   type LeaveWorkspaceData,
   type LeaveWorkspaceRequest,
+  type PayrollBalanceReminderCalendarEntry,
   type SubscriptionReviewCalendarEntry,
 } from "@/app/leave/actions";
 import { signOut } from "@/app/login/actions";
@@ -91,6 +92,7 @@ import { CheckInTasks } from "@/components/check-in-tasks";
 import { EmployeeDirectory } from "@/components/employee-directory";
 import { EmployeeTeamDirectory } from "@/components/employee-team-directory";
 import { ManagerEmployeeDirectory } from "@/components/manager-employee-directory";
+import { PayrollBalanceImporter } from "@/components/payroll-balance-importer";
 import { SubscriptionCredentialVault } from "@/components/subscription-credential-vault";
 import { SubscriptionRegister } from "@/components/subscription-register";
 import { TeamCalendar } from "@/components/team-calendar";
@@ -535,7 +537,9 @@ export function LeaveDemo({
   const [calendarBirthdays, setCalendarBirthdays] = useState<BirthdayCalendarEntry[]>([]);
   const [checkInCalendarEntries, setCheckInCalendarEntries] = useState<CheckInCalendarEntry[]>([]);
   const [subscriptionReviewCalendarEntries, setSubscriptionReviewCalendarEntries] = useState<SubscriptionReviewCalendarEntry[]>([]);
+  const [payrollBalanceReminderEntries, setPayrollBalanceReminderEntries] = useState<PayrollBalanceReminderCalendarEntry[]>([]);
   const [canViewSubscriptionReviewCalendarForProfile, setCanViewSubscriptionReviewCalendarForProfile] = useState(canViewSubscriptionReviewCalendar);
+  const [canViewPayrollBalanceReminderCalendar, setCanViewPayrollBalanceReminderCalendar] = useState(false);
   const [canReviewLeaveWorkspace, setCanReviewLeaveWorkspace] = useState(false);
   const [leavePriority, setLeavePriority] = useState<LeavePriorityWorkspace>();
   const [requestForPersonId, setRequestForPersonId] = useState("");
@@ -662,7 +666,9 @@ export function LeaveDemo({
       setCalendarBirthdays(data.birthdayEntries);
       setCheckInCalendarEntries(data.checkInEntries);
       setSubscriptionReviewCalendarEntries(data.subscriptionReviewEntries);
+      setPayrollBalanceReminderEntries(data.payrollBalanceReminderEntries);
       setCanViewSubscriptionReviewCalendarForProfile(data.canViewSubscriptionReviewCalendar);
+      setCanViewPayrollBalanceReminderCalendar(data.canViewPayrollBalanceReminderCalendar);
       setCanReviewLeaveWorkspace(data.canReviewLeave);
       setEmploymentType(data.employmentType);
       setHasPaidLeaveEntitlement(data.hasPaidLeaveEntitlement);
@@ -683,7 +689,9 @@ export function LeaveDemo({
       setCalendarBirthdays([]);
       setCheckInCalendarEntries([]);
       setSubscriptionReviewCalendarEntries([]);
+      setPayrollBalanceReminderEntries([]);
       setCanViewSubscriptionReviewCalendarForProfile(false);
+      setCanViewPayrollBalanceReminderCalendar(false);
       setSelectedRequestId("");
       setCancellationRequestId(null);
       setCancellationFocusRequestId(null);
@@ -1205,10 +1213,13 @@ export function LeaveDemo({
   // inherit birthdays, team leave or other employees' check-ins.
   const canViewTeamCalendarForActiveProfile = canViewTeamCalendar
     && (!isPreviewingEmployeeAccess || activeProfile.accessRole !== "employee");
+  const canViewPayrollBalanceReminderForActiveProfile = canViewPayrollBalanceReminderCalendar
+    && !isPreviewingEmployeeAccess;
   const canViewActiveWorkspaceCalendar = canViewTeamCalendarForActiveProfile
-    || canViewSubscriptionReviewCalendarForProfile;
-  const calendarIsSubscriptionReviewOnly = canViewSubscriptionReviewCalendarForProfile
-    && !canViewTeamCalendarForActiveProfile;
+    || canViewSubscriptionReviewCalendarForProfile
+    || canViewPayrollBalanceReminderForActiveProfile;
+  const calendarHidesTeamEvents = !canViewTeamCalendarForActiveProfile
+    && (canViewSubscriptionReviewCalendarForProfile || canViewPayrollBalanceReminderForActiveProfile);
   // Change profile changes what the System Admin sees, not their real server
   // authority. Returning to their own profile restores the complete admin
   // workspace. Server Actions and RPCs still re-authorise the real session.
@@ -1298,6 +1309,7 @@ export function LeaveDemo({
   // for guarded actions and testing.
   const calendarCheckIns = checkInCalendarEntries;
   const calendarSubscriptionReviews = subscriptionReviewCalendarEntries;
+  const calendarPayrollBalanceReminders = isPreviewingEmployeeAccess ? [] : payrollBalanceReminderEntries;
   const approvalQueue = canReviewLeave
     ? visibleRequests.filter((request) => request.canDecide)
     : [];
@@ -1921,8 +1933,19 @@ export function LeaveDemo({
           {activeView === "leave" ? <LeaveWorkspaceLoadBoundary loading={leaveDataLoading}>
             <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} />
           </LeaveWorkspaceLoadBoundary> : null}
+          {activeView === "leave" && !leaveDataLoading && !isPreviewingEmployeeAccess ? <PayrollBalanceImporter onSaved={refreshLeaveWorkspace} /> : null}
           {activeView === "leave" && !leaveDataLoading ? <LeavePriorityControls key={previewPersonId || "self"} previewPersonId={previewPersonId} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /> : null}
-          {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <TeamCalendar birthdays={calendarIsSubscriptionReviewOnly ? [] : calendarBirthdays} checkIns={calendarIsSubscriptionReviewOnly ? [] : calendarCheckIns} requests={calendarIsSubscriptionReviewOnly ? [] : calendarRequests} subscriptionReviews={calendarSubscriptionReviews} reviewOnly={calendarIsSubscriptionReviewOnly} loading={leaveDataLoading} /> : null}
+          {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <TeamCalendar
+            birthdays={calendarHidesTeamEvents ? [] : calendarBirthdays}
+            checkIns={calendarHidesTeamEvents ? [] : calendarCheckIns}
+            requests={calendarHidesTeamEvents ? [] : calendarRequests}
+            subscriptionReviews={calendarSubscriptionReviews}
+            payrollBalanceReminders={calendarPayrollBalanceReminders}
+            showSubscriptionReviews={canViewSubscriptionReviewCalendarForProfile}
+            showPayrollBalanceReminders={canViewPayrollBalanceReminderForActiveProfile}
+            reviewOnly={calendarHidesTeamEvents}
+            loading={leaveDataLoading}
+          /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
               key={`${activeProfile.accessRole}:${isPreviewingEmployeeAccess ? activeProfile.id : "signed-in"}`}

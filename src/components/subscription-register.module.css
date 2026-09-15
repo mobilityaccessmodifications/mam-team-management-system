@@ -247,8 +247,8 @@
 }
 
 .subscriptionSheet {
-  --subscription-sheet-columns: minmax(214px, 1.3fr) minmax(122px, .74fr) minmax(142px, .8fr) minmax(152px, .9fr) minmax(102px, .56fr) minmax(78px, .38fr) 194px;
-  min-width: 1130px;
+  --subscription-sheet-columns: minmax(214px, 1.2fr) minmax(122px, .64fr) minmax(108px, .5fr) minmax(210px, .95fr) minmax(150px, .72fr) minmax(142px, .72fr) minmax(152px, .78fr) minmax(102px, .5fr) minmax(78px, .36fr) 194px;
+  min-width: 1570px;
 }
 
 .subscriptionSheetRow {
@@ -372,6 +372,8 @@
 .serviceCell .subscriptionIdentity code,
 .monthlyCell strong,
 .monthlyCell small,
+.detailCell strong,
+.detailCell small,
 .reviewCell strong,
 .reviewCell small,
 .responsibleCell strong,
@@ -388,16 +390,19 @@
 .serviceCell .subscriptionIdentity strong { color: var(--subscription-ink); font-size: 13px; }
 .serviceCell .subscriptionIdentity span,
 .monthlyCell small,
+.detailCell small,
 .reviewCell small,
 .responsibleCell small,
 .membersCell small { color: var(--subscription-muted); font-size: 11px; }
 .serviceCell .subscriptionIdentity code { color: var(--subscription-accent-deep); font-size: 9px; }
 
 .monthlyCell,
+.detailCell,
 .reviewCell,
 .responsibleCell,
 .membersCell { display: grid; align-content: center; gap: 3px; }
 .monthlyCell strong,
+.detailCell strong,
 .reviewCell strong,
 .responsibleCell strong,
 .membersCell strong { color: var(--text-secondary, #53625e); font-size: 12px; }
@@ -549,6 +554,9 @@
   .serviceCell::before { display: none !important; }
   .serviceCell .subscriptionIdentity span { white-space: normal; }
   .monthlyCell { grid-column: 1; }
+  .seatCell { grid-column: 2; }
+  .billingCell { grid-column: 1 / -1; }
+  .lastReviewedCell { grid-column: 1; }
   .reviewCell { grid-column: 2; }
   .responsibleCell { grid-column: 1 / -1; }
   .statusCell { grid-column: 1; align-self: end; }

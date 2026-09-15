@@ -8,11 +8,15 @@ import type { SubscriptionCredentialDraft } from "@/lib/subscription-credential-
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ENCODED_VALUE_PATTERN = /^[A-Za-z0-9_-]+$/;
 const ENCODED_KEY_PATTERN = /^[A-Za-z0-9+/_-]+={0,2}$/;
+const MAX_CIPHERTEXT_CHARACTERS = 32_768;
 const MAXIMUMS = {
   loginUrl: 2_048,
+  accountEmail: 512,
   username: 512,
   password: 4_096,
+  mfaDetails: 2_048,
   recoveryCodes: 8_192,
+  licenceKey: 2_048,
   notes: 4_096,
 } as const;
 
@@ -93,7 +97,8 @@ function validatedEncodedValue(value: string, expectedLength?: number) {
   return decoded;
 }
 
-function textField(value: unknown, field: keyof typeof MAXIMUMS) {
+function textField(value: unknown, field: keyof typeof MAXIMUMS, legacyOptional = false) {
+  if (legacyOptional && value === undefined) return "";
   if (typeof value !== "string" || value.length > MAXIMUMS[field]) {
     throw new Error("The stored credential is invalid.");
   }
@@ -107,9 +112,12 @@ function credentialPayload(value: unknown): SubscriptionCredentialDraft {
   const record = value as Record<string, unknown>;
   return {
     loginUrl: textField(record.loginUrl, "loginUrl"),
+    accountEmail: textField(record.accountEmail, "accountEmail", true),
     username: textField(record.username, "username"),
     password: textField(record.password, "password"),
+    mfaDetails: textField(record.mfaDetails, "mfaDetails", true),
     recoveryCodes: textField(record.recoveryCodes, "recoveryCodes"),
+    licenceKey: textField(record.licenceKey, "licenceKey", true),
     notes: textField(record.notes, "notes"),
   };
 }
@@ -135,9 +143,13 @@ export function encryptSubscriptionCredential(
   cipher.setAAD(credentialAad(subscriptionId, active.version));
   const plaintext = Buffer.from(JSON.stringify(payload), "utf8");
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const encodedCiphertext = ciphertext.toString("base64url");
+  if (encodedCiphertext.length > MAX_CIPHERTEXT_CHARACTERS) {
+    throw new Error("The subscription credential details are too large.");
+  }
 
   return {
-    ciphertext: ciphertext.toString("base64url"),
+    ciphertext: encodedCiphertext,
     iv: iv.toString("base64url"),
     authTag: cipher.getAuthTag().toString("base64url"),
     keyVersion: active.version,
@@ -155,24 +167,21 @@ export function decryptSubscriptionCredential(
   const key = keys.get(encrypted.keyVersion);
   if (!key) throw new SubscriptionCredentialVaultConfigurationError();
 
-  const decipher = createDecipheriv(
-    "aes-256-gcm",
-    key,
-    validatedEncodedValue(encrypted.iv, 12),
-    { authTagLength: 16 },
-  );
-  decipher.setAAD(credentialAad(subscriptionId, encrypted.keyVersion));
-  decipher.setAuthTag(validatedEncodedValue(encrypted.authTag, 16));
-  const plaintext = Buffer.concat([
-    decipher.update(validatedEncodedValue(encrypted.ciphertext)),
-    decipher.final(),
-  ]);
-
-  let decoded: unknown;
   try {
-    decoded = JSON.parse(plaintext.toString("utf8"));
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      key,
+      validatedEncodedValue(encrypted.iv, 12),
+      { authTagLength: 16 },
+    );
+    decipher.setAAD(credentialAad(subscriptionId, encrypted.keyVersion));
+    decipher.setAuthTag(validatedEncodedValue(encrypted.authTag, 16));
+    const plaintext = Buffer.concat([
+      decipher.update(validatedEncodedValue(encrypted.ciphertext)),
+      decipher.final(),
+    ]);
+    return credentialPayload(JSON.parse(plaintext.toString("utf8")));
   } catch {
     throw new Error("The stored credential is invalid.");
   }
-  return credentialPayload(decoded);
 }
