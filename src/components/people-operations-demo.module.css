@@ -1,11 +1,15 @@
-.workspace, .modalBackdrop { --people-accent: var(--mam-orange); --people-accent-deep: var(--mam-orange-dark); --people-accent-soft: var(--surface-warm); }
-.workspace { display: grid; gap: 18px; width: 100%; max-width: 1280px; margin: 0 auto; color: var(--text-primary); }
+.workspace, .modalBackdrop { --people-accent: var(--accent, var(--mam-orange)); --people-action: var(--accent-deep, var(--mam-orange-strong)); --people-accent-deep: var(--accent-deep, var(--mam-orange-dark)); --people-accent-soft: var(--accent-soft, var(--surface-warm)); }
+.workspace { display: grid; gap: 18px; width: 100%; max-width: 1480px; margin: 0 auto; color: var(--text-primary); }
 .checkInLead > div > span, .modal header span { display: block; color: var(--text-tertiary); font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; font-weight: 760; letter-spacing: .11em; text-transform: uppercase; }
 .checkInLead p { margin: 0; color: var(--text-secondary); font-size: 13px; }
-.primaryAction, .previewButton { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--people-accent) 78%, #000); border-radius: var(--radius-md); background: var(--people-accent); box-shadow: 0 6px 16px color-mix(in srgb, var(--people-accent) 18%, transparent); color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 720; padding: 9px 15px; transition: background 160ms var(--ease-out), box-shadow 160ms var(--ease-out), transform 160ms var(--ease-out); }
-.primaryAction:hover, .previewButton:hover { background: var(--mam-orange-strong); box-shadow: 0 8px 20px color-mix(in srgb, var(--people-accent) 24%, transparent); transform: translateY(-1px); }
+.primaryAction, .previewButton { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--people-action) 84%, #000); border-radius: var(--radius-md); background: var(--people-action); box-shadow: none; color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 720; padding: 9px 15px; transition: background var(--duration-ui, 170ms) var(--ease-out), transform var(--duration-press, 120ms) var(--ease-out); }
+.primaryAction:hover, .previewButton:hover { background: color-mix(in srgb, var(--people-action) 86%, #000); box-shadow: none; }
+.primaryAction:active, .previewButton:active { transform: scale(.97); }
 .primaryAction:focus-visible, .previewButton:focus-visible { outline: 3px solid color-mix(in srgb, var(--people-accent) 32%, transparent); outline-offset: 3px; }
 .sectionSwitch { width: 100%; }
+.peopleLayout { display: grid; min-width: 0; gap: 18px; }
+.sectionContent { display: grid; min-width: 0; align-content: start; gap: 20px; }
+.sectionContent > * { min-width: 0; }
 .taskSwitch { display: inline-flex; justify-self: start; gap: 4px; border: 1px solid var(--surface-border); border-radius: var(--radius-md); background: var(--surface-muted); padding: 4px; }
 .taskSwitch button { min-height: 34px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 11px; font-weight: 720; padding: 7px 12px; }
 .taskSwitch button[aria-pressed="true"] { background: var(--surface-raised); box-shadow: var(--shadow-xs); color: var(--people-accent-deep); }
@@ -474,3 +478,114 @@
 .primaryAction { min-height: 40px; font-size: 13px; font-weight: 600; box-shadow: none; }
 .workflowDesk, .checkInDesk { border-radius: 12px; box-shadow: none; }
 .modal { border-radius: 14px; }
+
+/* Apple-style adaptive People navigation: a stable section rail on wide
+   desktops, a complete two-row switcher at compact widths, and a swipeable
+   strip on phones. */
+@media (min-width: 1320px) {
+  .peopleLayout {
+    grid-template-columns: 196px minmax(0, 1fr);
+    align-items: start;
+    gap: 24px;
+  }
+
+  .sectionSwitch {
+    position: sticky;
+    top: 84px;
+    display: grid;
+    max-height: calc(100dvh - 112px);
+    align-content: start;
+    gap: 3px;
+    align-self: start;
+    padding: 5px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--surface-raised) 86%, var(--surface-muted));
+    box-shadow: var(--shadow-xs);
+    scrollbar-width: thin;
+  }
+
+  .sectionSwitch > [role="tab"] {
+    width: 100%;
+    min-width: 0;
+    justify-self: stretch;
+    padding-inline: 11px;
+    border-radius: 10px;
+    text-align: left;
+  }
+
+  .sectionSwitch > [role="tab"] > span:last-child {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .sectionSwitch > [role="tab"][data-active="true"] > [aria-hidden="true"]:first-child {
+    inset: 2px;
+    border: 1px solid var(--surface-border);
+    border-radius: 9px;
+    background: var(--surface-raised);
+    box-shadow: 0 1px 2px rgb(24 36 33 / 5%);
+  }
+
+  .sectionSwitch > [role="tab"][data-active="true"] > [aria-hidden="true"]:first-child::after {
+    inset: 8px auto 8px 0;
+    width: 3px;
+    height: auto;
+    border-radius: 0 99px 99px 0;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1319px) {
+  .sectionSwitch {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 3px;
+    padding: 4px;
+    overflow: visible;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--surface-raised) 86%, var(--surface-muted));
+  }
+
+  .sectionSwitch > [role="tab"] {
+    min-width: 0;
+    border-radius: 9px;
+  }
+}
+
+@media (max-width: 720px) {
+  .peopleLayout {
+    gap: 14px;
+  }
+
+  .sectionSwitch {
+    margin-inline: calc(-1 * var(--mobile-gutter, 16px));
+    width: calc(100% + (2 * var(--mobile-gutter, 16px)));
+    padding-inline: var(--mobile-gutter, 16px);
+    scroll-padding-inline: var(--mobile-gutter, 16px);
+  }
+
+  .sectionContent {
+    gap: 16px;
+  }
+
+  .toast {
+    right: 16px;
+    bottom: calc(86px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .taskSwitch button:hover {
+    color: var(--text-primary);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primaryAction:active,
+  .previewButton:active {
+    transform: none;
+  }
+}

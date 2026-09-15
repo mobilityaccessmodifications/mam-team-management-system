@@ -1,16 +1,16 @@
 .shell {
-  --accent: #e86f2e;
-  --accent-deep: #a84416;
+  --accent: var(--mam-orange);
+  --accent-deep: var(--mam-orange-strong);
   --accent-soft: #fff0e7;
   --orange: var(--accent);
   --orange-deep: var(--accent-deep);
   --orange-soft: var(--accent-soft);
-  --ink: #252d2f;
-  --muted: #697477;
-  --canvas: #f3f5f4;
-  --panel: #ffffff;
-  --line: #dde3e0;
-  --line-dark: #cbd3cf;
+  --ink: var(--text-primary);
+  --muted: var(--text-secondary);
+  --canvas: var(--surface-canvas);
+  --panel: var(--surface-raised);
+  --line: var(--surface-border);
+  --line-dark: var(--surface-border-strong);
   --green: #47766a;
   --green-soft: #e7f1ed;
   --blue: #52758d;
@@ -23,8 +23,8 @@
 }
 
 .shell[data-company="equipsy"] {
-  --accent: #2677b8;
-  --accent-deep: #175e95;
+  --accent: var(--equipsy-blue);
+  --accent-deep: var(--equipsy-blue-deep);
   --accent-soft: #edf6fd;
 }
 
@@ -7113,5 +7113,513 @@
   .filterTabs button {
     min-height: 44px;
     touch-action: manipulation;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Apple UI system
+
+   A stable operations rail, one quiet content canvas, and company colour used
+   only for selection and primary actions. Motion follows the Emil interaction
+   rules: short press feedback, transform/opacity only, and no list-page reveal.
+   -------------------------------------------------------------------------- */
+
+.shell {
+  min-height: 100dvh;
+  background: var(--surface-canvas);
+}
+
+.shell button:active:not(:disabled) {
+  transform: scale(.97);
+  transition-duration: var(--duration-press, 120ms);
+}
+
+.sidebar {
+  width: 232px;
+  padding: 18px 14px 16px;
+  overflow-x: hidden;
+  background: var(--sidebar);
+  border-right: 1px solid rgb(255 255 255 / 7%);
+  box-shadow: none;
+}
+
+.brandRow {
+  min-height: 46px;
+  align-items: center;
+  padding: 0 8px;
+}
+
+.nav {
+  gap: 5px;
+  margin-top: 30px;
+}
+
+.navItem {
+  position: relative;
+  min-height: 46px;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 8px 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #aab8b3;
+}
+
+.navItem::before {
+  inset: 10px auto 10px 0;
+  width: 3px;
+  border-radius: 0 99px 99px 0;
+  background: var(--accent);
+  opacity: 0;
+  transform: scaleY(.55);
+  transform-origin: center;
+  transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out);
+}
+
+.navItem b {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 620;
+  letter-spacing: -.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navItemActive {
+  border-color: rgb(255 255 255 / 6%);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: #fff;
+  box-shadow: none;
+}
+
+.navItemActive::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+.navItem i {
+  min-width: 22px;
+  height: 22px;
+  border: 0;
+  background: var(--accent-deep);
+  box-shadow: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewSwitcher,
+.viewSwitcher[data-previewing] {
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 4%);
+  box-shadow: none;
+}
+
+.viewSwitcher[data-previewing] {
+  border-color: color-mix(in srgb, var(--accent) 42%, rgb(255 255 255 / 11%));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.viewPickerTrigger {
+  min-height: 42px;
+  border-color: rgb(255 255 255 / 14%);
+  border-radius: 9px;
+  background: var(--sidebar-raised);
+  box-shadow: none;
+}
+
+.workspace {
+  min-height: 100dvh;
+  margin-left: 232px;
+}
+
+.topbar {
+  min-height: 64px;
+  justify-content: space-between;
+  padding: 0 clamp(20px, 2.4vw, 32px);
+  border-bottom: 1px solid color-mix(in srgb, var(--surface-border) 88%, transparent);
+  background: rgb(255 255 255 / 92%);
+  box-shadow: none;
+  backdrop-filter: blur(18px) saturate(115%);
+}
+
+.pageTitle {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 19px;
+  font-weight: 680;
+  letter-spacing: -.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topActions {
+  flex: 0 0 auto;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.signOutButton,
+.mobileProfileTrigger,
+.mobileReturnButton,
+.emailActivityButton,
+.resetButton,
+.secondaryButton,
+.viewActions > button,
+.calendarToolbar button,
+.peopleToolbar > button {
+  min-height: 40px;
+  border-color: var(--surface-border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+
+.main {
+  width: min(100%, 1480px);
+  margin: 0 auto;
+  padding: 24px clamp(20px, 3vw, 38px) 56px;
+}
+
+.dashboard,
+.leaveDesk,
+.recordsWorkspace {
+  animation: none;
+}
+
+.panel,
+.recordsGrid,
+.approvalGrid,
+.calendarPanel,
+.leaveBalances,
+.payrollImportRegister {
+  border-color: var(--surface-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: none;
+}
+
+.panelHeader,
+.calendarToolbar,
+.viewToolbar {
+  background: var(--surface-raised);
+}
+
+.tableHead {
+  background: var(--surface-muted);
+}
+
+.primaryButton,
+.applyForLeaveButton {
+  border-color: var(--accent-deep);
+  border-radius: 10px;
+  background: var(--accent-deep);
+  box-shadow: none;
+  color: #fff;
+}
+
+.profilePicker,
+.modal {
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+
+.profilePickerHeader,
+.modal > header {
+  min-height: 70px;
+  padding: 14px 18px;
+  border-top: 0;
+  background: var(--surface-raised);
+}
+
+.profilePickerAvatar,
+.shell[data-company="equipsy"] .profilePickerAvatar {
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+
+.profilePickerOption {
+  border-radius: 10px;
+}
+
+.profilePickerOptionActive {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--surface-border));
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+.profilePickerBackdrop,
+.modalBackdrop {
+  background: rgb(11 22 19 / 56%);
+  backdrop-filter: blur(6px);
+  animation: appleBackdropIn 160ms ease-out both;
+}
+
+.profilePicker,
+.modal {
+  animation: appleDialogIn var(--duration-dialog, 210ms) var(--ease-out) both;
+  transform-origin: center;
+}
+
+.toast {
+  border-radius: 12px;
+  background: var(--sidebar-raised);
+  box-shadow: var(--shadow-md);
+  transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .navItem:hover {
+    background: rgb(255 255 255 / 6%);
+    color: #fff;
+    transform: none;
+  }
+
+  .navItemActive:hover {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+
+  .signOutButton:hover,
+  .emailActivityButton:hover,
+  .resetButton:hover,
+  .secondaryButton:hover,
+  .viewActions > button:hover,
+  .calendarToolbar button:hover,
+  .peopleToolbar > button:hover {
+    border-color: var(--surface-border-strong);
+    background: var(--surface-muted);
+    box-shadow: none;
+    color: var(--text-primary);
+    transform: none;
+  }
+
+  .primaryButton:hover,
+  .applyForLeaveButton:hover {
+    border-color: color-mix(in srgb, var(--accent-deep) 86%, #000);
+    background: color-mix(in srgb, var(--accent-deep) 86%, #000);
+    box-shadow: none;
+    transform: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .shell {
+    --mobile-gutter: 16px;
+    --mobile-nav-height: 72px;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: auto 8px max(8px, env(safe-area-inset-bottom)) 8px;
+    z-index: 50;
+    width: auto;
+    height: var(--mobile-nav-height);
+    padding: 5px;
+    overflow: visible;
+    border: 1px solid rgb(255 255 255 / 10%);
+    border-radius: 18px;
+    background: rgb(24 36 33 / 96%);
+    box-shadow: 0 12px 34px rgb(14 25 22 / 22%);
+    backdrop-filter: blur(18px) saturate(120%);
+  }
+
+  .sidebar:has(.profilePickerBackdrop) {
+    z-index: 120;
+  }
+
+  .brandRow,
+  .viewSwitcher {
+    display: none;
+  }
+
+  .sidebar:not(:has(.nav)) {
+    display: none;
+  }
+
+  .nav {
+    width: 100%;
+    height: 100%;
+    grid-template-columns: repeat(var(--nav-count, 4), minmax(0, 1fr));
+    gap: 2px;
+    margin: 0;
+  }
+
+  .navItem {
+    min-width: 0;
+    min-height: 60px;
+    grid-template-columns: 1fr;
+    grid-template-rows: 24px 18px;
+    place-items: center;
+    gap: 1px;
+    padding: 7px 3px 5px;
+    border: 0;
+    border-radius: 13px;
+    text-align: center;
+    touch-action: manipulation;
+  }
+
+  .navItem::before {
+    inset: -1px 22% auto;
+    width: auto;
+    height: 3px;
+    border-radius: 0 0 99px 99px;
+    transform: scaleX(.5);
+  }
+
+  .navItemActive::before {
+    transform: scaleX(1);
+  }
+
+  .navItem b {
+    width: 100%;
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1.2;
+  }
+
+  .navItem i {
+    position: absolute;
+    top: 4px;
+    right: max(5px, 16%);
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    border: 2px solid var(--sidebar);
+    font-size: 10px;
+  }
+
+  .workspace {
+    min-height: 100dvh;
+    margin-left: 0;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 35;
+    min-height: 60px;
+    padding: 6px var(--mobile-gutter);
+  }
+
+  .mobileBrand {
+    display: none;
+  }
+
+  .mobileProfileTrigger {
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    gap: 3px;
+    padding: 0 8px;
+    color: var(--accent-deep);
+    font-size: 12px;
+    font-weight: 760;
+  }
+
+  .mobileReturnButton {
+    display: grid;
+  }
+
+  .main {
+    width: 100%;
+    min-width: 0;
+    padding: 16px var(--mobile-gutter) calc(104px + env(safe-area-inset-bottom));
+  }
+
+  .calendarWorkspace {
+    height: 100dvh;
+    padding-bottom: calc(var(--mobile-nav-height) + 16px + env(safe-area-inset-bottom));
+  }
+
+  .main.calendarMain {
+    padding: 0;
+  }
+
+  .toast {
+    right: 16px;
+    bottom: calc(92px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 680px) {
+  .shell {
+    --mobile-gutter: 14px;
+  }
+
+  .pageTitle {
+    font-size: 18px;
+  }
+
+  .topActions {
+    gap: 6px;
+  }
+
+  .signOutButton,
+  .mobileProfileTrigger,
+  .mobileReturnButton {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+
+  .mobileProfileTrigger {
+    padding: 0;
+  }
+
+  .mobileProfileTrigger > svg {
+    display: none;
+  }
+
+  .profilePickerBackdrop,
+  .modalBackdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .profilePicker,
+  .modal {
+    width: 100%;
+    max-height: calc(92dvh - env(safe-area-inset-top));
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 22px 22px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation-name: appleSheetIn;
+    transform-origin: bottom;
+  }
+}
+
+@keyframes appleBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes appleDialogIn {
+  from { opacity: 0; transform: translateY(8px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes appleSheetIn {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell button:active:not(:disabled),
+  .profilePicker,
+  .modal {
+    transform: none;
+  }
+
+  .profilePickerBackdrop,
+  .modalBackdrop,
+  .profilePicker,
+  .modal {
+    animation: none;
   }
 }

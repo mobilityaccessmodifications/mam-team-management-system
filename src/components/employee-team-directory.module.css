@@ -83,7 +83,7 @@
 .emptyDetail p { max-width: 320px; margin: 0; font-size: 12px; line-height: 1.5; }
 
 .detail { min-width: 0; background: var(--surface-raised, #fff); }
-.detailHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px; border-bottom: 1px solid var(--directory-line); background: linear-gradient(135deg, #fff9f5, var(--surface-raised, #fff) 56%); }
+.detailHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px; border-bottom: 1px solid var(--directory-line); background: var(--surface-raised, #fff); }
 .detailHeader h3 { margin: 4px 0 0; font-size: 24px; letter-spacing: -.02em; }
 .detailHeader p { margin: 7px 0 0; color: var(--directory-muted); font-size: 12px; }
 .closeButton { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 10px; }

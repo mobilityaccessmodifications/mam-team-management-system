@@ -74,7 +74,7 @@
 .avatarLarge {
   width: 43px;
   height: 43px;
-  background: var(--accent, #e86f2e);
+  background: var(--accent-deep, #c34d14);
   color: #fff;
   font-size: 14px;
 }
@@ -438,8 +438,8 @@
 }
 
 .saveButton {
-  border: 1px solid var(--accent, #e86f2e);
-  background: var(--accent, #e86f2e);
+  border: 1px solid var(--accent-deep, #c34d14);
+  background: var(--accent-deep, #c34d14);
   color: #fff;
 }
 
@@ -902,5 +902,51 @@
     background: transparent;
     clip-path: none;
     font-size: 14px;
+  }
+}
+
+/* Quiet profile surface aligned with the application shell. */
+.trigger,
+.triggerOpen {
+  border-color: var(--surface-border);
+  background: var(--surface-raised);
+  box-shadow: none;
+  transform: none;
+}
+
+.avatarLarge {
+  background: var(--accent-deep, var(--mam-orange-strong));
+  box-shadow: none;
+}
+
+.panel {
+  border-color: var(--surface-border);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-md);
+}
+
+.panelHeader {
+  min-height: 74px;
+  background: var(--surface-raised);
+}
+
+.panelHeader::after {
+  left: 18px;
+  width: 44px;
+  background: var(--accent, var(--mam-orange));
+}
+
+.closeButton:hover {
+  background: var(--surface-muted);
+  transform: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .trigger:hover,
+  .triggerOpen:hover {
+    border-color: var(--surface-border-strong);
+    background: var(--surface-muted);
+    transform: none;
   }
 }

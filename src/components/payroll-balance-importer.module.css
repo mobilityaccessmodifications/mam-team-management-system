@@ -8,8 +8,8 @@
 .eyebrow { color: var(--mam-orange-dark, #be4814); font-family: var(--font-mono, ui-monospace, monospace); font-size: 9px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
 .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .primaryButton, .secondaryButton, .iconButton { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--surface-border-strong, #cbd7d2); border-radius: 10px; background: var(--surface-raised, #fff); color: var(--text-secondary, #53625e); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; padding: 8px 11px; }
-.primaryButton { border-color: var(--mam-orange, #f56d25); background: var(--mam-orange, #f56d25); color: #fff; }
-.primaryButton:hover:not(:disabled) { background: var(--mam-orange-strong, #df5818); }
+.primaryButton { border-color: var(--mam-orange-strong, #c34d14); background: var(--mam-orange-strong, #c34d14); color: #fff; }
+.primaryButton:hover:not(:disabled) { background: var(--mam-orange-dark, #a83f0d); }
 .secondaryButton:hover:not(:disabled), .iconButton:hover:not(:disabled) { border-color: var(--mam-orange, #f56d25); color: var(--mam-orange-dark, #be4814); }
 .primaryButton:focus-visible, .secondaryButton:focus-visible, .iconButton:focus-visible, .accessModal input:focus-visible { outline: 3px solid color-mix(in srgb, var(--mam-orange, #f56d25) 28%, transparent); outline-offset: 2px; }
 .primaryButton:disabled, .secondaryButton:disabled, .iconButton:disabled { cursor: not-allowed; opacity: .56; }

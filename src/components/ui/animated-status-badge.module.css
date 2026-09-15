@@ -1,9 +1,9 @@
 .badge {
   display: inline-flex;
-  min-height: 27px;
+  min-height: 28px;
   align-items: center;
   gap: 6px;
-  padding: 4px 9px;
+  padding: 5px 9px;
   border: 1px solid transparent;
   border-radius: 999px;
   background: var(--surface-muted);

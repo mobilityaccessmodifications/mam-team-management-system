@@ -1,15 +1,12 @@
 .root {
   position: relative;
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
+  display: flex;
+  max-width: 100%;
   align-items: stretch;
-  gap: 2px;
-  padding: 4px;
+  gap: 4px;
   overflow-x: auto;
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
+  border-bottom: 1px solid var(--surface-border);
+  background: transparent;
   scrollbar-width: none;
 }
 
@@ -19,45 +16,51 @@
 
 .trigger {
   position: relative;
+  flex: 0 0 auto;
   min-width: max-content;
   min-height: 44px;
-  padding: 0 14px;
+  padding: 0 13px;
   border: 0;
-  border-radius: calc(var(--radius-md) - 3px);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   isolation: isolate;
-  transition: color 160ms var(--ease-out);
-}
-
-.trigger:hover {
-  color: var(--text-primary);
+  transition:
+    color var(--duration-ui, 170ms) var(--ease-out),
+    transform var(--duration-press, 120ms) var(--ease-out);
 }
 
 .trigger[data-active="true"] {
   color: var(--text-primary);
 }
 
+.trigger:active {
+  transform: scale(0.97);
+}
+
 .indicator {
   position: absolute;
-  inset: 0;
+  inset: 3px 3px 0;
   z-index: -1;
-  border: 1px solid color-mix(in srgb, var(--mam-orange) 25%, var(--surface-border));
-  border-radius: calc(var(--radius-md) - 3px);
-  background: var(--surface-raised);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mam-orange) 22%, var(--surface-border));
+  border-radius: 8px 8px 0 0;
+  background: color-mix(in srgb, var(--mam-orange) 9%, var(--surface-raised));
+  animation: tab-selection-in 160ms var(--ease-out) both;
 }
 
 .indicator::after {
   content: "";
   position: absolute;
-  right: 15px;
-  bottom: -1px;
-  left: 15px;
+  right: 10px;
+  bottom: 0;
+  left: 10px;
   height: 2px;
   border-radius: 99px 99px 0 0;
   background: var(--mam-orange);
+}
+
+.root[data-keyboard-navigation="true"] .indicator {
+  animation: none;
 }
 
 .label {
@@ -68,12 +71,18 @@
   justify-content: center;
   gap: 8px;
   font-size: 13px;
-  font-weight: 680;
+  font-weight: 650;
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .icon {
   display: inline-flex;
+  color: var(--text-tertiary);
+}
+
+.trigger[data-active="true"] .icon {
+  color: var(--mam-orange-dark);
 }
 
 .icon svg {
@@ -88,40 +97,109 @@
   background: var(--surface-muted);
   color: var(--text-tertiary);
   font-size: 10px;
+  font-variant-numeric: tabular-nums;
   font-weight: 760;
+}
+
+.root[data-orientation="vertical"] {
+  display: grid;
+  max-height: calc(100dvh - 112px);
+  align-content: start;
+  gap: 3px;
+  padding: 5px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface-raised) 86%, var(--surface-muted));
+  box-shadow: var(--shadow-xs);
+  scrollbar-width: thin;
+}
+
+.root[data-orientation="vertical"] .trigger {
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
+  padding: 0 11px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.root[data-orientation="vertical"] .label {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.root[data-orientation="vertical"] .badge {
+  margin-left: auto;
+}
+
+.root[data-orientation="vertical"] .indicator {
+  inset: 2px;
+  border: 1px solid var(--surface-border);
+  border-radius: 9px;
+  background: var(--surface-raised);
+  box-shadow: 0 1px 2px rgb(24 36 33 / 5%);
+}
+
+.root[data-orientation="vertical"] .indicator::after {
+  inset: 8px auto 8px 0;
+  width: 3px;
+  height: auto;
+  border-radius: 0 99px 99px 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .trigger:hover {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--surface-muted) 76%, transparent);
+  }
+
+  .root[data-orientation="vertical"] .trigger:hover {
+    background: var(--surface-muted);
+  }
 }
 
 @media (max-width: 720px) {
   .root {
-    grid-auto-flow: column;
-    grid-auto-columns: max-content;
-    grid-template-columns: none;
-    justify-content: start;
-    overflow-x: auto;
-    scroll-snap-type: x proximity;
-    gap: 8px;
+    gap: 6px;
     scroll-padding-inline: 4px;
+    scroll-snap-type: x proximity;
   }
 
   .trigger {
-    min-width: max-content;
     min-height: 48px;
     padding-inline: 12px;
     scroll-snap-align: start;
     touch-action: manipulation;
   }
-  .label { font-size: 14px; }
-  .badge { font-size: 12px; }
+
+  .label {
+    font-size: 14px;
+  }
+
+  .badge {
+    font-size: 12px;
+  }
+}
+
+@keyframes tab-selection-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .trigger {
     transition: none;
   }
-}
 
-/* Quiet navigation shared by People workspaces. */
-.root { display: flex; gap: 4px; padding: 0; border: 0; border-bottom: 1px solid var(--surface-border); border-radius: 0; background: transparent; }
-.trigger { flex: 0 0 auto; border-radius: 0; padding: 0 14px; }
-.indicator { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.indicator::after { left: 12px; right: 12px; bottom: 0; }
+  .indicator {
+    animation: none;
+  }
+}

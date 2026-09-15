@@ -36,10 +36,10 @@ export function AnimatedStatusBadge({
         <motion.span
           key={tone}
           className={styles.icon}
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.65, rotate: -12 }}
-          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, rotate: 0 }}
-          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.65, rotate: 12 }}
-          transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: EASE_OUT }}
+          initial={reduceMotion ? false : { opacity: 0, scale: 0.94 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.16, ease: EASE_OUT }}
           aria-hidden="true"
         >
           <Icon className={tone === "loading" && !reduceMotion ? styles.spinning : undefined} size={12} />
