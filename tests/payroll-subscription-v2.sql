@@ -314,7 +314,7 @@ do $$begin
 end$$;
 
 create temporary table created_subscription as
-select public.create_subscription_v2(
+select public.create_subscription_v3(
   'Synthetic Service',
   'Team plan',
   'paid',
@@ -323,6 +323,7 @@ select public.create_subscription_v2(
   private.mam_local_calendar_date() + 30,
   14,
   true,
+  'Synthetic Corporate Card',
   private.mam_local_calendar_date(),
   '20000000-0000-4000-8000-000000000004',
   array['20000000-0000-4000-8000-000000000002']::uuid[]
@@ -330,18 +331,46 @@ select public.create_subscription_v2(
 
 do $$declare payload jsonb := (select created_subscription.payload from created_subscription); begin
   assert (payload->>'seat_count')::integer = 14;
-  assert (payload->>'mam_credit_card_used')::boolean;
+  assert (payload->>'credit_card_used')::boolean;
+  assert payload->>'credit_card_holder' = 'Synthetic Corporate Card';
+  assert (payload->>'mam_credit_card_used')::boolean, 'Legacy projection key remains compatible';
   assert (payload->>'billing_anchor_date')::date = private.mam_local_calendar_date();
   assert (payload->>'next_billing_on')::date = private.mam_local_calendar_date();
   assert payload->>'last_reviewed_on' is null;
 end$$;
 
-create temporary table reviewed_subscription as
-select public.mark_subscription_reviewed_v2(
+create temporary table updated_subscription as
+select public.update_subscription_v3(
   (created_subscription.payload->>'subscription_id')::uuid,
-  (created_subscription.payload->>'version')::bigint
+  (created_subscription.payload->>'version')::bigint,
+  'Synthetic Service',
+  'Team plan',
+  'active',
+  'paid',
+  'monthly',
+  12345,
+  private.mam_local_calendar_date() + 30,
+  14,
+  false,
+  'This stale value must be cleared',
+  private.mam_local_calendar_date(),
+  '20000000-0000-4000-8000-000000000004',
+  array['20000000-0000-4000-8000-000000000002']::uuid[]
 ) as payload
 from created_subscription;
+
+do $$declare payload jsonb := (select updated_subscription.payload from updated_subscription); begin
+  assert not (payload->>'credit_card_used')::boolean;
+  assert payload->>'credit_card_holder' is null, 'Cardholder is cleared when no credit card is used';
+  assert (payload->>'version')::bigint > (select (created_subscription.payload->>'version')::bigint from created_subscription);
+end$$;
+
+create temporary table reviewed_subscription as
+select public.mark_subscription_reviewed_v2(
+  (updated_subscription.payload->>'subscription_id')::uuid,
+  (updated_subscription.payload->>'version')::bigint
+) as payload
+from updated_subscription;
 
 do $$declare payload jsonb := (select reviewed_subscription.payload from reviewed_subscription); begin
   assert (payload->>'last_reviewed_on')::date = private.mam_local_calendar_date();
@@ -349,16 +378,21 @@ do $$declare payload jsonb := (select reviewed_subscription.payload from reviewe
   assert jsonb_array_length(public.list_subscriptions_v2()) = 1;
   assert not has_table_privilege('authenticated', 'private.subscription_register', 'SELECT');
   assert not has_function_privilege('authenticated', 'private.subscription_register_v2_projection(uuid)', 'EXECUTE');
+  assert has_function_privilege(
+    'authenticated',
+    'public.create_subscription_v3(text,text,text,text,integer,date,integer,boolean,text,date,uuid,uuid[])',
+    'EXECUTE'
+  );
 end$$;
 
 do $$begin
   begin
-    perform public.create_subscription_v2(
+    perform public.create_subscription_v3(
       'Incomplete paid service', null, 'paid', 'monthly', 1000, null,
-      null, null, null,
+      1, true, null, private.mam_local_calendar_date(),
       '20000000-0000-4000-8000-000000000004', array[]::uuid[]
     );
-    raise exception 'Incomplete paid billing details were accepted';
+    raise exception 'A used credit card without a cardholder was accepted';
   exception when invalid_parameter_value then null; end;
 end$$;
 

@@ -48,6 +48,8 @@ import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import styles from "@/components/subscription-register.module.css";
 import {
   SUBSCRIPTION_BILLING_CYCLES,
+  compareSubscriptionMonthlyCost,
+  subscriptionMonthlyEquivalentCents,
   type CreateSubscriptionInput,
   type Subscription,
   type SubscriptionBillingCycle,
@@ -108,17 +110,9 @@ function compareSubscriptionText(left: string | null | undefined, right: string 
   return left.localeCompare(right, "en-AU", { numeric: true, sensitivity: "base" });
 }
 
-function monthlyEquivalentCents(subscription: Subscription) {
-  if (subscription.pricingModel !== "paid" || subscription.amountCents === null) return null;
-  if (subscription.billingCycle === "monthly") return subscription.amountCents;
-  if (subscription.billingCycle === "quarterly") return Math.round(subscription.amountCents / 3);
-  if (subscription.billingCycle === "annual") return Math.round(subscription.amountCents / 12);
-  return null;
-}
-
 function monthlyCostLabel(subscription: Subscription) {
   if (subscription.pricingModel === "free") return "Free";
-  const monthlyCents = monthlyEquivalentCents(subscription);
+  const monthlyCents = subscriptionMonthlyEquivalentCents(subscription);
   return monthlyCents === null ? "—" : `${formatCurrency(monthlyCents)} / mo`;
 }
 
@@ -163,6 +157,7 @@ function subscriptionSearchText(subscription: Subscription) {
     subscription.planName,
     subscription.subscriptionCode,
     subscription.responsible.fullName,
+    subscription.creditCardHolder,
     ...subscription.memberNames,
   ].filter(Boolean).join(" ").toLocaleLowerCase();
 }
@@ -374,11 +369,7 @@ export function SubscriptionRegister({
           result = compareSubscriptionText(first.serviceName, second.serviceName);
           break;
         case "monthly":
-          result = compareSubscriptionText(
-            monthlyEquivalentCents(first) === null ? null : String(monthlyEquivalentCents(first)).padStart(18, "0"),
-            monthlyEquivalentCents(second) === null ? null : String(monthlyEquivalentCents(second)).padStart(18, "0"),
-          );
-          break;
+          return compareSubscriptionMonthlyCost(first, second, subscriptionSort.direction);
         case "seats":
           result = (first.seatCount ?? Number.MAX_SAFE_INTEGER) - (second.seatCount ?? Number.MAX_SAFE_INTEGER);
           break;
@@ -523,7 +514,7 @@ export function SubscriptionRegister({
           <div className={`${styles.sheetCell} ${styles.detailCell} ${styles.seatCell}`} role="cell" data-label="Seats / licences"><strong>{subscription.pricingModel === "paid" ? subscription.seatCount ?? "Not recorded" : "—"}</strong></div>
           <div className={`${styles.sheetCell} ${styles.detailCell} ${styles.billingCell}`} role="cell" data-label="Next billing">
             <strong>{subscription.pricingModel === "paid" ? (subscription.nextBillingOn ? formatDate(subscription.nextBillingOn) : subscription.billingCycle === "other" ? "Manual schedule" : "Not recorded") : "—"}</strong>
-            {subscription.pricingModel === "paid" ? <><small>Billing date: {formatDate(subscription.billingDate)}</small><small>MAM card: {subscription.mamCreditCardUsed === null ? "Not recorded" : subscription.mamCreditCardUsed ? "Yes" : "No"}</small></> : null}
+            {subscription.pricingModel === "paid" ? <><small>Billing date: {formatDate(subscription.billingDate)}</small><small>Credit card: {subscription.creditCardUsed === null ? "Not recorded" : subscription.creditCardUsed ? "Yes" : "No"}</small>{subscription.creditCardUsed ? <small>Cardholder: {subscription.creditCardHolder ?? "Not recorded"}</small> : null}</> : null}
           </div>
           <div className={`${styles.sheetCell} ${styles.detailCell} ${styles.lastReviewedCell}`} role="cell" data-label="Last reviewed"><strong>{hasQuarterlyReview(subscription) ? (subscription.lastReviewedOn ? formatDate(subscription.lastReviewedOn) : "Not yet reviewed") : "—"}</strong></div>
           <div className={`${styles.sheetCell} ${styles.reviewCell}`} role="cell" data-label="Next review" data-due={isReviewDue(subscription)}><strong>{hasQuarterlyReview(subscription) ? formatDate(subscription.nextReviewOn) : <><span aria-hidden="true">—</span><span className={styles.visuallyHidden}>No quarterly review scheduled</span></>}</strong></div>
@@ -575,6 +566,7 @@ function SubscriptionModal({
   const dialogRef = useRef<HTMLElement>(null);
   const initialFocusRef = useRef<HTMLInputElement>(null);
   const [pricingModel, setPricingModel] = useState<SubscriptionPricingModel>(subscription?.pricingModel ?? "free");
+  const [creditCardUsed, setCreditCardUsed] = useState(subscription?.creditCardUsed === true ? "yes" : subscription?.creditCardUsed === false ? "no" : "");
   const [memberPersonIds, setMemberPersonIds] = useState<string[]>(subscription?.memberPersonIds ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -589,10 +581,11 @@ function SubscriptionModal({
     const amountText = String(form.get("amount") ?? "");
     const amountCents = pricingModel === "paid" ? amountToCents(amountText) : null;
     const seatCount = pricingModel === "paid" ? Number(form.get("seatCount")) : null;
-    const cardChoice = pricingModel === "paid" ? String(form.get("mamCreditCardUsed") ?? "") : "";
+    const cardChoice = pricingModel === "paid" ? String(form.get("creditCardUsed") ?? "") : "";
+    const creditCardHolder = pricingModel === "paid" && cardChoice === "yes" ? String(form.get("creditCardHolder") ?? "").trim() : "";
     const billingDate = pricingModel === "paid" ? String(form.get("billingDate") ?? "") : "";
-    if (pricingModel === "paid" && (amountCents === null || !Number.isSafeInteger(seatCount) || (seatCount ?? 0) < 1 || !["yes", "no"].includes(cardChoice) || !billingDate)) {
-      setError("Enter the amount, seats or licences, MAM card choice and billing date for this paid subscription.");
+    if (pricingModel === "paid" && (amountCents === null || !Number.isSafeInteger(seatCount) || (seatCount ?? 0) < 1 || !["yes", "no"].includes(cardChoice) || (cardChoice === "yes" && !creditCardHolder) || !billingDate)) {
+      setError("Enter the amount, seats or licences, credit-card details and billing date for this paid subscription.");
       return;
     }
     const baseInput: CreateSubscriptionInput = {
@@ -603,7 +596,8 @@ function SubscriptionModal({
       amountCents,
       renewalDate: String(form.get("renewalDate") ?? "") || null,
       seatCount,
-      mamCreditCardUsed: pricingModel === "paid" ? cardChoice === "yes" : null,
+      creditCardUsed: pricingModel === "paid" ? cardChoice === "yes" : null,
+      creditCardHolder: creditCardHolder || null,
       billingDate: billingDate || null,
       responsiblePersonId: String(form.get("responsiblePersonId") ?? ""),
       memberPersonIds,
@@ -647,7 +641,24 @@ function SubscriptionModal({
           <label><span>Plan <small>Optional</small></span><input name="planName" maxLength={160} defaultValue={subscription?.planName ?? ""} placeholder="Business Standard, Teams…" /></label>
         </div>
         {isEditing ? <label><span>Status <b aria-hidden="true">*</b></span><select name="status" defaultValue={subscription?.status ?? "active"}><option value="active">Active</option><option value="paused">Paused</option><option value="cancelled">Cancelled</option></select></label> : null}
-        <fieldset className={styles.pricingFieldset}><legend>Pricing</legend><div className={styles.pricingChoices}><label><input type="radio" name="pricingModel" value="free" checked={pricingModel === "free"} onChange={() => setPricingModel("free")} /> Free</label><label><input type="radio" name="pricingModel" value="paid" checked={pricingModel === "paid"} onChange={() => setPricingModel("paid")} /> Paid</label></div>{pricingModel === "paid" ? <><div className={styles.formGrid}><label><span>Billing cycle <b aria-hidden="true">*</b></span><select name="billingCycle" required defaultValue={subscription?.billingCycle ?? "monthly"}>{SUBSCRIPTION_BILLING_CYCLES.map((cycle) => <option key={cycle} value={cycle}>{billingCycleLabels[cycle]}</option>)}</select></label><label><span>Amount (AUD) <b aria-hidden="true">*</b></span><input name="amount" inputMode="decimal" required defaultValue={centsToAmount(subscription?.amountCents ?? null)} placeholder="0.00" /></label><label><span>Seats / licences <b aria-hidden="true">*</b></span><input name="seatCount" type="number" min="1" max="100000" step="1" required defaultValue={subscription?.seatCount ?? ""} placeholder="1" /></label><label><span>MAM credit card used <b aria-hidden="true">*</b></span><select name="mamCreditCardUsed" required defaultValue={subscription?.mamCreditCardUsed === null || subscription?.mamCreditCardUsed === undefined ? "" : subscription.mamCreditCardUsed ? "yes" : "no"}><option value="" disabled>Choose</option><option value="yes">Yes</option><option value="no">No</option></select></label><label><span>Billing date <b aria-hidden="true">*</b></span><input name="billingDate" type="date" required defaultValue={subscription?.billingDate ?? ""} /></label></div><p className={styles.formHelp}><CalendarClock size={15} /> Use a known charge date. Monthly, quarterly and annual next billing dates are calculated automatically.</p></> : null}</fieldset>
+        <fieldset className={styles.pricingFieldset}>
+          <legend>Pricing</legend>
+          <div className={styles.pricingChoices}>
+            <label><input type="radio" name="pricingModel" value="free" checked={pricingModel === "free"} onChange={() => setPricingModel("free")} /> Free</label>
+            <label><input type="radio" name="pricingModel" value="paid" checked={pricingModel === "paid"} onChange={() => setPricingModel("paid")} /> Paid</label>
+          </div>
+          {pricingModel === "paid" ? <>
+            <div className={styles.formGrid}>
+              <label><span>Billing cycle <b aria-hidden="true">*</b></span><select name="billingCycle" required defaultValue={subscription?.billingCycle ?? "monthly"}>{SUBSCRIPTION_BILLING_CYCLES.map((cycle) => <option key={cycle} value={cycle}>{billingCycleLabels[cycle]}</option>)}</select></label>
+              <label><span>Amount (AUD) <b aria-hidden="true">*</b></span><input name="amount" inputMode="decimal" required defaultValue={centsToAmount(subscription?.amountCents ?? null)} placeholder="0.00" /></label>
+              <label><span>Seats / licences <b aria-hidden="true">*</b></span><input name="seatCount" type="number" min="1" max="100000" step="1" required defaultValue={subscription?.seatCount ?? ""} placeholder="1" /></label>
+              <label><span>Credit card used <b aria-hidden="true">*</b></span><select name="creditCardUsed" required value={creditCardUsed} onChange={(event) => setCreditCardUsed(event.target.value)}><option value="" disabled>Choose</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+              {creditCardUsed === "yes" ? <label><span>Cardholder / card name <b aria-hidden="true">*</b></span><input name="creditCardHolder" required maxLength={160} defaultValue={subscription?.creditCardHolder ?? ""} placeholder="Gerard, Luke, Equipsy corporate card…" /></label> : null}
+              <label><span>Billing date <b aria-hidden="true">*</b></span><input name="billingDate" type="date" required defaultValue={subscription?.billingDate ?? ""} /></label>
+            </div>
+            <p className={styles.formHelp}><CalendarClock size={15} /> Use a known charge date. Monthly, quarterly and annual next billing dates are calculated automatically.</p>
+          </> : null}
+        </fieldset>
         <div className={styles.formGrid}>
           <label><span>Renewal date <small>Optional</small></span><input name="renewalDate" type="date" defaultValue={subscription?.renewalDate ?? ""} /></label>
           <label><span>Responsible person <b aria-hidden="true">*</b></span><EmployeePicker assignees={people} defaultValue={subscription?.responsible.personId ?? ""} name="responsiblePersonId" disabled={!people.length} /></label>

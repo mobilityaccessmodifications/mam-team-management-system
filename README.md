@@ -12,7 +12,7 @@ Safer People System is the private people portal for Mobility Access Modificatio
 - Accounts: username/password login backed by Supabase Auth and a database-controlled account registry
 - Leave rollout: durable leave migration `20260817120000_persist_leave_workspace` is applied to the verified MAM production project and the matching application is deployed at the fixed production URL. Leave requests and decisions now persist through controlled, RLS-protected operations.
 - Check-ins: active employees receive an automatic, durable milestone schedule; onboarding and offboarding remain separate review work
-- Payroll self-service and subscriptions: authorised payroll delegates and System Admin can stage CSV/XLSX leave-balance exports, review exact same-company matches and apply only safe rows; paid subscriptions also include seat, MAM-card, billing-date, next-billing and last-reviewed fields.
+- Payroll self-service and subscriptions: authorised payroll delegates and System Admin can stage CSV/XLSX leave-balance exports, review exact same-company matches and apply only safe rows; paid subscriptions also include seats, generic credit-card use and cardholder name, billing date, next billing and last reviewed fields.
 
 MAM people use the orange accent and Equipsy people use blue. Company is also stated in text, so colour is never the only company indicator.
 
@@ -47,7 +47,7 @@ Check-in schedules are generated automatically from each active employee's start
 
 The payroll self-service release adds a first-of-month Calendar reminder and an import panel to Leave. System Admin can grant the importer capability to an active linked payroll delegate without granting the broader employee Directory or subscription register. CSV and `.xlsx` files are parsed server-side, staged into a private preview and matched only to one active person in the same company after punctuation/spacing normalisation. Inactive, unmatched, cross-company and ambiguous rows are retained for review and never update a balance. The source files themselves are not persisted. At the 08:00 n8n run on each Melbourne Monday-to-Friday date, the explicitly configured payroll recipient receives one Outlook email naming only the current-month company snapshots still required. The reminder repeats on each later workday until both snapshots are complete; weekends are skipped and no email is sent once both snapshots are current.
 
-Paid subscription records in the same release record seats/licences, whether the MAM credit card is used, the billing anchor date and a server-calculated next billing date. Last Reviewed Date is derived from the audited review event. Service account email, username, password, MFA details, recovery codes, licence key and notes belong only in the separate encrypted credential vault, never in the subscription register or an export.
+Paid subscription records in the same release record seats/licences, whether a credit card is used, a free-text cardholder or company-card name, the billing anchor date and a server-calculated next billing date. The label is company-neutral so MAM and Equipsy cards can both be recorded. Never enter a card number, expiry date or security code. Last Reviewed Date is derived from the audited review event. Service account email, username, password, MFA details, recovery codes, licence key and notes belong only in the separate encrypted credential vault, never in the subscription register or an export.
 
 ## Data boundaries
 
