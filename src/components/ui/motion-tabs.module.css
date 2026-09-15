@@ -203,3 +203,138 @@
     animation: none;
   }
 }
+
+/* Segmented workspace control: compact, complete and horizontally scrollable. */
+.root {
+  position: relative;
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--surface-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-raised) 62%, var(--surface-muted));
+  box-shadow: var(--shadow-xs);
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  scroll-padding-inline: 5px;
+  scroll-snap-type: x proximity;
+}
+
+.trigger {
+  position: relative;
+  min-width: max-content;
+  min-height: 46px;
+  flex: 0 0 auto;
+  padding: 0 14px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-secondary);
+  isolation: isolate;
+  scroll-snap-align: start;
+  transition:
+    color var(--duration-ui, 170ms) var(--ease-out),
+    background var(--duration-ui, 170ms) var(--ease-out),
+    transform var(--duration-press, 120ms) var(--ease-out);
+}
+
+.indicator {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid rgb(255 255 255 / 90%);
+  border-radius: inherit;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-xs);
+  animation: tab-selection-in 170ms var(--ease-out) both;
+}
+
+.indicator::after {
+  right: auto;
+  bottom: 7px;
+  left: 9px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--accent, var(--mam-orange));
+}
+
+.label {
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 610;
+  letter-spacing: -.012em;
+}
+
+.icon {
+  color: var(--text-tertiary);
+  transition: color var(--duration-ui, 170ms) var(--ease-out);
+}
+
+.trigger[data-active="true"] {
+  color: var(--text-primary);
+}
+
+.trigger[data-active="true"] .icon {
+  color: var(--accent-deep, var(--mam-orange-dark));
+}
+
+.badge {
+  min-width: 21px;
+  padding: 2px 6px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .trigger:hover {
+    background: rgb(255 255 255 / 52%);
+    color: var(--text-primary);
+  }
+
+  .trigger[data-active="true"]:hover {
+    background: transparent;
+  }
+}
+
+@media (max-width: 720px) {
+  .root {
+    border-radius: 15px;
+  }
+
+  .trigger {
+    min-height: 46px;
+    padding-inline: 13px;
+  }
+
+  .label {
+    font-size: 13px;
+  }
+}
+
+@keyframes tab-selection-in {
+  from {
+    opacity: 0;
+    transform: scale(.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trigger {
+    transition: none;
+  }
+
+  .indicator {
+    animation: none;
+  }
+}

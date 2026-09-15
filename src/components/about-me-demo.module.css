@@ -70,3 +70,11 @@
 /* Shared People Hub page rhythm. */
 .workspace { gap: 20px; }
 .profileCard { border-radius: 12px; box-shadow: none; }
+
+/* Apple workspace v2 */
+.workspace { gap: 16px; }
+.profileCard { overflow: hidden; border: 1px solid var(--surface-border); border-radius: 18px; background: var(--surface-raised); box-shadow: var(--shadow-xs); }
+.profileSummary { min-height: 72px; padding: 16px 18px; border-color: var(--surface-border); }
+@media (max-width: 520px) {
+  .profileCard { border-radius: 16px; }
+}

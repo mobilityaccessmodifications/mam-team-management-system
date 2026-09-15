@@ -124,23 +124,36 @@ test('duration pill reports the requested balance, including sick leave', () => 
   }
 });
 
-test('self-service shows only own annual balance and eligible team request choices', () => {
+test('self-service keeps eligible team choices without exposing a standing balance card', () => {
   const html = renderToStaticMarkup(createElement(loaded.exports.LeaveSelfServiceControls, {
     workspace: workspace([{...person,sickHours:99,canViewSickBalance:true}, {...person,personId:'team',name:'Test Teammate',canSubmit:true,hours:987}]),
     personId:'employee',busy:false,onRequest() {},
   }));
-  assert.match(html,/My annual leave/);
-  assert.match(html,/<strong>60<\/strong>/);
   assert.match(html,/Request for team/);
   assert.match(html,/<option value="team">Test Teammate<\/option>/);
-  assert.doesNotMatch(html,/Sick|99|987|Edit annual|Edit sick|Accrual settings/);
+  assert.doesNotMatch(html,/My annual leave|<strong>60<\/strong>|Sick|99|987|Edit annual|Edit sick|Accrual settings/);
 });
 
-test('administrator preview retains self service but not management, and own balance hold remains visible', () => {
+test('annual balance appears in the request context for the authorised target only', () => {
   const props = {workspace:{...workspace([{...person,accrualStatus:'needs_review'}]),canManageBalances:true},personId:'employee',busy:false,onRequest() {}};
   assert.equal(renderToStaticMarkup(createElement(loaded.exports.LeaveSelfServiceControls,props)), '');
-  const html=renderToStaticMarkup(createElement(loaded.exports.LeaveSelfServiceControls,{...props,previewPersonId:'employee'}));
+  assert.equal(renderToStaticMarkup(createElement(loaded.exports.LeaveSelfServiceControls,{...props,previewPersonId:'employee'})), '');
+  const html=renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance,{workspace:props.workspace,personId:'employee',self:true}));
   assert.match(html,/My annual leave/);
+  assert.match(html,/<strong>60<\/strong>/);
   assert.match(html,/Balance needs checking/);
   assert.doesNotMatch(html,/Edit annual|Edit sick|Accrual settings/);
+  assert.equal(renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance,{workspace:props.workspace,personId:'different',self:true})), '');
+});
+
+test('annual request context names an unavailable balance instead of hiding or inventing zero', () => {
+  const html = renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance, {
+    workspace: workspace([{ ...person, hours: null, accrualStatus: 'needs_review' }]),
+    personId: 'employee',
+    self: true,
+  }));
+  assert.match(html, /My annual leave/);
+  assert.match(html, /Unavailable/);
+  assert.match(html, /Balance needs checking/);
+  assert.doesNotMatch(html, /<strong>0<\/strong>/);
 });

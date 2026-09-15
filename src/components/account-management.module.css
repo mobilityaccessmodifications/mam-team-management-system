@@ -1313,3 +1313,22 @@
     transform: none;
   }
 }
+
+/* Apple workspace v2 */
+.workspace { gap: 16px; }
+.header { min-height: 60px; align-items: center; }
+.header h2 { font-size: 24px; font-weight: 670; letter-spacing: -.035em; }
+.header > div:first-child > span { margin-bottom: 5px; font-family: var(--font-geist-sans), sans-serif; font-size: 10px; letter-spacing: .08em; }
+.accountCount { border-radius: 14px; box-shadow: var(--shadow-xs); }
+.listControls { gap: 8px; padding: 6px; border: 1px solid var(--surface-border); border-radius: 16px; background: rgb(255 255 255 / 76%); box-shadow: var(--shadow-xs); }
+.searchField, .sortField { min-height: 44px; border: 0; border-radius: 11px; box-shadow: none; }
+.accountList { border-radius: 18px; box-shadow: var(--shadow-xs); }
+.accountRow { min-height: 76px; }
+.avatar { width: 40px; height: 40px; border-radius: 12px; }
+.editor { margin: 0 12px 12px; border: 1px solid var(--surface-border); border-radius: 14px; background: var(--surface-muted); }
+.primaryButton, .secondaryButton, .dangerButton, .textButton, .iconButton, .pageControls button { border-radius: 11px; }
+@media (max-width: 720px) {
+  .listControls { grid-template-columns: 1fr; padding: 5px; border-radius: 14px; }
+  .accountList { border-radius: 16px; }
+  .editor { margin: 0 8px 8px; }
+}

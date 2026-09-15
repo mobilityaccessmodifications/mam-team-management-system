@@ -1141,3 +1141,23 @@
     touch-action: manipulation;
   }
 }
+
+/* Apple workspace v2 */
+.workspace { gap: 16px; }
+.header { min-height: 60px; align-items: center; }
+.header h2 { font-size: 24px; font-weight: 670; letter-spacing: -.035em; }
+.header > div:first-child > span { font-family: var(--font-geist-sans), sans-serif; font-size: 10px; letter-spacing: .08em; }
+.directoryDesk { overflow: hidden; border-color: var(--surface-border); border-radius: 18px; background: var(--surface-raised); box-shadow: var(--shadow-xs); }
+.listTools { padding: 7px; border-bottom-color: var(--surface-border); background: color-mix(in srgb, var(--surface-muted) 70%, var(--surface-raised)); }
+.searchField { border-radius: 11px; }
+.directoryList { background: color-mix(in srgb, var(--surface-muted) 54%, var(--surface-raised)); }
+.directoryList button { min-height: 68px; border-color: var(--surface-border); }
+.directoryList button[aria-current="true"] { background: var(--directory-accent-soft); box-shadow: inset 3px 0 var(--directory-accent); }
+.editor { border-color: var(--surface-border); background: var(--surface-raised); }
+.editorHeader { min-height: 72px; border-bottom-color: var(--surface-border); background: rgb(255 255 255 / 92%); backdrop-filter: blur(18px); }
+.primaryAction, .secondaryAction, .primaryButton, .secondaryButton, .dangerAction, .formFooter button { border-radius: 11px; }
+.modal { border-color: var(--surface-border); border-radius: 22px; box-shadow: var(--shadow-md); }
+@media (max-width: 640px) {
+  .directoryDesk { border-radius: 16px; }
+  .modal, .editor { border-radius: 24px 24px 0 0; }
+}

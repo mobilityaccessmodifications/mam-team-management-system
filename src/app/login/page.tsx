@@ -18,7 +18,15 @@ export default async function LoginPage({
   return (
     <main className="auth-shell">
       <section className="auth-story">
-        <BrandMark />
+        <div className="auth-story-content">
+          <BrandMark />
+          <div className="auth-story-copy">
+            <span>Private team workspace</span>
+            <h1>People work, made clear.</h1>
+            <p>Leave, schedules, people records and day-to-day operations in one secure place.</p>
+          </div>
+          <small>MAM · Equipsy</small>
+        </div>
       </section>
       <section className="auth-form-wrap" aria-labelledby="sign-in-title">
         <div className="auth-card">

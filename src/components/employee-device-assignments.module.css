@@ -161,7 +161,7 @@
 .deviceAssigned span {
   color: var(--text-tertiary);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: .1em;
   text-transform: uppercase;
@@ -421,3 +421,15 @@
 /* Shared People Hub page rhythm. */
 .primaryAction, .secondaryAction, .dangerAction { min-height: 40px; font-size: 13px; font-weight: 600; box-shadow: none; }
 .modal { border-radius: 14px; }
+
+/* Apple workspace v2 */
+.section { padding: 16px; border-color: var(--surface-border); border-radius: 16px; background: var(--surface-muted); }
+.deviceList { overflow: hidden; border-color: var(--surface-border); border-radius: 14px; background: var(--surface-raised); }
+.deviceCard { min-height: 66px; border-color: var(--surface-border); }
+.deviceIcon { border-radius: 11px; }
+.primaryAction, .secondaryAction, .dangerAction { border-radius: 11px; }
+.modal { border-color: var(--surface-border); border-radius: 22px; box-shadow: var(--shadow-md); }
+@media (max-width: 640px) {
+  .section, .deviceList { border-radius: 14px; }
+  .modal { border-radius: 24px 24px 0 0; }
+}

@@ -950,3 +950,18 @@
     transform: none;
   }
 }
+
+/* Apple workspace v2 */
+.trigger, .triggerOpen { min-height: 48px; padding: 5px 8px 5px 6px; border-color: var(--surface-border); border-radius: 14px; background: rgb(255 255 255 / 86%); box-shadow: var(--shadow-xs); }
+.avatar { width: 36px; height: 36px; border-radius: 11px; background: var(--accent-soft, var(--surface-warm)); color: var(--accent-deep, var(--mam-orange-strong)); }
+.triggerCopy strong { font-size: 13px; font-weight: 650; }
+.triggerCopy small { color: var(--text-tertiary); }
+.panel { border-color: var(--surface-border); border-radius: 22px; background: var(--surface-raised); box-shadow: var(--shadow-md); }
+.panelHeader { min-height: 76px; border-bottom-color: var(--surface-border); background: rgb(255 255 255 / 92%); backdrop-filter: blur(18px); }
+.organisationSummary, .section { border-color: var(--surface-border); border-radius: 14px; background: var(--surface-muted); }
+.field input { min-height: 46px; border-color: var(--surface-border-strong); border-radius: 11px; }
+.form button, .closeButton { border-radius: 11px; }
+@media (max-width: 760px) {
+  .trigger, .triggerOpen { padding: 0; border-radius: 12px; }
+  .panel { border-radius: 24px 24px 0 0; }
+}

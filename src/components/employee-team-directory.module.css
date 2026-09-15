@@ -226,3 +226,14 @@
 /* Shared People Hub page rhythm. */
 .directoryDesk { border-radius: 12px; box-shadow: none; }
 .header { gap: 12px; }
+
+/* Apple workspace v2 */
+.header { min-height: 60px; align-items: center; }
+.header h2 { font-size: 24px; font-weight: 670; letter-spacing: -.035em; }
+.directoryDesk { overflow: hidden; border-color: var(--surface-border); border-radius: 18px; background: var(--surface-raised); box-shadow: var(--shadow-xs); }
+.directoryList { background: color-mix(in srgb, var(--surface-muted) 58%, var(--surface-raised)); }
+.detailHeader { border-bottom-color: var(--surface-border); }
+.detailGrid > *, .deviceList, .subscriptionList { border-color: var(--surface-border); border-radius: 14px; }
+@media (max-width: 640px) {
+  .directoryDesk { border-radius: 16px; }
+}

@@ -24,3 +24,11 @@ test("tab selection inherits the active company palette", () => {
   assert.match(styles, /var\(--accent, var\(--mam-orange\)\)/);
   assert.match(styles, /var\(--accent-deep, var\(--mam-orange-dark\)\)/);
 });
+
+test("the selected tab is brought back into view when its container resizes", () => {
+  assert.match(source, /function revealActiveTab\(\)/);
+  assert.match(source, /new ResizeObserver\(revealActiveTab\)/);
+  assert.match(source, /resizeObserver\.observe\(tabList\)/);
+  assert.match(source, /resizeObserver\.disconnect\(\)/);
+  assert.match(source, /behavior: "auto"/);
+});

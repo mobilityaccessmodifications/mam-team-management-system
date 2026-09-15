@@ -536,7 +536,7 @@ export function PeopleOperationsDemo({
         options={sectionTabs}
         ariaLabel="People sections"
         className={styles.sectionSwitch}
-        orientation="responsive"
+        orientation="horizontal"
         panelId="people-section-panel"
       />
 

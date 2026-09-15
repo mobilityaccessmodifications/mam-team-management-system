@@ -29,7 +29,7 @@ import {
 import { FormEvent, type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
-import { ApprovalBalancePill, ApprovalLeaveBalances, LeavePriorityControls, LeaveSelfServiceControls, SickEvidenceNotice } from "@/components/leave-priority-controls";
+import { ApprovalBalancePill, ApprovalLeaveBalances, LeavePriorityControls, LeaveRequestBalance, LeaveSelfServiceControls, SickEvidenceNotice } from "@/components/leave-priority-controls";
 import { BALANCE_PENDING_STATUS, sickEvidenceDeadline, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import {
   getCurrentEmployeeSelfProfile,
@@ -1802,12 +1802,13 @@ export function LeaveDemo({
       <a className={styles.skipLink} href="#main-content">Skip to workspace</a>
       <aside className={styles.sidebar} aria-label="People Hub navigation">
         <div className={styles.brandRow}><BrandMark /></div>
+        <span className={styles.navHeading}>Workspace</span>
         <nav className={styles.nav} style={navCountStyle}>
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
               <button aria-current={activeView === item.id ? "page" : undefined} className={`${styles.navItem} ${activeView === item.id ? styles.navItemActive : ""}`} type="button" onClick={() => navigate(item.id)} key={item.id}>
-                <Icon size={17} strokeWidth={1.8} /><b>{item.label}</b>{item.badge ? <i>{item.badge}</i> : null}
+                <span className={styles.navIcon}><Icon size={18} strokeWidth={1.8} /></span><b>{item.label}</b>{item.badge ? <i>{item.badge}</i> : null}
               </button>
             );
           })}
@@ -1880,7 +1881,10 @@ export function LeaveDemo({
 
       <div className={`${styles.workspace} ${activeView === "calendar" ? styles.calendarWorkspace : ""}`}>
         <header className={styles.topbar}>
-          <h1 className={styles.pageTitle}>{navItems.find((item) => item.id === activeView)?.label}</h1>
+          <div className={styles.topbarHeading}>
+            <span>{activeProfile.company === "equipsy" ? "Equipsy" : "MAM"} workspace</span>
+            <h1 className={styles.pageTitle}>{navItems.find((item) => item.id === activeView)?.label}</h1>
+          </div>
           <div className={styles.mobileBrand}><BrandMark compact /></div>
           <div className={styles.topActions}>
             {organisationState !== "live" ? (
@@ -2061,6 +2065,7 @@ export function LeaveDemo({
           <section className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
             <header><div><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={closeLeaveRequestForm} aria-label="Close request form"><X size={19} /></button></header>
             <div className={styles.formPerson}><span className={styles.avatarOrange}>{activeProfile.initials}</span><span><strong>{requestForPersonId ? leavePriority?.people.find((person) => person.personId === requestForPersonId)?.name : activeProfile.name}</strong><small>{requestForPersonId ? "On behalf of your team member" : activeProfile.team}</small></span></div>
+            {formLeaveType === "Annual leave" ? <LeaveRequestBalance workspace={leavePriority} personId={requestForPersonId || activeProfile.id} self={!requestForPersonId} /> : null}
             <form className={styles.form} onSubmit={submitRequest} onChange={() => setFormError("")}>
               <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" value={formLeaveType} onChange={(event) => setFormLeaveType(event.target.value)} required>{(requestForPersonId ? (leavePriority?.people.find((person) => person.personId === requestForPersonId)?.paidLeave ? ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"] : ["Unpaid leave"]).map((value) => ({ value, label: value })) : availableLeaveTypes).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
               {!requestForPersonId && !hasPaidLeaveEntitlement ? <p className={styles.leavePolicyNote} role="note">
@@ -2136,6 +2141,13 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
   if (isNonRosterSystemAdmin) {
     return (
       <div className={styles.dashboard}>
+        <header className={styles.homeWelcome}>
+          <div>
+            <span className={styles.homeEyebrow}>System workspace</span>
+            <h2>People operations, at a glance</h2>
+            <p>Choose a staff profile to inspect their workspace, or open People to manage the organisation.</p>
+          </div>
+        </header>
         {workSchedule}
         <section className={styles.panel}>
           <div className={styles.emptyState}>
@@ -2161,10 +2173,26 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
   const attentionRequests = canReview ? pending : requests.filter((request) => request.status === "Pending" && request.personId !== profile.id);
   const attentionTitle = canReview ? "Needs review" : "Pending leave";
   const recordSection: LeaveSection = canReview ? "approvals" : "requests";
+  const firstName = profile.name?.trim().split(/\s+/)[0] || "there";
+  const overviewPending = canReview ? pending.length : pendingOwnRequests.length;
+  const overviewActive = activeOwnRequests.length;
+
+  const welcome = <header className={styles.homeWelcome}>
+    <div>
+      <span className={styles.homeEyebrow}>Today</span>
+      <h2>Welcome back, {firstName}</h2>
+      <p>{canReview ? "Review what needs attention, then move on with your day." : "Your schedule and leave activity are ready when you need them."}</p>
+    </div>
+    <div className={styles.homeSnapshot} aria-label="Workspace summary">
+      <span><strong>{overviewPending}</strong><small>{canReview ? "to review" : "pending"}</small></span>
+      <span><strong>{overviewActive}</strong><small>active leave</small></span>
+    </div>
+  </header>;
 
   if (!canReview) {
     return (
       <div className={styles.dashboard}>
+        {welcome}
         {workSchedule}
         <section className={`${styles.panel} ${styles.myLeavePanel} ${styles.personalLeavePanel}`}>
           <PanelHeader title="My leave" action="Open my leave" onAction={() => onNavigate("leave")} />
@@ -2176,6 +2204,7 @@ function HomeView({ profile, requests, myRequests, pending, canReview, onNavigat
 
   return (
     <div className={styles.dashboard}>
+      {welcome}
       {workSchedule}
       <div className={styles.homeGrid}>
         <section className={`${styles.panel} ${styles.attentionPanel}`}>
@@ -2214,7 +2243,7 @@ function LeaveLoadingState() {
 }
 
 function LeaveView({ leavePriority, onBalancesSaved, profile, section, requests, allRequests, selected, filter, pending, canReview, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canApplyForLeave, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, onRequestLeave, onFilter, onSection, onNote, onSelect, onCloseMobileDetail, onDecision, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { leavePriority?: LeavePriorityWorkspace; onBalancesSaved: () => Promise<void>; profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canApplyForLeave: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onRequestLeave: () => void; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onCloseMobileDetail: () => void; onDecision: (status: LeaveDecision) => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
-  const applyAction = canApplyForLeave ? <button className={`${styles.primaryButton} ${styles.applyForLeaveButton}`} type="button" onClick={onRequestLeave} disabled={busy} aria-haspopup="dialog"><Plus aria-hidden="true" size={17} /><span>Apply for leave</span></button> : null;
+  const applyAction = canApplyForLeave ? <button className={`${styles.primaryButton} ${styles.applyForLeaveButton}`} type="button" onClick={onRequestLeave} disabled={busy} aria-haspopup="dialog" aria-label="Apply for leave" title="Apply for leave"><Plus aria-hidden="true" size={17} /><span className={styles.applyFullLabel}>Apply for leave</span><span className={styles.applyCompactLabel}>Apply</span></button> : null;
   return (
     <section className={styles.leaveDesk}>
       <div className={styles.leaveHeader}>
@@ -2228,15 +2257,15 @@ function LeaveView({ leavePriority, onBalancesSaved, profile, section, requests,
           </button>
         </div>
       ) : null}
-      {section === "approvals" ? applyAction : null}
+      {applyAction}
       </div>
-      {section === "requests" ? <RequestsView action={applyAction} profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} attachmentsByRequestId={attachmentsByRequestId} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onViewMore={(id) => onSelect(id, "approvals")} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
+      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} attachmentsByRequestId={attachmentsByRequestId} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onViewMore={(id) => onSelect(id, "approvals")} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
       {section === "approvals" && canReview ? <ApprovalsView leavePriority={leavePriority} onBalancesSaved={onBalancesSaved} pending={pending} selected={selected} selectedId={selectedId} note={note} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={busy} readOnly={readOnly} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} /> : null}
     </section>
   );
 }
 
-function RequestsView({ action, profile, requests, allRequests, selected, filter, canReview, attachmentsByRequestId, readOnly, hidePrivateDetails, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onViewMore, onCloseMobileDetail, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { action?: ReactNode; profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; attachmentsByRequestId: Map<string, LeaveAttachment[]>; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onViewMore: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function RequestsView({ profile, requests, allRequests, selected, filter, canReview, attachmentsByRequestId, readOnly, hidePrivateDetails, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onViewMore, onCloseMobileDetail, onAddSupportingFiles, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; attachmentsByRequestId: Map<string, LeaveAttachment[]>; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onViewMore: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   const filters: ("All" | RequestStatus)[] = ["All", "Pending", BALANCE_PENDING_STATUS, "Approved", "Declined", "Cancelled"];
   const isEmployee = !canReview;
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -2261,11 +2290,8 @@ function RequestsView({ action, profile, requests, allRequests, selected, filter
 
   return (
     <section className={styles.recordsWorkspace}>
-      <div className={styles.requestToolbar}>
       <div className={styles.viewToolbar}>
         <div className={styles.filterTabs} role="group" aria-label="Leave request status">{filters.map((item) => <button aria-pressed={filter === item} className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item === BALANCE_PENDING_STATUS ? "Waiting for balance" : item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => request.status === item).length}</span></button>)}</div>
-      </div>
-      {action}
       </div>
       <div className={`${styles.recordsGrid} ${isEmployee ? styles.employeeRecordsGrid : ""} ${!selected ? styles.recordsGridNoDetail : ""} ${mobileDetailDialogOpen ? styles.recordsGridMobileDetailOpen : ""}`}>
         <div className={styles.recordsTable} role="table" aria-label="Leave requests">

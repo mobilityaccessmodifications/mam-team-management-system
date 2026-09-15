@@ -666,7 +666,7 @@
   min-width: 52px;
   color: var(--text-tertiary, #75817d);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   text-align: center;
 }
@@ -1188,10 +1188,10 @@
   visibility: hidden;
   border: 1px solid rgb(255 255 255 / 0.08);
   border-radius: 7px;
-  background: var(--sidebar, #182421);
+  background: var(--surface-inverse, #1d2d29);
   box-shadow: 0 8px 20px rgb(24 35 37 / 0.22);
-  color: #fff;
-  font-size: 9px;
+  color: var(--text-on-inverse, #fff);
+  font-size: 10px;
   font-weight: 700;
   line-height: 1.25;
   opacity: 0;
@@ -1304,7 +1304,7 @@
 
 .inspectorHeader span {
   color: var(--company);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 850;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1369,7 +1369,7 @@
 .personFacts dt,
 .relationships > span {
   color: var(--text-tertiary, #75817d);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.055em;
   text-transform: uppercase;
@@ -2079,4 +2079,19 @@
   .filterHeading {
     grid-column: 1 / -1;
   }
+}
+
+/* Apple workspace v2 */
+.organisation { gap: 16px; }
+.header h2 { font-size: 24px; font-weight: 670; letter-spacing: -.035em; }
+.header > div > span { font-family: var(--font-geist-sans), sans-serif; font-size: 10px; letter-spacing: .08em; }
+.toolbar { min-height: 58px; padding: 7px; border: 1px solid var(--surface-border); border-radius: 16px; background: rgb(255 255 255 / 78%); box-shadow: var(--shadow-xs); backdrop-filter: blur(18px); }
+.toolbar label, .toolbarActions > button { min-height: 42px; border-radius: 11px; }
+.treeViewport, .mobileTree { border-color: var(--surface-border); border-radius: 18px; background: var(--surface-raised); box-shadow: var(--shadow-xs); }
+.personCard, .unitCard { border-color: var(--surface-border); border-radius: 14px; box-shadow: var(--shadow-xs); }
+.filterCard, .personPanel, .editorPanel { border-color: var(--surface-border); border-radius: 18px; background: var(--surface-raised); box-shadow: var(--shadow-md); }
+@media (max-width: 760px) {
+  .organisation { gap: 12px; }
+  .toolbar { border-radius: 14px; }
+  .treeViewport, .mobileTree { border-radius: 16px; }
 }

@@ -49,7 +49,7 @@
 .readiness i b { display: block; height: 100%; border-radius: inherit; background: var(--people-accent); }
 .taskBoard { border: 1px solid var(--surface-border); border-radius: var(--radius-lg); background: var(--surface-raised); overflow: hidden; }
 .taskBoard > header, .audit > header, .detailGrid section > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 15px; border-bottom: 1px solid #dce2e1; }
-.taskBoard header span, .audit header small, .detailGrid section header small { display: block; color: #748185; font-family: var(--font-mono, ui-monospace, monospace); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.taskBoard header span, .audit header small, .detailGrid section header small { display: block; color: #64706c; font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .taskBoard h3, .audit h3, .detailGrid h3 { margin: 3px 0 0; font-size: 14px; }
 .taskBoard > header > small { max-width: 190px; color: #78858a; font-size: 10px; text-align: right; }
 .taskGroup { border-top: 1px solid #edf0ef; }
@@ -162,7 +162,7 @@
 .modal details > .formRow, .modal details > label { margin-top: 11px; }
 .modal footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 3px; }
 .cancelButton { border: 1px solid #d2dcda; border-radius: 6px; background: #fff; color: #58656a; cursor: pointer; font: inherit; font-size: 13px; padding: 10px 13px; }
-.toast { position: fixed; z-index: 70; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 8px; max-width: min(420px, calc(100vw - 32px)); border: 1px solid rgb(255 255 255 / .1); border-radius: var(--radius-md); background: var(--sidebar-raised); box-shadow: var(--shadow-md); color: #fff; font-size: 12px; opacity: 0; padding: 12px 14px; pointer-events: none; transform: translateY(12px); transition: opacity .2s ease, transform .2s ease; }
+.toast { position: fixed; z-index: 70; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 8px; max-width: min(420px, calc(100vw - 32px)); border: 1px solid rgb(255 255 255 / .1); border-radius: var(--radius-md); background: var(--surface-inverse, #1d2d29); box-shadow: var(--shadow-md); color: var(--text-on-inverse, #fff); font-size: 12px; opacity: 0; padding: 12px 14px; pointer-events: none; transform: translateY(12px); transition: opacity .2s ease, transform .2s ease; }
 .toastVisible { opacity: 1; transform: translateY(0); }
 
 @media (max-width: 900px) {
@@ -480,8 +480,7 @@
 .modal { border-radius: 14px; }
 
 /* Apple-style adaptive People navigation: a stable section rail on wide
-   desktops, a complete two-row switcher at compact widths, and a swipeable
-   strip on phones. */
+   desktops and a single, swipeable row at every compact width. */
 @media (min-width: 1320px) {
   .peopleLayout {
     grid-template-columns: 196px minmax(0, 1fr);
@@ -539,19 +538,25 @@
 
 @media (min-width: 721px) and (max-width: 1319px) {
   .sectionSwitch {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 3px;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 4px;
     padding: 4px;
-    overflow: visible;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    scroll-padding-inline: 4px;
+    scroll-snap-type: x proximity;
     border: 1px solid var(--surface-border);
     border-radius: var(--radius-lg);
     background: color-mix(in srgb, var(--surface-raised) 86%, var(--surface-muted));
   }
 
   .sectionSwitch > [role="tab"] {
-    min-width: 0;
+    flex: 0 0 auto;
+    min-width: max-content;
     border-radius: 9px;
+    scroll-snap-align: start;
   }
 }
 
@@ -577,6 +582,13 @@
   }
 }
 
+@media (prefers-reduced-transparency: reduce) {
+  .sectionSwitch {
+    background: var(--surface-raised);
+    backdrop-filter: none;
+  }
+}
+
 @media (hover: hover) and (pointer: fine) {
   .taskSwitch button:hover {
     color: var(--text-primary);
@@ -587,5 +599,250 @@
   .primaryAction:active,
   .previewButton:active {
     transform: none;
+  }
+}
+
+/* Apple workspace v2: People always uses one complete horizontal section bar. */
+.workspace {
+  gap: 16px;
+}
+
+.peopleLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.sectionSwitch {
+  position: sticky;
+  top: 90px;
+  z-index: 12;
+  display: flex;
+  width: 100%;
+  max-height: none;
+  flex-wrap: nowrap;
+  align-self: auto;
+  gap: 4px;
+  padding: 5px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--surface-border);
+  border-radius: 16px;
+  background: rgb(247 249 248 / 88%);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(22px) saturate(125%);
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 5px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.sectionSwitch::-webkit-scrollbar {
+  display: none;
+}
+
+.sectionSwitch > [role="tab"] {
+  width: auto;
+  min-width: max-content;
+  flex: 0 0 auto;
+  justify-self: auto;
+  padding-inline: 14px;
+  border-radius: 11px;
+  text-align: center;
+  scroll-snap-align: start;
+}
+
+.sectionSwitch > [role="tab"] > span:last-child {
+  width: auto;
+  justify-content: center;
+}
+
+.sectionSwitch > [role="tab"][data-active="true"] > [aria-hidden="true"]:first-child {
+  inset: 0;
+  border: 1px solid rgb(255 255 255 / 90%);
+  border-radius: 11px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-xs);
+}
+
+.sectionSwitch > [role="tab"][data-active="true"] > [aria-hidden="true"]:first-child::after {
+  inset: auto auto 7px 9px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+}
+
+.sectionContent {
+  gap: 18px;
+}
+
+.taskSwitch {
+  gap: 4px;
+  padding: 5px;
+  border-color: var(--surface-border);
+  border-radius: 13px;
+  background: var(--surface-muted);
+}
+
+.taskSwitch button {
+  min-height: 38px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 610;
+}
+
+.taskSwitch button[aria-pressed="true"] {
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-xs);
+}
+
+.workflowDesk,
+.checkInLayout {
+  overflow: hidden;
+  border-color: var(--surface-border);
+  border-radius: 18px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-xs);
+}
+
+.workflowList,
+.personList {
+  border-color: var(--surface-border);
+  background: color-mix(in srgb, var(--surface-muted) 62%, var(--surface-raised));
+}
+
+.workflowList > button,
+.personList button {
+  min-height: 68px;
+  border-color: var(--surface-border);
+  transition: background var(--duration-ui, 170ms) var(--ease-out), box-shadow var(--duration-ui, 170ms) var(--ease-out);
+}
+
+.workflowList > .workflowSelected,
+.personList .personSelected {
+  background: var(--people-accent-soft);
+  box-shadow: inset 3px 0 var(--people-accent);
+}
+
+.workflowDetail,
+.checkInDetail {
+  gap: 20px;
+  padding: 26px;
+}
+
+.detailHeader h2,
+.checkInDetail h2 {
+  font-size: 23px;
+  font-weight: 660;
+  letter-spacing: -.035em;
+}
+
+.caseAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.readiness,
+.checkInMeta,
+.taskBoard,
+.reminderTimeline,
+.supportingDetails {
+  border-color: var(--surface-border);
+  border-radius: 14px;
+  background: var(--surface-muted);
+}
+
+.taskBoard,
+.reminderTimeline,
+.supportingDetails[open] {
+  background: var(--surface-raised);
+}
+
+.taskRow,
+.assetRow,
+.accessRow,
+.reminderTimeline article {
+  min-height: 60px;
+  border-color: var(--surface-border);
+}
+
+.primaryAction,
+.previewButton {
+  min-height: 42px;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 620;
+  box-shadow: none;
+}
+
+.emptyState {
+  min-height: 260px;
+  border: 1px solid var(--surface-border);
+  border-radius: 18px;
+  background: rgb(255 255 255 / 78%);
+  box-shadow: var(--shadow-xs);
+}
+
+.modal {
+  border-color: var(--surface-border);
+  border-radius: 22px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-md);
+}
+
+.modal > header {
+  border-bottom-color: var(--surface-border);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workflowList > button:hover,
+  .personList button:hover {
+    background: var(--surface-muted);
+  }
+
+  .workflowList > .workflowSelected:hover,
+  .personList .personSelected:hover {
+    background: var(--people-accent-soft);
+  }
+}
+
+@media (max-width: 900px) {
+  .sectionSwitch {
+    top: 76px;
+  }
+}
+
+@media (max-width: 720px) {
+  .peopleLayout {
+    gap: 12px;
+  }
+
+  .sectionSwitch {
+    top: 72px;
+    width: calc(100% + (2 * var(--mobile-gutter, 12px)));
+    margin-inline: calc(-1 * var(--mobile-gutter, 12px));
+    padding-inline: var(--mobile-gutter, 12px);
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+    box-shadow: 0 1px var(--surface-border);
+    scroll-padding-inline: var(--mobile-gutter, 12px);
+  }
+
+  .sectionSwitch > [role="tab"] {
+    min-height: 46px;
+  }
+
+  .workflowDetail,
+  .checkInDetail {
+    padding: 16px;
+  }
+
+  .workflowDesk,
+  .checkInLayout,
+  .emptyState {
+    border-radius: 16px;
   }
 }
