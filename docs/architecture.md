@@ -33,7 +33,7 @@ Browser
        -> browser-session onboarding/offboarding review state
 ```
 
-There is no live payroll API, AroFlo or provisioning write integration. Payroll changes enter only through the reviewed dated-snapshot import. The monthly importer reminder has both an in-app Calendar entry and a narrowly scoped first-day email through the existing MAM n8n/Outlook delivery path; it does not write to payroll.
+There is no live payroll API, AroFlo or provisioning write integration. Payroll changes enter only through the reviewed dated-snapshot import. The monthly importer reminder has both an in-app Calendar entry and a narrowly scoped recurring workday email through the existing MAM n8n/Outlook delivery path; it does not write to payroll.
 
 ## Authenticated directory
 
@@ -85,7 +85,7 @@ The database re-authorises every stage and commit, locks a batch during commit a
 
 System Admin may replace the active delegate list through a separately audited function. Delegate authority is resolved from the person's current active portal link; no name or user ID is compiled into the application. The Calendar reminder is due on the first of each month and remains visible to authorised importers until both MAM and Equipsy have a current-month imported snapshot.
 
-Migration `20260915140000_payroll_balance_email_reminder` adds a separate private recipient configuration and durable month-level delivery outbox. The recipient is configured as data after a target-checked release, not embedded in the schema. At claim and immediately before send, the database requires that stable person to remain an active MAM employee with an active linked portal account, a current payroll-import grant and a valid HR work email. The current email is returned only to the server dispatcher and is not stored in the outbox. The existing n8n scheduler calls the consolidated route daily, but SQL permits payroll delivery only on day 1 between 08:00 and 16:59 Melbourne time and never creates mid-month catch-up mail. If both company snapshots are current, no email is required; otherwise the strict n8n event includes only the missing company keys, a server-derived recipient and a stable month event key.
+Migration `20260915140000_payroll_balance_email_reminder` adds a separate private recipient configuration and durable delivery outbox. Forward migration `20260915150000_weekday_recurring_payroll_balance_email_reminder` scopes outbox uniqueness to the Melbourne workday instead of the month. The recipient is configured as data after a target-checked release, not embedded in the schema. At claim and immediately before send, the database requires that stable person to remain an active MAM employee with an active linked portal account, a current payroll-import grant and a valid HR work email. The current email is returned only to the server dispatcher and is not stored in the outbox. The existing n8n scheduler calls the consolidated route daily, but SQL permits payroll delivery only on Monday-to-Friday dates between 08:00 and 16:59 Melbourne time. A completed day cannot send twice, a later workday gets a new row while either company remains stale, and both current snapshots stop the series immediately. Public holidays are not modelled. The strict n8n event includes only the missing company keys, a server-derived recipient and the stable key for that workday row.
 
 ## HR employee directory
 
@@ -137,7 +137,7 @@ This boundary keeps onboarding and offboarding separate until their durable acce
 - `private.subscription_credential_audit_events` and `private.subscription_credential_access_audit_events`: action metadata only, without credential values or individual grant contents.
 - `private.payroll_balance_import_grants` and `private.payroll_balance_import_grant_events`: current linked delegate capability and grant-change audit metadata.
 - `private.payroll_balance_import_batches` and `private.payroll_balance_import_stage_rows`: bounded source metadata, digest, staged review state and reconciliation outcomes; no workbook bytes.
-- `private.payroll_balance_email_recipients`, `private.payroll_balance_email_reminders` and `private.payroll_balance_email_reminder_events`: explicit recipient identity, durable month-level claim/delivery state and address-free operational audit for the first-day n8n email.
+- `private.payroll_balance_email_recipients`, `private.payroll_balance_email_reminders` and `private.payroll_balance_email_reminder_events`: explicit recipient identity, durable workday-level claim/delivery state and address-free operational audit for recurring n8n email.
 - `teams` and `team_memberships`: controlled team relationships for future live workflows.
 - `leave_requests` and `leave_request_events`: RLS-first durable leave model used by the deployed release after migration `20260817120000_persist_leave_workspace` was applied.
 - `private.leave_approval_grants`: private, explicit team, global or future-subtree leave-review capability grants; it is not exposed through the browser data API.
@@ -149,7 +149,7 @@ The former shared fake-profile/fake-leave tables and their public mutation funct
 
 ## Environments
 
-The payroll-balance migrations add private sick balance snapshots/history, extend the authenticated leave-priority projection and add the staged self-service importer. Annual balances are visible to self and authorised team reviewers; sick fields are null for employees. A private sufficiency predicate gates one durable conditional-approval reminder per request, using refreshed payroll hours and reviewer-confirmed required hours. Existing daily reminders exclude conditional approvals, including previously queued rows. The monthly import email reuses the existing MAM n8n scheduler, authenticated webhook and Outlook node with a new strict event contract; there is still no live payroll integration.
+The payroll-balance migrations add private sick balance snapshots/history, extend the authenticated leave-priority projection and add the staged self-service importer. Annual balances are visible to self and authorised team reviewers; sick fields are null for employees. A private sufficiency predicate gates one durable conditional-approval reminder per request, using refreshed payroll hours and reviewer-confirmed required hours. Existing daily reminders exclude conditional approvals, including previously queued rows. The recurring workday import email reuses the existing MAM n8n scheduler, authenticated webhook and Outlook node with a strict event contract; there is still no live payroll integration.
 
 - Development: local application with a development Supabase project or branch.
 - Preview: Vercel branch deployment with isolated, non-production Supabase data.
