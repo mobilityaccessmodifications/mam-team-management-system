@@ -19,3 +19,8 @@ test("tab motion is skipped for keyboard navigation and reduced motion", () => {
   assert.match(styles, /\[data-keyboard-navigation="true"\] \.indicator\s*\{[^}]*animation: none;/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.indicator\s*\{[^}]*animation: none;/);
 });
+
+test("tab selection inherits the active company palette", () => {
+  assert.match(styles, /var\(--accent, var\(--mam-orange\)\)/);
+  assert.match(styles, /var\(--accent-deep, var\(--mam-orange-dark\)\)/);
+});

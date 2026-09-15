@@ -44,7 +44,7 @@
   inset: 3px 3px 0;
   z-index: -1;
   border-radius: 8px 8px 0 0;
-  background: color-mix(in srgb, var(--mam-orange) 9%, var(--surface-raised));
+  background: color-mix(in srgb, var(--accent, var(--mam-orange)) 9%, var(--surface-raised));
   animation: tab-selection-in 160ms var(--ease-out) both;
 }
 
@@ -56,7 +56,7 @@
   left: 10px;
   height: 2px;
   border-radius: 99px 99px 0 0;
-  background: var(--mam-orange);
+  background: var(--accent, var(--mam-orange));
 }
 
 .root[data-keyboard-navigation="true"] .indicator {
@@ -82,7 +82,7 @@
 }
 
 .trigger[data-active="true"] .icon {
-  color: var(--mam-orange-dark);
+  color: var(--accent-deep, var(--mam-orange-dark));
 }
 
 .icon svg {
