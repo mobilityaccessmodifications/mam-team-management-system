@@ -538,7 +538,7 @@ export function LeaveDemo({
   canAccessOwnSubscriptions?: boolean;
   /** An active employee can see the self-only Tasks tab even without manager scope. */
   canViewOwnTasks?: boolean;
-  /** Server-issued manager/System Admin capability for the team calendar. */
+  /** Server-issued active-employee/System Admin capability for Calendar. */
   canViewTeamCalendar?: boolean;
   /** Server-issued capability for an employee's own subscription review dates. */
   canViewSubscriptionReviewCalendar?: boolean;
@@ -1230,12 +1230,10 @@ export function LeaveDemo({
         ? listMySubscriptions
         : undefined
     : undefined;
-  // Change profile must reflect the selected employee's workspace, not the
-  // System Admin session behind it. A responsible employee can only open a
-  // calendar that contains their own subscription-review events; they never
-  // inherit birthdays, team leave or other employees' check-ins.
-  const canViewTeamCalendarForActiveProfile = canViewTeamCalendar
-    && (!isPreviewingEmployeeAccess || activeProfile.accessRole !== "employee");
+  // Every active profile receives Calendar. The server projections scope an
+  // employee preview to that person's leave and Check-ins plus birthdays;
+  // browser role labels never decide which events are returned.
+  const canViewTeamCalendarForActiveProfile = canViewTeamCalendar;
   const canViewPayrollBalanceReminderForActiveProfile = canViewPayrollBalanceReminderCalendar
     && !isPreviewingEmployeeAccess;
   const canViewActiveWorkspaceCalendar = canViewTeamCalendarForActiveProfile
@@ -1335,17 +1333,16 @@ export function LeaveDemo({
       ? calendarEntries
       : getEmployeePreviewRequests(calendarEntries, activeProfile, organisationRows, false)
     : calendarEntries;
-  // The Check-in Calendar is a manager-safe projection of the selected profile
-  // in Change profile mode, while the Super Admin retains its real authority
-  // for guarded actions and testing.
+  // Check-in Calendar rows are owner-scoped by the server in employee and
+  // Change Profile modes; System Admin's own workspace retains global scope.
   const calendarCheckIns = checkInCalendarEntries;
   const calendarSubscriptionReviews = subscriptionReviewCalendarEntries;
   const calendarPayrollBalanceReminders = isPreviewingEmployeeAccess ? [] : payrollBalanceReminderEntries;
   const approvalQueue = canReviewLeave
     ? visibleRequests.filter((request) => request.canDecide)
     : [];
-  const canAccessBalance = !isPreviewingEmployeeAccess
-    && (canImportPayrollBalances || leavePriority?.canManageBalances === true);
+  const canAccessBalance = canImportPayrollBalances
+    || (!isPreviewingEmployeeAccess && leavePriority?.canManageBalances === true);
   const myRequests = requests.filter((request) => request.personId === activeProfile.id);
   const filteredRequests = visibleRequests.filter((request) => {
     return statusFilter === "All" || request.status === statusFilter;

@@ -94,10 +94,11 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const requestedView = view === "about"
     ? "people"
     : view === "leave" || view === "calendar" || view === "people" ? view : "home";
-  // Team calendars are manager/System Admin workspaces. A responsible person
-  // may additionally open an owner-scoped review calendar, which never
-  // contains team leave, birthdays or check-ins.
-  const canViewTeamCalendar = isAdmin || canViewCheckIns;
+  // Calendar is a core employee workspace. Its database projections decide
+  // which records are relevant: ordinary employees receive only their own
+  // leave and Check-ins plus birthdays, while explicit approved-leave viewers
+  // and System Admin receive their separately authorised additions.
+  const canViewTeamCalendar = Boolean(currentPersonId) || isNonRosterSystemAdmin;
   const resolvedView = requestedView === "calendar" && !(canViewTeamCalendar || canViewSubscriptionReviewCalendar)
     ? "home"
     : requestedView;

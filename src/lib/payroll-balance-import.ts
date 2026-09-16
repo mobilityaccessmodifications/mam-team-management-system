@@ -227,6 +227,22 @@ function dataRowHasValue(row: SheetData[number]) {
   return row.some((cell) => cell !== null && cell !== undefined && cell !== "");
 }
 
+function isMissingCell(value: unknown) {
+  return value === null || value === undefined || (typeof value === "string" && value.trim() === "");
+}
+
+function rowValueOrFallback<T>(
+  value: unknown,
+  parser: (candidate: unknown) => T | null,
+  fallback: T | null,
+  invalidMessage: string,
+) {
+  if (isMissingCell(value)) return fallback;
+  const parsed = parser(value);
+  if (parsed === null) throw new Error(invalidMessage);
+  return parsed;
+}
+
 function parseSheet(sheet: Sheet, fileName: string, fileSha256: string): Observation[] {
   if (sheet.rows.length > MAX_ROWS_PER_SHEET) throw new Error(`${fileName} · ${sheet.name}: too many rows.`);
   if (sheet.rows.some((row) => row.length > MAX_COLUMNS_PER_SHEET)) throw new Error(`${fileName} · ${sheet.name}: too many columns.`);
@@ -245,8 +261,22 @@ function parseSheet(sheet: Sheet, fileName: string, fileSha256: string): Observa
     }
     const employeeName = rawName.replace(/\s+/g, " ").trim();
     if (employeeName.length > 200) throw new Error(`${fileName} · ${sheet.name} · row ${rowIndex + 1}: employee name is too long.`);
-    const companyKey = (header.company === null ? null : parseCompany(row[header.company])) ?? sheetCompany;
-    const asOf = (header.asOf === null ? null : parseDate(row[header.asOf])) ?? sheetAsOf;
+    const companyKey = header.company === null
+      ? sheetCompany
+      : rowValueOrFallback(
+        row[header.company],
+        parseCompany,
+        sheetCompany,
+        `${fileName} · ${sheet.name} · row ${rowIndex + 1}: company is not recognised.`,
+      );
+    const asOf = header.asOf === null
+      ? sheetAsOf
+      : rowValueOrFallback(
+        row[header.asOf],
+        parseDate,
+        sheetAsOf,
+        `${fileName} · ${sheet.name} · row ${rowIndex + 1}: balance date is invalid.`,
+      );
     if (!companyKey) throw new Error(`${fileName} · ${sheet.name} · row ${rowIndex + 1}: company could not be identified.`);
     if (!asOf) throw new Error(`${fileName} · ${sheet.name} · row ${rowIndex + 1}: balance date could not be identified.`);
 

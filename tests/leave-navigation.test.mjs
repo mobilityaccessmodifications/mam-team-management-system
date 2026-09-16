@@ -56,10 +56,10 @@ test('leave links show an honest loading state before their authorised workspace
   assert.equal(status.props.children[1].props.children, 'Loading leave');
   assert.match(source, /<LeaveWorkspaceLoadBoundary loading=\{leaveDataLoading\}>/);
 });
-test('payroll import controls and reminders stay out of employee access previews', () => {
+test('payroll import preview is target-capability scoped while reminders stay in the signed-in workspace', () => {
   assert.match(
     source,
-    /canAccessBalance = !isPreviewingEmployeeAccess\s*&& \(canImportPayrollBalances \|\| leavePriority\?\.canManageBalances === true\);/,
+    /canAccessBalance = canImportPayrollBalances\s*\|\| \(!isPreviewingEmployeeAccess && leavePriority\?\.canManageBalances === true\);/,
   );
   assert.match(
     source,

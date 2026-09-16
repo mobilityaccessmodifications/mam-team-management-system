@@ -84,6 +84,28 @@ test("rejects conflicting balances rather than guessing which source wins", asyn
   );
 });
 
+test("rejects explicit invalid company and date cells instead of replacing them with file defaults", async () => {
+  const invalidCompany = upload("mam-balances.csv", [
+    "As at 10 September 2026",
+    "Company,Employee,As of,Annual Leave",
+    "Unrecognised Entity,Sample Person,2026-09-10,10",
+  ].join("\n"));
+  await assert.rejects(
+    parsePayrollBalanceFiles([invalidCompany]),
+    /company is not recognised/i,
+  );
+
+  const invalidDate = upload("mam-balances.csv", [
+    "As at 10 September 2026",
+    "Company,Employee,As of,Annual Leave",
+    "MAM,Sample Person,31\/02\/2026,10",
+  ].join("\n"));
+  await assert.rejects(
+    parsePayrollBalanceFiles([invalidDate]),
+    /balance date is invalid/i,
+  );
+});
+
 test("groups Unicode-equivalent employee names without dropping non-Latin letters", async () => {
   const annual = upload("mam-unicode-annual.csv", [
     "Company,Employee,As of,Annual Leave",
