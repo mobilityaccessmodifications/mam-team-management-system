@@ -46,7 +46,8 @@ test('Accounts receives only approved cancellation',()=>{
 });
 for(const event of ['leave-reminder','team-birthday']) test(event,()=>{
   const out=run(event,{employeeEmail:null,leaveType:event==='team-birthday'?'Birthday':'Annual leave'});
-  assert.equal(out.outcome,'send'); assert.equal(out.deliveryRecipient,'manager@example.test'); assert.equal(out.ccRecipients,event==='leave-reminder'?'':'hr@mobilityaccess.com.au');
+  assert.equal(out.outcome,'send'); assert.equal(out.deliveryRecipient,'manager@example.test'); assert.equal(out.ccRecipients,'');
+  if (event === 'team-birthday') assert.equal(out.emailSubject, '[MAM] Team birthday reminder: Test Employee');
 });
 test('deduplicates sent event and fails closed without a manager',()=>{
   const key=`leave:${id}:leave-submitted:${'a'.repeat(24)}`;

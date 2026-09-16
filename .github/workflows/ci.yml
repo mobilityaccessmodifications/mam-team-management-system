@@ -84,3 +84,13 @@ jobs:
             -f tests/personal-calendar-scope-bootstrap.sql \
             -f supabase/migrations/20260916130000_personal_calendar_scope.sql \
             -f tests/personal-calendar-scope.sql
+
+      - name: Test private employee and manager-team birthday scope
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres private_team_birthdays_test
+          psql -h localhost -U postgres -d private_team_birthdays_test -v ON_ERROR_STOP=1 \
+            -f tests/private-team-birthdays-bootstrap.sql \
+            -f supabase/migrations/20260916140000_private_team_calendar_birthdays.sql \
+            -f tests/private-team-birthdays.sql

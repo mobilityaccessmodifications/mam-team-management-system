@@ -73,9 +73,9 @@ export type LeaveCalendarEntry = Omit<
 };
 
 /**
- * A deliberately minimal company-calendar birthday projection. It contains
+ * A deliberately minimal, role-scoped birthday projection. It contains
  * neither a date of birth nor any private contact information: the calendar
- * only needs the employee's name and recurring month/day.
+ * receives only the authorised employee names and recurring month/day.
  */
 export type BirthdayCalendarEntry = {
   employee: string;
@@ -864,7 +864,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
       { data: entitlementPolicyData, error: entitlementPolicyError },
     ] = await Promise.all([
       supabase.rpc("list_leave_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
-      supabase.rpc("list_calendar_birthdays"),
+      supabase.rpc("list_calendar_birthdays_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("list_employee_check_in_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("list_subscription_review_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("can_view_subscription_review_calendar_for_preview", { p_person_id: checkedPreviewPersonId }),
