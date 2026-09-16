@@ -108,6 +108,8 @@ test("Calendar remains available to every active employee and trusts server-scop
   assert.match(leaveSource, /canViewTeamCalendarForActiveProfile = canViewTeamCalendar;/);
   assert.match(leaveActionsSource, /supabase\.rpc\("list_leave_calendar_entries"\)/);
   assert.match(leaveActionsSource, /supabase\.rpc\("list_employee_check_in_calendar_entries"\)/);
+  assert.match(leaveActionsSource, /supabase\.rpc\("list_calendar_birthdays"\)/);
+  assert.match(leaveActionsSource, /supabase\.rpc\("list_calendar_birthdays_for_preview", \{ p_person_id: checkedPreviewPersonId \}\)/);
   assert.doesNotMatch(leaveActionsSource, /canViewTeamCalendarScope/);
 });
 
