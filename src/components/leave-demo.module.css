@@ -7199,12 +7199,38 @@
 .requestExtras summary {
   min-height: 44px;
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
   padding-block: 10px;
   cursor: pointer;
   font-weight: 600;
+  list-style: none;
   touch-action: manipulation;
 }
-.requestExtras[open] { display: grid; gap: 14px; }
+.requestExtras summary::-webkit-details-marker { display: none; }
+.requestExtras summary::after {
+  margin-left: auto;
+  color: var(--muted);
+  content: "+";
+  font-size: 20px;
+  font-weight: 400;
+}
+.requestExtras[open] summary::after { content: "−"; }
+.requestExtrasContent {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+.requestExtrasContent > label {
+  display: grid;
+  min-width: 0;
+}
+.requestExtrasContent > .attachmentField,
+.requestExtrasContent > .privacyNote {
+  box-sizing: border-box;
+  width: 100%;
+}
 .timeRange:not([open]) > :not(summary),
 .requestExtras:not([open]) > :not(summary) { display: none; }
 .leaveBalances { margin-top: 20px; padding: 16px; border-radius: 10px; }
