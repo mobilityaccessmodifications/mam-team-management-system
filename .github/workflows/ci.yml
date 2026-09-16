@@ -94,3 +94,13 @@ jobs:
             -f tests/private-team-birthdays-bootstrap.sql \
             -f supabase/migrations/20260916140000_private_team_calendar_birthdays.sql \
             -f tests/private-team-birthdays.sql
+
+      - name: Test full-time duration and approved-leave balance deductions
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres leave_duration_balance_test
+          psql -h localhost -U postgres -d leave_duration_balance_test -v ON_ERROR_STOP=1 \
+            -f tests/leave-duration-balance-breakdown-bootstrap.sql \
+            -f supabase/migrations/20260917090100_leave_duration_balance_breakdown.sql \
+            -f tests/leave-duration-balance-breakdown.sql

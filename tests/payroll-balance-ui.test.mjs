@@ -41,17 +41,27 @@ test('balance management section is hidden from staff, reviewers and employee pr
   }
 });
 
-test('approval panel shows concise rounded balances with icons and no bookkeeping dates', () => {
+test('approval panel shows Xero, approved and post-deduction balances', () => {
   const html = renderToStaticMarkup(createElement(loaded.exports.ApprovalLeaveBalances, {
-    workspace: workspace([{ ...person, canViewSickBalance: true, sickHours: 25.1234, sickAsOf: '2026-09-10' }], [{ id: 'request', pendingBalance: true, requiredHours: null }]),
+    workspace: workspace([{ ...person,
+      annualPayrollHours: 60, annualPayrollDate: '2026-09-10', annualApprovedHours: 15.2, annualAvailableHours: 44.8,
+      canViewSickBalance: true, sickPayrollHours: 25.1234, sickPayrollDate: '2026-09-10', sickApprovedHours: 7.6, sickAvailableHours: 17.5234,
+    }], [{ id: 'request', pendingBalance: true, requiredHours: null }]),
     personId: 'employee', requestId: 'request', busy: false, async onSaved() {},
   }));
   assert.match(html, /Annual leave/);
-  assert.match(html, /<strong>60<\/strong>/);
+  assert.match(html, /<strong>60 <span>hours<\/span><\/strong>/);
+  assert.match(html, /Current Xero balance/);
+  assert.match(html, /Approved leave in People Hub/);
+  assert.match(html, /Available after approved leave/);
+  assert.match(html, /15\.2/);
+  assert.match(html, /44\.8/);
   assert.match(html, /Sick leave/);
-  assert.match(html, /<strong>25.12<\/strong>/);
+  assert.match(html, /25\.12/);
+  assert.match(html, /17\.52/);
   assert.match(html, /<svg/);
-  assert.doesNotMatch(html, /As of|2026-09-10|Payroll baseline|Includes automatic|25.1234/);
+  assert.match(html, /Xero as at 10 Sept 2026/);
+  assert.doesNotMatch(html, /25.1234/);
   assert.match(html, /Waiting for enough leave/);
   assert.match(html, /Confirm the paid hours/);
 });
@@ -98,15 +108,19 @@ test('approval keeps sick balances private and does not round tiny debt to zero'
 });
 
 const { approvalRequestHours, approvalBalanceCoverage } = resolveImport('@/lib/leave-priority');
-test('approval hours use 7.5 hours per day and retain recorded hourly requests', () => {
-  assert.equal(approvalRequestHours({ days: 2 }), 15);
-  assert.equal(approvalRequestHours({ days: 2, hours: 3.25 }), 3.25);
+test('approval hours use the full-time 7.6-hour snapshot and retain recorded hourly requests', () => {
+  assert.equal(approvalRequestHours({ days: 2, fullDayHours: 7.6 }), 15.2);
+  assert.equal(approvalRequestHours({ days: 2, fullDayHours: 7.6, hours: 3.25 }), 3.25);
+  assert.equal(approvalRequestHours({ days: 2 }), 15, 'payloads without duration metadata retain the staged fallback');
   assert.equal(approvalRequestHours({ days: 0 }), null);
   assert.equal(approvalRequestHours({ days: 2, hours: NaN }), null);
 });
 test('coverage compares full precision, respects visibility and review holds', () => {
   assert.equal(approvalBalanceCoverage({ ...person, hours: 15 }, 'Annual leave', 15), 'Enough balance');
+  assert.equal(approvalBalanceCoverage({ ...person, hours: 30, annualAvailableHours: 14.9999 }, 'Annual leave', 15), 'Not enough balance');
+  assert.equal(approvalBalanceCoverage({ ...person, hours: 30, annualAvailableHours: null }, 'Annual leave', 15), 'Check balance');
   assert.equal(approvalBalanceCoverage({ ...person, hours: 14.9999 }, 'Annual leave', 15), 'Not enough balance');
+  assert.equal(approvalBalanceCoverage({ ...person, canViewSickBalance: true, sickHours: 30, sickAvailableHours: null }, 'Sick leave', 15), 'Check balance');
   assert.equal(approvalBalanceCoverage({ ...person, accrualStatus: 'needs_review' }, 'Annual leave', 15), 'Check balance');
   assert.equal(approvalBalanceCoverage({ ...person, hours: null }, 'Annual leave', 15), 'Check balance');
   assert.equal(approvalBalanceCoverage(person, 'Sick leave', 15), null);

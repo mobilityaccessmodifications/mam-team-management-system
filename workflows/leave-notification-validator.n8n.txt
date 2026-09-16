@@ -106,6 +106,7 @@ try {
   if (!optionalText(body.endTime, 5) || (body.endTime !== null && !TIME.test(body.endTime))) return reject('end-time');
   if (!['number', 'object'].includes(typeof body.days) || (body.days !== null && (!Number.isFinite(body.days) || body.days <= 0))) return reject('days');
   if (!['number', 'object'].includes(typeof body.hours) || (body.hours !== null && (!Number.isFinite(body.hours) || body.hours <= 0))) return reject('hours');
+  if (body.fullDayHours !== undefined && (!Number.isFinite(body.fullDayHours) || body.fullDayHours <= 0 || body.fullDayHours > 24)) return reject('full-day-hours');
   if (!STATUSES.includes(body.status) || !optionalNote(body.employeeNote, 4000) || !optionalNote(body.managerNote, 4000)) return reject('status-or-notes');
   const managerEmails = typeof body.managerEmail === 'string' ? body.managerEmail.split(',') : [];
   if (!(body.managerEmail === null || (managerEmails.length > 0 && managerEmails.length <= 10
@@ -146,23 +147,14 @@ try {
   if (previous?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true, actualRecipient: confirmationRecipient, eventKey: body.eventKey } }];
   if (previous?.state === 'processing' && now - previous.at < PROCESSING) return reject('delivery-in-flight');
   events[body.eventKey] = { state: 'processing', at: now };
-  const eventLabel = { 'leave-submitted': 'submitted', 'leave-approved': 'approved', 'leave-declined': 'declined', 'leave-cancelled': 'cancelled', 'leave-conditionally-approved': 'approved pending balance', 'leave-reminder': 'awaiting your review', 'team-birthday': 'team birthday reminder' }[body.event];
-  const employeeCopy = body.event === 'leave-conditionally-approved' ? 'Coverage is approved. Paid annual leave is still awaiting balance confirmation.' : body.event === 'leave-approved' ? 'Your leave request has been approved.' : body.event === 'leave-declined' ? 'Your leave request has been declined.' : 'This is a record of your leave request.';
-  const managerCopy = body.event === 'leave-reminder' ? (body.status === 'Approved – pending leave balance' ? 'Please confirm the annual leave balance and finalise approval for this request.' : 'Please review this outstanding leave request.') : body.event === 'leave-submitted' ? 'A leave request is waiting for your review.' : 'This is a record of the leave request being ' + eventLabel + '.';
+  const eventLabel = { 'leave-submitted': 'submitted', 'leave-approved': 'approved', 'leave-declined': 'declined', 'leave-cancelled': 'cancelled', 'leave-conditionally-approved': 'approved pending finalisation', 'leave-reminder': 'awaiting your review', 'team-birthday': 'team birthday reminder' }[body.event];
+  const employeeCopy = body.event === 'leave-conditionally-approved' ? 'Coverage is approved. Paid annual leave is still awaiting final confirmation.' : body.event === 'leave-approved' ? 'Your leave request has been approved.' : body.event === 'leave-declined' ? 'Your leave request has been declined.' : 'This is a record of your leave request.';
+  const managerCopy = body.event === 'leave-reminder' ? (body.status === 'Approved – pending leave balance' ? 'Please finalise approval for this request.' : 'Please review this outstanding leave request.') : body.event === 'leave-submitted' ? 'A leave request is waiting for your review.' : 'This is a record of the leave request being ' + eventLabel + '.';
   const employeeDeliveryLink = APP_URL + '/?view=leave&request=' + encodeURIComponent(body.requestId);
   const managerDeliveryLink = APP_URL + '/?view=leave&section=approvals&request=' + encodeURIComponent(body.requestId);
-  const requestedHours = body.hours ?? (body.days === null ? null : body.days * 7.5);
-  const balanceLabel = sick ? 'Sick leave' : 'Annual leave';
+  const requestedHours = body.hours ?? (body.days === null ? null : body.days * (body.fullDayHours ?? 7.5));
   const hoursLabel = (value) => new Intl.NumberFormat('en-AU', { maximumFractionDigits: 2 }).format(value) + ' hours';
-  // Fail closed during staggered releases: an unsplit sick message cannot show balances.
-  const showBalance = body.event === 'leave-submitted' && object(snapshot)
-    && (!sick || body.audience === 'reviewers');
-  const knownBalance = snapshot?.status === 'current' && Number.isFinite(snapshot?.hours);
-  const balanceRows = showBalance ? [
-    '<li><strong>' + balanceLabel + ' hours requested:</strong> ' + (requestedHours === null ? 'Check hours' : hoursLabel(requestedHours)) + '</li>',
-    '<li><strong>' + balanceLabel + ' balance:</strong> ' + (knownBalance ? hoursLabel(snapshot.hours) : 'Check balance') + '</li>',
-    '<li><strong>' + balanceLabel + ' remaining if approved:</strong> ' + (knownBalance && requestedHours !== null ? hoursLabel(snapshot.hours - requestedHours) : 'Check balance') + '</li>',
-  ].join('') : '';
+  const emailStatus = body.status === 'Approved – pending leave balance' ? 'Approval pending' : body.status;
   const emailHtml = body.event === 'team-birthday' ? '<p>Team birthday reminder: <strong>' + escape(body.employeeName) + '</strong></p><p>Birthday: ' + escape(friendlyDate(body.startDate)) + '</p><p><a href="' + APP_URL + '">People Hub</a></p>' : [
     '<p>' + (employeeDelivery ? 'Hi ' + escape(body.employeeName) + ',' : 'MAM leave notification') + '</p>',
     '<p>' + escape(body.event === 'leave-submitted' ? 'A leave request has been submitted and is awaiting review.' : employeeDelivery ? employeeCopy : managerCopy) + '</p>',
@@ -174,8 +166,8 @@ try {
     body.startTime ? '<li><strong>Start time:</strong> ' + escape(body.startTime) + '</li>' : '',
     body.endTime ? '<li><strong>End time:</strong> ' + escape(body.endTime) + '</li>' : '',
     body.days !== null ? '<li><strong>Business days:</strong> ' + escape(body.days) + '</li>' : '',
-    !showBalance && requestedHours !== null && body.event === 'leave-submitted' ? '<li><strong>Hours requested:</strong> ' + hoursLabel(requestedHours) + '</li>' : !showBalance && body.hours !== null ? '<li><strong>Hours:</strong> ' + escape(body.hours) + '</li>' : '',
-    '<li><strong>Status:</strong> ' + escape(body.status) + '</li>', balanceRows, '</ul>',
+    requestedHours !== null && body.event === 'leave-submitted' ? '<li><strong>Hours requested:</strong> ' + hoursLabel(requestedHours) + '</li>' : body.hours !== null ? '<li><strong>Hours:</strong> ' + escape(body.hours) + '</li>' : '',
+    '<li><strong>Status:</strong> ' + escape(emailStatus) + '</li>', '</ul>',
     employeeDelivery && body.managerNote && !(body.company === 'mam' && emailList([deliveryRecipient,ccRecipients].join(',')).includes(ACCOUNTS.toLowerCase())) ? '<p><strong>Manager note:</strong> ' + escape(body.managerNote) + '</p>' : '',
     '<p><a href="' + (body.event === 'leave-submitted' && !split ? APP_URL : employeeDelivery ? employeeDeliveryLink : managerDeliveryLink) + '" style="display:inline-block;padding:10px 16px;background:#ef6c24;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">People Hub</a></p>',
   ].join('');

@@ -123,13 +123,13 @@ The owner confirmed 38 ordinary hours per week and automatic future accrual. The
 - Membership is a private, release-configured set of verified active portal identities and global approval grants. Addresses come from the linked HR directory. Revoked grants and inactive accounts cannot receive or approve these requests. Ordinary employee routing and System Admin authority remain unchanged.
 - Existing submitted manager requests are rerouted; decided history and already-delivered email events are retained. Balance-pending requests retain their reminder pause and one-time sufficiency notification. HR is not duplicated in CC when already a direct recipient.
 
-Approval duration display uses 7.5 hours per full day (confirmed 10 September 2026); hourly requests retain their recorded hours. Annual and sick/personal leave coverage pills compare the relevant visible balance at full precision. Review-held or unavailable balances require checking. This display conversion does not change the 38-hour weekly accrual policy or payroll reconciliation.
+Full-time approval duration display uses 7.6 hours per full working day (updated 17 September 2026); explicit hourly requests retain their recorded hours. Historical records without an employment snapshot use the employee's current classification where available, while staged clients with no duration metadata retain the former 7.5-hour fallback. Annual and sick/personal leave coverage pills compare the relevant visible balance at full precision. Review-held or unavailable balances require checking. This display conversion does not change the 38-hour weekly accrual policy or payroll reconciliation.
 
-### Leave request email balances
+Authorised approval cards show the latest Xero snapshot, approved People Hub leave occurring after that snapshot, and the resulting available balance. Leave completed on or before the snapshot date is not deducted again. The selected pending request is not included in the approved-leave total; its coverage pill compares the request against the post-approved-leave amount.
 
-Submission emails show requested hours, the current accrued balance, and the balance remaining if that request is approved. Full days use 7.5 hours; an explicit hourly request takes precedence. Values are captured when the request is submitted, so retries use the same figures. Missing, example, or review-held balances show “Check balance”.
+### Leave request emails
 
-Annual leave balances can appear in the employee and reviewer copies. Sick/carer’s leave submission emails are split: only reviewers (including HR) receive the balance; the employee receives a separate confirmation. Each copy has a stable delivery key, and the outbox completes only when every required copy is acknowledged. Existing queued legacy emails retain their original delivery contract. Approval/cancellation emails do not subtract the requested hours again.
+Leave emails contain routing, dates, requested days/hours and status only. They never contain annual, sick/personal, Xero, approved-commitment or remaining balances. New outbox rows do not store a balance snapshot, and the server removes the legacy balance field before any older queued row crosses the email webhook boundary. Full-time full days use the snapshotted 7.6-hour rule; explicit hourly requests take precedence.
 
 ### Reviewer balance visibility (11 September 2026)
 

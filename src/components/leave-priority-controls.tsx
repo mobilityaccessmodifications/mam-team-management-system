@@ -27,6 +27,39 @@ function BalanceCard({ label, hours, sick = false }: { label: string; hours?: nu
   </div>;
 }
 
+function ApprovalBalanceCard({
+  label,
+  currentHours,
+  approvedHours,
+  availableHours,
+  asOf,
+  sick = false,
+}: {
+  label: string;
+  currentHours?: number | null;
+  approvedHours?: number | null;
+  availableHours?: number | null;
+  asOf?: string | null;
+  sick?: boolean;
+}) {
+  const Icon = sick ? HeartPulse : Palmtree;
+  const amount = (hours?: number | null, negative = false) => hours == null
+    ? <strong className={styles.balanceUnavailable}>Unavailable</strong>
+    : <strong data-negative={hours < 0 || undefined}>{negative && hours !== 0 ? "−" : ""}{balanceHours(Math.abs(hours))} <span>hours</span></strong>;
+
+  return <article className={`${styles.balanceCard} ${styles.balanceBreakdownCard}`} data-kind={sick ? "sick" : "annual"}>
+    <header>
+      <span className={styles.balanceIcon}><Icon size={21} strokeWidth={1.7} aria-hidden="true" /></span>
+      <span><strong>{label}</strong>{asOf ? <small>Xero as at {leaveDateLabel(asOf)}</small> : null}</span>
+    </header>
+    <dl className={styles.balanceBreakdown}>
+      <div><dt>Current Xero balance</dt><dd>{amount(currentHours)}</dd></div>
+      <div><dt>Approved leave in People Hub</dt><dd>{amount(approvedHours, true)}</dd></div>
+      <div className={styles.balanceAvailable}><dt>Available after approved leave</dt><dd>{amount(availableHours)}</dd></div>
+    </dl>
+  </article>;
+}
+
 export function LeaveRequestBalance({ workspace, personId, self = false }: {
   workspace?: LeavePriorityWorkspace;
   personId: string;
@@ -106,11 +139,17 @@ export function ApprovalLeaveBalances({ workspace, personId, requestId, busy, on
   const [error, setError] = useState("");
   const person = workspace?.people.find((p) => p.personId === personId);
   const request = workspace?.requests.find((r) => r.id === requestId);
+  const annualBreakdown = person && Object.hasOwn(person, "annualApprovedHours") && Object.hasOwn(person, "annualAvailableHours");
+  const sickBreakdown = person && Object.hasOwn(person, "sickApprovedHours") && Object.hasOwn(person, "sickAvailableHours");
   return <section className={styles.approvalBalances} aria-label="Employee leave balances">
     <strong>Leave balances</strong>
     <div className={styles.balanceCards}>
-      <BalanceCard label="Annual leave" hours={person?.canViewBalance ? person.hours : null} />
-      {person?.canViewSickBalance ? <BalanceCard label="Sick leave" hours={person.sickHours} sick /> : null}
+      {annualBreakdown
+        ? <ApprovalBalanceCard label="Annual leave" currentHours={person.canViewBalance ? person.annualPayrollHours ?? person.hours : null} approvedHours={person.canViewBalance ? person.annualApprovedHours : null} availableHours={person.canViewBalance ? person.annualAvailableHours : null} asOf={person.canViewBalance ? person.annualPayrollDate ?? person.asOf : null} />
+        : <BalanceCard label="Annual leave" hours={person?.canViewBalance ? person.hours : null} />}
+      {person?.canViewSickBalance ? sickBreakdown
+        ? <ApprovalBalanceCard label="Sick leave" currentHours={person.sickPayrollHours ?? person.sickHours} approvedHours={person.sickApprovedHours} availableHours={person.sickAvailableHours} asOf={person.sickPayrollDate ?? person.sickAsOf} sick />
+        : <BalanceCard label="Sick leave" hours={person.sickHours} sick /> : null}
     </div>
     {person ? <LeaveAccrualNotice person={person} /> : null}
     {request?.pendingBalance ? <>

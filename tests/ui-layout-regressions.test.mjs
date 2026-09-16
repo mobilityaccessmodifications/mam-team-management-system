@@ -81,6 +81,13 @@ test("team leave selection lives inside the request sheet and stays capability s
   assert.match(leaveStyles, /\.requestPersonPicker\s*\{[\s\S]*?min-height: 42px;/);
 });
 
+test("choosing a leave start date immediately aligns the end date", () => {
+  assert.match(leaveSource, /const \[formStartDate, setFormStartDate\] = useState\(\(\) => nextAvailableLeaveDate\(\)\)/);
+  assert.match(leaveSource, /setFormStartDate\(initialDate\);\s*setFormEndDate\(initialDate\);/);
+  assert.match(leaveSource, /name="startDate"[\s\S]*?value=\{formStartDate\}[\s\S]*?setFormStartDate\(nextDate\); setFormEndDate\(nextDate\);/);
+  assert.match(leaveSource, /name="endDate"[\s\S]*?min=\{formStartDate\}[\s\S]*?value=\{formEndDate\}/);
+});
+
 test("People selection and Organisation tool groups use clean, balanced affordances", () => {
   assert.match(motionTabStyles, /\.indicator::after\s*\{[^}]*display: none;[^}]*content: none;/);
   assert.match(organisationStyles, /\.chartControlGroup\s*\{[\s\S]*?border: 1px solid var\(--surface-border\);/);

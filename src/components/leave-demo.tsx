@@ -167,6 +167,7 @@ type LeaveRequest = {
   dateLabel: string;
   days: number;
   hours?: number;
+  fullDayHours?: number;
   startTime?: string;
   endTime?: string;
   approvalRequired: boolean;
@@ -461,6 +462,7 @@ function toLeaveRequest(record: LeaveWorkspaceRequest): LeaveRequest {
     dateLabel: formatDateRange(record.startDate, record.endDate),
     days: record.days,
     hours: record.hours,
+    fullDayHours: record.fullDayHours,
     startTime: record.startTime,
     endTime: record.endTime,
     approvalRequired: record.approvalRequired,
@@ -568,7 +570,8 @@ export function LeaveDemo({
   const [leavePriority, setLeavePriority] = useState<LeavePriorityWorkspace>();
   const [requestForPersonId, setRequestForPersonId] = useState("");
   const [formLeaveType, setFormLeaveType] = useState("");
-  const [formEndDate, setFormEndDate] = useState(nextAvailableLeaveDate());
+  const [formStartDate, setFormStartDate] = useState(() => nextAvailableLeaveDate());
+  const [formEndDate, setFormEndDate] = useState(() => nextAvailableLeaveDate());
   const [employmentType, setEmploymentType] = useState<LeaveWorkspaceData["employmentType"]>(null);
   const [hasPaidLeaveEntitlement, setHasPaidLeaveEntitlement] = useState(false);
   const [availableLeaveTypes, setAvailableLeaveTypes] = useState<LeaveWorkspaceData["availableLeaveTypes"]>([]);
@@ -1623,7 +1626,9 @@ export function LeaveDemo({
     const target = personId ? teamRequestPeople.find((person) => person.personId === personId) : undefined;
     if (isMutating || (personId ? !target : !canApplyForLeave)) return;
     changeLeaveRequestPerson(personId);
-    setFormEndDate(nextAvailableLeaveDate());
+    const initialDate = nextAvailableLeaveDate();
+    setFormStartDate(initialDate);
+    setFormEndDate(initialDate);
     setShowRequestForm(true);
   }
 
@@ -2169,7 +2174,7 @@ export function LeaveDemo({
               {!requestForPersonId && !hasPaidLeaveEntitlement ? <p className={styles.leavePolicyNote} role="note">
                 {employmentType === "abn" ? "ABN" : employmentType === "casual" ? "Casual" : "Unclassified"} employees can record Unpaid leave only.
               </p> : null}
-              <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" defaultValue={nextAvailableLeaveDate()} required /></label><label><span>End date</span><input name="endDate" type="date" value={formEndDate} onChange={(event) => setFormEndDate(event.target.value)} required /></label></div>
+              <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" value={formStartDate} onChange={(event) => { const nextDate = event.target.value; setFormStartDate(nextDate); setFormEndDate(nextDate); }} required /></label><label><span>End date</span><input name="endDate" type="date" min={formStartDate} value={formEndDate} onChange={(event) => setFormEndDate(event.target.value)} required /></label></div>
               {formLeaveType === "Sick leave" ? <SickEvidenceNotice dueDate={sickEvidenceDeadline(formEndDate)} hasEvidence={false} /> : null}
               <details className={styles.timeRange}><summary>Part-day leave</summary><div className={styles.formRow}><label><span>Starts</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>Ends</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>First and last day only.</p></details>
               <details className={styles.requestExtras}><summary>Note & files</summary>
