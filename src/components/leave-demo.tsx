@@ -118,7 +118,10 @@ import type {
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import type { CheckInResourceLinks } from "@/lib/check-in-register-types";
-import type { EmployeeWorkingWeekday } from "@/lib/employee-directory-types";
+import type {
+  EmployeeWorkingDayTime,
+  EmployeeWorkingWeekday,
+} from "@/lib/employee-directory-types";
 import type {
   WorkScheduleMutationResult,
   WorkScheduleWorkspace,
@@ -783,11 +786,13 @@ export function LeaveDemo({
 
   const submitWorkScheduleRequest = useCallback(async (
     workingWeekdays: EmployeeWorkingWeekday[],
+    workingDayTimes: EmployeeWorkingDayTime[],
     reason: string,
   ): Promise<WorkScheduleMutationResult> => {
     const actionEpoch = profileScopeEpoch.current;
     const result = await requestEmployeeWorkScheduleChange({
       workingWeekdays,
+      workingDayTimes,
       reason,
       previewPersonId: previewPersonId || undefined,
     });

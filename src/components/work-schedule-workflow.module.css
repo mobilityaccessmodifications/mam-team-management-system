@@ -63,6 +63,9 @@
 }
 
 .dayChips span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
   border: 1px solid var(--surface-border-strong);
   border-radius: 999px;
   background: var(--surface-muted);
@@ -70,6 +73,16 @@
   font-size: 11px;
   font-weight: 750;
   padding: 4px 8px;
+}
+
+.dayChips strong {
+  font: inherit;
+}
+
+.dayChips small {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 650;
 }
 
 .notRecorded {
@@ -115,6 +128,7 @@
 .iconButton:focus-visible,
 .modalHeader button:focus-visible,
 .dayPicker button:focus-visible,
+.timeRow input:focus-visible,
 .reviewActions button:focus-visible,
 .primaryButton:focus-visible,
 .secondaryButton:focus-visible,
@@ -376,6 +390,24 @@
   padding: 11px 13px;
 }
 
+.initialSetupNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid #badfcf;
+  border-radius: var(--radius-md);
+  background: #f1faf6;
+  color: #2c6a52;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 11px 13px;
+}
+
+.initialSetupNote svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 .changeSummary span,
 .decisionOverview span {
   color: var(--text-tertiary);
@@ -390,18 +422,74 @@
   text-align: right;
 }
 
-.dayPicker {
+.dayPicker,
+.timePicker {
   min-width: 0;
   border: 0;
   padding: 0;
 }
 
 .dayPicker legend,
+.timePicker legend,
 .reasonField > span {
   margin-bottom: 8px;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 750;
+}
+
+.timePicker > p {
+  margin: -2px 0 10px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.timeRows {
+  display: grid;
+  gap: 7px;
+}
+
+.timeRow {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  padding: 9px 10px;
+}
+
+.timeRow > strong {
+  align-self: center;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.timeRow label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.timeRow label span {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.timeRow input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 8px;
 }
 
 .dayPicker > div {
@@ -645,6 +733,14 @@
 
   .dayPicker button {
     min-height: 54px;
+  }
+
+  .timeRow {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .timeRow > strong {
+    grid-column: 1 / -1;
   }
 
   .modalFooter > button {

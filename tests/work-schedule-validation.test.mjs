@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const ts = require("typescript");
 const react = require("react");
 
-function loadScheduleCard() {
+function loadScheduleCard(stateValues) {
   const source = readFileSync("src/components/work-schedule-workflow.tsx", "utf8");
   const compiled = ts.transpileModule(`${source}\nexport { ScheduleCard as __ScheduleCard };`, {
     compilerOptions: {
@@ -18,10 +18,11 @@ function loadScheduleCard() {
     },
   }).outputText;
 
-  const values = [
+  const values = stateValues ?? [
     true,
     false,
     [1, 2, 3, 4, 5],
+    {},
     "Synthetic reason",
     "Choose a schedule that is different from your current work days.",
     false,
@@ -52,6 +53,16 @@ function loadScheduleCard() {
   return { ScheduleCard: loaded.exports.__ScheduleCard, updates };
 }
 
+function findElements(node, predicate, matches = []) {
+  if (!node || typeof node !== "object") return matches;
+  if (predicate(node)) matches.push(node);
+  const children = node.props?.children;
+  for (const child of Array.isArray(children) ? children : [children]) {
+    findElements(child, predicate, matches);
+  }
+  return matches;
+}
+
 function findElement(node, predicate) {
   if (!node || typeof node !== "object") return null;
   if (predicate(node)) return node;
@@ -68,9 +79,14 @@ test("editing a schedule request clears stale validation feedback", () => {
   const tree = ScheduleCard({
     workspace: {
       activePersonId: "employee",
+      activePersonName: "Synthetic employee",
       workingWeekdays: [1, 2, 3, 4, 5],
+      workingDayTimes: [],
+      initialSetupAvailable: false,
       canRequestChange: true,
+      isProfilePreview: false,
       history: [],
+      reviews: [],
     },
     async onRequest() { return { ok: true }; },
   });
@@ -78,12 +94,53 @@ test("editing a schedule request clears stale validation feedback", () => {
   const friday = findElement(tree, (node) => node.type === "button" && node.props?.["aria-label"] === "Friday");
   assert.ok(friday, "Friday schedule control should render");
   friday.props.onClick();
-  assert.deepEqual(updates[4], [""], "changing selected days should clear the prior error");
+  assert.deepEqual(updates[5], [""], "changing selected days should clear the prior error");
 
-  updates[4].length = 0;
+  updates[5].length = 0;
   const reason = findElement(tree, (node) => node.type === "textarea" && node.props?.placeholder === "Why do you need this change?");
   assert.ok(reason, "schedule reason field should render");
   reason.props.onChange({ target: { value: "Updated reason" } });
-  assert.deepEqual(updates[3], ["Updated reason"]);
-  assert.deepEqual(updates[4], [""], "editing the reason should clear the prior error");
+  assert.deepEqual(updates[4], ["Updated reason"]);
+  assert.deepEqual(updates[5], [""], "editing the reason should clear the prior error");
+});
+
+test("the first self-service schedule saves directly and offers optional daily times", () => {
+  const { ScheduleCard } = loadScheduleCard([
+    true,
+    false,
+    [1, 2, 3, 4, 5],
+    {},
+    "",
+    "",
+    false,
+  ]);
+  const tree = ScheduleCard({
+    workspace: {
+      activePersonId: "employee",
+      activePersonName: "Synthetic employee",
+      workingWeekdays: null,
+      workingDayTimes: [],
+      initialSetupAvailable: true,
+      canRequestChange: true,
+      isProfilePreview: false,
+      history: [],
+      reviews: [],
+    },
+    async onRequest() { return { ok: true, outcome: "applied" }; },
+  });
+
+  assert.equal(
+    findElement(tree, (node) => node.type === "textarea" && node.props?.placeholder === "Why do you need this change?"),
+    null,
+    "an initial schedule must not ask for an approval reason",
+  );
+  assert.ok(
+    findElement(tree, (node) => node.type === "button" && node.props?.type === "submit" && node.props?.children === "Save schedule"),
+    "the initial action should say that it saves rather than sends a request",
+  );
+  assert.equal(
+    findElements(tree, (node) => node.type === "input" && node.props?.type === "time").length,
+    10,
+    "each selected weekday should expose optional start and finish controls",
+  );
 });

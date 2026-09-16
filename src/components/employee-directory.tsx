@@ -45,6 +45,7 @@ import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryDraft,
   EmployeeDirectoryRecord,
+  EmployeeWorkingDayTime,
   EmployeeWorkingWeekday,
   UpdateEmployeeDirectoryInput,
 } from "@/lib/employee-directory-types";
@@ -109,6 +110,7 @@ const emptyDraft: EmployeeDirectoryDraft = {
   startedDate: "",
   scheduledEmploymentEndDate: "",
   workingWeekdays: null,
+  workingDayTimes: [],
   archiveReason: "",
   employmentType: "",
   laptopSupplied: "",
@@ -136,6 +138,7 @@ function toDraft(record: EmployeeDirectoryRecord): EmployeeDirectoryDraft {
     startedDate: record.startedDate,
     scheduledEmploymentEndDate: record.scheduledEmploymentEndDate,
     workingWeekdays: record.workingWeekdays,
+    workingDayTimes: record.workingDayTimes,
     archiveReason: record.archiveReason,
     employmentType: record.employmentType,
     laptopSupplied: record.laptopSupplied,
@@ -176,13 +179,30 @@ function formatScheduleDate(value: string) {
   return scheduleDateFormatter.format(new Date(Date.UTC(year, month - 1, day)));
 }
 
-function workdaySummary(days: EmployeeWorkingWeekday[] | null) {
+function formatWorkTime(value: string) {
+  const [hourValue, minute] = value.split(":");
+  const hour = Number(hourValue);
+  if (!Number.isInteger(hour) || !minute) return value;
+  return `${hour % 12 || 12}:${minute} ${hour < 12 ? "am" : "pm"}`;
+}
+
+function workdaySummary(
+  days: EmployeeWorkingWeekday[] | null,
+  times: EmployeeWorkingDayTime[] = [],
+) {
   if (!days?.length) return "Work days not set";
   const key = days.join(",");
-  if (key === "1,2,3,4,5") return "Mon–Fri";
-  if (key === "1,2,3,4,5,6,7") return "Every day";
   const labels = new Map(workingDayOptions.map((day) => [day.value, day.short]));
-  return days.map((day) => labels.get(day)).filter(Boolean).join(", ");
+  const dayLabel = key === "1,2,3,4,5"
+    ? "Mon–Fri"
+    : key === "1,2,3,4,5,6,7"
+      ? "Every day"
+      : days.map((day) => labels.get(day)).filter(Boolean).join(", ");
+  if (!times.length) return dayLabel;
+  const timeLabel = times.map((time) => (
+    `${labels.get(time.weekday)} ${formatWorkTime(time.startTime)}–${formatWorkTime(time.endTime)}`
+  )).join(", ");
+  return `${dayLabel} · ${timeLabel}`;
 }
 
 function scheduleDateSummary(startDate: string, plannedEndDate: string) {
@@ -200,6 +220,27 @@ function toggleWorkday(
     ? selected.filter((value) => value !== day)
     : [...selected, day].sort((first, second) => first - second);
   return next.length ? next : null;
+}
+
+function updateWorkTime(
+  times: EmployeeWorkingDayTime[],
+  day: EmployeeWorkingWeekday,
+  field: "startTime" | "endTime",
+  value: string,
+) {
+  const current = times.find((time) => time.weekday === day) ?? {
+    weekday: day,
+    startTime: "",
+    endTime: "",
+  };
+  const next = { ...current, [field]: value };
+  if (!next.startTime && !next.endTime) {
+    return times.filter((time) => time.weekday !== day);
+  }
+  return [
+    ...times.filter((time) => time.weekday !== day),
+    next,
+  ].sort((first, second) => first.weekday - second.weekday);
 }
 
 function companyLabel(company: EmployeeDirectoryRecord["company"]) {
@@ -451,6 +492,22 @@ export function EmployeeDirectory({
     setEditor(updateDraft(base, key, value));
   }
 
+  function handleScheduleChange(
+    workingWeekdays: EmployeeWorkingWeekday[] | null,
+    workingDayTimes: EmployeeWorkingDayTime[],
+  ) {
+    const base = editor ?? activeEditor;
+    if (!base) return;
+    setEditor({
+      ...base,
+      draft: {
+        ...base.draft,
+        workingWeekdays,
+        workingDayTimes,
+      },
+    });
+  }
+
   function openEmploymentEndPrompt() {
     const base = editor ?? activeEditor;
     const record = selectedRecord(records, base);
@@ -660,6 +717,7 @@ export function EmployeeDirectory({
           saving={saving}
           error={saveError}
           onChange={handleDraftChange}
+          onScheduleChange={handleScheduleChange}
           onClose={closeEditor}
           onSubmit={saveRecord}
           onRequestArchive={!activeEditor || activeEditor.mode === "create" || !currentRecord || !currentRecord.isActive ? undefined : openEmploymentEndPrompt}
@@ -785,6 +843,7 @@ function EmployeeEditor({
   saving,
   error,
   onChange,
+  onScheduleChange,
   onClose,
   onSubmit,
   onRequestArchive,
@@ -799,6 +858,10 @@ function EmployeeEditor({
   saving: boolean;
   error: string;
   onChange: (key: keyof EmployeeDirectoryDraft, value: EmployeeDirectoryDraft[keyof EmployeeDirectoryDraft]) => void;
+  onScheduleChange: (
+    workingWeekdays: EmployeeWorkingWeekday[] | null,
+    workingDayTimes: EmployeeWorkingDayTime[],
+  ) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onRequestArchive?: () => void;
@@ -900,7 +963,7 @@ function EmployeeEditor({
         <div className={styles.scheduleOverview}>
           <span className={styles.scheduleIcon}><CalendarDays size={18} aria-hidden="true" /></span>
           <span className={styles.scheduleCopy}>
-            <strong>{workdaySummary(editor.draft.workingWeekdays)}</strong>
+            <strong>{workdaySummary(editor.draft.workingWeekdays, editor.draft.workingDayTimes)}</strong>
             <small>{scheduleDateSummary(editor.draft.startedDate, editor.draft.scheduledEmploymentEndDate)}</small>
           </span>
           <button
@@ -933,11 +996,53 @@ function EmployeeEditor({
                   data-selected={selected}
                   aria-pressed={selected}
                   aria-label={day.label}
-                  onClick={() => onChange("workingWeekdays", toggleWorkday(editor.draft.workingWeekdays, day.value))}
+                  onClick={() => {
+                    const nextDays = toggleWorkday(editor.draft.workingWeekdays, day.value);
+                    const nextTimes = selected
+                      ? editor.draft.workingDayTimes.filter((time) => time.weekday !== day.value)
+                      : editor.draft.workingDayTimes;
+                    onScheduleChange(nextDays, nextTimes);
+                  }}
                 ><span>{day.short}</span>{selected ? <Check size={12} aria-hidden="true" /> : null}</button>;
               })}
             </div>
           </div>
+          {editor.draft.workingWeekdays?.length ? <div className={styles.workTimeField}>
+            <span>Optional daily times</span>
+            <small>Leave both fields blank when exact hours are not fixed.</small>
+            <div className={styles.workTimeRows}>
+              {workingDayOptions.filter((day) => editor.draft.workingWeekdays?.includes(day.value)).map((day) => {
+                const time = editor.draft.workingDayTimes.find((candidate) => candidate.weekday === day.value);
+                return <div className={styles.workTimeRow} key={day.value}>
+                  <strong>{day.label}</strong>
+                  <label>
+                    <span>Start</span>
+                    <input
+                      type="time"
+                      step={900}
+                      value={time?.startTime ?? ""}
+                      onChange={(event) => onScheduleChange(
+                        editor.draft.workingWeekdays,
+                        updateWorkTime(editor.draft.workingDayTimes, day.value, "startTime", event.target.value),
+                      )}
+                    />
+                  </label>
+                  <label>
+                    <span>Finish</span>
+                    <input
+                      type="time"
+                      step={900}
+                      value={time?.endTime ?? ""}
+                      onChange={(event) => onScheduleChange(
+                        editor.draft.workingWeekdays,
+                        updateWorkTime(editor.draft.workingDayTimes, day.value, "endTime", event.target.value),
+                      )}
+                    />
+                  </label>
+                </div>;
+              })}
+            </div>
+          </div> : null}
         </div> : null}
       </fieldset>
 

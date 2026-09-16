@@ -20,7 +20,10 @@ import {
 import styles from "@/components/work-schedule-workflow.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
-import type { EmployeeWorkingWeekday } from "@/lib/employee-directory-types";
+import type {
+  EmployeeWorkingDayTime,
+  EmployeeWorkingWeekday,
+} from "@/lib/employee-directory-types";
 import type {
   WorkScheduleMutationResult,
   WorkScheduleReviewItem,
@@ -39,6 +42,7 @@ const weekdays: { value: EmployeeWorkingWeekday; short: string; long: string }[]
 
 type RequestHandler = (
   workingWeekdays: EmployeeWorkingWeekday[],
+  workingDayTimes: EmployeeWorkingDayTime[],
   reason: string,
 ) => Promise<WorkScheduleMutationResult>;
 
@@ -66,14 +70,51 @@ function formatDate(value: string) {
   }).format(date);
 }
 
-function sameDays(first: EmployeeWorkingWeekday[] | null, second: EmployeeWorkingWeekday[]) {
-  if (!first || first.length !== second.length) return false;
-  return first.every((day, index) => day === second[index]);
+type TimeDraft = Partial<Record<EmployeeWorkingWeekday, {
+  startTime: string;
+  endTime: string;
+}>>;
+
+function sameSchedule(
+  firstDays: EmployeeWorkingWeekday[] | null,
+  firstTimes: EmployeeWorkingDayTime[],
+  secondDays: EmployeeWorkingWeekday[],
+  secondTimes: EmployeeWorkingDayTime[],
+) {
+  if (!firstDays || firstDays.length !== secondDays.length) return false;
+  if (!firstDays.every((day, index) => day === secondDays[index])) return false;
+  if (firstTimes.length !== secondTimes.length) return false;
+  return firstTimes.every((time, index) => {
+    const other = secondTimes[index];
+    return time.weekday === other.weekday
+      && time.startTime === other.startTime
+      && time.endTime === other.endTime;
+  });
 }
 
-function daySummary(value: EmployeeWorkingWeekday[] | null) {
+function formatTime(value: string) {
+  const [hourValue, minute] = value.split(":");
+  const hour = Number(hourValue);
+  if (!Number.isInteger(hour) || !minute) return value;
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:${minute} ${hour < 12 ? "am" : "pm"}`;
+}
+
+function timeForDay(value: EmployeeWorkingDayTime[], weekday: EmployeeWorkingWeekday) {
+  return value.find((time) => time.weekday === weekday) ?? null;
+}
+
+function daySummary(
+  value: EmployeeWorkingWeekday[] | null,
+  times: EmployeeWorkingDayTime[] = [],
+) {
   if (!value?.length) return "Not recorded";
-  return weekdays.filter((day) => value.includes(day.value)).map((day) => day.short).join(" · ");
+  return weekdays.filter((day) => value.includes(day.value)).map((day) => {
+    const time = timeForDay(times, day.value);
+    return time
+      ? `${day.short} ${formatTime(time.startTime)}–${formatTime(time.endTime)}`
+      : day.short;
+  }).join(" · ");
 }
 
 function historyStatusLabel(status: WorkScheduleReviewItem["status"]) {
@@ -81,12 +122,22 @@ function historyStatusLabel(status: WorkScheduleReviewItem["status"]) {
   return status[0].toLocaleUpperCase() + status.slice(1);
 }
 
-function DayChips({ value }: { value: EmployeeWorkingWeekday[] | null }) {
+function DayChips({
+  value,
+  times,
+}: {
+  value: EmployeeWorkingWeekday[] | null;
+  times: EmployeeWorkingDayTime[];
+}) {
   if (!value?.length) return <span className={styles.notRecorded}>Not recorded</span>;
-  return <div className={styles.dayChips} aria-label={daySummary(value)}>
-    {weekdays.filter((day) => value.includes(day.value)).map((day) => (
-      <span key={day.value}>{day.short}</span>
-    ))}
+  return <div className={styles.dayChips} aria-label={daySummary(value, times)}>
+    {weekdays.filter((day) => value.includes(day.value)).map((day) => {
+      const time = timeForDay(times, day.value);
+      return <span key={day.value}>
+        <strong>{day.short}</strong>
+        {time ? <small>{formatTime(time.startTime)}–{formatTime(time.endTime)}</small> : null}
+      </span>;
+    })}
   </div>;
 }
 
@@ -150,12 +201,14 @@ function ScheduleCard({
   const [requestOpen, setRequestOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedDays, setSelectedDays] = useState<EmployeeWorkingWeekday[]>([]);
+  const [selectedTimes, setSelectedTimes] = useState<TimeDraft>({});
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const requestDialogRef = useRef<HTMLElement>(null);
   const historyDialogRef = useRef<HTMLElement>(null);
   const requestReasonRef = useRef<HTMLTextAreaElement>(null);
+  const timeInputRefs = useRef<Partial<Record<EmployeeWorkingWeekday, HTMLInputElement | null>>>({});
   const firstDayRef = useRef<HTMLButtonElement>(null);
   const requestTitleId = useId();
   const historyTitleId = useId();
@@ -173,6 +226,10 @@ function ScheduleCard({
   function openRequest() {
     const current = workspace.workingWeekdays;
     setSelectedDays(current?.length ? [...current] : [1, 2, 3, 4, 5]);
+    setSelectedTimes(Object.fromEntries(workspace.workingDayTimes.map((time) => [
+      time.weekday,
+      { startTime: time.startTime, endTime: time.endTime },
+    ])) as TimeDraft);
     setReason("");
     setError("");
     setRequestOpen(true);
@@ -180,9 +237,33 @@ function ScheduleCard({
 
   function toggleDay(day: EmployeeWorkingWeekday) {
     setError("");
+    const removing = selectedDays.includes(day);
     setSelectedDays((current) => current.includes(day)
       ? current.filter((candidate) => candidate !== day)
       : [...current, day].sort((first, second) => first - second));
+    if (removing) {
+      setSelectedTimes((times) => {
+        const next = { ...times };
+        delete next[day];
+        return next;
+      });
+    }
+  }
+
+  function updateTime(
+    day: EmployeeWorkingWeekday,
+    field: "startTime" | "endTime",
+    value: string,
+  ) {
+    setSelectedTimes((current) => ({
+      ...current,
+      [day]: {
+        startTime: current[day]?.startTime ?? "",
+        endTime: current[day]?.endTime ?? "",
+        [field]: value,
+      },
+    }));
+    setError("");
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -193,12 +274,41 @@ function ScheduleCard({
       firstDayRef.current?.focus();
       return;
     }
-    if (sameDays(workspace.workingWeekdays, selectedDays)) {
-      setError("Choose a schedule that is different from your current work days.");
+    const nextTimes: EmployeeWorkingDayTime[] = [];
+    const timePattern = /^(?:[01]\d|2[0-3]):(?:00|15|30|45)$/;
+    for (const day of selectedDays) {
+      const draft = selectedTimes[day];
+      const startTime = draft?.startTime ?? "";
+      const endTime = draft?.endTime ?? "";
+      if (!startTime && !endTime) continue;
+      if (!startTime || !endTime) {
+        setError("Choose both a start time and a finish time, or leave both blank.");
+        timeInputRefs.current[day]?.focus();
+        return;
+      }
+      if (!timePattern.test(startTime) || !timePattern.test(endTime)) {
+        setError("Choose work times in 15-minute intervals.");
+        timeInputRefs.current[day]?.focus();
+        return;
+      }
+      if (endTime <= startTime) {
+        setError("Finish time must be later than start time.");
+        timeInputRefs.current[day]?.focus();
+        return;
+      }
+      nextTimes.push({ weekday: day, startTime, endTime });
+    }
+    if (sameSchedule(
+      workspace.workingWeekdays,
+      workspace.workingDayTimes,
+      selectedDays,
+      nextTimes,
+    )) {
+      setError("Choose a schedule that is different from your current work days or times.");
       firstDayRef.current?.focus();
       return;
     }
-    if (!reason.trim()) {
+    if (!workspace.initialSetupAvailable && !reason.trim()) {
       setError("Tell your manager why the schedule needs to change.");
       requestReasonRef.current?.focus();
       return;
@@ -206,7 +316,7 @@ function ScheduleCard({
     setBusy(true);
     setError("");
     try {
-      const result = await onRequest(selectedDays, reason);
+      const result = await onRequest(selectedDays, nextTimes, reason);
       if (!result.ok) {
         setError(result.message);
         return;
@@ -224,7 +334,8 @@ function ScheduleCard({
       <div className={styles.scheduleIcon}><CalendarClock size={19} aria-hidden="true" /></div>
       <div className={styles.scheduleCopy}>
         <span>Work schedule</span>
-        <DayChips value={workspace.workingWeekdays} />
+        <DayChips value={workspace.workingWeekdays} times={workspace.workingDayTimes} />
+        {workspace.initialSetupAvailable ? <small>Your first schedule saves immediately.</small> : null}
         {pendingRequest ? <small>Change awaiting review</small> : null}
       </div>
       <div className={styles.scheduleActions}>
@@ -235,8 +346,10 @@ function ScheduleCard({
           onClick={() => setHistoryOpen(true)}
         ><Clock3 size={18} aria-hidden="true" /></IconButton>
         <IconButton
-          label="Request a work schedule change"
-          title={workspace.canRequestChange ? "Request change" : "A request is already awaiting review"}
+          label={workspace.initialSetupAvailable ? "Set your work schedule" : "Request a work schedule change"}
+          title={workspace.canRequestChange
+            ? workspace.initialSetupAvailable ? "Set schedule" : "Request change"
+            : "A request is already awaiting review"}
           disabled={!workspace.canRequestChange}
           onClick={openRequest}
         ><Pencil size={18} aria-hidden="true" /></IconButton>
@@ -246,15 +359,20 @@ function ScheduleCard({
     <ModalFrame open={requestOpen} dialogRef={requestDialogRef} titleId={requestTitleId} onClose={closeRequest}>
       <form className={styles.form} onSubmit={submit}>
         <header className={styles.modalHeader}>
-          <div><span>Work schedule</span><h2 id={requestTitleId}>Request a change</h2></div>
+          <div><span>Work schedule</span><h2 id={requestTitleId}>{workspace.initialSetupAvailable ? "Set your schedule" : "Request a change"}</h2></div>
           <button type="button" onClick={closeRequest} disabled={busy} aria-label="Close request"><X size={19} /></button>
         </header>
         <div className={styles.modalBody}>
-          <div className={styles.changeSummary}>
-            <span>Current</span><strong>{daySummary(workspace.workingWeekdays)}</strong>
-          </div>
+          {workspace.initialSetupAvailable
+            ? <div className={styles.initialSetupNote}>
+                <Check size={17} aria-hidden="true" />
+                <span>This is your first schedule, so it will save immediately without manager approval.</span>
+              </div>
+            : <div className={styles.changeSummary}>
+                <span>Current</span><strong>{daySummary(workspace.workingWeekdays, workspace.workingDayTimes)}</strong>
+              </div>}
           <fieldset className={styles.dayPicker}>
-            <legend>Proposed work days</legend>
+            <legend>{workspace.initialSetupAvailable ? "Usual work days" : "Proposed work days"}</legend>
             <div>{weekdays.map((day) => <button
               key={day.value}
               ref={day.value === 1 ? firstDayRef : undefined}
@@ -264,26 +382,57 @@ function ScheduleCard({
               onClick={() => toggleDay(day.value)}
             ><span>{day.short}</span><small>{day.long}</small></button>)}</div>
           </fieldset>
-          <label className={styles.reasonField}>
-            <span>Reason</span>
-            <textarea
-              ref={requestReasonRef}
-              value={reason}
-              onChange={(event) => {
-                setReason(event.target.value);
-                setError("");
-              }}
-              maxLength={1000}
-              rows={4}
-              required
-              placeholder="Why do you need this change?"
-            />
-          </label>
+          <fieldset className={styles.timePicker}>
+            <legend>Optional start and finish times</legend>
+            <p>Set hours only where they are fixed. Leave both fields blank for a day with no exact time.</p>
+            <div className={styles.timeRows}>{selectedDays.map((day) => {
+              const option = weekdays.find((candidate) => candidate.value === day);
+              return <div className={styles.timeRow} key={day}>
+                <strong>{option?.long}</strong>
+                <label>
+                  <span>Start</span>
+                  <input
+                    ref={(node) => { timeInputRefs.current[day] = node; }}
+                    type="time"
+                    step={900}
+                    value={selectedTimes[day]?.startTime ?? ""}
+                    onChange={(event) => updateTime(day, "startTime", event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Finish</span>
+                  <input
+                    type="time"
+                    step={900}
+                    value={selectedTimes[day]?.endTime ?? ""}
+                    onChange={(event) => updateTime(day, "endTime", event.target.value)}
+                  />
+                </label>
+              </div>;
+            })}</div>
+          </fieldset>
+          {!workspace.initialSetupAvailable ? <label className={styles.reasonField}>
+              <span>Reason</span>
+              <textarea
+                ref={requestReasonRef}
+                value={reason}
+                onChange={(event) => {
+                  setReason(event.target.value);
+                  setError("");
+                }}
+                maxLength={1000}
+                rows={4}
+                required
+                placeholder="Why do you need this change?"
+              />
+            </label> : null}
           {error ? <p className={styles.error} role="alert"><AlertTriangle size={16} />{error}</p> : null}
         </div>
         <footer className={styles.modalFooter}>
           <button className={styles.secondaryButton} type="button" onClick={closeRequest} disabled={busy}>Cancel</button>
-          <button className={styles.primaryButton} type="submit" disabled={busy}>{busy ? "Sending…" : "Send request"}</button>
+          <button className={styles.primaryButton} type="submit" disabled={busy}>{busy
+            ? workspace.initialSetupAvailable ? "Saving…" : "Sending…"
+            : workspace.initialSetupAvailable ? "Save schedule" : "Send request"}</button>
         </footer>
       </form>
     </ModalFrame>
@@ -295,7 +444,7 @@ function ScheduleCard({
       </header>
       <div className={`${styles.modalBody} ${styles.historyList}`}>
         {workspace.history.map((item) => <article key={item.id}>
-          <header><strong>{daySummary(item.originalWorkingWeekdays)} <span aria-hidden="true">→</span> {daySummary(item.requestedWorkingWeekdays)}</strong><span data-status={item.status}>{historyStatusLabel(item.status)}</span></header>
+          <header><strong>{daySummary(item.originalWorkingWeekdays, item.originalWorkingDayTimes)} <span aria-hidden="true">→</span> {daySummary(item.requestedWorkingWeekdays, item.requestedWorkingDayTimes)}</strong><span data-status={item.status}>{historyStatusLabel(item.status)}</span></header>
           <p>{item.requestReason}</p>
           <small>Submitted {formatDate(item.submittedAt)} · {item.submittedByName}</small>
           {item.decidedAt ? <small>{historyStatusLabel(item.status)} {formatDate(item.decidedAt)}{item.reviewerName ? ` · ${item.reviewerName}` : ""}</small> : null}
@@ -387,7 +536,7 @@ function ReviewQueue({
       <header><div><span>Manager action</span><h2 id={headingId}>Schedule requests</h2></div><strong>{reviews.length}</strong></header>
       <div className={styles.reviewRows}>
         {visibleReviews.map((item) => <article key={item.id}>
-          <div><strong>{item.employeeName}</strong><span>{daySummary(item.originalWorkingWeekdays)} <i aria-hidden="true">→</i> {daySummary(item.requestedWorkingWeekdays)}</span><small>{item.requestReason}</small></div>
+          <div><strong>{item.employeeName}</strong><span>{daySummary(item.originalWorkingWeekdays, item.originalWorkingDayTimes)} <i aria-hidden="true">→</i> {daySummary(item.requestedWorkingWeekdays, item.requestedWorkingDayTimes)}</span><small>{item.requestReason}</small></div>
           <div className={styles.reviewActions}>
             <button type="button" data-decision="declined" disabled={busy} onClick={() => open(item, "declined")}>Decline</button>
             <button type="button" data-decision="approved" disabled={busy} onClick={() => open(item, "approved")}><Check size={16} aria-hidden="true" />Approve</button>
@@ -405,8 +554,8 @@ function ReviewQueue({
         </header>
         <div className={styles.modalBody}>
           <div className={styles.decisionOverview}>
-            <div><span>Current</span><strong>{daySummary(selected.originalWorkingWeekdays)}</strong></div>
-            <div><span>Proposed</span><strong>{daySummary(selected.requestedWorkingWeekdays)}</strong></div>
+            <div><span>Current</span><strong>{daySummary(selected.originalWorkingWeekdays, selected.originalWorkingDayTimes)}</strong></div>
+            <div><span>Proposed</span><strong>{daySummary(selected.requestedWorkingWeekdays, selected.requestedWorkingDayTimes)}</strong></div>
             <blockquote>{selected.requestReason}</blockquote>
           </div>
           <label className={styles.reasonField}>
