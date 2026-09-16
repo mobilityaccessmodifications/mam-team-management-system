@@ -150,6 +150,36 @@ function workingWeekdays(value: unknown) {
   return [...value].sort((first, second) => first - second);
 }
 
+function workingDayTimes(value: unknown, selectedWeekdays: number[] | null) {
+  if (!Array.isArray(value) || value.length > 7) {
+    throw new Error("Work times are invalid.");
+  }
+  const selected = new Set(selectedWeekdays ?? []);
+  const seen = new Set<number>();
+  const timePattern = /^(?:[01]\d|2[0-3]):(?:00|15|30|45)$/;
+  return value.map((candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      throw new Error("Work times are invalid.");
+    }
+    const row = candidate as Record<string, unknown>;
+    const weekday = Number(row.weekday);
+    const startTime = typeof row.startTime === "string" ? row.startTime : "";
+    const endTime = typeof row.endTime === "string" ? row.endTime : "";
+    if (
+      !Number.isInteger(weekday)
+      || !selected.has(weekday)
+      || seen.has(weekday)
+      || !timePattern.test(startTime)
+      || !timePattern.test(endTime)
+      || endTime <= startTime
+    ) {
+      throw new Error("Choose valid start and finish times in 15-minute intervals.");
+    }
+    seen.add(weekday);
+    return { weekday, start_time: startTime, end_time: endTime };
+  }).sort((first, second) => first.weekday - second.weekday);
+}
+
 function laptopSupplied(value: unknown) {
   const cleaned = optionalText(value, "Laptop supplied", 32);
   if (cleaned === null) return null;
@@ -198,6 +228,7 @@ function validateDraft(input: unknown) {
   const value = inputObject(input);
   const p_laptop_supplied = laptopSupplied(value.laptopSupplied);
   const p_laptop_id = optionalText(value.laptopId, "Laptop ID", 120);
+  const p_working_weekdays = workingWeekdays(value.workingWeekdays);
 
   if (p_laptop_supplied === "mam_laptop" && !p_laptop_id) {
     throw new Error("A Laptop ID is required for a MAM laptop.");
@@ -220,7 +251,8 @@ function validateDraft(input: unknown) {
       value.scheduledEmploymentEndDate,
       "Scheduled employment end date",
     ),
-    p_working_weekdays: workingWeekdays(value.workingWeekdays),
+    p_working_weekdays,
+    p_working_day_times: workingDayTimes(value.workingDayTimes, p_working_weekdays),
     p_employment_type: employmentType(value.employmentType),
     p_company_key: company(value.company),
     p_is_active: value.isActive === true,
@@ -233,7 +265,8 @@ function validateDraft(input: unknown) {
 }
 
 function legacyDraftValues(values: ReturnType<typeof validateDraft>) {
-  const { p_working_weekdays, ...legacyValues } = values;
+  const { p_working_weekdays, p_working_day_times, ...legacyValues } = values;
+  void p_working_day_times;
   if (p_working_weekdays !== null) {
     throw new Error("Work schedule storage is not ready. Refresh and try again.");
   }
@@ -286,10 +319,18 @@ export async function createEmployeeDirectoryRecord(
 ): Promise<EmployeeDirectoryMutationResult> {
   const { supabase } = await requireEmployeeDirectoryManager();
   const values = validateDraft(input);
-  let { data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule", {
+  let { data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule_times", {
     ...values,
     p_sort_order: 0,
   });
+  if (isMissingWorkScheduleRpc(error) && values.p_working_day_times.length === 0) {
+    const { p_working_day_times, ...weekdayValues } = values;
+    void p_working_day_times;
+    ({ data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule", {
+      ...weekdayValues,
+      p_sort_order: 0,
+    }));
+  }
   if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
     ({ data, error } = await supabase.rpc("create_employee_directory_record_with_employment_type", {
       ...legacyDraftValues(values),
@@ -316,12 +357,22 @@ export async function updateEmployeeDirectoryRecord(
   }
   const { supabase } = await requireEmployeeDirectoryManager();
   const values = validateDraft(inputValue);
-  let { data, error } = await supabase.rpc("update_employee_directory_record_with_work_schedule", {
+  let { data, error } = await supabase.rpc("update_employee_directory_record_with_work_schedule_times", {
     ...values,
     p_person_id: inputValue.personId,
     p_expected_person_version: version(inputValue.personVersion),
     p_expected_detail_version: version(inputValue.detailVersion),
   });
+  if (isMissingWorkScheduleRpc(error) && values.p_working_day_times.length === 0) {
+    const { p_working_day_times, ...weekdayValues } = values;
+    void p_working_day_times;
+    ({ data, error } = await supabase.rpc("update_employee_directory_record_with_work_schedule", {
+      ...weekdayValues,
+      p_person_id: inputValue.personId,
+      p_expected_person_version: version(inputValue.personVersion),
+      p_expected_detail_version: version(inputValue.detailVersion),
+    }));
+  }
   if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
     ({ data, error } = await supabase.rpc("update_employee_directory_record_with_employment_type", {
       ...legacyDraftValues(values),

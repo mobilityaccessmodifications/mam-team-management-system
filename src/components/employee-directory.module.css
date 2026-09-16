@@ -692,7 +692,8 @@
 }
 
 .scheduleFields > label,
-.workdayField {
+.workdayField,
+.workTimeField {
   display: grid;
   min-width: 0;
   gap: 5px;
@@ -703,6 +704,50 @@
 
 .workdayField {
   grid-column: 1 / -1;
+}
+
+.workTimeField {
+  grid-column: 1 / -1;
+}
+
+.workTimeField > small {
+  color: var(--directory-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.workTimeRows {
+  display: grid;
+  gap: 7px;
+  margin-top: 3px;
+}
+
+.workTimeRow {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  border: 1px solid var(--directory-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  padding: 9px 10px;
+}
+
+.workTimeRow > strong {
+  align-self: center;
+  color: var(--directory-ink);
+  font-size: 12px;
+}
+
+.workTimeRow label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.workTimeRow label span {
+  color: var(--directory-muted);
+  font-size: 10px;
 }
 
 .workdayPicker {
@@ -953,6 +998,14 @@
 
   .workdayPicker {
     grid-template-columns: repeat(4, minmax(44px, 1fr));
+  }
+
+  .workTimeRow {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .workTimeRow > strong {
+    grid-column: 1 / -1;
   }
 
   .scheduleCopy small {

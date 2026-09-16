@@ -1,11 +1,16 @@
-import type { EmployeeWorkingWeekday } from "@/lib/employee-directory-types";
+import type {
+  EmployeeWorkingDayTime,
+  EmployeeWorkingWeekday,
+} from "@/lib/employee-directory-types";
 
 export type WorkScheduleRequestStatus = "submitted" | "approved" | "declined" | "cancelled";
 
 export type WorkScheduleHistoryItem = {
   id: string;
   originalWorkingWeekdays: EmployeeWorkingWeekday[] | null;
+  originalWorkingDayTimes: EmployeeWorkingDayTime[];
   requestedWorkingWeekdays: EmployeeWorkingWeekday[];
+  requestedWorkingDayTimes: EmployeeWorkingDayTime[];
   requestReason: string;
   submittedByName: string;
   status: WorkScheduleRequestStatus;
@@ -24,6 +29,8 @@ export type WorkScheduleWorkspace = {
   activePersonId: string | null;
   activePersonName: string | null;
   workingWeekdays: EmployeeWorkingWeekday[] | null;
+  workingDayTimes: EmployeeWorkingDayTime[];
+  initialSetupAvailable: boolean;
   canRequestChange: boolean;
   isProfilePreview: boolean;
   history: WorkScheduleHistoryItem[];
@@ -39,5 +46,5 @@ export type WorkScheduleLoadResult =
     };
 
 export type WorkScheduleMutationResult =
-  | { ok: true }
+  | { ok: true; outcome?: "applied" | "submitted" }
   | { ok: false; message: string };

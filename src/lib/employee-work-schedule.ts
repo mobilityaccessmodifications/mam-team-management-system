@@ -1,7 +1,10 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
-import type { EmployeeWorkingWeekday } from "@/lib/employee-directory-types";
+import type {
+  EmployeeWorkingDayTime,
+  EmployeeWorkingWeekday,
+} from "@/lib/employee-directory-types";
 import type {
   WorkScheduleHistoryItem,
   WorkScheduleReviewItem,
@@ -14,6 +17,9 @@ const SAVE_ERROR = "The work schedule request could not be saved. Refresh and tr
 const DECISION_ERROR = "The work schedule request could not be updated. Refresh and try again.";
 const SAFE_DATABASE_MESSAGES = new Set([
   "Choose at least one work day.",
+  "Choose both a start time and an end time, or leave both blank.",
+  "Choose work times in 15-minute intervals.",
+  "Finish time must be later than start time.",
   "Choose a work schedule that is different from the current schedule.",
   "This employee profile is unavailable.",
   "Choose Approve or Decline.",
@@ -101,6 +107,40 @@ function weekdays(value: unknown, allowNull = false) {
   return [...value].sort((first, second) => Number(first) - Number(second)) as EmployeeWorkingWeekday[];
 }
 
+function workingDayTimes(
+  value: unknown,
+  selectedWeekdays: EmployeeWorkingWeekday[] | null,
+): EmployeeWorkingDayTime[] {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 7) throw new WorkSchedulePublicError(LOAD_ERROR);
+  const selected = new Set(selectedWeekdays ?? []);
+  const seen = new Set<number>();
+  const timePattern = /^(?:[01]\d|2[0-3]):(?:00|15|30|45)$/;
+  const result = value.map((candidate) => {
+    const row = record(candidate);
+    const weekday = row.weekday;
+    const startTime = text(row.start_time, true);
+    const endTime = text(row.end_time, true);
+    if (
+      !Number.isInteger(weekday)
+      || Number(weekday) < 1
+      || Number(weekday) > 7
+      || !selected.has(Number(weekday) as EmployeeWorkingWeekday)
+      || seen.has(Number(weekday))
+      || !timePattern.test(startTime)
+      || !timePattern.test(endTime)
+      || endTime <= startTime
+    ) throw new WorkSchedulePublicError(LOAD_ERROR);
+    seen.add(Number(weekday));
+    return {
+      weekday: Number(weekday) as EmployeeWorkingWeekday,
+      startTime,
+      endTime,
+    };
+  });
+  return result.sort((first, second) => first.weekday - second.weekday);
+}
+
 function status(value: unknown) {
   if (
     value === "submitted"
@@ -116,7 +156,15 @@ function historyItem(value: unknown): WorkScheduleHistoryItem {
   return {
     id: text(row.id, true),
     originalWorkingWeekdays: weekdays(row.original_working_weekdays, true),
+    originalWorkingDayTimes: workingDayTimes(
+      row.original_working_day_times,
+      weekdays(row.original_working_weekdays, true),
+    ),
     requestedWorkingWeekdays: weekdays(row.requested_working_weekdays),
+    requestedWorkingDayTimes: workingDayTimes(
+      row.requested_working_day_times,
+      weekdays(row.requested_working_weekdays),
+    ),
     requestReason: text(row.request_reason, true),
     submittedByName: text(row.submitted_by_name, true),
     status: status(row.status),
@@ -140,10 +188,13 @@ function parseWorkspace(value: unknown): WorkScheduleWorkspace {
   const row = record(value);
   const rawHistory = Array.isArray(row.history) ? row.history : [];
   const rawReviews = Array.isArray(row.reviews) ? row.reviews : [];
+  const selectedWeekdays = weekdays(row.working_weekdays, true);
   return {
     activePersonId: nullableText(row.active_person_id),
     activePersonName: nullableText(row.active_person_name),
-    workingWeekdays: weekdays(row.working_weekdays, true),
+    workingWeekdays: selectedWeekdays,
+    workingDayTimes: workingDayTimes(row.working_day_times, selectedWeekdays),
+    initialSetupAvailable: row.initial_setup_available === true,
     canRequestChange: row.can_request_change === true,
     isProfilePreview: row.is_profile_preview === true,
     history: rawHistory.map(historyItem),
@@ -175,22 +226,35 @@ export async function getEmployeeWorkScheduleWorkspace(previewPersonId?: string)
 
 export async function submitEmployeeWorkScheduleChange(input: {
   workingWeekdays: EmployeeWorkingWeekday[];
+  workingDayTimes: EmployeeWorkingDayTime[];
   reason: string;
   previewPersonId?: string;
 }) {
   const supabase = await authenticatedClient(SAVE_ERROR);
   if (input.previewPersonId && !UUID_PATTERN.test(input.previewPersonId)) throw new WorkSchedulePublicError(SAVE_ERROR);
-  const { error } = input.previewPersonId
-    ? await supabase.rpc("submit_selected_employee_work_schedule_change_request", {
+  const requestedTimes = input.workingDayTimes.map((time) => ({
+    weekday: time.weekday,
+    start_time: time.startTime,
+    end_time: time.endTime,
+  }));
+  const { data, error } = input.previewPersonId
+    ? await supabase.rpc("submit_selected_employee_work_schedule_change_v2", {
         p_person_id: input.previewPersonId,
         p_requested_working_weekdays: input.workingWeekdays,
+        p_requested_working_day_times: requestedTimes,
         p_reason: input.reason,
       })
-    : await supabase.rpc("submit_my_employee_work_schedule_change_request", {
+    : await supabase.rpc("submit_my_employee_work_schedule_change_v2", {
         p_requested_working_weekdays: input.workingWeekdays,
+        p_requested_working_day_times: requestedTimes,
         p_reason: input.reason,
       });
   if (error) throw new WorkSchedulePublicError(safeMessage(error, SAVE_ERROR));
+  const result = record(data);
+  if (result.outcome !== "applied" && result.outcome !== "submitted") {
+    throw new WorkSchedulePublicError(SAVE_ERROR);
+  }
+  return result.outcome;
 }
 
 export async function decideEmployeeWorkScheduleChange(input: {

@@ -6,6 +6,7 @@ import type {
   EmployeeEmploymentType,
   EmployeeLaptopSupply,
   EmployeeDirectoryRecord,
+  EmployeeWorkingDayTime,
   EmployeeWorkingWeekday,
 } from "@/lib/employee-directory-types";
 
@@ -31,6 +32,7 @@ type DirectoryRpcRow = {
   started_date: string | null;
   scheduled_employment_end_date: string | null;
   working_weekdays: number[] | null;
+  working_day_times?: unknown;
   archive_reason: string | null;
   employment_type: string | null;
   has_paid_leave_entitlement: boolean;
@@ -100,6 +102,41 @@ function workingWeekdays(value: unknown): EmployeeWorkingWeekday[] | null {
   return [...value].sort((first, second) => first - second) as EmployeeWorkingWeekday[];
 }
 
+function workingDayTimes(
+  value: unknown,
+  selectedWeekdays: EmployeeWorkingWeekday[] | null,
+): EmployeeWorkingDayTime[] {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 7) throw new Error(GENERIC_LOAD_ERROR);
+  const selected = new Set(selectedWeekdays ?? []);
+  const seen = new Set<number>();
+  const timePattern = /^(?:[01]\d|2[0-3]):(?:00|15|30|45)$/;
+  const result: EmployeeWorkingDayTime[] = [];
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      throw new Error(GENERIC_LOAD_ERROR);
+    }
+    const row = candidate as Record<string, unknown>;
+    if (
+      !Number.isInteger(row.weekday)
+      || !selected.has(Number(row.weekday) as EmployeeWorkingWeekday)
+      || seen.has(Number(row.weekday))
+      || typeof row.start_time !== "string"
+      || typeof row.end_time !== "string"
+      || !timePattern.test(row.start_time)
+      || !timePattern.test(row.end_time)
+      || row.end_time <= row.start_time
+    ) throw new Error(GENERIC_LOAD_ERROR);
+    seen.add(Number(row.weekday));
+    result.push({
+      weekday: Number(row.weekday) as EmployeeWorkingWeekday,
+      startTime: row.start_time,
+      endTime: row.end_time,
+    });
+  }
+  return result.sort((first, second) => first.weekday - second.weekday);
+}
+
 function assetTags(value: unknown) {
   if (value === null || value === undefined) return [];
   if (!Array.isArray(value) || value.some((tag) => typeof tag !== "string")) {
@@ -109,6 +146,7 @@ function assetTags(value: unknown) {
 }
 
 function toRecord(row: DirectoryRpcRow): EmployeeDirectoryRecord {
+  const selectedWeekdays = workingWeekdays(row.working_weekdays);
   return {
     personId: requiredText(row.person_id),
     personVersion: version(row.person_version),
@@ -130,7 +168,8 @@ function toRecord(row: DirectoryRpcRow): EmployeeDirectoryRecord {
     dateOfBirth: optionalText(row.date_of_birth),
     startedDate: optionalText(row.started_date),
     scheduledEmploymentEndDate: optionalText(row.scheduled_employment_end_date),
-    workingWeekdays: workingWeekdays(row.working_weekdays),
+    workingWeekdays: selectedWeekdays,
+    workingDayTimes: workingDayTimes(row.working_day_times, selectedWeekdays),
     archiveReason: optionalText(row.archive_reason),
     employmentType: employmentType(row.employment_type),
     hasPaidLeaveEntitlement: row.has_paid_leave_entitlement === true,
@@ -166,9 +205,14 @@ export async function listEmployeeDirectoryRecordsForManager() {
 export async function listEmployeeDirectoryRecordsWithClient(
   supabase: Awaited<ReturnType<typeof createClient>>,
 ) {
-  let { data: archiveData, error: archiveError } = await supabase.rpc("list_employee_directory_records_with_work_schedule", {
+  let { data: archiveData, error: archiveError } = await supabase.rpc("list_employee_directory_records_with_work_schedule_times", {
     p_include_archived: true,
   });
+  if (isMissingWorkScheduleRpc(archiveError)) {
+    ({ data: archiveData, error: archiveError } = await supabase.rpc("list_employee_directory_records_with_work_schedule", {
+      p_include_archived: true,
+    }));
+  }
   if (isMissingWorkScheduleRpc(archiveError)) {
     ({ data: archiveData, error: archiveError } = await supabase.rpc("list_employee_directory_records_with_archive_visibility", {
       p_include_archived: true,
@@ -186,9 +230,14 @@ export async function findEmployeeDirectoryRecord(
   personId: string,
 ) {
   if (!UUID_PATTERN.test(personId)) throw new Error(GENERIC_LOAD_ERROR);
-  let { data, error } = await supabase.rpc("get_employee_directory_record_with_work_schedule", {
+  let { data, error } = await supabase.rpc("get_employee_directory_record_with_work_schedule_times", {
     p_person_id: personId,
   });
+  if (isMissingWorkScheduleRpc(error)) {
+    ({ data, error } = await supabase.rpc("get_employee_directory_record_with_work_schedule", {
+      p_person_id: personId,
+    }));
+  }
   if (isMissingWorkScheduleRpc(error)) {
     ({ data, error } = await supabase.rpc("get_employee_directory_record_with_archive_visibility", {
       p_person_id: personId,
