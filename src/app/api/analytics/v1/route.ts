@@ -57,7 +57,13 @@ async function matchesAnalyticsKey(request: Request) {
     const { data, error } = await supabase.rpc("validate_analytics_api_key", {
       p_key_hash: candidateHash,
     });
-    if (!error && typeof data === "boolean") return data;
+    if (!error) {
+      if (typeof data === "boolean") return data;
+      // The managed-key validator deliberately returns null until the first
+      // database key is created, preserving the deployment-key transition.
+      if (data === null) return matchesEnvironmentAnalyticsKey(candidate);
+      return false;
+    }
     // PostgREST uses PGRST202 when the RPC is not present in its schema cache.
     // Only that initial, pre-migration state may use the old environment key.
     if (error?.code !== "PGRST202") return false;

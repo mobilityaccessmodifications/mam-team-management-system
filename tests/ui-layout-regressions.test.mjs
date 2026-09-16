@@ -12,6 +12,8 @@ const calendarStyles = readFileSync("src/components/team-calendar.module.css", "
 const loginSource = readFileSync("src/app/login/page.tsx", "utf8");
 const globalStyles = readFileSync("src/app/globals.css", "utf8");
 const motionTabStyles = readFileSync("src/components/ui/motion-tabs.module.css", "utf8");
+const pageSource = readFileSync("src/app/page.tsx", "utf8");
+const leaveActionsSource = readFileSync("src/app/leave/actions.ts", "utf8");
 
 test("the redesigned shell uses a dark split workspace at desktop and a safe-area bottom bar on mobile", () => {
   assert.match(leaveSource, /className=\{styles\.navHeading\}>Workspace/);
@@ -99,6 +101,14 @@ test("calendar polish owns the final cascade after its full-viewport layout", ()
   const ownershipRules = calendarStyles.slice(ownershipStart);
   assert.match(ownershipRules, /\.df-header\) \{ min-height: 72px;[\s\S]*?backdrop-filter: blur\(20px\)/);
   assert.match(ownershipRules, /prefers-reduced-transparency: reduce/);
+});
+
+test("Calendar remains available to every active employee and trusts server-scoped event projections", () => {
+  assert.match(pageSource, /canViewTeamCalendar = Boolean\(currentPersonId\) \|\| isNonRosterSystemAdmin/);
+  assert.match(leaveSource, /canViewTeamCalendarForActiveProfile = canViewTeamCalendar;/);
+  assert.match(leaveActionsSource, /supabase\.rpc\("list_leave_calendar_entries"\)/);
+  assert.match(leaveActionsSource, /supabase\.rpc\("list_employee_check_in_calendar_entries"\)/);
+  assert.doesNotMatch(leaveActionsSource, /canViewTeamCalendarScope/);
 });
 
 test("subscription column headings remain complete and use horizontal overflow", () => {

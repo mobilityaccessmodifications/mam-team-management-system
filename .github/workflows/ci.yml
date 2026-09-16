@@ -64,3 +64,23 @@ jobs:
             -f tests/advisor-security-cleanup-bootstrap.sql \
             -f supabase/migrations/20260915010000_advisor_security_and_policy_cleanup.sql \
             -f tests/advisor-security-cleanup.sql
+
+      - name: Test serialised portal account status changes in disposable database
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres portal_account_status_test
+          psql -h localhost -U postgres -d portal_account_status_test -v ON_ERROR_STOP=1 \
+            -f tests/portal-account-status-claim-bootstrap.sql \
+            -f supabase/migrations/20260916120000_serialise_portal_account_status_changes.sql \
+            -f tests/portal-account-status-claim.sql
+
+      - name: Test personal Calendar scope and explicit approved-leave viewers
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres personal_calendar_scope_test
+          psql -h localhost -U postgres -d personal_calendar_scope_test -v ON_ERROR_STOP=1 \
+            -f tests/personal-calendar-scope-bootstrap.sql \
+            -f supabase/migrations/20260916130000_personal_calendar_scope.sql \
+            -f tests/personal-calendar-scope.sql
