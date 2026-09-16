@@ -2168,13 +2168,15 @@ export function LeaveDemo({
               {formLeaveType === "Sick leave" ? <SickEvidenceNotice dueDate={sickEvidenceDeadline(formEndDate)} hasEvidence={false} /> : null}
               <details className={styles.timeRange}><summary>Part-day leave</summary><div className={styles.formRow}><label><span>Starts</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>Ends</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>First and last day only.</p></details>
               <details className={styles.requestExtras}><summary>Note & files</summary>
-              <label><span>Note</span><textarea name="employeeNote" rows={3} /></label>
-              <label className={styles.attachmentField}>
-                <span>Supporting files <small>Optional</small></span>
-                <input className={styles.fileInput} name="attachments" type="file" accept={LEAVE_ATTACHMENT_ACCEPT} multiple disabled={isMutating} />
-                <small>PDF or image · up to 10 files, 5 MB each.</small>
-              </label>
-              <small className={styles.privacyNote}>Visible to your approver and HR.</small>
+              <div className={styles.requestExtrasContent}>
+                <label><span>Note</span><textarea name="employeeNote" rows={3} /></label>
+                <label className={styles.attachmentField}>
+                  <span>Supporting files <small>Optional</small></span>
+                  <input className={styles.fileInput} name="attachments" type="file" accept={LEAVE_ATTACHMENT_ACCEPT} multiple disabled={isMutating} />
+                  <small>PDF or image · up to 10 files, 5 MB each.</small>
+                </label>
+                <small className={styles.privacyNote}>Visible to your approver and HR.</small>
+              </div>
               </details>
               {formError ? <p className={styles.formError} role="alert">{formError}</p> : null}
               <footer><button className={styles.secondaryButton} type="button" onClick={closeLeaveRequestForm} disabled={isMutating}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : "Send request"}</button></footer>
