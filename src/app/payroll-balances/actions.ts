@@ -4,7 +4,15 @@ import "server-only";
 
 import { revalidatePath } from "next/cache";
 
-import { parsePayrollBalanceFiles } from "@/lib/payroll-balance-import";
+import {
+  parsePreparedPayrollBalanceFiles,
+  preparePayrollBalanceFiles,
+} from "@/lib/payroll-balance-import";
+import {
+  archivePayrollBalanceFiles,
+  linkPayrollBalanceSourceArchives,
+  markPayrollBalanceSourceArchivesFailed,
+} from "@/lib/payroll-balance-source-archive";
 import type {
   PayrollImportAccessPerson,
   PayrollImportAccessWorkspace,
@@ -206,7 +214,19 @@ export async function stagePayrollBalanceFiles(formData: FormData): Promise<
     if (!files.length || files.some((file) => !(file instanceof File))) {
       return { ok: false, message: "Choose CSV or Excel leave-balance files." };
     }
-    const parsed = await parsePayrollBalanceFiles(files as File[]);
+    const preparedFiles = await preparePayrollBalanceFiles(files as File[]);
+    const archiveIds = await archivePayrollBalanceFiles(actorUserId, preparedFiles);
+    let parsed: Awaited<ReturnType<typeof parsePreparedPayrollBalanceFiles>>;
+    try {
+      parsed = await parsePreparedPayrollBalanceFiles(preparedFiles);
+    } catch (reason) {
+      try {
+        await markPayrollBalanceSourceArchivesFailed(actorUserId, archiveIds);
+      } catch {
+        // The upload plan itself still enforces the minimum retention window.
+      }
+      throw reason;
+    }
     if (!SHA256_PATTERN.test(parsed.sourceDigest)) throw new Error("The upload digest is invalid.");
     let data: unknown;
     try {
@@ -223,7 +243,9 @@ export async function stagePayrollBalanceFiles(formData: FormData): Promise<
     } catch {
       return { ok: false, message: "The files could not be staged. Check the format and try again." };
     }
-    return { ok: true, batch: mapBatch(data) };
+    const batch = mapBatch(data);
+    await linkPayrollBalanceSourceArchives(actorUserId, archiveIds, batch.batchId);
+    return { ok: true, batch };
   } catch (reason) {
     return { ok: false, message: reason instanceof Error ? reason.message : "The files could not be read." };
   }

@@ -24,8 +24,6 @@
 .companyStates > span svg { opacity: .25; }
 .companyStates > span[data-complete="true"] { border-color: #bcd9c8; color: #286f57; }
 .companyStates > span[data-complete="true"] svg { opacity: 1; }
-.matchingNote { display: flex; align-items: flex-start; gap: 7px; margin: 0; color: var(--text-tertiary, #6e7d78); font-size: 11px; line-height: 1.45; }
-.matchingNote svg { flex: 0 0 auto; color: #327a61; }
 .history { border-top: 1px solid var(--surface-border, #dce5df); padding-top: 10px; }
 .history summary { color: var(--text-secondary, #53625e); cursor: pointer; font-size: 12px; font-weight: 700; }
 .history > div { display: grid; gap: 7px; padding-top: 9px; }
