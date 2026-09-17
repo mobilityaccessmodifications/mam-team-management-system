@@ -38,6 +38,12 @@ jobs:
           --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
+      - name: Test service-only OpenClaw allowlist snapshot with synthetic data
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres openclaw_allowlist_test
+          psql -h localhost -U postgres -d openclaw_allowlist_test -v ON_ERROR_STOP=1 -f tests/openclaw-allowlist.sql
       - name: Test notification transaction and credential audit in disposable database
         env:
           PGPASSWORD: synthetic-ci-only
