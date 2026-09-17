@@ -5,7 +5,7 @@ import test from "node:test";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
-const source = readFileSync("src/components/leave-demo.tsx", "utf8");
+const source = readFileSync("src/components/leave-request-dialog.tsx", "utf8");
 const ast = ts.createSourceFile("leave-demo.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 
 test("editing a leave request clears stale custom validation feedback", () => {

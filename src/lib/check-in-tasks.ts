@@ -1,11 +1,6 @@
 import "server-only";
 
-import {
-  CHECK_IN_TASK_LOAD_ERROR,
-  parseCheckInTasks,
-} from "@/lib/check-in-tasks-data";
 import { createClient } from "@/lib/supabase/server";
-import type { CheckInTasksData } from "@/lib/check-in-tasks-types";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACCESS_ERROR = "You do not have permission to view check-in tasks.";
@@ -16,27 +11,6 @@ async function requireAuthenticatedClient() {
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) throw new Error(SESSION_ERROR);
   return supabase;
-}
-
-/** Returns the minimal, current-user-scoped check-in task list. */
-export async function getMyEmployeeCheckInTasks(): Promise<CheckInTasksData> {
-  const supabase = await requireAuthenticatedClient();
-  const { data, error } = await supabase.rpc("list_my_employee_check_in_tasks");
-  if (error) {
-    if (error.code === "42501") throw new Error(ACCESS_ERROR);
-    throw new Error(CHECK_IN_TASK_LOAD_ERROR);
-  }
-  return parseCheckInTasks(data);
-}
-
-/** Change Profile scope projection; the RPC is Super Admin-only. */
-export async function getEmployeeCheckInTasksForPreview(personId: string): Promise<CheckInTasksData> {
-  const supabase = await requireAuthenticatedClient();
-  const { data, error } = await supabase.rpc("list_employee_check_in_tasks_for_preview", {
-    p_person_id: personId,
-  });
-  if (error) throw new Error(CHECK_IN_TASK_LOAD_ERROR);
-  return parseCheckInTasks(data);
 }
 
 /** Completes one task after both application and database scope checks. */

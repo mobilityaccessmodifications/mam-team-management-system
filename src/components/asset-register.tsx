@@ -37,12 +37,12 @@ import {
   listItAssetAssignees,
   listItAssetCustodyHistory,
   listItAssets,
-  reassignItAsset,
   returnItAsset,
   retireItAsset,
 } from "@/app/assets/actions";
 import styles from "@/components/asset-register.module.css";
 import { EmployeePicker } from "@/components/employee-picker";
+import { useAssetOwnerChange } from "@/components/use-asset-owner-change";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   IT_ASSET_TYPES,
@@ -437,43 +437,9 @@ function ChangeDeviceOwnerModal({
   onClose: () => void;
   onSaved: (asset: ItAsset) => void;
 }) {
-  const dialogRef = useRef<HTMLElement>(null);
-  const assigneeRef = useRef<HTMLInputElement>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const closeWhenReady = useCallback(() => {
-    if (!saving) onClose();
-  }, [onClose, saving]);
-  useDialogFocus(true, dialogRef, assigneeRef, closeWhenReady, fallbackFocusRef);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (saving) return;
-    const assignedPersonId = String(new FormData(event.currentTarget).get("assignedPersonId") ?? "");
-    if (!assignees.some((assignee) => assignee.personId === assignedPersonId)) {
-      setError("Choose the employee responsible for this device.");
-      assigneeRef.current?.focus();
-      return;
-    }
-    if (assignedPersonId === asset.assignedTo?.personId) {
-      onClose();
-      return;
-    }
-
-    setSaving(true);
-    setError("");
-    try {
-      onSaved(await reassignItAsset({
-        assetId: asset.id,
-        assignedPersonId,
-        version: asset.version,
-      }));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The device owner could not be changed. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
+  const { dialogRef, assigneeRef, saving, error, closeWhenReady, submit } = useAssetOwnerChange({
+    asset, assignees, onClose, onSaved, fallbackFocusRef,
+  });
 
   return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={`${styles.modal} ${styles.modalWithPicker}`} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="change-device-owner-title" tabIndex={-1}>

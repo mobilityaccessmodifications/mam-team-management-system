@@ -5,14 +5,7 @@ import { revalidatePath } from "next/cache";
 import {
   completeCheckInReminderForHr,
   completeVisibleCheckInReminder as completeVisibleCheckInReminderForWorkspace,
-  getCheckInRegisterForHr,
-  getVisibleCheckInWorkspace,
-  getVisibleCheckInWorkspaceForPreview,
 } from "@/lib/check-in-register";
-import type {
-  CheckInRegisterData,
-  CheckInWorkspaceData,
-} from "@/lib/check-in-register-types";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -23,27 +16,10 @@ function checkedId(value: unknown) {
   return value;
 }
 
-/** HR-only data action. The DAL and database RPC both re-authorise the caller. */
-export async function getCheckInRegister(): Promise<CheckInRegisterData> {
-  return getCheckInRegisterForHr();
-}
-
 export async function completeCheckInReminder(reminderId: string) {
   await completeCheckInReminderForHr(checkedId(reminderId));
   revalidatePath("/");
   return { ok: true };
-}
-
-/**
- * Minimal manager/global-reviewer action. The database resolves the caller's
- * live reporting-line scope and re-authorises the selected reminder.
- */
-export async function getCheckInWorkspace(): Promise<CheckInWorkspaceData> {
-  return getVisibleCheckInWorkspace();
-}
-
-export async function getCheckInWorkspaceForPreview(personId: string): Promise<CheckInWorkspaceData> {
-  return getVisibleCheckInWorkspaceForPreview(checkedId(personId));
 }
 
 export async function completeVisibleCheckInReminder(reminderId: string) {

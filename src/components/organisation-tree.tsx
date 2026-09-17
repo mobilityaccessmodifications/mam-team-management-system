@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Check,
   ChevronDown,
   ChevronRight,
   Columns3,
@@ -10,20 +9,13 @@ import {
   GripVertical,
   Link2,
   Link2Off,
-  LocateFixed,
   Mail,
-  Maximize2,
-  Minimize2,
-  Minus,
   Network,
   Pencil,
   Plus,
   Rows3,
   Search,
-  SlidersHorizontal,
-  Undo2,
   UserPlus,
-  WandSparkles,
   X,
 } from "lucide-react";
 import {
@@ -40,6 +32,7 @@ import {
 } from "react";
 
 import styles from "@/components/organisation-tree.module.css";
+import { OrganisationChartControls, OrganisationFilterMenu, type OrganisationFilter } from "@/components/organisation-controls";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 
 export type OrganisationCompany = "mam" | "equipsy";
@@ -80,8 +73,6 @@ export type OrganisationTreeProps = {
   className?: string;
 };
 
-type CompanyFilter = "all" | OrganisationCompany;
-type OrganisationFilter = CompanyFilter | "major" | "minor" | "warehouse";
 type TreeNode = OrganisationPerson & { children: TreeNode[] };
 type EditorState =
   | { mode: "create" }
@@ -838,7 +829,6 @@ export function OrganisationTree({
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [companyFilter, setCompanyFilter] = useState<OrganisationFilter>("all");
-  const [filterOpen, setFilterOpen] = useState(false);
   const [focusedRootId, setFocusedRootId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -880,7 +870,6 @@ export function OrganisationTree({
   const disconnectKeepButtonRef = useRef<HTMLButtonElement>(null);
   const inspectorDialogRef = useRef<HTMLElement>(null);
   const inspectorCloseButtonRef = useRef<HTMLButtonElement>(null);
-  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const chartWorldRef = useRef<HTMLDivElement>(null);
   const initialViewportRef = useRef(false);
@@ -2414,66 +2403,14 @@ export function OrganisationTree({
             ) : null}
           </div>
 
-          <div
-            className={styles.filterMenu}
-            onKeyDown={(event) => {
-              if (event.key !== "Escape" || !filterOpen) return;
-              event.preventDefault();
-              event.stopPropagation();
-              setFilterOpen(false);
-              filterButtonRef.current?.focus();
-            }}
-          >
-            <button
-              aria-label="Filter organisation"
-              aria-expanded={filterOpen}
-              aria-haspopup="menu"
-              className={styles.filterButton}
-              onClick={() => setFilterOpen((current) => !current)}
-              ref={filterButtonRef}
-              title="Filter"
-              type="button"
-            >
-              <SlidersHorizontal aria-hidden="true" size={17} />
-              <span>Filter</span>
-              {companyFilter !== "all" ? <span className={styles.filterBadge}>1</span> : null}
-            </button>
-            {filterOpen ? (
-              <div aria-label="Organisation filters" className={styles.filterCard} role="menu">
-                <span className={styles.filterHeading}>Show teams</span>
-                {([
-                  ["all", "All"],
-                  ["mam", "MAM"],
-                  ["equipsy", "Equipsy"],
-                  ["major", "Major"],
-                  ["minor", "Minor"],
-                  ["warehouse", "Warehouse"],
-                ] as const).map(([filter, label]) => (
-                  <button
-                    aria-checked={companyFilter === filter}
-                    className={styles.filterOption}
-                    data-active={companyFilter === filter}
-                    onClick={() => {
-                      setCompanyFilter(filter);
-                      setFilterOpen(false);
-                      setFocusedRootId(null);
-                      setQuery("");
-                      setSelectedId(null);
-                      workContactRequestRef.current += 1;
-                      setWorkContact(null);
-                      filterButtonRef.current?.focus();
-                    }}
-                    key={filter}
-                    role="menuitemradio"
-                    type="button"
-                  >
-                    <span>{label}</span>
-                    {companyFilter === filter ? <Check aria-hidden="true" size={14} /> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          <OrganisationFilterMenu companyFilter={companyFilter} onSelect={(filter) => {
+            setCompanyFilter(filter);
+            setFocusedRootId(null);
+            setQuery("");
+            setSelectedId(null);
+            workContactRequestRef.current += 1;
+            setWorkContact(null);
+          }} />
         </div>
       </div>
 
@@ -2504,93 +2441,24 @@ export function OrganisationTree({
               {linkGuide ? <span>Add line · choose a + or click blank space to cancel</span> : null}
             </div>
 
-            <div aria-label="Chart view controls" className={styles.chartControls}>
-              {canArrange || canUseRelationshipEditor ? (
-                <div aria-label="Chart editing" className={styles.chartControlGroup} role="group">
-                  {canArrange ? (
-                    <button
-                      aria-label="Clean up chart and restore the reporting layout"
-                      className={styles.cleanUpControl}
-                      disabled={!Object.keys(manualOffsets).length && !arrangeMode}
-                      onClick={cleanUpChart}
-                      title="Clean up chart"
-                      type="button"
-                    >
-                      <WandSparkles aria-hidden="true" size={16} />
-                      <span>Clean up</span>
-                    </button>
-                  ) : null}
-                  {canUseRelationshipEditor ? (
-                    <button
-                      aria-label="Undo last reporting-line change"
-                      disabled={!relationshipHistory.length || saving}
-                      onClick={() => void undoLastRelationship()}
-                      title="Undo last reporting-line change"
-                      type="button"
-                    >
-                      <Undo2 aria-hidden="true" size={16} />
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-              <div aria-label="Zoom" className={`${styles.chartControlGroup} ${styles.zoomControlGroup}`} role="group">
-                <button
-                  aria-label="Zoom out"
-                  disabled={zoom <= MIN_ZOOM}
-                  onClick={() =>
-                    setZoom((current) =>
-                      Math.max(MIN_ZOOM, Math.round((current - 0.1) * 100) / 100),
-                    )
-                  }
-                  type="button"
-                >
-                  <Minus aria-hidden="true" size={16} />
-                </button>
-                <span aria-label={`${Math.round(zoom * 100)} percent zoom`}>
-                  {Math.round(zoom * 100)}%
-                </span>
-                <button
-                  aria-label="Zoom in"
-                  disabled={zoom >= MAX_ZOOM}
-                  onClick={() =>
-                    setZoom((current) =>
-                      Math.min(MAX_ZOOM, Math.round((current + 0.1) * 100) / 100),
-                    )
-                  }
-                  type="button"
-                >
-                  <Plus aria-hidden="true" size={16} />
-                </button>
-              </div>
-              <div aria-label="Chart framing" className={styles.chartControlGroup} role="group">
-                <button
-                  aria-label="Fit chart to screen"
-                  className={styles.namedChartControl}
-                  onClick={fitChart}
-                  title="Fit chart to screen"
-                  type="button"
-                >
-                  <LocateFixed aria-hidden="true" size={16} />
-                  <span>Fit</span>
-                </button>
-                <button aria-label="Reset chart view" onClick={resetView} title="Reset chart view" type="button">
-                  <Focus aria-hidden="true" size={16} />
-                </button>
-                <button
-                  aria-label={fullscreen ? "Exit full screen" : "Open full screen"}
-                  aria-pressed={fullscreen}
-                  onClick={toggleFullscreen}
-                  title={fullscreen ? "Exit full screen" : "Open full screen"}
-                  type="button"
-                >
-                  {fullscreen ? (
-                    <Minimize2 aria-hidden="true" size={16} />
-                  ) : (
-                    <Maximize2 aria-hidden="true" size={16} />
-                  )}
-                </button>
-              </div>
-            </div>
+            <OrganisationChartControls
+              canArrange={canArrange}
+              canUseRelationshipEditor={canUseRelationshipEditor}
+              hasManualOffsets={Boolean(Object.keys(manualOffsets).length)}
+              arrangeMode={arrangeMode}
+              hasRelationshipHistory={Boolean(relationshipHistory.length)}
+              saving={saving}
+              zoom={zoom}
+              minZoom={MIN_ZOOM}
+              maxZoom={MAX_ZOOM}
+              fullscreen={fullscreen}
+              cleanUpChart={cleanUpChart}
+              undoLastRelationship={undoLastRelationship}
+              setZoom={setZoom}
+              fitChart={fitChart}
+              resetView={resetView}
+              toggleFullscreen={toggleFullscreen}
+            />
           </div>
 
         <div
