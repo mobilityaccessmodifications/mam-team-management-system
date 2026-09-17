@@ -7071,6 +7071,23 @@
 .balanceCardValue span { font-size: 12px; color: #55655e; }
 .balanceCardValue[data-negative="true"] { color: #a63828; }
 .balanceUnavailable { font-size: 16px; color: #67746e; font-weight: 500; }
+.balanceBreakdownCard { display: block; padding: 16px; }
+.balanceBreakdownCard > header { display: flex; align-items: center; gap: 10px; }
+.balanceBreakdownCard > header > span:last-child { display: grid; gap: 2px; min-width: 0; }
+.balanceBreakdownCard > header > span:last-child > strong { color: #20312b; font-size: 14px; }
+.balanceBreakdownCard > header small { color: #687771; font-size: 11px; }
+.balanceBreakdownCard .balanceIcon { flex-basis: 36px; height: 36px; }
+.balanceBreakdown { display: grid; gap: 0; margin: 14px 0 0; }
+.balanceBreakdown > div { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 9px 0; border-top: 1px solid rgb(45 74 62 / 10%); }
+.balanceBreakdown dt { color: #586963; font-size: 12px; line-height: 1.35; }
+.balanceBreakdown dd { margin: 0; color: #20312b; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.balanceBreakdown dd > strong { font-size: 13px; font-weight: 650; }
+.balanceBreakdown dd > strong > span { color: #687771; font-size: 11px; font-weight: 500; }
+.balanceBreakdown dd > strong[data-negative="true"] { color: #a63828; }
+.balanceBreakdown .balanceUnavailable { font-size: 13px; }
+.balanceBreakdown .balanceAvailable { margin-top: 2px; padding-bottom: 0; border-top-color: rgb(45 74 62 / 22%); }
+.balanceBreakdown .balanceAvailable dt,
+.balanceBreakdown .balanceAvailable dd > strong { color: #1f5e49; font-weight: 700; }
 .balanceReviewNotice { display: block; margin-top: 10px; color: #8b5514; font-size: 12px; }
 .requestBalance { margin: 12px 20px 0; }
 .requestBalance .balanceCard { padding: 14px 16px; }

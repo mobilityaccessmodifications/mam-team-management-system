@@ -15,8 +15,12 @@ export type LeaveBalancePerson = {
   sickAsOf?: string | null;
   annualPayrollHours?: number | null;
   annualPayrollDate?: string | null;
+  annualApprovedHours?: number | null;
+  annualAvailableHours?: number | null;
   sickPayrollHours?: number | null;
   sickPayrollDate?: string | null;
+  sickApprovedHours?: number | null;
+  sickAvailableHours?: number | null;
   accrualStatus?: "current" | "needs_review" | "not_configured";
   accrualReviewDate?: string | null;
   accrualPolicy?: {
@@ -33,7 +37,7 @@ export type LeavePriorityWorkspace = {
     linkedName: string | null; sourceFile: string;
   }>;
   canManageBalances: boolean;
-  requests: Array<{ id: string; pendingBalance: boolean; evidenceDueDate: string | null; canAttach: boolean; requiredHours?: number | null; balanceSufficient?: boolean }>;
+  requests: Array<{ id: string; pendingBalance: boolean; evidenceDueDate: string | null; canAttach: boolean; requiredHours?: number | null; balanceSufficient?: boolean; fullDayHours?: number }>;
   pendingBalanceCalendarIds: string[];
 };
 
@@ -55,9 +59,10 @@ export function leaveDateLabel(date: string) {
   return new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
 }
 
-// Approval display conversion confirmed by the business; accrual remains independent.
-export function approvalRequestHours(request: { days: number; hours?: number }): number | null {
-  const hours = request.hours ?? request.days * 7.5;
+// Full-day display hours are supplied from the database's snapshotted/current
+// classification. Staged or older payloads retain the former 7.5-hour fallback.
+export function approvalRequestHours(request: { days: number; hours?: number; fullDayHours?: number }): number | null {
+  const hours = request.hours ?? request.days * (request.fullDayHours ?? 7.5);
   return Number.isFinite(hours) && hours > 0 ? hours : null;
 }
 
@@ -65,7 +70,10 @@ export function approvalBalanceCoverage(person: LeaveBalancePerson | undefined, 
   const sick = leaveType === "Sick leave" || leaveType === "Carer's leave";
   if (leaveType !== "Annual leave" && !sick) return null;
   if (!person || !(sick ? person.canViewSickBalance : person.canViewBalance)) return null;
-  const balance = sick ? person.sickHours : person.hours;
+  const availableField = sick ? "sickAvailableHours" : "annualAvailableHours";
+  const balance = Object.hasOwn(person, availableField)
+    ? person[availableField]
+    : sick ? person.sickHours : person.hours;
   if (requiredHours == null || balance == null || !Number.isFinite(balance) || person.accrualStatus === "needs_review") return "Check balance";
   return balance >= requiredHours ? "Enough balance" : "Not enough balance";
 }

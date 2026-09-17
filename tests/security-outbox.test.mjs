@@ -62,7 +62,7 @@ test('global framing policy includes every route',()=>{
   assert(config.includes('{ key: "X-Frame-Options", value: "DENY" }'));
 });
 
-test('sick copies have separate stable receipts and retry without exposing the balance to the employee',async(t)=>{
+test('legacy sick copies have stable receipts and never expose balances to the email webhook',async(t)=>{
   const oldFetch=globalThis.fetch; const saved={...process.env};
   t.after(()=>{globalThis.fetch=oldFetch;for(const k of ['MAM_N8N_LEAVE_WEBHOOK_URL','MAM_N8N_LEAVE_WEBHOOK_ORIGIN','MAM_N8N_LEAVE_WEBHOOK_SECRET']) {
     if(saved[k]===undefined)delete process.env[k];else process.env[k]=saved[k];
@@ -83,10 +83,10 @@ test('sick copies have separate stable receipts and retry without exposing the b
   });
   globalThis.fetch=async(url,options)=>{
     const payload=JSON.parse(options.body);keys[payload.audience].push(payload.eventKey);
+    assert.equal(payload.leaveBalance,undefined);
     if(payload.audience==='employee'){
-      assert.equal(payload.leaveBalance,undefined);
       if(failEmployee)throw new Error('synthetic timeout');
-    }else assert.equal(payload.leaveBalance.hours,40.9297);
+    }
     return Response.json({ok:true,sent:failEmployee,alreadySent:!failEmployee,eventKey:payload.eventKey,
       actualRecipient:payload.audience==='employee'?'employee@example.test':'hr@mobilityaccess.com.au,manager@example.test'});
   };

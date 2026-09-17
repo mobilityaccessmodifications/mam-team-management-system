@@ -44,6 +44,10 @@ export async function dispatchLeaveNotificationOutbox(requestId: string | null =
       const employees = emailList(payload.employeeEmails ?? payload.employeeEmail);
       const managers = emailList(payload.managerEmail);
       const copies = split ? ["reviewers", ...(employees.length ? ["employee"] : [])] : ["shared"];
+      const outboundPayload = { ...payload };
+      // Legacy queued rows may contain a balance snapshot. Balances are now
+      // People Hub-only and must never cross the email webhook boundary.
+      delete outboundPayload.leaveBalance;
       let delivered = true;
       for (const audience of copies) {
         const eventKey = `leave:${payload.requestId}:${payload.event}:${createHash("sha256")
@@ -61,9 +65,7 @@ export async function dispatchLeaveNotificationOutbox(requestId: string | null =
           const response = await fetch(target.url, {
             method: "POST", redirect: "error", cache: "no-store", signal: AbortSignal.timeout(15_000),
             headers: { "Content-Type": "application/json", "X-MAM-Notification-Secret": target.secret },
-            body: JSON.stringify({ ...payload, ...(split ? { audience } : {}),
-              // The employee copy never carries the private sick balance.
-              leaveBalance: audience === "employee" ? undefined : payload.leaveBalance,
+            body: JSON.stringify({ ...outboundPayload, ...(split ? { audience } : {}),
               eventKey, employeeNote: bodyNote(payload.employeeNote), managerNote: bodyNote(payload.managerNote) }),
           });
           const receipt = await response.json();

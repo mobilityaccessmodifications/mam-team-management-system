@@ -23,6 +23,8 @@ export type LeaveWorkspaceRequest = {
   endTime?: string;
   days: number;
   hours?: number;
+  /** Full-day hours derived from the employee classification at submission. */
+  fullDayHours?: number;
   approvalRequired: boolean;
   status: LeaveStatus;
   submittedAt: string;
@@ -1013,6 +1015,7 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
       status: metadata.get(request.id)?.pendingBalance && request.status === "Pending" ? BALANCE_PENDING_STATUS : request.status,
       evidenceDueDate: metadata.get(request.id)?.evidenceDueDate ?? undefined,
       canAttach: metadata.get(request.id)?.canAttach === true,
+      fullDayHours: metadata.get(request.id)?.fullDayHours,
     })),
     calendarEntries: base.calendarEntries.map((request) => ({ ...request,
       status: conditionalCalendar.has(request.id) && request.status === "Pending" ? BALANCE_PENDING_STATUS : request.status,
