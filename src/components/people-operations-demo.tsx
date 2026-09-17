@@ -288,6 +288,7 @@ export function PeopleOperationsDemo({
   renderAnalyticsApiManagement,
   legacyCheckInFormsUrl,
   showProfile = true,
+  showOrganisation = false,
   showTasks,
   isAccessPreview = false,
 }: {
@@ -319,6 +320,8 @@ export function PeopleOperationsDemo({
   legacyCheckInFormsUrl?: string | null;
   /** Lets a constrained employee workspace omit the legacy Profile tab. */
   showProfile?: boolean;
+  /** Database-authorised access to the complete organisation chart. */
+  showOrganisation?: boolean;
   /** Exposes the self-only task surface when a scoped manager task list is unavailable. */
   showTasks?: boolean;
   /** Read-only UI preview for an administrator; it never changes the session. */
@@ -329,15 +332,15 @@ export function PeopleOperationsDemo({
   const availableSections = useMemo<PeopleSection[]>(() => [
     ...(renderEmployeeDirectory ? ["directory" as const] : []),
     ...(showProfile ? ["profile" as const] : []),
-    "organisation",
+    ...(showOrganisation ? ["organisation" as const] : []),
     ...(renderCheckInRegister ? ["checkins" as const] : []),
     ...(hasTasks ? ["tasks" as const] : []),
     ...(renderAccounts ? ["accounts" as const] : []),
     ...(renderAssetRegister ? ["assets" as const] : []),
     ...(renderSubscriptionRegister ? ["subscriptions" as const] : []),
     ...(renderAnalyticsApiManagement ? ["analytics" as const] : []),
-  ], [hasTasks, renderAccounts, renderAnalyticsApiManagement, renderAssetRegister, renderCheckInRegister, renderEmployeeDirectory, renderSubscriptionRegister, showProfile]);
-  const [section, setSection] = useState<PeopleSection>(() => availableSections[0] ?? "organisation");
+  ], [hasTasks, renderAccounts, renderAnalyticsApiManagement, renderAssetRegister, renderCheckInRegister, renderEmployeeDirectory, renderSubscriptionRegister, showOrganisation, showProfile]);
+  const [section, setSection] = useState<PeopleSection>(() => availableSections[0] ?? "profile");
   const [taskSection, setTaskSection] = useState<PeopleTaskSection>(
     renderCheckInRegister ? "onboarding" : "checkins",
   );
@@ -356,7 +359,7 @@ export function PeopleOperationsDemo({
   // effect.
   const visibleSection = availableSections.includes(section)
     ? section
-    : availableSections[0] ?? "organisation";
+    : availableSections[0] ?? "profile";
 
   const canManage = !isAccessPreview && (activeProfile.accessRole === "hr" || activeProfile.accessRole === "manager");
   const isEmployee = activeProfile.accessRole === "employee";
@@ -549,7 +552,7 @@ export function PeopleOperationsDemo({
         {visibleSection === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} manager={activeProfile.manager} company={activeProfile.company} /> : null}
         {visibleSection === "directory" ? renderEmployeeDirectory : null}
         {visibleSection === "checkins" ? renderCheckInRegister : null}
-        {visibleSection === "organisation" ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation} canArrange={canArrangeOrganisation && !isAccessPreview} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={onOpenEmployeeDirectoryRecord ? (personId) => {
+        {visibleSection === "organisation" && showOrganisation ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation} canArrange={canArrangeOrganisation && !isAccessPreview} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={onOpenEmployeeDirectoryRecord ? (personId) => {
           onOpenEmployeeDirectoryRecord?.(personId);
           setSection("directory");
         } : undefined} /> : null}
