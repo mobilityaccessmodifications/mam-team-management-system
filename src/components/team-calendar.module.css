@@ -151,6 +151,7 @@
 }
 
 .eventDetailIcon[data-kind="approved"] { background: #e9f6f0; color: #237657 !important; }
+.eventDetailIcon[data-kind="public-holiday"] { background: #edf1f8; color: #50658a !important; }
 .eventDetailIcon[data-kind="birthday"] { background: #e9f5fb; color: #1684ad !important; }
 .eventDetailIcon[data-kind="check-in"] { background: #f2edfb; color: #7454a2 !important; }
 .eventDetailIcon[data-kind="subscription"] { background: #fff7df; color: #b77914 !important; }
