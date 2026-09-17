@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     // Timestamp precedes the query so a slow request cannot rejuvenate old data.
     const generatedAt = new Date().toISOString();
     const { data, error } = await createAdminClient()
-      .rpc("openclaw_whatsapp_allowlist_snapshot")
+      .rpc("openclaw_whatsapp_allowlist_snapshot_v2")
       .abortSignal(AbortSignal.timeout(8000));
     if (error) throw new Error("Snapshot unavailable");
     return Response.json(allowlistSnapshot(data, generatedAt), { headers });

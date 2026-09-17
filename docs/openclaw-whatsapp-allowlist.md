@@ -51,13 +51,21 @@ anything (Next.js supplies HEAD/OPTIONS and rejects unsupported methods).
 - Scope is **exactly** active `public.internal_org_people` with `company_key =
   'mam'`, joined on ID/person_id to `private.employee_directory_details.phone`.
   Equipsy and inactive rows are excluded in SQL. No details row means no number.
-- Phone normalization requires explicit international `+` notation. ASCII spaces
-  and hyphens between digit groups are removed. A leading nonzero digit and
-  8–15 total digits are required. Local `04...`, `00...`, optional trunk-prefix
-  parentheses, extensions, letters and multiple numbers are rejected, not guessed.
-  This validates conservative E.164 **syntax**, not country numbering plans,
-  ownership, reachability, or WhatsApp registration. Source data must be verified
-  by HR; phone reassignment remains an operational risk.
+- Phone normalization uses pinned `libphonenumber-js/max` numbering-plan metadata.
+  International `+` and `00` prefixes are supported. Local numbers use the private
+  directory country (English name or ISO code); only a blank country defaults to
+  Australia for this MAM-only integration. Unknown nonblank countries reject local
+  numbers. Australian `04`, missing trunk zero, `61`, and `0011` formats, spaces,
+  balanced parentheses, dots, hyphens and full-width digits are normalized.
+  Extensions, letters, multiple numbers and invalid numbering plans are rejected.
+  Validation does not prove ownership, reachability or WhatsApp registration.
+  Source records are never rewritten; HR must verify ownership and reassignment.
+- Country parsing uses service-only `openclaw_whatsapp_allowlist_snapshot_v2`,
+  added by migration `20260917051434_openclaw_phone_country_context.sql`.
+  The internal envelope is version 2; the external four-field version 1 response
+  and digest are unchanged and never expose country. The old RPC remains available
+  for rolling deployment. Apply only the reviewed migration using the deployment
+  helper's `--country-context` option, without rotating the existing secret.
 - Missing/invalid numbers are excluded. If multiple active MAM records normalize
   to the same number, **all copies are excluded** as ambiguous. An inactive or
   non-MAM row does not participate in this active-MAM snapshot.

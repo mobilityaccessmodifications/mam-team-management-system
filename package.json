@@ -18,6 +18,7 @@
     "@supabase/ssr": "0.12.4",
     "@supabase/supabase-js": "2.111.0",
     "fflate": "^0.8.3",
+    "libphonenumber-js": "1.13.13",
     "lucide-react": "1.28.0",
     "motion": "12.23.24",
     "next": "16.3.5",
