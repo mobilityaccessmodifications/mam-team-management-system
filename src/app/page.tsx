@@ -16,6 +16,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   let isNonRosterSystemAdmin = false;
   let canViewCheckIns = false;
   let canViewEmployeeDirectory = false;
+  let canViewOrganisation = false;
   let canChangeEmployeeView = false;
   let canViewSubscriptions = false;
   let canManageSubscriptionCredentials = false;
@@ -59,6 +60,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     isNonRosterSystemAdmin = current?.can_access_non_roster_system_admin_workspace === true;
     canViewCheckIns = current?.can_view_check_in_workspace === true;
     canViewEmployeeDirectory = current?.can_view_employee_directory === true;
+    canViewOrganisation = current?.can_view_organisation_chart === true;
     checkInResources = canViewCheckIns ? getCheckInResourceLinks() : undefined;
     canChangeEmployeeView = current?.can_change_employee_view === true;
     canViewSubscriptions = current?.can_view_subscription_register === true;
@@ -108,6 +110,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     currentPersonId={currentPersonId}
     isNonRosterSystemAdmin={isNonRosterSystemAdmin}
     canViewEmployeeDirectory={canViewEmployeeDirectory}
+    canViewOrganisation={canViewOrganisation}
     canChangeEmployeeView={canChangeEmployeeView}
     canViewSubscriptions={canViewSubscriptions}
     canManageSubscriptionCredentials={canManageSubscriptionCredentials}

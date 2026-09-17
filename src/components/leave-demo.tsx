@@ -513,6 +513,7 @@ export function LeaveDemo({
   currentPersonId,
   isNonRosterSystemAdmin = false,
   canViewEmployeeDirectory = false,
+  canViewOrganisation = false,
   canChangeEmployeeView = false,
   canViewSubscriptions = false,
   canManageSubscriptionCredentials = false,
@@ -535,8 +536,10 @@ export function LeaveDemo({
   isNonRosterSystemAdmin?: boolean;
   /** Server-issued manager/System Admin capability for the safe directory projection. */
   canViewEmployeeDirectory?: boolean;
+  /** Server-issued manager/HR/System Admin capability for the complete organisation chart. */
+  canViewOrganisation?: boolean;
   canChangeEmployeeView?: boolean;
-  /** System-derived System Admin access to the credential-free subscription register. */
+  /** System-derived manager/HR/System Admin access to the credential-free subscription register. */
   canViewSubscriptions?: boolean;
   /** Server-issued access to the encrypted subscription-service credential vault. */
   canManageSubscriptionCredentials?: boolean;
@@ -1268,10 +1271,16 @@ export function LeaveDemo({
     && hasManagerPeopleWorkspace;
   const showManagerTasks = activeProfile.accessRole === "manager"
     && hasManagerPeopleWorkspace;
-  // A System Admin keeps their real subscription-management authority while
-  // using Change profile. Explicit vault delegates receive a deliberately
-  // smaller credential-only surface instead of the operational register.
-  const showSubscriptionRegister = canViewSubscriptions || canManageSubscriptionCredentials;
+  // Change profile mirrors the selected employee's role-level tabs. The real
+  // session still authorises every RPC, but an employee preview must not show
+  // Organisation or the company-wide subscription register merely because
+  // the signed-in System Admin can access them. Explicit credential delegates
+  // retain their deliberately smaller vault surface in their own workspace.
+  const showOrganisationChart = canViewOrganisation
+    && (!isPreviewingEmployeeAccess || activeProfile.accessRole !== "employee");
+  const showSubscriptionRegister = isPreviewingEmployeeAccess
+    ? activeProfile.accessRole !== "employee" && canViewSubscriptions
+    : canViewSubscriptions || canManageSubscriptionCredentials;
   const previewScopedManagerPersonId = isPreviewingEmployeeAccess
     && activeProfile.accessRole === "manager"
     ? previewProfile?.id
@@ -2040,6 +2049,7 @@ export function LeaveDemo({
               organisationProfiles={organisationPeople}
               canEditOrganisation={canEditOrganisation && showHrWorkspace}
               canArrangeOrganisation={canEditOrganisation && showHrWorkspace}
+              showOrganisation={showOrganisationChart}
               showProfile={false}
               showTasks={canViewOwnTasks || showHrWorkspace || showManagerTasks || (isPreviewingEmployeeAccess && activeProfile.accessRole === "employee")}
               isAccessPreview={isPreviewingEmployeeAccess}
