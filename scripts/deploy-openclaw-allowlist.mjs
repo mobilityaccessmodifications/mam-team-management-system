@@ -5,8 +5,10 @@ import { createHash } from 'node:crypto';
 
 const projectId = 'xtwlrjqbusadghavchqm';
 const organizationId = 'fwlmbmospuwoaosffvmw';
-const version = '20260917045203';
-const name = 'openclaw_phone_allowlist';
+const countryContext = process.argv.includes('--country-context');
+const version = countryContext ? '20260917051434' : '20260917045203';
+const name = countryContext ? 'openclaw_phone_country_context' : 'openclaw_phone_allowlist';
+const functionName = countryContext ? 'openclaw_whatsapp_allowlist_snapshot_v2' : 'openclaw_whatsapp_allowlist_snapshot';
 const operation = process.argv[2];
 function requireCondition(condition, message) { if (!condition) throw new Error(message); }
 requireCondition(['inspect', 'apply'].includes(operation), 'Use inspect or apply <reviewed-sha256>');
@@ -42,16 +44,16 @@ if (operation === 'apply') {
   }
 }
 const state = await query(`select
-  to_regprocedure('public.openclaw_whatsapp_allowlist_snapshot()') is not null as public_function,
-  to_regprocedure('private.openclaw_whatsapp_allowlist_snapshot()') is not null as private_function,
+  to_regprocedure('public.${functionName}()') is not null as public_function,
+  to_regprocedure('private.${functionName}()') is not null as private_function,
   exists(select 1 from supabase_migrations.schema_migrations where version=${literal(version)}) as recorded`);
 if (state[0].public_function && state[0].private_function) {
   const permissions = await query(`select
-    has_function_privilege('service_role','public.openclaw_whatsapp_allowlist_snapshot()','execute') as service_allowed,
-    not has_function_privilege('anon','public.openclaw_whatsapp_allowlist_snapshot()','execute') as anon_denied,
-    not has_function_privilege('authenticated','public.openclaw_whatsapp_allowlist_snapshot()','execute') as employee_denied,
-    not has_function_privilege('anon','private.openclaw_whatsapp_allowlist_snapshot()','execute') as private_anon_denied,
-    not has_function_privilege('authenticated','private.openclaw_whatsapp_allowlist_snapshot()','execute') as private_employee_denied`);
+    has_function_privilege('service_role','public.${functionName}()','execute') as service_allowed,
+    not has_function_privilege('anon','public.${functionName}()','execute') as anon_denied,
+    not has_function_privilege('authenticated','public.${functionName}()','execute') as employee_denied,
+    not has_function_privilege('anon','private.${functionName}()','execute') as private_anon_denied,
+    not has_function_privilege('authenticated','private.${functionName}()','execute') as private_employee_denied`);
   requireCondition(Object.values(permissions[0]).every(Boolean), 'Function privileges unsafe');
   state[0].permissionsVerified = true;
 }
