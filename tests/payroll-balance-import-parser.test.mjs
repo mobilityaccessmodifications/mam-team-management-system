@@ -23,7 +23,11 @@ function testRequire(id) {
 }
 
 new Function("require", "module", "exports", source)(testRequire, moduleUnderTest, moduleUnderTest.exports);
-const { parsePayrollBalanceFiles } = moduleUnderTest.exports;
+const {
+  parsePayrollBalanceFiles,
+  parsePreparedPayrollBalanceFiles,
+  preparePayrollBalanceFiles,
+} = moduleUnderTest.exports;
 
 function upload(name, contents, type = "text/csv") {
   const bytes = Buffer.isBuffer(contents) ? contents : Buffer.from(contents, "utf8");
@@ -36,6 +40,27 @@ function upload(name, contents, type = "text/csv") {
     },
   };
 }
+
+test("prepares one canonical private archive payload and parses the same buffered bytes", async () => {
+  let reads = 0;
+  const file = upload("mam-balances.csv", [
+    "Company,Employee,As of,Annual Leave",
+    "MAM,Sample Person,2026-09-10,14.25",
+  ].join("\n"), "application/octet-stream");
+  const originalRead = file.arrayBuffer;
+  file.arrayBuffer = async () => {
+    reads += 1;
+    return originalRead();
+  };
+
+  const prepared = await preparePayrollBalanceFiles([file]);
+  assert.equal(reads, 1);
+  assert.equal(prepared[0].mimeType, "text/csv");
+  assert.match(prepared[0].sha256, /^[0-9a-f]{64}$/);
+  const result = await parsePreparedPayrollBalanceFiles(prepared);
+  assert.equal(reads, 1);
+  assert.equal(result.rows[0].annualHours, 14.25);
+});
 
 test("combines split payroll exports and understands tidy and wide company layouts", async () => {
   const annual = upload("Mobility_Access_Modifications_Annual.csv", [

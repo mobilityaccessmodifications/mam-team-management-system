@@ -7,7 +7,6 @@ import {
   FileSpreadsheet,
   LoaderCircle,
   Settings2,
-  ShieldCheck,
   Upload,
   X,
 } from "lucide-react";
@@ -68,7 +67,13 @@ function fileSizeLabel(bytes: number) {
   return bytes < 1024 ? `${bytes} B` : `${Math.ceil(bytes / 1024)} KB`;
 }
 
-export function PayrollBalanceImporter({ onSaved }: { onSaved: () => Promise<void> }) {
+export function PayrollBalanceImporter({
+  onSaved,
+  hideManagementControls = false,
+}: {
+  onSaved: () => Promise<void>;
+  hideManagementControls?: boolean;
+}) {
   const [workspace, setWorkspace] = useState<PayrollImportWorkspace | null>();
   const [batch, setBatch] = useState<PayrollImportBatch | null>(null);
   const [busy, setBusy] = useState<"staging" | "committing" | "access" | null>(null);
@@ -231,10 +236,9 @@ export function PayrollBalanceImporter({ onSaved }: { onSaved: () => Promise<voi
         <div>
           <span className={styles.eyebrow}>Monthly payroll update</span>
           <h2>Import leave balances</h2>
-          <p>Upload CSV or Excel exports. Every row is previewed before any balance changes.</p>
         </div>
         <div className={styles.actions}>
-          {workspace.canManageAccess ? <button className={styles.secondaryButton} type="button" onClick={() => void openAccess()} disabled={Boolean(busy)}>
+          {workspace.canManageAccess && !hideManagementControls ? <button className={styles.secondaryButton} type="button" onClick={() => void openAccess()} disabled={Boolean(busy)}>
             <Settings2 size={16} aria-hidden="true" />Manage access
           </button> : null}
           <button className={styles.primaryButton} type="button" onClick={() => fileInputRef.current?.click()} disabled={Boolean(busy)}>
@@ -257,15 +261,12 @@ export function PayrollBalanceImporter({ onSaved }: { onSaved: () => Promise<voi
         {reminder.complete ? <CheckCircle2 size={20} aria-hidden="true" /> : <AlertTriangle size={20} aria-hidden="true" />}
         <div>
           <strong>{reminder.complete ? "This month is up to date" : `Update due ${dateLabel(reminder.dueOn)}`}</strong>
-          <span>The reminder renews on the first of every month and clears after current MAM and Equipsy snapshots are applied.</span>
         </div>
         <div className={styles.companyStates}>
           <span data-complete={reminder.mamComplete || undefined}><Check size={13} aria-hidden="true" />MAM · {dateLabel(reminder.mamAsOf)}</span>
           <span data-complete={reminder.equipsyComplete || undefined}><Check size={13} aria-hidden="true" />Equipsy · {dateLabel(reminder.equipsyAsOf)}</span>
         </div>
       </div>
-
-      <p className={styles.matchingNote}><ShieldCheck size={16} aria-hidden="true" />Names are normalised for punctuation and spacing, then matched only to one active employee in the same company. Uncertain rows are held for review.</p>
 
       {workspace.recentBatches.length ? <details className={styles.history}>
         <summary>Recent imports · {workspace.recentBatches.length}</summary>

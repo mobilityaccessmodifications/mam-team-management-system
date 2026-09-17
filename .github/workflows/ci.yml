@@ -120,3 +120,13 @@ jobs:
             -f tests/victorian-public-holiday-workdays-bootstrap.sql \
             -f supabase/migrations/20260917110640_victorian_public_holiday_workdays.sql \
             -f tests/victorian-public-holiday-workdays.sql
+
+      - name: Test private payroll source-file retention
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres payroll_source_retention_test
+          psql -h localhost -U postgres -d payroll_source_retention_test -v ON_ERROR_STOP=1 \
+            -f tests/payroll-balance-source-retention-bootstrap.sql \
+            -f supabase/migrations/20260918100000_payroll_balance_source_file_retention.sql \
+            -f tests/payroll-balance-source-retention.sql

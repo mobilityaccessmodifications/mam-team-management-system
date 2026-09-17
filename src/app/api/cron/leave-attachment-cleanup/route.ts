@@ -16,7 +16,7 @@ function hasValidCronSecret(request: Request, secret: string) {
     && timingSafeEqual(candidateBytes, expectedBytes);
 }
 
-/** Daily, CRON_SECRET-gated cleanup for abandoned private leave attachments. */
+/** Daily, CRON_SECRET-gated cleanup for expired private file retention. */
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET?.trim();
   if (!cronSecret || !hasValidCronSecret(request, cronSecret)) {

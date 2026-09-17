@@ -3,7 +3,10 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const STORAGE_PATH_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:pdf|heic|heif|jpg|png|webp)$/i;
+const PAYROLL_ARCHIVE_PATH_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:csv|xlsx)$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ORPHAN_BATCHES = 8;
+const MAX_PAYROLL_ARCHIVE_BATCHES = 8;
 
 function orphanPath(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -13,6 +16,18 @@ function orphanPath(value: unknown): string | null {
 
 function deletedCount(value: unknown) {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
+function payrollArchive(value: unknown): { archiveId: string; storagePath: string; wasUploaded: boolean } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const archiveId = row.archive_id;
+  const storagePath = row.storage_path;
+  const wasUploaded = row.was_uploaded;
+  if (typeof archiveId !== "string" || !UUID_PATTERN.test(archiveId)
+    || typeof storagePath !== "string" || !PAYROLL_ARCHIVE_PATH_PATTERN.test(storagePath)
+    || typeof wasUploaded !== "boolean") return null;
+  return { archiveId, storagePath, wasUploaded };
 }
 
 /**
@@ -49,6 +64,42 @@ export async function runLeaveAttachmentMaintenance() {
     removedObjects += removed.length;
   }
 
+  let removedPayrollSourceFiles = 0;
+  let prunedPayrollArchiveRecords = 0;
+  let payrollArchiveBatches = 0;
+  for (; payrollArchiveBatches < MAX_PAYROLL_ARCHIVE_BATCHES; payrollArchiveBatches += 1) {
+    const { data: archiveData, error: archiveError } = await admin.rpc(
+      "list_expired_payroll_balance_source_archives",
+    );
+    if (archiveError || !Array.isArray(archiveData)) {
+      throw new Error("Payroll source archive discovery failed.");
+    }
+    const archives = archiveData.map(payrollArchive);
+    if (archives.some((archive) => archive === null)) {
+      throw new Error("Payroll source archive discovery returned an invalid record.");
+    }
+    const validArchives = archives.filter((archive): archive is NonNullable<typeof archive> => Boolean(archive));
+    if (!validArchives.length) break;
+
+    const { data: removed, error: removalError } = await admin.storage
+      .from("payroll-balance-archives")
+      .remove(validArchives.map((archive) => archive.storagePath));
+    if (removalError) throw new Error("Payroll source archive deletion failed.");
+    const expectedObjects = validArchives.filter((archive) => archive.wasUploaded).length;
+    if (!Array.isArray(removed) || removed.length < expectedObjects) {
+      throw new Error("Payroll source archive deletion was incomplete.");
+    }
+
+    const completed = await admin.rpc("complete_payroll_balance_source_archive_deletion", {
+      p_archive_ids: validArchives.map((archive) => archive.archiveId),
+    });
+    if (completed.error || deletedCount(completed.data) !== validArchives.length) {
+      throw new Error("Payroll source archive retention could not be finalised.");
+    }
+    removedPayrollSourceFiles += removed.length;
+    prunedPayrollArchiveRecords += validArchives.length;
+  }
+
   const [intents, attempts] = await Promise.all([
     admin.rpc("prune_expired_leave_attachment_upload_intents"),
     admin.rpc("prune_expired_leave_attachment_upload_attempts"),
@@ -60,6 +111,9 @@ export async function runLeaveAttachmentMaintenance() {
   return {
     cleanupBatches,
     removedObjects,
+    payrollArchiveBatches,
+    removedPayrollSourceFiles,
+    prunedPayrollArchiveRecords,
     prunedIntents: deletedCount(intents.data),
     prunedAttempts: deletedCount(attempts.data),
   };

@@ -45,6 +45,14 @@ export type ParsedPayrollBalanceUpload = {
 };
 
 type UploadFile = Pick<File, "name" | "size" | "type" | "arrayBuffer">;
+export type PreparedPayrollBalanceFile = {
+  source: UploadFile;
+  name: string;
+  mimeType: "text/csv" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  sizeBytes: number;
+  sha256: string;
+  buffer: Buffer;
+};
 type Sheet = { name: string; rows: SheetData };
 type Observation = {
   companyKey: PayrollCompany;
@@ -91,6 +99,23 @@ function safeFileName(value: string) {
   const cleaned = basename(value.replaceAll("\\", "/")).replace(/[\u0000-\u001f\u007f]/g, "").trim();
   if (!cleaned || cleaned.length > 180) throw new Error("Choose a file with a shorter valid name.");
   return cleaned;
+}
+
+function archiveMimeType(file: UploadFile, name: string): PreparedPayrollBalanceFile["mimeType"] {
+  const extension = name.slice(name.lastIndexOf(".")).toLocaleLowerCase();
+  if (extension === ".csv") {
+    if (file.type && !["text/csv", "text/plain", "application/csv", "application/vnd.ms-excel", "application/octet-stream"].includes(file.type)) {
+      throw new Error(`${name}: file type does not match a CSV upload.`);
+    }
+    return "text/csv";
+  }
+  if (extension !== ".xlsx") throw new Error(`${name}: upload a .csv or .xlsx file.`);
+  if (file.type && ![
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/octet-stream",
+    "application/zip",
+  ].includes(file.type)) throw new Error(`${name}: file type does not match an Excel workbook.`);
+  return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 }
 
 function normalText(value: string) {
@@ -465,30 +490,49 @@ function groupObservations(observations: Observation[]): PayrollBalanceSourceRow
   })).sort((left, right) => left.companyKey.localeCompare(right.companyKey) || left.employeeName.localeCompare(right.employeeName, "en-AU", { sensitivity: "base" }));
 }
 
-export async function parsePayrollBalanceFiles(files: UploadFile[]): Promise<ParsedPayrollBalanceUpload> {
+export async function preparePayrollBalanceFiles(files: UploadFile[]): Promise<PreparedPayrollBalanceFile[]> {
   if (!Array.isArray(files) || files.length < 1 || files.length > PAYROLL_IMPORT_MAX_FILES) {
     throw new Error(`Choose between 1 and ${PAYROLL_IMPORT_MAX_FILES} CSV or Excel files.`);
   }
   const totalBytes = files.reduce((total, file) => total + file.size, 0);
   if (totalBytes > PAYROLL_IMPORT_MAX_TOTAL_BYTES) throw new Error("The selected files are too large to import together.");
-  const observations: Observation[] = [];
-  const summaries: PayrollBalanceSourceFile[] = [];
 
+  const prepared: PreparedPayrollBalanceFile[] = [];
   for (const file of files) {
     const name = safeFileName(file.name);
     if (!Number.isSafeInteger(file.size) || file.size < 1 || file.size > PAYROLL_IMPORT_MAX_FILE_BYTES) {
       throw new Error(`${name}: file must be smaller than ${Math.round(PAYROLL_IMPORT_MAX_FILE_BYTES / 1_000)} KB.`);
     }
+    const mimeType = archiveMimeType(file, name);
     const buffer = Buffer.from(await file.arrayBuffer());
     if (buffer.byteLength !== file.size) throw new Error(`${name}: file size changed during upload.`);
-    const fileSha256 = sha256(buffer);
-    const sheets = await sheetsFromFile(file, name, buffer);
-    const fileObservations = sheets.flatMap((sheet) => parseSheet(sheet, name, fileSha256));
+    prepared.push({
+      source: file,
+      name,
+      mimeType,
+      sizeBytes: file.size,
+      sha256: sha256(buffer),
+      buffer,
+    });
+  }
+  return prepared;
+}
+
+export async function parsePreparedPayrollBalanceFiles(files: PreparedPayrollBalanceFile[]): Promise<ParsedPayrollBalanceUpload> {
+  if (!Array.isArray(files) || files.length < 1 || files.length > PAYROLL_IMPORT_MAX_FILES) {
+    throw new Error(`Choose between 1 and ${PAYROLL_IMPORT_MAX_FILES} CSV or Excel files.`);
+  }
+  const observations: Observation[] = [];
+  const summaries: PayrollBalanceSourceFile[] = [];
+
+  for (const file of files) {
+    const sheets = await sheetsFromFile(file.source, file.name, file.buffer);
+    const fileObservations = sheets.flatMap((sheet) => parseSheet(sheet, file.name, file.sha256));
     observations.push(...fileObservations);
     summaries.push({
-      name,
-      sha256: fileSha256,
-      sizeBytes: file.size,
+      name: file.name,
+      sha256: file.sha256,
+      sizeBytes: file.sizeBytes,
       companies: [...new Set(fileObservations.map((row) => row.companyKey))].sort(),
       asOfDates: [...new Set(fileObservations.map((row) => row.asOf))].sort(),
       employeeRows: new Set(fileObservations.map((row) => [row.companyKey, normalPersonName(row.employeeName), row.asOf].join(":"))).size,
@@ -500,4 +544,8 @@ export async function parsePayrollBalanceFiles(files: UploadFile[]): Promise<Par
     files: summaries,
     rows: groupObservations(observations),
   };
+}
+
+export async function parsePayrollBalanceFiles(files: UploadFile[]): Promise<ParsedPayrollBalanceUpload> {
+  return parsePreparedPayrollBalanceFiles(await preparePayrollBalanceFiles(files));
 }
