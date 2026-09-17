@@ -2,7 +2,7 @@
 
 import "@dayflow/core/dist/styles.components.css";
 
-import { CalendarDays, CheckCircle2, Clock3, FileSpreadsheet, Gift, Search, WalletCards, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, FileSpreadsheet, Flag, Gift, Search, WalletCards, X } from "lucide-react";
 import {
   DayFlowCalendar,
   ViewType,
@@ -42,6 +42,7 @@ import {
 } from "@/lib/dayflow-event-accessibility";
 import { navigateFromDayFlowSearchResult } from "@/lib/dayflow-search-navigation";
 import { BALANCE_PENDING_STATUS } from "@/lib/leave-priority";
+import { getVictorianPublicHolidays } from "@/lib/victorian-public-holidays";
 
 type CalendarLeaveRequest = {
   id: string;
@@ -56,7 +57,7 @@ type CalendarLeaveRequest = {
   status: "Pending" | "Approved" | "Declined" | "Cancelled" | typeof BALANCE_PENDING_STATUS;
 };
 
-type EventKind = "approved" | "pending" | "balance-pending" | "birthday" | "check-in" | "subscription" | "payroll-balance";
+type EventKind = "approved" | "pending" | "balance-pending" | "birthday" | "check-in" | "subscription" | "payroll-balance" | "public-holiday";
 type MAMEventMeta = { kind: EventKind; subject: string; detail: string; dateLabel: string; priority: number };
 
 type TeamCalendarProps = {
@@ -80,6 +81,7 @@ const calendars: CalendarType[] = [
   { id: "balance-pending", name: "Approved – pending leave balance", icon: "◷", isVisible: true, readOnly: true, colors: { eventColor: "#fff2b3", eventSelectedColor: "#a17b00", lineColor: "#c79a12", textColor: "#604800" } },
   { id: "approved", name: "Approved leave", icon: "✓", isVisible: true, readOnly: true, colors: { eventColor: "#e9f6f0", eventSelectedColor: "#237657", lineColor: "#237657", textColor: "#164d3b" } },
   { id: "pending", name: "Pending leave", icon: "◷", isVisible: true, readOnly: true, colors: { eventColor: "#fff1e8", eventSelectedColor: "#ef6a25", lineColor: "#ef6a25", textColor: "#9a3d10" } },
+  { id: "public-holiday", name: "Victorian public holidays", icon: "VIC", isVisible: true, readOnly: true, colors: { eventColor: "#edf1f8", eventSelectedColor: "#50658a", lineColor: "#61779d", textColor: "#344766" } },
   { id: "birthday", name: "Birthdays", icon: "◈", isVisible: true, readOnly: true, colors: { eventColor: "#e9f5fb", eventSelectedColor: "#1684ad", lineColor: "#1684ad", textColor: "#075978" } },
   { id: "check-in", name: "Check-ins", icon: "CI", isVisible: true, readOnly: true, colors: { eventColor: "#f2edfb", eventSelectedColor: "#7454a2", lineColor: "#7454a2", textColor: "#523a76" } },
   { id: "subscription", name: "Subscription reviews", icon: "$", isVisible: true, readOnly: true, colors: { eventColor: "#fff7df", eventSelectedColor: "#b77914", lineColor: "#b77914", textColor: "#744d0f" } },
@@ -201,12 +203,19 @@ function buildEvents(
       meta: { kind: "birthday", subject: entry.employee, detail: "Birthday", dateLabel: formatDate(date), priority: 1 },
     });
   }));
-  return [...birthday, ...checkIn, ...subscriptions, ...payroll, ...leave];
+  const publicHolidays = getVictorianPublicHolidays(years).map((holiday) => createMAMEvent({
+    id: `public-holiday:${holiday.date}`,
+    title: holiday.name,
+    startDate: holiday.date,
+    calendarId: "public-holiday",
+    meta: { kind: "public-holiday", subject: holiday.name, detail: "Victorian public holiday", dateLabel: formatDate(holiday.date), priority: 0 },
+  }));
+  return [...publicHolidays, ...birthday, ...checkIn, ...subscriptions, ...payroll, ...leave];
 }
 
 function EventDetail({ event, onClose }: EventDetailContentProps) {
   const meta = eventMeta(event);
-  const icon = meta.kind === "birthday" ? <Gift size={18} /> : meta.kind === "check-in" ? <CheckCircle2 size={18} /> : meta.kind === "subscription" ? <WalletCards size={18} /> : meta.kind === "payroll-balance" ? <FileSpreadsheet size={18} /> : <CalendarDays size={18} />;
+  const icon = meta.kind === "public-holiday" ? <Flag size={18} /> : meta.kind === "birthday" ? <Gift size={18} /> : meta.kind === "check-in" ? <CheckCircle2 size={18} /> : meta.kind === "subscription" ? <WalletCards size={18} /> : meta.kind === "payroll-balance" ? <FileSpreadsheet size={18} /> : <CalendarDays size={18} />;
   return (
     <div className={styles.eventDetail}>
       <div className={styles.eventDetailHeader}>
@@ -257,6 +266,7 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
   // whenever visibleYears changes resets the active view back to Month (which
   // made Year appear to do nothing).
   const visibleCalendars = useMemo(() => calendars.filter((item) => {
+    if (item.id === "public-holiday") return true;
     if (item.id === "subscription") return showSubscriptionReviews;
     if (item.id === "payroll-balance") return showPayrollBalanceReminders;
     return !reviewOnly;
