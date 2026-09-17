@@ -4,7 +4,8 @@ import test from "node:test";
 
 const peopleStyles = readFileSync("src/components/people-operations-demo.module.css", "utf8");
 const peopleSource = readFileSync("src/components/people-operations-demo.tsx", "utf8");
-const leaveSource = readFileSync("src/components/leave-demo.tsx", "utf8");
+const leaveSource = readFileSync("src/components/leave-demo.tsx", "utf8")
+  + readFileSync("src/components/leave-request-dialog.tsx", "utf8");
 const leaveStyles = readFileSync("src/components/leave-demo.module.css", "utf8");
 const subscriptionStyles = readFileSync("src/components/subscription-register.module.css", "utf8");
 const organisationStyles = readFileSync("src/components/organisation-tree.module.css", "utf8");

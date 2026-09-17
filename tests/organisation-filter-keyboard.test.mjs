@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = readFileSync("src/components/organisation-tree.tsx", "utf8");
+const source = readFileSync("src/components/organisation-controls.tsx", "utf8");
+const treeSource = readFileSync("src/components/organisation-tree.tsx", "utf8");
 
 test("organisation filter closes on Escape and restores trigger focus", () => {
   assert.match(source, /const filterButtonRef = useRef<HTMLButtonElement>\(null\);/);
@@ -16,6 +17,7 @@ test("organisation filter closes on Escape and restores trigger focus", () => {
 test("organisation filter selection restores trigger focus", () => {
   assert.match(
     source,
-    /onClick=\{\(\) => \{\s*setCompanyFilter\(filter\);\s*setFilterOpen\(false\);[\s\S]*?setWorkContact\(null\);\s*filterButtonRef\.current\?\.focus\(\);/,
+    /onClick=\{\(\) => \{\s*onSelect\(filter\);\s*setFilterOpen\(false\);\s*filterButtonRef\.current\?\.focus\(\);/,
   );
+  assert.match(treeSource, /<OrganisationFilterMenu[\s\S]*?setCompanyFilter\(filter\);[\s\S]*?setFocusedRootId\(null\);[\s\S]*?setSelectedId\(null\);[\s\S]*?workContactRequestRef\.current \+= 1;\s*setWorkContact\(null\);/);
 });

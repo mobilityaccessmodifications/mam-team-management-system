@@ -28,7 +28,7 @@
   border-color: #d7e0dc;
   border-radius: 18px;
   box-shadow: none;
-  font-family: var(--font-body), Arial, sans-serif;
+  font-family: var(--font-geist-sans, Arial), sans-serif;
   min-height: 590px;
 }
 

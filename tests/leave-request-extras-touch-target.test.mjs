@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const styles = readFileSync("src/components/leave-demo.module.css", "utf8");
-const component = readFileSync("src/components/leave-demo.tsx", "utf8");
+const component = readFileSync("src/components/leave-request-dialog.tsx", "utf8");
 
 test("leave request extras disclosure has a complete touch target", () => {
   assert.match(

@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
-const source = fs.readFileSync('src/components/leave-demo.tsx', 'utf8');
+const source = fs.readFileSync('src/components/leave-demo.tsx', 'utf8')
+  + fs.readFileSync('src/components/leave-attachment-list.tsx', 'utf8');
 const ast = ts.createSourceFile('leave.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 function load(name, bindings) {
   let found;

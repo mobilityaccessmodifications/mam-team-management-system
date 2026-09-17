@@ -5,7 +5,6 @@ import { approvalBalanceCoverage, approvalRequestHours } from "@/lib/leave-prior
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 
 import {
-  ArrowUpRight,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
@@ -13,15 +12,12 @@ import {
   ClipboardList,
   Clock3,
   Eye,
-  FileText,
   LayoutDashboard,
   Plus,
-  Paperclip,
   RotateCcw,
   Search,
   ShieldCheck,
   LogOut,
-  Trash2,
   Upload,
   UsersRound,
   X,
@@ -30,8 +26,8 @@ import {
 import { FormEvent, type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
-import { ApprovalBalancePill, ApprovalLeaveBalances, LeavePriorityControls, LeaveRequestBalance, SickEvidenceNotice } from "@/components/leave-priority-controls";
-import { BALANCE_PENDING_STATUS, sickEvidenceDeadline, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
+import { ApprovalBalancePill, ApprovalLeaveBalances, LeavePriorityControls, SickEvidenceNotice } from "@/components/leave-priority-controls";
+import { BALANCE_PENDING_STATUS, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import {
   getCurrentEmployeeSelfProfile,
   getSelectedEmployeeProfile,
@@ -58,12 +54,9 @@ import {
 import {
   cancelMyLeaveRequest,
   cancelSelectedEmployeeLeaveRequest,
-  completeLeaveRequestAttachmentUpload,
   decideLeaveRequest,
   deleteLeaveRequestAttachment,
-  discardLeaveRequestAttachmentUpload,
   getLeaveWorkspaceData,
-  prepareLeaveRequestAttachmentUpload,
   submitLeaveRequest,
   submitLeaveRequestForSelectedEmployee,
   type BirthdayCalendarEntry,
@@ -109,6 +102,11 @@ import {
   type SelfProfileData,
 } from "@/components/self-profile-menu";
 import styles from "@/components/leave-demo.module.css";
+import { AttachmentList } from "@/components/leave-attachment-list";
+import { uploadLeaveAttachments } from "@/components/leave-attachment-upload";
+import { LeaveRequestDialog } from "@/components/leave-request-dialog";
+import { LEAVE_ATTACHMENT_ACCEPT, MAX_LEAVE_ATTACHMENTS, validateLeaveAttachmentFiles } from "@/lib/leave-attachments";
+import { formatClockTime, TIME_VALUES } from "@/lib/leave-request-options";
 import { PeopleOperationsDemo } from "@/components/people-operations-demo";
 import type {
   OrganisationCompany,
@@ -126,11 +124,6 @@ import type {
   WorkScheduleMutationResult,
   WorkScheduleWorkspace,
 } from "@/lib/work-schedule-types";
-import { getVictorianPublicHolidays } from "@/lib/victorian-public-holidays";
-
-const VICTORIAN_PUBLIC_HOLIDAY_DATES = new Set(
-  getVictorianPublicHolidays([2025, 2026, 2027, 2028]).map(({ date }) => date),
-);
 
 type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals" | "balance";
@@ -282,12 +275,6 @@ function formatDuration(request: LeaveRequest) {
   return `${request.days} ${request.days === 1 ? "day" : "days"}`;
 }
 
-function formatClockTime(value: string) {
-  const [hourValue, minute] = value.split(":");
-  const hour = Number(hourValue);
-  const suffix = hour >= 12 ? "pm" : "am";
-  return `${hour % 12 || 12}:${minute} ${suffix}`;
-}
 
 function formatTimeRange(request: LeaveRequest) {
   if (!request.startTime || !request.endTime) return "";
@@ -302,50 +289,11 @@ function formatDurationWithTime(request: LeaveRequest) {
   return timeRange ? `${formatDuration(request)} · ${timeRange}` : formatDuration(request);
 }
 
-const TIME_OPTIONS = Array.from({ length: 49 }, (_, index) => {
-  const totalMinutes = (6 * 60) + (index * 15);
-  const value = `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
-  return { value, label: formatClockTime(value) };
-});
-
-const START_TIME_OPTIONS = TIME_OPTIONS.slice(0, -1);
-const END_TIME_OPTIONS = TIME_OPTIONS.slice(1);
-const TIME_VALUES = new Set(TIME_OPTIONS.map((option) => option.value));
-const MAX_LEAVE_ATTACHMENTS = 10;
-const MAX_LEAVE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
-const LEAVE_ATTACHMENT_MIME_TYPES = new Set([
-  "application/pdf",
-  "image/heic",
-  "image/heif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
-const LEAVE_ATTACHMENT_ACCEPT = "application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif";
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function cancelLeaveTriggerId(requestId: string) {
   return `cancel-leave-${requestId.replace(/[^A-Za-z0-9_-]/g, "-")}`;
 }
 
-function validateLeaveAttachmentFiles(files: File[], existingCount = 0) {
-  if (files.length + existingCount > MAX_LEAVE_ATTACHMENTS) {
-    return `A leave request can have up to ${MAX_LEAVE_ATTACHMENTS} supporting files.`;
-  }
-  const unsupported = files.find((file) => !LEAVE_ATTACHMENT_MIME_TYPES.has(file.type.toLowerCase()));
-  if (unsupported) return `${unsupported.name || "That file"} is not a supported PDF or image file.`;
-  const empty = files.find((file) => file.size < 1);
-  if (empty) return `${empty.name || "That file"} is empty.`;
-  const oversized = files.find((file) => file.size > MAX_LEAVE_ATTACHMENT_BYTES);
-  if (oversized) return `${oversized.name || "That file"} is larger than 5 MB.`;
-  const unsafeName = files.find((file) => !file.name.trim() || file.name.length > 255 || /[\\/\u0000-\u001f]/u.test(file.name));
-  if (unsafeName) return "One supporting file has an unsupported name. Rename it and try again.";
-  return "";
-}
 
 function formatDateRange(start: string, end: string) {
   const date = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" });
@@ -645,8 +593,6 @@ export function LeaveDemo({
   const workScheduleWorkspaceRef = useRef<WorkScheduleWorkspace | null>(null);
   const profilePickerDialogRef = useRef<HTMLElement>(null);
   const profilePickerSearchRef = useRef<HTMLInputElement>(null);
-  const leaveRequestDialogRef = useRef<HTMLElement>(null);
-  const leaveRequestInitialFocusRef = useRef<HTMLSelectElement>(null);
   const closeProfilePicker = useCallback(() => setProfilePickerOpen(false), []);
   const closeLeaveRequestForm = useCallback(() => setShowRequestForm(false), []);
   const closeMobileRequestDetail = useCallback(() => setMobileRequestDetailOpen(false), []);
@@ -656,12 +602,6 @@ export function LeaveDemo({
     profilePickerDialogRef,
     profilePickerSearchRef,
     closeProfilePicker,
-  );
-  useDialogFocus(
-    showRequestForm,
-    leaveRequestDialogRef,
-    leaveRequestInitialFocusRef,
-    closeLeaveRequestForm,
   );
 
   const handleSignOut = useCallback(async () => {
@@ -1474,44 +1414,6 @@ export function LeaveDemo({
     window.setTimeout(() => setToast(""), 3200);
   }
 
-  async function uploadLeaveAttachments(requestId: string, files: File[]) {
-    if (!directorySupabase) return { uploaded: 0, failed: files.map((file) => file.name || "supporting file") };
-    const failed: string[] = [];
-    let uploaded = 0;
-    for (const file of files) {
-      let storagePath: string | undefined;
-      try {
-        const plan = await prepareLeaveRequestAttachmentUpload({
-          requestId,
-          fileName: file.name,
-          mimeType: file.type.toLowerCase(),
-          sizeBytes: file.size,
-        });
-        storagePath = plan.storagePath;
-        const { error: storageError } = await directorySupabase.storage
-          .from("leave-evidence")
-          .upload(plan.storagePath, file, {
-            cacheControl: "0",
-            contentType: plan.mimeType,
-            upsert: false,
-          });
-        if (storageError) throw new Error("Storage upload failed.");
-        await completeLeaveRequestAttachmentUpload({ storagePath: plan.storagePath });
-        uploaded += 1;
-      } catch {
-        if (storagePath) {
-          try {
-            await discardLeaveRequestAttachmentUpload({ storagePath });
-          } catch {
-            // A retention job removes any unregistered private object if the
-            // upload reached Storage before registration failed.
-          }
-        }
-        failed.push(file.name || "supporting file");
-      }
-    }
-    return { uploaded, failed };
-  }
 
   function changeEmployeeAccessPreview(personId: string) {
     if (!canPreviewEmployeeAccess) return;
@@ -1732,7 +1634,7 @@ export function LeaveDemo({
         ? await submitLeaveRequestForSelectedEmployee(previewProfile.id, requestInput)
         : await submitLeaveRequest(requestInput);
       const attachmentResult = attachmentFiles.length
-        ? await uploadLeaveAttachments(next.id, attachmentFiles)
+        ? await uploadLeaveAttachments(directorySupabase, next.id, attachmentFiles)
         : { uploaded: 0, failed: [] as string[] };
       await refreshLeaveWorkspace();
       setSelectedRequestId(next.id);
@@ -1768,7 +1670,7 @@ export function LeaveDemo({
     }
     setIsMutating(true);
     try {
-      const result = await uploadLeaveAttachments(requestId, files);
+      const result = await uploadLeaveAttachments(directorySupabase, requestId, files);
       await refreshLeaveWorkspace();
       if (result.failed.length) {
         announce(`${result.uploaded ? `${result.uploaded} added. ` : ""}${result.failed.length} ${result.failed.length === 1 ? "file was" : "files were"} not attached; choose ${result.failed.length === 1 ? "it" : "them"} again to retry.`);
@@ -2153,62 +2055,30 @@ export function LeaveDemo({
         </main>
       </div>
 
-      {showRequestForm ? (
-        <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeLeaveRequestForm()}>
-          <section className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
-            <header><div><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={closeLeaveRequestForm} aria-label="Close request form"><X size={19} /></button></header>
-            <div className={styles.formPerson}>
-              <span className={styles.avatarOrange}>{leaveRequestPersonInitials}</span>
-              <span className={styles.formPersonCopy}>
-                <strong>{leaveRequestPersonName}</strong>
-                <small>{requestForPersonId ? "On behalf of your team member" : activeProfile.team}</small>
-              </span>
-              {teamRequestPeople.length ? (
-                <label className={styles.requestPersonPicker}>
-                  <UsersRound aria-hidden="true" size={15} />
-                  <span className={styles.srOnly}>Request leave for</span>
-                  <select
-                    aria-label="Request leave for"
-                    disabled={isMutating}
-                    onChange={(event) => changeLeaveRequestPerson(event.currentTarget.value)}
-                    title="Change request person"
-                    value={requestForPersonId}
-                  >
-                    {canApplyForLeave ? <option value="">Myself</option> : null}
-                    {teamRequestPeople.map((person) => (
-                      <option key={person.personId} value={person.personId}>{person.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown aria-hidden="true" size={14} />
-                </label>
-              ) : null}
-            </div>
-            {formLeaveType === "Annual leave" ? <LeaveRequestBalance workspace={leavePriority} personId={requestForPersonId || activeProfile.id} self={!requestForPersonId} /> : null}
-            <form className={styles.form} onSubmit={submitRequest} onChange={() => setFormError("")}>
-              <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" value={formLeaveType} onChange={(event) => setFormLeaveType(event.target.value)} required>{(requestedTeamMember ? (requestedTeamMember.paidLeave ? ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"] : ["Unpaid leave"]).map((value) => ({ value, label: value })) : availableLeaveTypes).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
-              {!requestForPersonId && !hasPaidLeaveEntitlement ? <p className={styles.leavePolicyNote} role="note">
-                {employmentType === "abn" ? "ABN" : employmentType === "casual" ? "Casual" : "Unclassified"} employees can record Unpaid leave only.
-              </p> : null}
-              <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" value={formStartDate} onChange={(event) => { const nextDate = event.target.value; setFormStartDate(nextDate); setFormEndDate(nextDate); }} required /></label><label><span>End date</span><input name="endDate" type="date" min={formStartDate} value={formEndDate} onChange={(event) => setFormEndDate(event.target.value)} required /></label></div>
-              {formLeaveType === "Sick leave" ? <SickEvidenceNotice dueDate={sickEvidenceDeadline(formEndDate, VICTORIAN_PUBLIC_HOLIDAY_DATES)} hasEvidence={false} /> : null}
-              <details className={styles.timeRange}><summary>Part-day leave</summary><div className={styles.formRow}><label><span>Starts</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>Ends</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>First and last day only.</p></details>
-              <details className={styles.requestExtras}><summary>Note & files</summary>
-              <div className={styles.requestExtrasContent}>
-                <label><span>Note</span><textarea name="employeeNote" rows={3} /></label>
-                <label className={styles.attachmentField}>
-                  <span>Supporting files <small>Optional</small></span>
-                  <input className={styles.fileInput} name="attachments" type="file" accept={LEAVE_ATTACHMENT_ACCEPT} multiple disabled={isMutating} />
-                  <small>PDF or image · up to 10 files, 5 MB each.</small>
-                </label>
-                <small className={styles.privacyNote}>Visible to your approver and HR.</small>
-              </div>
-              </details>
-              {formError ? <p className={styles.formError} role="alert">{formError}</p> : null}
-              <footer><button className={styles.secondaryButton} type="button" onClick={closeLeaveRequestForm} disabled={isMutating}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : "Send request"}</button></footer>
-            </form>
-          </section>
-        </ModalBackdrop>
-      ) : null}
+      {showRequestForm ? <LeaveRequestDialog
+        leaveRequestPersonInitials={leaveRequestPersonInitials}
+        leaveRequestPersonName={leaveRequestPersonName}
+        requestForPersonId={requestForPersonId}
+        activeProfile={activeProfile}
+        teamRequestPeople={teamRequestPeople}
+        isMutating={isMutating}
+        canApplyForLeave={canApplyForLeave}
+        leavePriority={leavePriority}
+        formLeaveType={formLeaveType}
+        availableLeaveTypes={availableLeaveTypes}
+        hasPaidLeaveEntitlement={hasPaidLeaveEntitlement}
+        employmentType={employmentType}
+        formStartDate={formStartDate}
+        formEndDate={formEndDate}
+        formError={formError}
+        closeLeaveRequestForm={closeLeaveRequestForm}
+        changeLeaveRequestPerson={changeLeaveRequestPerson}
+        submitRequest={submitRequest}
+        setFormError={setFormError}
+        setFormLeaveType={setFormLeaveType}
+        setFormStartDate={setFormStartDate}
+        setFormEndDate={setFormEndDate}
+      /> : null}
 
       <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`} role="status" aria-live="polite"><CheckCircle2 size={17} />{toast}</div>
     </div>
@@ -2470,31 +2340,6 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
   </aside>;
 }
 
-function AttachmentList({ attachments, busy = false, onDelete }: { attachments: LeaveAttachment[]; busy?: boolean; onDelete?: (attachmentId: string) => Promise<void> }) {
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  if (!attachments.length) return null;
-
-  return <section className={styles.attachmentList} aria-label="Supporting files">
-    <span><Paperclip aria-hidden="true" size={14} /> Supporting files</span>
-    {attachments.map((attachment) => <div className={styles.attachmentItem} key={attachment.id}>
-      <div className={styles.attachmentItemActions}>
-        <a href={`/leave/attachments/${attachment.id}`}>
-          <FileText aria-hidden="true" size={17} />
-          <span><strong>{attachment.fileName}</strong><small>{formatFileSize(attachment.sizeBytes)} · Download</small></span>
-          <ArrowUpRight aria-hidden="true" size={15} />
-        </a>
-        {attachment.canDelete && onDelete ? <button className={styles.attachmentDeleteButton} type="button" aria-label={`Delete ${attachment.fileName}`} aria-expanded={confirmDeleteId === attachment.id} onClick={() => setConfirmDeleteId(attachment.id)} disabled={busy} title="Delete file"><Trash2 aria-hidden="true" size={15} /><span>Delete</span></button> : null}
-      </div>
-      {attachment.canDelete && onDelete && confirmDeleteId === attachment.id ? <div className={styles.attachmentDeleteConfirm} role="group" aria-label={`Confirm deletion of ${attachment.fileName}`}>
-        <span><strong>Delete this file?</strong><small>This cannot be undone.</small></span>
-        <div>
-          <button className={styles.attachmentDeleteKeepButton} type="button" onClick={() => setConfirmDeleteId(null)} disabled={busy}>Cancel</button>
-          <button className={styles.attachmentDeleteConfirmButton} type="button" onClick={() => void onDelete(attachment.id)} disabled={busy}><Trash2 aria-hidden="true" size={14} />{busy ? "Deleting…" : "Delete"}</button>
-        </div>
-      </div> : null}
-    </div>)}
-  </section>;
-}
 
 function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, onNote, onSelect, onDecision, onDeleteSupportingFile }: { leavePriority?: LeavePriorityWorkspace; onBalancesSaved: () => Promise<void>; pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: LeaveDecision) => void; onDeleteSupportingFile: (attachmentId: string) => Promise<void> }) {
   const person = leavePriority?.people.find((person) => person.personId === selected?.personId);
