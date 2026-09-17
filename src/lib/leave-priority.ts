@@ -41,13 +41,28 @@ export type LeavePriorityWorkspace = {
   pendingBalanceCalendarIds: string[];
 };
 
-/** Monday immediately following the final sick-leave date, in date-only time. */
-export function sickEvidenceDeadline(endDate: string) {
+/**
+ * First working day on or after the Monday following the final sick-leave
+ * date. Callers provide the same published holiday dates used by Calendar.
+ */
+export function sickEvidenceDeadline(
+  endDate: string,
+  publicHolidayDates?: ReadonlySet<string>,
+) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return "";
   const date = new Date(`${endDate}T12:00:00Z`);
   if (!Number.isFinite(date.valueOf()) || date.toISOString().slice(0, 10) !== endDate) return "";
   const isoDay = date.getUTCDay() || 7;
   date.setUTCDate(date.getUTCDate() + 8 - isoDay);
+
+  while (
+    date.getUTCDay() === 0
+    || date.getUTCDay() === 6
+    || publicHolidayDates?.has(date.toISOString().slice(0, 10))
+  ) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+
   return date.toISOString().slice(0, 10);
 }
 

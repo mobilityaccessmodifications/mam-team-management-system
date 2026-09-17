@@ -104,3 +104,13 @@ jobs:
             -f tests/leave-duration-balance-breakdown-bootstrap.sql \
             -f supabase/migrations/20260917090100_leave_duration_balance_breakdown.sql \
             -f tests/leave-duration-balance-breakdown.sql
+
+      - name: Test Victorian public-holiday workday scheduling
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres victorian_workday_test
+          psql -h localhost -U postgres -d victorian_workday_test -v ON_ERROR_STOP=1 \
+            -f tests/victorian-public-holiday-workdays-bootstrap.sql \
+            -f supabase/migrations/20260917110640_victorian_public_holiday_workdays.sql \
+            -f tests/victorian-public-holiday-workdays.sql
