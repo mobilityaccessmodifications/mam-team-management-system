@@ -94,6 +94,33 @@ colon, underscore or hyphen. If a provider/host ID contains other characters,
 the adapter must deterministically SHA-256 the complete trusted ID (including
 its namespace), not truncate it or substitute an LLM-selected session label.
 
+### Read-only self profile
+
+The native adapter also exposes `mam_self_profile` so a leave conversation can
+know the authenticated employee's name and employment type before collecting
+leave details. This is not a generic employee lookup:
+
+- the tool schema is exactly an empty object; it accepts no phone, name,
+  employee ID, user ID or selected-person argument;
+- the adapter inserts the canonical WhatsApp sender and account from trusted
+  OpenClaw context and signs `operation: "profile"` with `payload: {}`;
+- the People backend resolves exactly one active MAM person with an active linked
+  account from a complete directory snapshot, rejecting missing and duplicate
+  phone matches;
+- the response is limited to `{name, employmentType}`. It never returns phone
+  numbers, person IDs, user IDs, company records or another employee's profile;
+- the new `openclaw_self_profile_snapshot` facade is read-only and executable
+  only by `service_role`. The native adapter never receives the full snapshot or
+  any Supabase credential.
+
+The assistant must call this tool before starting a leave request. A `casual` or
+`abn` result means Unpaid leave is the only valid type, so it should not ask the
+employee to choose paid versus unpaid. The leave submission path re-resolves the
+same trusted sender and independently enforces employment policy; profile output
+is conversational context, not authorization. If identity is absent, ambiguous,
+inactive or malformed, fail closed without revealing whether a supplied phone
+belongs to an employee.
+
 ## Display and confirmation (not model-callable tools)
 
 ### Native host binding evidence and required behavior

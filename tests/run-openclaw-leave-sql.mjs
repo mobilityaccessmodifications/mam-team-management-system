@@ -10,7 +10,8 @@ const sql=fs.readFileSync('tests/openclaw-leave-bootstrap.sql','utf8')+'\n'+
 extract('supabase/migrations/20260818130000_configurable_leave_approval_grants.sql','create function public.submit_my_leave_request(', 'comment on function public.submit_my_leave_request')+'\n'+
 extract('supabase/migrations/20260904140000_historical_leave_import_support.sql','create or replace function private.enforce_leave_request_employment_policy()', 'drop function public.list_leave_workspace_requests')+'\n'+
 'create trigger employment before insert on public.leave_requests for each row execute function private.enforce_leave_request_employment_policy();\n'+
-fs.readFileSync('supabase/migrations/20260917223558_openclaw_leave_bridge.sql','utf8')+'\n'+fs.readFileSync('tests/openclaw-leave.sql','utf8');
+fs.readFileSync('supabase/migrations/20260917223558_openclaw_leave_bridge.sql','utf8')+'\n'+
+fs.readFileSync('supabase/migrations/20260918120000_openclaw_self_profile.sql','utf8')+'\n'+fs.readFileSync('tests/openclaw-leave.sql','utf8');
 const result=spawnSync('psql',['-h',socket,'-p','55439','-d',database,'-v','ON_ERROR_STOP=1'],{input:sql,encoding:'utf8',env:{PATH:process.env.PATH}});
 process.stdout.write(result.stdout??'');process.stderr.write(result.stderr??'');
 if(result.status!==0)process.exit(result.status??1);

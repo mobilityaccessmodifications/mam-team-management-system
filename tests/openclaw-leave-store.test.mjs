@@ -22,7 +22,7 @@ test("real contract and Supabase adapter carry the resolved actor for needs_inpu
       if (name === "openclaw_leave_snapshot") return { data: {
         complete: true, fingerprint: "a".repeat(64), draftFingerprint: "b".repeat(64), draft: null, receipt: null,
         rows: [{ personId, userId, company: "mam", active: true, nodeKind: "person", accountActive: true,
-          phone: "0400000001", country: "Australia", employmentType: "full_time" }],
+          phone: "0400000001", country: "Australia", fullName: "Synthetic Employee", employmentType: "full_time" }],
       } };
       assert.equal(name, "openclaw_leave_commit");
       assert.equal(args.p_person_id, personId);
@@ -43,4 +43,22 @@ test("real contract and Supabase adapter carry the resolved actor for needs_inpu
   assert.equal(response.status, 200);
   assert.equal(response.body.code, "needs_input");
   assert.equal(calls.length, 2);
+});
+
+test("self profile snapshot is a single read-only RPC and returns no unrelated response fields", async () => {
+  const calls = [];
+  const rows = [{ personId: "10000000-0000-4000-8000-000000000001", userId: "20000000-0000-4000-8000-000000000001",
+    company: "mam", active: true, nodeKind: "person", accountActive: true, phone: "0400000001", country: "Australia",
+    fullName: "Synthetic Employee", employmentType: "casual" }];
+  const client = { rpc(name, args) {
+    calls.push({ name, args });
+    return { async abortSignal() {
+      assert.equal(name, "openclaw_self_profile_snapshot");
+      assert.equal(args, undefined);
+      return { data: { complete: true, rows }, error: null };
+    } };
+  } };
+  const store = load("src/lib/openclaw-leave-store.ts", { "server-only": {}, "./supabase/admin": { createAdminClient: () => client } }).createLeaveBridgeStore();
+  assert.deepEqual(await store.selfProfileEmployees(), { complete: true, rows });
+  assert.deepEqual(calls.map(call => call.name), ["openclaw_self_profile_snapshot"]);
 });

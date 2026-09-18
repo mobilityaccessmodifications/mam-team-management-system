@@ -21,15 +21,20 @@ const config = { key: 'synthetic-only-key-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
 const baseTime = Date.parse('2026-09-18T01:00:00Z');
 const personId = '10000000-0000-4000-8000-000000000001';
 const userId = '20000000-0000-4000-8000-000000000001';
-const employee = () => ({ personId, userId, company: 'mam', active: true, nodeKind: 'person', accountActive: true, phone: '0400000001', country: 'Australia', employmentType: 'full_time' });
+const employee = () => ({ personId, userId, company: 'mam', active: true, nodeKind: 'person', accountActive: true, phone: '0400000001', country: 'Australia', fullName: 'Synthetic Employee', employmentType: 'full_time' });
 const input = () => ({ leaveType: 'Annual leave', startDate: '2026-10-12', endDate: '2026-10-12', employeeNote: '' });
 // Synthetic adapter ONLY. Serializes concurrent requests and rolls back all
 // mutations. It is not a persistence implementation or proof of DB isolation.
 function fixture() {
   let rows = [employee()], state = { receipts: new Map(), drafts: new Map(), leaves: [] };
   let queue = Promise.resolve();
-  let calls = 0;
-  const store = { transaction(work) {
+  let calls = 0, profileReads = 0;
+  const store = {
+    async selfProfileEmployees() {
+      profileReads++;
+      return { complete: true, rows: structuredClone(rows) };
+    },
+    transaction(work) {
     const run = queue.then(async () => {
       calls++;
       const next = structuredClone(state);
@@ -53,7 +58,8 @@ function fixture() {
     });
     queue = run.catch(() => {});
     return run;
-  } };
+    },
+  };
   let sequence = 0;
   const packet = (operation, payload, overrides = {}) => ({ version: 1, account: config.account, channel: 'whatsapp', sender: '+61400000001', session: 'self-session', eventId: 'event-' + ++sequence, operation, payload, ...overrides });
   const call = (p, now = baseTime, options = {}) => {
@@ -69,7 +75,7 @@ function fixture() {
     assert.equal(shown.body.code, 'shown');
     return { d, confirm: packet('confirm', { draftId: d.draftId, digest: d.digest, replyToMessageId: 'out-1', text: d.summary.match(/CONFIRM [a-f0-9-]+/)[0] }) };
   }
-  return { packet, call, ready, setRows: r => { rows = r; }, state: () => state, calls: () => calls };
+  return { packet, call, ready, setRows: r => { rows = r; }, state: () => state, calls: () => calls, profileReads: () => profileReads };
 }
 
 test('unauthenticated, expired, wrong-account/channel packets never enter transaction', async () => {
@@ -80,11 +86,24 @@ test('unauthenticated, expired, wrong-account/channel packets never enter transa
   assert.equal((await f.call({ ...p, channel: 'group' })).status, 401);
   assert.equal((await f.call(p, baseTime, { config: { ...config, key: '' } })).status, 503);
   assert.equal(f.calls(), 0);
+  assert.equal(f.profileReads(), 0);
+});
+test('self profile returns only the uniquely matched sender name and employment type without a write transaction', async () => {
+  const f = fixture();
+  const second = { ...employee(), personId: crypto.randomUUID(), userId: crypto.randomUUID(), phone: '0400000002', fullName: 'Second Employee', employmentType: 'casual' };
+  f.setRows([employee(), second]);
+  const result = await f.call(f.packet('profile', {}, { sender: '+61400000002' }));
+  assert.deepEqual(result, { status: 200, body: { code: 'profile', profile: { name: 'Second Employee', employmentType: 'casual' } } });
+  assert.deepEqual(Object.keys(result.body.profile).sort(), ['employmentType', 'name']);
+  assert.equal(f.calls(), 0);
+  assert.equal(f.profileReads(), 1);
 });
 test('model cannot supply identity or approve/reject/cancel/edit fields', async () => {
   for (const field of ['employeeId', 'userId', 'phone', 'confirmed', 'status', 'hours']) {
     const f = fixture();
     assert.equal((await f.call(f.packet('prepare', { ...input(), [field]: 'bad' }))).status, 400);
+    assert.equal((await f.call(f.packet('profile', { [field]: 'bad' }))).status, 400);
+    assert.equal(f.profileReads(), 0);
     assert.equal(f.state().leaves.length, 0);
   }
   for (const operation of ['approve', 'reject', 'cancel', 'update', 'submit']) {
@@ -105,7 +124,14 @@ test('unknown, inactive, other company, unlinked and shared numbers all fail clo
   for (const rows of [[], [{ ...employee(), active: false }], [{ ...employee(), company: 'equipsy' }], [{ ...employee(), userId: null }], [{ ...employee(), accountActive: false }], [{ ...employee(), nodeKind: 'unit' }], [employee(), { ...employee(), userId: null, phone: '+61400000001' }]]) {
     const f = fixture(); f.setRows(rows);
     assert.deepEqual((await f.call(f.packet('prepare', input()))).body, { code: 'not_available' });
+    assert.deepEqual((await f.call(f.packet('profile', {}))).body, { code: 'not_available' });
     assert.equal(f.state().leaves.length, 0);
+  }
+});
+test('self profile fails closed for missing or malformed identity attributes', async () => {
+  for (const change of [{ fullName: '' }, { fullName: '\u202eHidden' }, { employmentType: 'contractor' }]) {
+    const f = fixture(); f.setRows([{ ...employee(), ...change }]);
+    assert.deepEqual((await f.call(f.packet('profile', {}))).body, { code: 'not_available' });
   }
 });
 test('casual/unclassified cannot request paid leave; unpaid is allowed', async () => {

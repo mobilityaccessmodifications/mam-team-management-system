@@ -3,6 +3,7 @@ do $$declare role_name text; signature text; relation text; privilege text;begin
  foreach role_name in array array['anon','authenticated','service_role'] loop
   foreach signature in array array[
    'private.openclaw_leave_people()',
+   'private.openclaw_self_profile_people()',
    'private.openclaw_leave_snapshot(text,uuid)',
    'private.openclaw_leave_commit(text,text,text,text,jsonb,uuid,jsonb,jsonb,boolean)',
    'private.openclaw_submit_self(uuid,text,date,date,time,time,text)'
@@ -11,6 +12,7 @@ do $$declare role_name text; signature text; relation text; privilege text;begin
   end loop;
   foreach signature in array array[
    'public.openclaw_leave_snapshot(text,uuid)',
+   'public.openclaw_self_profile_snapshot()',
    'public.prune_openclaw_leave_state()',
    'public.openclaw_leave_commit(text,text,text,text,jsonb,uuid,jsonb,jsonb,boolean)'
   ] loop
@@ -33,6 +35,7 @@ do $$declare role_name text; statement text; denied boolean;begin
   execute format('set local role %I',role_name);
   foreach statement in array array[
    'select private.openclaw_leave_people()',
+   'select private.openclaw_self_profile_people()',
    'select private.openclaw_leave_snapshot(null,null)',
    'select private.openclaw_leave_commit(null,null,null,null,null,null,null,null,false)',
    'select private.openclaw_submit_self(null,null,null,null,null,null,null)',
@@ -41,6 +44,7 @@ do $$declare role_name text; statement text; denied boolean;begin
    'update private.openclaw_leave_release_gate set enabled=true'
   ] || case when role_name<>'service_role' then array[
    'select public.openclaw_leave_snapshot(null,null)',
+   'select public.openclaw_self_profile_snapshot()',
    'select public.prune_openclaw_leave_state()',
    'select public.openclaw_leave_commit(null,null,null,null,null,null,null,null,false)'
   ] else array[]::text[] end loop
@@ -55,8 +59,13 @@ end$$;
 -- Facades also work without private-schema USAGE; this is fixture-only revocation.
 revoke usage on schema private from service_role;
 set role service_role;
-do $$begin
+do $$declare profile jsonb;begin
  assert public.openclaw_leave_snapshot(repeat('0',64),null)->>'complete'='true';
+ profile:=public.openclaw_self_profile_snapshot();
+ assert profile->>'complete'='true';
+ assert jsonb_array_length(profile->'rows')=1;
+ assert profile#>>'{rows,0,fullName}'='Synthetic Employee';
+ assert profile#>>'{rows,0,employmentType}'='full_time';
  begin
   perform public.openclaw_leave_commit(null,null,null,null,null,null,null,null,false);
   raise exception 'Disabled bridge accepted commit';

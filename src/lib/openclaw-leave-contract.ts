@@ -5,6 +5,7 @@ import { normalizeAllowlistPhone } from "./openclaw-allowlist";
 // Protocol logic is shared by the route and synthetic transaction tests.
 export const LEAVE_BRIDGE_PATH = "/api/internal/integrations/openclaw/leave";
 const TYPES = ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"];
+const EMPLOYMENT_TYPES = ["abn", "casual", "full_time", "part_time"];
 const ID = /^[A-Za-z0-9:_-]{1,128}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
@@ -20,6 +21,8 @@ export type Employee = {
   nodeKind: string; accountActive: boolean; phone: string | null; country: string | null;
   employmentType: string | null;
 };
+export type SelfProfileEmployee = Employee & { fullName: string | null };
+export type SelfProfile = { name: string; employmentType: string | null };
 export type LeaveDraft = {
   id: string; identity: Identity; personId: string; userId: string;
   fields: LeaveFields; summary: string; digest: string; challenge: string;
@@ -27,7 +30,8 @@ export type LeaveDraft = {
   result?: { requestId: string; status: "Pending" };
 };
 export type BridgeResult = {
-  code: "needs_input" | "prepared" | "shown" | "submitted";
+  code: "profile" | "needs_input" | "prepared" | "shown" | "submitted";
+  profile?: SelfProfile;
   missing?: string[]; draftId?: string; summary?: string; digest?: string;
   expiresAt?: string; requestId?: string; status?: "Pending";
 };
@@ -49,8 +53,14 @@ export interface LeaveTransaction {
   submitSelf(employee: Employee, fields: LeaveFields, draftId: string): Promise<{ requestId: string; status: "Pending" }>;
 }
 export interface LeaveStore {
+  // Read-only, complete snapshot used only for the authenticated sender's
+  // minimal self profile. No caller-selected identity reaches this boundary.
+  selfProfileEmployees(): Promise<{ complete: true; rows: SelfProfileEmployee[] }>;
   transaction<T>(work: (tx: LeaveTransaction) => Promise<T>, context: { key: string; fingerprint: string; packet: ObjectValue }): Promise<T>;
 }
+type EmployeeSource<T extends Employee> = {
+  employees(): Promise<{ complete: true; rows: T[] }>;
+};
 class ContractError extends Error {
   constructor(readonly code: "invalid_request" | "unauthorized" | "not_available" | "conflict" | "expired") { super(code); }
 }
@@ -110,7 +120,7 @@ function summary(input: LeaveFields, employee: Employee, challenge: string) {
     `Reply to this exact message with CONFIRM ${challenge} within 10 minutes to submit.`].join("\n");
 }
 function sameIdentity(a: Identity, b: Identity) { return a.account === b.account && a.sender === b.sender && a.session === b.session; }
-async function resolve(tx: LeaveTransaction, sender: string) {
+async function resolve<T extends Employee>(tx: EmployeeSource<T>, sender: string): Promise<T> {
   const snapshot = await tx.employees();
   if (snapshot.complete !== true || !Array.isArray(snapshot.rows) || snapshot.rows.length > 10000) return fail("not_available");
   // Count BEFORE filtering portal eligibility: a shared active MAM number with
@@ -120,6 +130,12 @@ async function resolve(tx: LeaveTransaction, sender: string) {
   const p = matches[0];
   if (p.nodeKind !== "person" || !p.accountActive || !p.userId || !UUID.test(p.userId) || !UUID.test(p.personId)) return fail("not_available");
   return p;
+}
+function profile(employee: SelfProfileEmployee): SelfProfile {
+  const name = typeof employee.fullName === "string" ? employee.fullName.trim() : "";
+  if (!name || name.length > 200 || /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(name)) fail("not_available");
+  if (employee.employmentType !== null && !EMPLOYMENT_TYPES.includes(employee.employmentType)) fail("not_available");
+  return { name, employmentType: employee.employmentType };
 }
 function eligible(employee: Employee, input: LeaveFields) {
   if (!["full_time", "part_time"].includes(employee.employmentType ?? "") && input.leaveType !== "Unpaid leave") fail("not_available");
@@ -147,9 +163,14 @@ export async function handleLeaveBridge(
     if (normalizeAllowlistPhone(identity.sender) !== identity.sender) fail("unauthorized");
     const eventId = text(packet.eventId, ID);
     const payload = object(packet.payload);
-    if (!["prepare", "shown", "confirm"].includes(packet.operation as string)) fail("invalid_request");
+    if (!["profile", "prepare", "shown", "confirm"].includes(packet.operation as string)) fail("invalid_request");
     const key = hash(JSON.stringify([identity.account, identity.sender, eventId]));
     const fingerprint = hash(rawBody);
+    if (packet.operation === "profile") {
+      exact(payload, []);
+      const employee = await resolve({ employees: () => store.selfProfileEmployees() }, identity.sender);
+      return { status: 200, body: { code: "profile", profile: profile(employee) } };
+    }
     const result = await store.transaction(async tx => {
       const employee = await resolve(tx, identity.sender);
       const previous = await tx.receipt(key);
