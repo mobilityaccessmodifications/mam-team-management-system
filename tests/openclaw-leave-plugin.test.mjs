@@ -99,6 +99,10 @@ test("native plugin package exposes only prepare and contains no temporary harne
   assert.equal(plugin.tools[0].parameters.additionalProperties, false);
   assert.deepEqual(Object.keys(plugin.tools[0].parameters.properties).sort(),
     ["leaveType", "startDate", "endDate", "startTime", "endTime", "employeeNote"].sort());
+  assert.match(plugin.tools[0].description, /trusted sender phone number is the sole employee identity/i);
+  assert.match(plugin.tools[0].description, /never ask for or accept.*addressee.*approver/i);
+  assert.match(plugin.tools[0].parameters.properties.employeeNote.description, /optional note/i);
+  assert.doesNotMatch(plugin.tools[0].parameters.properties.employeeNote.description, /\breason\b/i);
 });
 
 test("disabled, untrusted, group, wrong-account and malformed-endpoint contexts fail closed", () => {
