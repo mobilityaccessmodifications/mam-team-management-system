@@ -30,7 +30,7 @@
 }
 
 .organisation:fullscreen .treeViewport {
-  min-height: calc(100dvh - 190px);
+  height: calc(100dvh - 190px);
 }
 
 /* Keep the chart's wide, scrollable canvas inside the People workspace. The
@@ -493,7 +493,9 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  min-height: min(680px, calc(100dvh - 310px));
+  /* Bound the canvas on both axes so its contents scroll inside the viewport. */
+  height: clamp(280px, calc(100dvh - 310px), 680px);
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg, 16px);
   background-color: #fbfcfa;
@@ -520,7 +522,7 @@
 }
 
 .treeViewport:fullscreen {
-  min-height: 100dvh;
+  height: 100dvh;
   border: 0;
   border-radius: 0;
 }
@@ -1801,6 +1803,7 @@
   }
 
   .treeViewport {
+    height: auto;
     min-height: 430px;
     cursor: auto;
     overflow: visible;
