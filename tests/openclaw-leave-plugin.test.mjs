@@ -130,7 +130,7 @@ test("disabled, untrusted, group, wrong-account and malformed-endpoint contexts 
   ]) for (const tool of loadPlugin().tools) assert.equal(tool.factory({ toolContext: context }), null);
   for (const context of [{ ...identity, delivery: undefined }, { ...identity, delivery: {} }]) {
     const plugin = loadPlugin();
-    assert.equal(toolByName(plugin, "mam_leave_prepare").factory({ toolContext: context }), null);
+    assert.notEqual(toolByName(plugin, "mam_leave_prepare").factory({ toolContext: context }), null);
     assert.notEqual(toolByName(plugin, "mam_self_profile").factory({ toolContext: context }), null);
   }
   for (const override of [
@@ -166,6 +166,35 @@ test("self profile has no identity arguments and returns only this trusted sende
   assert.deepEqual(plugin.calls[0].payload, {});
   assert.deepEqual(JSON.parse(JSON.stringify((await tool.execute("bad", { phone: "+61400000002" })).details)), { code: "unavailable" });
   assert.equal(plugin.calls.length, 1, "Caller-supplied identity must never reach the bridge");
+});
+
+test("prepare falls back to the trusted WhatsApp adapter when host-bound delivery is absent", async () => {
+  const plugin = loadPlugin();
+  const deliveries = [];
+  const api = {
+    config: { synthetic: true },
+    runtime: { channel: { outbound: { loadAdapter: async (channel) => {
+      assert.equal(channel, "whatsapp");
+      return { sendText: async (delivery) => {
+        deliveries.push(delivery);
+        return { channel: "whatsapp", messageId: "synthetic-adapter-receipt" };
+      } };
+    } } } },
+  };
+  const toolContext = { ...identity, delivery: undefined };
+  const tool = toolByName(plugin, "mam_leave_prepare").factory({ api, toolContext });
+  const signal = new AbortController().signal;
+  const prepared = await tool.execute("adapter-fallback", params, signal);
+  assert.equal(prepared.details.code, "prepared");
+  assert.match(prepared.details.delivery, /verified delivery receipt/i);
+  assert.equal(deliveries.length, 1);
+  assert.equal(deliveries[0].cfg, api.config);
+  assert.equal(deliveries[0].to, identity.requesterSenderId);
+  assert.equal(deliveries[0].accountId, identity.agentAccountId);
+  assert.equal(deliveries[0].text, summary);
+  assert.equal(deliveries[0].signal, signal);
+  assert.deepEqual(plugin.calls.map((call) => call.operation), ["prepare", "shown"]);
+  assert.equal(plugin.calls[1].payload.outboundMessageId, "synthetic-adapter-receipt");
 });
 
 test("trusted self identity signs prepare, records delivery and requires exact quoted confirmation", async () => {

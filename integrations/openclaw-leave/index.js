@@ -151,6 +151,27 @@ async function bridge(identity, operation, payload) {
   }
 }
 
+async function deliverSummary(api, toolContext, identity, text, signal) {
+  if (typeof toolContext.delivery?.send === "function") {
+    await toolContext.delivery.send({ text });
+    return null;
+  }
+  const adapter = await api?.runtime?.channel?.outbound?.loadAdapter?.("whatsapp");
+  const sendText = adapter?.sendText;
+  const cfg = toolContext.getRuntimeConfig?.() ?? toolContext.runtimeConfig ?? api?.config;
+  if (typeof sendText !== "function" || !cfg) throw new Error("Trusted WhatsApp delivery is unavailable");
+  const result = await sendText({
+    cfg,
+    to: identity.sender,
+    text,
+    accountId: identity.account,
+    ...(signal ? { signal } : {}),
+  });
+  const messageId = typeof result?.messageId === "string" ? result.messageId.trim() : "";
+  if (!messageId) throw new Error("Trusted WhatsApp delivery returned no receipt");
+  return messageId;
+}
+
 function visiblePrepareResult(result, shown) {
   if (result.code === "needs_input") return result;
   if (result.code !== "prepared") return { code: "unavailable" };
@@ -214,25 +235,28 @@ const plugin = defineToolPlugin({
     description: prepareDescription,
     parameters: prepareParameters,
     optional: true,
-    factory({ toolContext }) {
+    factory({ api, toolContext }) {
       const identity = conversation(toolContext);
       const cfg = configured();
-      if (!identity || !cfg || identity.account !== cfg.account || typeof toolContext.delivery?.send !== "function") return null;
+      if (!identity || !cfg || identity.account !== cfg.account) return null;
       return {
         name: "mam_leave_prepare",
         label: "Prepare MAM leave request",
         description: prepareDescription,
         parameters: prepareParameters,
         executionMode: "sequential",
-        async execute(_id, params) {
+        async execute(_id, params, signal) {
           prune();
-          if (typeof toolContext.delivery?.send !== "function") return { content: [{ type: "text", text: "Trusted delivery is unavailable." }], details: { code: "unavailable" } };
           const result = await bridge(identity, "prepare", payloadFromParams(params));
           if (result.code !== "prepared") return { content: [{ type: "text", text: result.code === "needs_input" ? "Collect the missing leave details before calling this tool again." : "Leave service is temporarily unavailable." }], details: result };
           const item = remember(identity, result);
           if (!item) return { content: [{ type: "text", text: "Leave service is temporarily unavailable." }], details: { code: "unavailable" } };
           try {
-            await toolContext.delivery.send({ text: item.summary });
+            const messageId = await deliverSummary(api, toolContext, identity, item.summary, signal);
+            if (messageId) {
+              item.outboundMessageId = messageId;
+              await recordShown(item);
+            }
           } catch {
             forget(item);
             return { content: [{ type: "text", text: "I could not deliver the confirmation summary. Please try the leave request again." }], details: { code: "unavailable" } };
