@@ -44,6 +44,12 @@ jobs:
         run: |
           createdb -h localhost -U postgres openclaw_allowlist_test
           psql -h localhost -U postgres -d openclaw_allowlist_test -v ON_ERROR_STOP=1 -f tests/openclaw-allowlist.sql
+      - name: Test employee email login and unchanged administrator credentials
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres employee_email_login_test
+          psql -h localhost -U postgres -d employee_email_login_test -v ON_ERROR_STOP=1 -f tests/employee-email-login.sql
       - name: Test notification transaction and credential audit in disposable database
         env:
           PGPASSWORD: synthetic-ci-only

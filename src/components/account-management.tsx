@@ -947,18 +947,18 @@ function LoginField({
 }) {
   return (
     <label className={styles.field}>
-      <span>Username</span>
+      <span>Login email</span>
       <input
         autoCapitalize="none"
         autoComplete="off"
         data-account-editor-initial-focus
-        maxLength={80}
+        maxLength={254}
         minLength={3}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="e.g. first.last"
+        placeholder="name@company.com"
         required
         spellCheck={false}
-        type="text"
+        type="email"
         value={loginName}
       />
     </label>

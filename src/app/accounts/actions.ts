@@ -12,6 +12,7 @@ import type {
 } from "@/components/account-management";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isPortalLoginEmail, normalisePortalLogin } from "@/lib/portal-login";
 
 type DirectoryRow = {
   id: string;
@@ -51,7 +52,6 @@ type AccountStatusInspectionRpcRow = AccountRpcRow & {
   claim_status: "pending" | "finalised" | "cancelled";
 };
 
-const LOGIN_PATTERN = /^[a-z0-9][a-z0-9._-]{2,63}$/;
 const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,128}$/;
 const GENERIC_ERROR = "The account change could not be saved. Refresh and try again.";
 
@@ -67,10 +67,6 @@ async function requireAccountAdministrator() {
   if (permissionError || allowed !== true) throw new Error("You do not have permission to manage accounts.");
 
   return { supabase, actorUserId: userData.user.id };
-}
-
-function normaliseLogin(value: string) {
-  return value.trim().toLowerCase();
 }
 
 function validatePassword(value: string) {
@@ -298,8 +294,8 @@ export async function listPortalAccounts(): Promise<AccountDto[]> {
 export async function createPortalAccount(input: CreateAccountInput): Promise<AccountMutationResult> {
   const { supabase } = await requireAccountAdministrator();
   validateIds(input.personId);
-  const loginName = normaliseLogin(input.loginName);
-  if (!LOGIN_PATTERN.test(loginName)) throw new Error("Use 3–64 lower-case letters, numbers, dots, dashes or underscores.");
+  const loginName = normalisePortalLogin(input.loginName);
+  if (!isPortalLoginEmail(loginName)) throw new Error("Use the employee’s company email, or personal email if they have no company email.");
   validatePassword(input.newPassword);
 
   const admin = createAdminClient();
@@ -349,8 +345,8 @@ export async function createPortalAccount(input: CreateAccountInput): Promise<Ac
 export async function updatePortalLogin(input: UpdateLoginInput): Promise<AccountMutationResult> {
   const { supabase } = await requireAccountAdministrator();
   validateIds(input.personId, input.userId);
-  const loginName = normaliseLogin(input.loginName);
-  if (!LOGIN_PATTERN.test(loginName)) throw new Error("Use 3–64 lower-case letters, numbers, dots, dashes or underscores.");
+  const loginName = normalisePortalLogin(input.loginName);
+  if (!isPortalLoginEmail(loginName)) throw new Error("Use the employee’s company email, or personal email if they have no company email.");
   const { data, error } = await supabase.rpc("update_portal_login", {
     p_person_id: input.personId,
     p_auth_user_id: input.userId,

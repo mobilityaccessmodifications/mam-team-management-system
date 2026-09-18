@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { loadPortalLoginModule } from "./portal-login-test-loader.mjs";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -126,6 +127,7 @@ function loadActions({
       if (id === "next/cache") return { revalidatePath() {} };
       if (id === "@/lib/supabase/admin") return { createAdminClient: () => admin };
       if (id === "@/lib/supabase/server") return { createClient: async () => client };
+      if (id === "@/lib/portal-login") return loadPortalLoginModule();
       return require(id);
     },
     moduleUnderTest,
