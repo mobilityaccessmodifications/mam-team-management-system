@@ -5,6 +5,41 @@ self-service leave. It is deliberately not a bare MCP identity boundary.
 
 ## Status and source
 
+The self-profile and leave plugin is released through GitHub (PRs #121–124).
+The historical validation notes below describe earlier artifacts, not the current
+runtime. Do not use their hashes as current release verification.
+
+### Gateway-owned delivery correction
+
+OpenClaw 2026.9.4 can execute optional plugin tools under a tool-only registry.
+Its `loadAdapter` reads that registry, which may contain no WhatsApp channel.
+The `mam-leave-delivery` service now resolves the public WhatsApp adapter during
+Gateway service startup. The official runtime store shares a narrowly scoped
+`sendPreparedSummary` capability and pending drafts with tool-only module graphs
+in that same Gateway process. Discovery cannot start or replace the owner;
+stop/reload clears its pending state. No Gateway RPC scope, messaging tool,
+administrator permission or additional recipient is granted.
+
+The service sends only a registered, server-signed draft to its authenticated
+sender using Gateway-owned configuration. A literal block preserves the exact
+summary through WhatsApp markdown. A summary that cannot fit in one message or
+would be changed by sanitization is rejected before sending. Only a real provider
+receipt can mark the draft shown. Native WhatsApp quote metadata omits `isQuote`
+in this version; when absent, confirmation requires both the exact receipt ID and
+the exact displayed body, as well as the existing sender/account/session checks.
+
+`scripts/verify-openclaw-leave-native.mjs` uses the installed 2026.9.4 SDK,
+real WhatsApp adapter and real inbound-hook mapper, but replaces the underlying
+network listener and People bridge with synthetic fixtures and blocks sockets.
+It reproduces the tool-only registry lookup failure and tests separate module
+graphs, full prepare/display/quoted-confirm flow, duplicate confirmation,
+formatting/length boundaries and service stop. Run only with isolated
+`OPENCLAW_STATE_DIR=/tmp/mam-leave-native.<suffix>` and its matching config path;
+pass the installed OpenClaw root, installed WhatsApp root and staged plugin root.
+This is not a live WhatsApp or production database test.
+
+### Historical build evidence
+
 The base leave plugin was released separately through MAM PR #121. The
 `mam_self_profile` extension in this branch is **local source only**: it has not
 been merged, migrated, deployed or enabled. The source-controlled location is

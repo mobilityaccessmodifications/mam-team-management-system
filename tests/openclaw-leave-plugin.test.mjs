@@ -10,6 +10,7 @@ const bridgePath = "/api/internal/integrations/openclaw/leave";
 const key = "synthetic-test-key-".padEnd(48, "x");
 const challenge = "30000000-0000-4000-8000-000000000001";
 const summary = `Synthetic leave summary\nReply to this exact message with CONFIRM ${challenge} within 10 minutes to submit.`;
+const deliveryText = `\`\`\`\n${summary}\n\`\`\``;
 const env = {
   MAM_OPENCLAW_LEAVE_ENABLED: "true",
   MAM_OPENCLAW_LEAVE_BRIDGE_URL: `https://mam.example.invalid${bridgePath}`,
@@ -26,11 +27,12 @@ const hookContext = { channelId: "whatsapp", accountId: "default", sessionKey: i
 
 // Deliberate offline shims, NOT an OpenClaw SDK/build or WhatsApp E2E test.
 // No module resolution, host process environment, credentials or real fetch.
-function loadPlugin(overrides = {}, failShown = 0) {
+function loadPlugin(overrides = {}, failShown = 0, stores = new Map()) {
   const imports = [
     'import { createHash, createHmac, randomUUID } from "node:crypto";',
     'import { Type } from "typebox";',
     'import { defineToolPlugin } from "openclaw/plugin-sdk/tool-plugin";',
+    'import { createPluginRuntimeStore } from "openclaw/plugin-sdk/runtime-store";',
   ];
   let code = source;
   for (const statement of imports) {
@@ -52,6 +54,9 @@ function loadPlugin(overrides = {}, failShown = 0) {
     Type, createHash, createHmac, randomUUID, URL, AbortSignal,
     process: { env: { ...env, ...overrides } },
     defineToolPlugin: (spec) => ({ register(api) { api.capture(spec); } }),
+    createPluginRuntimeStore: ({ key }) => ({
+      tryGetRuntime: () => stores.get(key), setRuntime: (value) => stores.set(key, value), clearRuntime: () => stores.delete(key),
+    }),
     fetch: async (url, options) => {
       assert.equal(url.origin, "https://mam.example.invalid");
       assert.equal(url.pathname, bridgePath);
@@ -74,9 +79,21 @@ function loadPlugin(overrides = {}, failShown = 0) {
   });
   new vm.Script(code, { filename: "offline-mam-leave-plugin.js" }).runInContext(context, { timeout: 1_000 });
   let spec;
+  let service;
+  let adapter;
   const hooks = new Map();
-  context.resultPlugin.register({ capture(value) { spec = value; }, on(name, handler) { hooks.set(name, handler); } });
-  return { tools: spec.tools((tool) => tool), hooks, calls };
+  const config = { synthetic: true };
+  context.resultPlugin.register({ capture(value) { spec = value; }, on(name, handler) { hooks.set(name, handler); },
+    registerService(value) { service = value; },
+    runtime: { channel: { text: { resolveTextChunkLimit: () => 4000 }, outbound: { loadAdapter: async (channel) => {
+      assert.equal(channel, "whatsapp"); return adapter;
+    } } } },
+  });
+  return { tools: spec.tools((tool) => tool), hooks, calls, config,
+    async start(value = { sendText: async () => ({ messageId: "synthetic-outbound-1" }) }) {
+      adapter = { sanitizeText: ({ text }) => text, ...value }; await service.start({ config, logger: {} });
+    }, stop() { service.stop(); },
+  };
 }
 
 function toolByName(plugin, name) {
@@ -168,30 +185,24 @@ test("self profile has no identity arguments and returns only this trusted sende
   assert.equal(plugin.calls.length, 1, "Caller-supplied identity must never reach the bridge");
 });
 
-test("prepare falls back to the trusted WhatsApp adapter when host-bound delivery is absent", async () => {
+test("prepare uses the Gateway service adapter when host-bound delivery is absent", async () => {
   const plugin = loadPlugin();
   const deliveries = [];
-  const api = {
-    config: { synthetic: true },
-    runtime: { channel: { outbound: { loadAdapter: async (channel) => {
-      assert.equal(channel, "whatsapp");
-      return { sendText: async (delivery) => {
+  await plugin.start({ sendText: async (delivery) => {
         deliveries.push(delivery);
         return { channel: "whatsapp", messageId: "synthetic-adapter-receipt" };
-      } };
-    } } } },
-  };
+  } });
   const toolContext = { ...identity, delivery: undefined };
-  const tool = toolByName(plugin, "mam_leave_prepare").factory({ api, toolContext });
+  const tool = toolByName(plugin, "mam_leave_prepare").factory({ toolContext });
   const signal = new AbortController().signal;
   const prepared = await tool.execute("adapter-fallback", params, signal);
   assert.equal(prepared.details.code, "prepared");
   assert.match(prepared.details.delivery, /verified delivery receipt/i);
   assert.equal(deliveries.length, 1);
-  assert.equal(deliveries[0].cfg, api.config);
+  assert.equal(deliveries[0].cfg, plugin.config);
   assert.equal(deliveries[0].to, identity.requesterSenderId);
   assert.equal(deliveries[0].accountId, identity.agentAccountId);
-  assert.equal(deliveries[0].text, summary);
+  assert.equal(deliveries[0].text, deliveryText);
   assert.equal(deliveries[0].signal, signal);
   assert.deepEqual(plugin.calls.map((call) => call.operation), ["prepare", "shown"]);
   assert.equal(plugin.calls[1].payload.outboundMessageId, "synthetic-adapter-receipt");
@@ -199,19 +210,20 @@ test("prepare falls back to the trusted WhatsApp adapter when host-bound deliver
 
 test("trusted self identity signs prepare, records delivery and requires exact quoted confirmation", async () => {
   const plugin = loadPlugin();
+  await plugin.start();
   const deliveries = [];
   const tool = toolByName(plugin, "mam_leave_prepare").factory({ toolContext: { ...identity, delivery: { send: async (message) => { deliveries.push(message); } } } });
   const prepared = await tool.execute("test-call", { ...params, sender: "+61400000002", employeeId: "model-supplied", confirmed: true });
   assert.equal(prepared.details.code, "prepared");
   assert.match(prepared.details.delivery, /awaiting the provider receipt/);
-  assert.equal(deliveries[0].text, summary);
+  assert.equal(deliveries[0].text, deliveryText);
   assert.equal(plugin.calls[0].sender, identity.requesterSenderId);
   assert.equal(plugin.calls[0].session, `s-${createHash("sha256").update(identity.sessionKey).digest("hex")}`);
   assert.deepEqual(Object.keys(plugin.calls[0].payload).sort(), Object.keys({ ...params, startTime: null, endTime: null, employeeNote: "" }).sort());
   const hook = plugin.hooks.get("before_dispatch");
   await hook(confirmEvent, hookContext); // No successful outbound receipt yet.
   assert.equal(plugin.calls.length, 1);
-  await plugin.hooks.get("message_sent")({ success: true, to: identity.requesterSenderId, content: summary, messageId: "synthetic-outbound-1" }, hookContext);
+  await plugin.hooks.get("message_sent")({ success: true, to: identity.requesterSenderId, content: deliveryText, messageId: "synthetic-outbound-1" }, hookContext);
   assert.equal(plugin.calls.at(-1).operation, "shown");
   for (const [event, context] of [
     [{ ...confirmEvent, senderId: "+61400000002" }, hookContext],
@@ -234,9 +246,10 @@ test("trusted self identity signs prepare, records delivery and requires exact q
 test("failed display receipts retry the same provider ID through hook or confirmation", async () => {
   for (const retryViaHook of [true, false]) {
     const plugin = loadPlugin({}, 1);
+    await plugin.start();
     const tool = toolByName(plugin, "mam_leave_prepare").factory({ toolContext: { ...identity, delivery: { send: async () => {} } } });
     await tool.execute("test", params);
-    const sent = { success: true, to: identity.requesterSenderId, content: summary, messageId: "synthetic-outbound-1" };
+    const sent = { success: true, to: identity.requesterSenderId, content: deliveryText, messageId: "synthetic-outbound-1" };
     await plugin.hooks.get("message_sent")(sent, { ...hookContext, sessionKey: "other-session" });
     assert.equal(plugin.calls.length, 1);
     await plugin.hooks.get("message_sent")(sent, hookContext);
@@ -252,8 +265,9 @@ test("failed display receipts retry the same provider ID through hook or confirm
 
 test("continued receipt failure does not attempt submission or claim success", async () => {
   const plugin = loadPlugin({}, 10);
+  await plugin.start();
   await toolByName(plugin, "mam_leave_prepare").factory({ toolContext: identity }).execute("test", params);
-  await plugin.hooks.get("message_sent")({ success: true, to: identity.requesterSenderId, content: summary, messageId: "synthetic-outbound-1" }, hookContext);
+  await plugin.hooks.get("message_sent")({ success: true, to: identity.requesterSenderId, content: deliveryText, messageId: "synthetic-outbound-1" }, hookContext);
   const result = await plugin.hooks.get("before_dispatch")(confirmEvent, hookContext);
   assert.match(result.text, /not confirmed yet/);
   assert.ok(plugin.calls.every((call) => call.operation !== "confirm"));
@@ -261,8 +275,54 @@ test("continued receipt failure does not attempt submission or claim success", a
 
 test("a fresh plugin after restart cannot confirm old in-memory drafts", async () => {
   const plugin = loadPlugin();
+  await plugin.start();
   const result = await plugin.hooks.get("before_dispatch")(confirmEvent, hookContext);
   assert.equal(result.handled, true);
   assert.match(result.text, /start the leave request again/);
   assert.equal(plugin.calls.length, 0);
+});
+
+test("tool-only module graphs share Gateway state but cannot initialize or replace its owner", async () => {
+  const stores = new Map();
+  const gateway = loadPlugin({}, 0, stores);
+  const tools = loadPlugin({}, 0, stores);
+  const tool = toolByName(tools, "mam_leave_prepare").factory({ toolContext: { ...identity, delivery: undefined } });
+  assert.equal((await tool.execute("no-service", params)).details.code, "unavailable");
+  assert.equal(tools.calls.length, 0);
+  await gateway.start();
+  await assert.rejects(tools.start(), /already has a Gateway owner/);
+  tools.stop(); // A discovery registration cannot stop another owner.
+  assert.equal((await tool.execute("active", params)).details.code, "prepared");
+  const result = await gateway.hooks.get("before_dispatch")({ ...confirmEvent, replyToIsQuote: undefined, replyToBody: deliveryText }, hookContext);
+  assert.match(result.text, /pending manager approval/);
+  gateway.stop();
+  assert.equal((await tool.execute("stopped", params)).details.code, "unavailable");
+  await tools.start();
+  gateway.stop(); // A stale stop cannot clear the replacement.
+  assert.equal((await tool.execute("replacement", params)).details.code, "prepared");
+});
+
+test("native WhatsApp quotes with no isQuote flag still require exact receipt and body", async () => {
+  const plugin = loadPlugin();
+  await plugin.start();
+  await toolByName(plugin, "mam_leave_prepare").factory({ toolContext: { ...identity, delivery: undefined } }).execute("test", params);
+  for (const event of [
+    { ...confirmEvent, replyToIsQuote: undefined },
+    { ...confirmEvent, replyToIsQuote: undefined, replyToBody: "different" },
+    { ...confirmEvent, replyToIsQuote: false, replyToBody: deliveryText },
+    { ...confirmEvent, replyToIsQuote: undefined, replyToBody: deliveryText, replyToId: "different" },
+  ]) await plugin.hooks.get("before_dispatch")(event, hookContext);
+  assert.equal(plugin.calls.filter((call) => call.operation === "confirm").length, 0);
+  const result = await plugin.hooks.get("before_dispatch")({ ...confirmEvent, replyToIsQuote: undefined, replyToBody: deliveryText }, hookContext);
+  assert.match(result.text, /pending manager approval/);
+});
+
+test("service replacement during delivery cannot register a stale receipt or confirm", async () => {
+  const plugin = loadPlugin();
+  await plugin.start({ sendText: async () => { plugin.stop(); return { messageId: "synthetic-outbound-1" }; } });
+  const result = await toolByName(plugin, "mam_leave_prepare").factory({ toolContext: { ...identity, delivery: undefined } }).execute("test", params);
+  assert.equal(result.details.code, "unavailable");
+  assert.deepEqual(plugin.calls.map((call) => call.operation), ["prepare"]);
+  await plugin.start();
+  assert.match((await plugin.hooks.get("before_dispatch")(confirmEvent, hookContext)).text, /no longer available/);
 });
