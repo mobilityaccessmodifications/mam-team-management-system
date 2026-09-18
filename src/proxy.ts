@@ -7,7 +7,9 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   // This exact server-to-server route authenticates its own dedicated secret.
   // No cookie refresh/network dependency or browser redirect may precede it.
-  if (pathname === "/api/internal/integrations/openclaw/whatsapp-allowlist") {
+  if (pathname === "/api/internal/integrations/openclaw/whatsapp-allowlist"
+    || pathname === "/api/internal/integrations/openclaw/leave"
+    || pathname === "/api/cron/openclaw-leave-cleanup") {
     return NextResponse.next({ request });
   }
   const isLoginRoute = pathname.startsWith("/login");
