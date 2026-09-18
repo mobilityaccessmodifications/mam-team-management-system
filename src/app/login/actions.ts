@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { isValidPortalLogin, normalisePortalLogin } from "@/lib/portal-login";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -14,13 +15,9 @@ export type LoginState = {
   message: string;
 };
 
-const INVALID_LOGIN_MESSAGE = "Incorrect username or password.";
+const INVALID_LOGIN_MESSAGE = "Incorrect email, username or password.";
 const DUMMY_AUTH_EMAIL = "invalid-portal-login@invalid.example";
 const MINIMUM_FAILED_LOGIN_MS = 500;
-
-function isValidLoginName(value: string) {
-  return /^[a-z0-9][a-z0-9._-]{2,63}$/.test(value);
-}
 
 function sha256(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -58,10 +55,10 @@ export async function signIn(
     };
   }
 
-  const username = String(formData.get("username") ?? "").trim().toLowerCase();
+  const username = normalisePortalLogin(String(formData.get("username") ?? ""));
   const password = String(formData.get("password") ?? "");
   if (
-    !isValidLoginName(username)
+    !isValidPortalLogin(username)
     || password.length < 8
     || password.length > 128
   ) {

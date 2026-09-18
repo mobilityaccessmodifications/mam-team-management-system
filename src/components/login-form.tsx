@@ -20,7 +20,7 @@ export function LoginForm({ initialMessage = "" }: { initialMessage?: string }) 
       action={action}
       onSubmit={() => setMessageDismissed(false)}
     >
-      <label htmlFor="username">Username</label>
+      <label htmlFor="username">Email or admin username</label>
       <input
         id="username"
         name="username"
@@ -28,7 +28,7 @@ export function LoginForm({ initialMessage = "" }: { initialMessage?: string }) 
         autoComplete="username"
         autoCapitalize="none"
         spellCheck={false}
-        maxLength={64}
+        maxLength={254}
         required
         aria-describedby={visibleMessage ? "login-message" : undefined}
         onChange={() => setMessageDismissed(true)}
