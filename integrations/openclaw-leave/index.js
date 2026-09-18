@@ -187,7 +187,7 @@ const prepareParameters = Type.Object({
   endDate: Type.String({ description: "Last leave date in YYYY-MM-DD format." }),
   startTime: Type.Optional(Type.Union([Type.String(), Type.Null()], { description: "Optional start time in HH:MM, 15-minute intervals." })),
   endTime: Type.Optional(Type.Union([Type.String(), Type.Null()], { description: "Optional end time in HH:MM, 15-minute intervals." })),
-  employeeNote: Type.Optional(Type.String({ description: "Optional reason or note, literal employee text." })),
+  employeeNote: Type.Optional(Type.String({ description: "Optional note, copied exactly from the employee's message." })),
 }, { additionalProperties: false });
 
 const plugin = defineToolPlugin({
@@ -197,7 +197,7 @@ const plugin = defineToolPlugin({
   tools: (tool) => [tool({
     name: "mam_leave_prepare",
     label: "Prepare MAM leave request",
-    description: "Prepare a leave request for the current WhatsApp employee only. Collect leave type, dates, optional times, and note first. This tool never accepts a phone number, employee ID, user ID, approver, status, confirmation flag, or another person's identity. It sends an exact summary and waits for a real WhatsApp reply with CONFIRM.",
+    description: "Prepare a leave request only for the authenticated WhatsApp sender. The trusted sender phone number is the sole employee identity and leave subject. Never ask for or accept a name, phone number, employee ID, user ID, leave subject, addressee, manager, approver, status, confirmation flag, or another person's identity. Collect only leave type, start and end dates, optional partial-day times, and an optional note. Reviewer routing is resolved by the server. It sends an exact summary and waits for a real WhatsApp reply with CONFIRM.",
     parameters: prepareParameters,
     optional: true,
     factory({ toolContext }) {
