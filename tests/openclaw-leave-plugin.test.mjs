@@ -140,6 +140,20 @@ test("disabled, untrusted, group, wrong-account and malformed-endpoint contexts 
   ]) for (const tool of loadPlugin(override).tools) assert.equal(tool.factory({ toolContext: identity }), null);
 });
 
+test("runtime factories return complete OpenClaw tools with their declared schemas", () => {
+  const plugin = loadPlugin();
+  for (const declared of plugin.tools) {
+    const runtime = declared.factory({ toolContext: identity });
+    assert.ok(runtime, `Expected ${declared.name} in a trusted WhatsApp context`);
+    assert.equal(runtime.name, declared.name);
+    assert.equal(runtime.label, declared.label);
+    assert.equal(runtime.description, declared.description);
+    assert.equal(runtime.parameters, declared.parameters);
+    assert.equal(runtime.parameters.type, "object");
+    assert.equal(typeof runtime.execute, "function");
+  }
+});
+
 test("self profile has no identity arguments and returns only this trusted sender's name and employment type", async () => {
   const plugin = loadPlugin();
   const tool = toolByName(plugin, "mam_self_profile").factory({ toolContext: identity });

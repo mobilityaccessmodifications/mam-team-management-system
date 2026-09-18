@@ -201,6 +201,8 @@ const prepareParameters = Type.Object({
   employeeNote: Type.Optional(Type.String({ description: "Optional note, copied exactly from the employee's message." })),
 }, { additionalProperties: false });
 const selfProfileParameters = Type.Object({}, { additionalProperties: false });
+const prepareDescription = "Prepare a leave request only for the authenticated WhatsApp sender. Call mam_self_profile first in the same conversation. The trusted sender phone number is the sole employee identity and leave subject. Never ask for or accept a name, phone number, employee ID, user ID, leave subject, addressee, manager, approver, status, confirmation flag, or another person's identity. If the self profile reports casual or abn, use Unpaid leave and do not ask whether the leave is paid or unpaid. Collect only leave type when still needed, start and end dates, optional partial-day times, and an optional note. Reviewer routing is resolved by the server. It sends an exact summary and waits for a real WhatsApp reply with CONFIRM.";
+const selfProfileDescription = "Read only the authenticated WhatsApp sender's own name and employment type. Call this before an employee-specific answer, before collecting any leave request, and when the sender asks who they are. This tool has no identity arguments: never ask for or accept a phone number, name, employee ID, user ID, or another person's identity. A casual or abn sender can request Unpaid leave only; do not ask paid versus unpaid. Never expose internal IDs or the sender phone number.";
 
 const plugin = defineToolPlugin({
   id: "mam-openclaw-leave",
@@ -209,7 +211,7 @@ const plugin = defineToolPlugin({
   tools: (tool) => [tool({
     name: "mam_leave_prepare",
     label: "Prepare MAM leave request",
-    description: "Prepare a leave request only for the authenticated WhatsApp sender. Call mam_self_profile first in the same conversation. The trusted sender phone number is the sole employee identity and leave subject. Never ask for or accept a name, phone number, employee ID, user ID, leave subject, addressee, manager, approver, status, confirmation flag, or another person's identity. If the self profile reports casual or abn, use Unpaid leave and do not ask whether the leave is paid or unpaid. Collect only leave type when still needed, start and end dates, optional partial-day times, and an optional note. Reviewer routing is resolved by the server. It sends an exact summary and waits for a real WhatsApp reply with CONFIRM.",
+    description: prepareDescription,
     parameters: prepareParameters,
     optional: true,
     factory({ toolContext }) {
@@ -218,6 +220,9 @@ const plugin = defineToolPlugin({
       if (!identity || !cfg || identity.account !== cfg.account || typeof toolContext.delivery?.send !== "function") return null;
       return {
         name: "mam_leave_prepare",
+        label: "Prepare MAM leave request",
+        description: prepareDescription,
+        parameters: prepareParameters,
         executionMode: "sequential",
         async execute(_id, params) {
           prune();
@@ -240,7 +245,7 @@ const plugin = defineToolPlugin({
   }), tool({
     name: "mam_self_profile",
     label: "Read my MAM employee profile",
-    description: "Read only the authenticated WhatsApp sender's own name and employment type. Call this before an employee-specific answer, before collecting any leave request, and when the sender asks who they are. This tool has no identity arguments: never ask for or accept a phone number, name, employee ID, user ID, or another person's identity. A casual or abn sender can request Unpaid leave only; do not ask paid versus unpaid. Never expose internal IDs or the sender phone number.",
+    description: selfProfileDescription,
     parameters: selfProfileParameters,
     optional: true,
     factory({ toolContext }) {
@@ -249,6 +254,9 @@ const plugin = defineToolPlugin({
       if (!identity || !cfg || identity.account !== cfg.account) return null;
       return {
         name: "mam_self_profile",
+        label: "Read my MAM employee profile",
+        description: selfProfileDescription,
+        parameters: selfProfileParameters,
         executionMode: "sequential",
         async execute(_id, params) {
           if (params !== undefined && params !== null && (typeof params !== "object" || Array.isArray(params) || Object.keys(params).length !== 0)) {
