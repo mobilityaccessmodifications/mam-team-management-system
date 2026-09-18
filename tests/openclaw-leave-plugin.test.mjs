@@ -61,7 +61,9 @@ function loadPlugin(overrides = {}, failShown = 0) {
       const packet = JSON.parse(options.body);
       calls.push(packet);
       if (packet.operation === "shown" && failShown-- > 0) throw new Error("Synthetic response lost");
-      const data = packet.operation === "prepare" ? {
+      const data = packet.operation === "profile" ? {
+        code: "profile", profile: { name: "Synthetic Employee", employmentType: "casual" },
+      } : packet.operation === "prepare" ? {
         code: "prepared", draftId: "10000000-0000-4000-8000-000000000001",
         digest: createHash("sha256").update(summary).digest("hex"), summary,
         expiresAt: new Date(Date.now() + 600_000).toISOString(),
@@ -77,54 +79,85 @@ function loadPlugin(overrides = {}, failShown = 0) {
   return { tools: spec.tools((tool) => tool), hooks, calls };
 }
 
+function toolByName(plugin, name) {
+  const value = plugin.tools.find((tool) => tool.name === name);
+  assert.ok(value, `Missing tool ${name}`);
+  return value;
+}
+
 const params = { leaveType: "Annual leave", startDate: "2030-10-14", endDate: "2030-10-14" };
 const confirmEvent = {
   channel: "whatsapp", senderId: identity.requesterSenderId, isGroup: false,
   content: `CONFIRM ${challenge}`, replyToId: "synthetic-outbound-1", replyToIsQuote: true,
 };
 
-test("native plugin package exposes only prepare and contains no temporary harness", () => {
+test("native plugin package exposes only self profile and prepare, with no temporary harness", () => {
   const files = readdirSync(root);
   for (const required of [".gitignore", "README.md", "index.js", "openclaw.plugin.json", "package.json"]) assert.ok(files.includes(required));
   assert.ok(!files.some((name) => /harness|^\.env/.test(name)));
   const manifest = JSON.parse(readFileSync(new URL("openclaw.plugin.json", root), "utf8"));
   const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
-  assert.deepEqual(manifest.contracts.tools, ["mam_leave_prepare"]);
+  assert.deepEqual([...manifest.contracts.tools].sort(), ["mam_leave_prepare", "mam_self_profile"].sort());
+  assert.equal(manifest.toolMetadata.mam_leave_prepare.optional, true);
+  assert.equal(manifest.toolMetadata.mam_self_profile.optional, true);
   assert.equal(pkg.private, true);
   assert.equal(pkg.dependencies.typebox, "1.3.18");
   const plugin = loadPlugin();
-  assert.equal(plugin.tools.length, 1);
-  assert.equal(plugin.tools[0].name, "mam_leave_prepare");
+  assert.equal(plugin.tools.length, 2);
+  const prepare = toolByName(plugin, "mam_leave_prepare");
+  const profile = toolByName(plugin, "mam_self_profile");
   assert.deepEqual([...plugin.hooks.keys()].sort(), ["before_dispatch", "message_sent"]);
-  assert.equal(plugin.tools[0].parameters.additionalProperties, false);
-  assert.deepEqual(Object.keys(plugin.tools[0].parameters.properties).sort(),
+  assert.equal(prepare.parameters.additionalProperties, false);
+  assert.deepEqual(Object.keys(prepare.parameters.properties).sort(),
     ["leaveType", "startDate", "endDate", "startTime", "endTime", "employeeNote"].sort());
-  assert.match(plugin.tools[0].description, /trusted sender phone number is the sole employee identity/i);
-  assert.match(plugin.tools[0].description, /never ask for or accept.*addressee.*approver/i);
-  assert.match(plugin.tools[0].parameters.properties.employeeNote.description, /optional note/i);
-  assert.doesNotMatch(plugin.tools[0].parameters.properties.employeeNote.description, /\breason\b/i);
+  assert.match(prepare.description, /trusted sender phone number is the sole employee identity/i);
+  assert.match(prepare.description, /never ask for or accept.*addressee.*approver/i);
+  assert.match(prepare.description, /casual or abn.*Unpaid leave/i);
+  assert.match(prepare.parameters.properties.employeeNote.description, /optional note/i);
+  assert.doesNotMatch(prepare.parameters.properties.employeeNote.description, /\breason\b/i);
+  assert.equal(profile.parameters.additionalProperties, false);
+  assert.deepEqual(Object.keys(profile.parameters.properties), []);
+  assert.match(profile.description, /authenticated WhatsApp sender's own name and employment type/i);
+  assert.match(profile.description, /no identity arguments/i);
 });
 
 test("disabled, untrusted, group, wrong-account and malformed-endpoint contexts fail closed", () => {
-  const tool = loadPlugin().tools[0];
   for (const context of [
     {}, { ...identity, requesterSenderId: undefined }, { ...identity, sessionKey: "" },
-    { ...identity, delivery: undefined }, { ...identity, delivery: {} },
     { ...identity, messageChannel: "web" }, { ...identity, agentAccountId: "other" },
     { ...identity, deliveryContext: { ...identity.deliveryContext, to: "123@g.us" } },
     { ...identity, deliveryContext: { ...identity.deliveryContext, to: "+61400000002" } },
-  ]) assert.equal(tool.factory({ toolContext: context }), null);
+  ]) for (const tool of loadPlugin().tools) assert.equal(tool.factory({ toolContext: context }), null);
+  for (const context of [{ ...identity, delivery: undefined }, { ...identity, delivery: {} }]) {
+    const plugin = loadPlugin();
+    assert.equal(toolByName(plugin, "mam_leave_prepare").factory({ toolContext: context }), null);
+    assert.notEqual(toolByName(plugin, "mam_self_profile").factory({ toolContext: context }), null);
+  }
   for (const override of [
     { MAM_OPENCLAW_LEAVE_ENABLED: undefined }, { MAM_OPENCLAW_LEAVE_BRIDGE_SECRET: "" },
     { MAM_OPENCLAW_LEAVE_BRIDGE_URL: `http://mam.example.invalid${bridgePath}` },
     { MAM_OPENCLAW_LEAVE_BRIDGE_URL: `https://mam.example.invalid${bridgePath}?extra=1` },
-  ]) assert.equal(loadPlugin(override).tools[0].factory({ toolContext: identity }), null);
+  ]) for (const tool of loadPlugin(override).tools) assert.equal(tool.factory({ toolContext: identity }), null);
+});
+
+test("self profile has no identity arguments and returns only this trusted sender's name and employment type", async () => {
+  const plugin = loadPlugin();
+  const tool = toolByName(plugin, "mam_self_profile").factory({ toolContext: identity });
+  const result = await tool.execute("profile", {});
+  assert.deepEqual(JSON.parse(JSON.stringify(result.details)), { name: "Synthetic Employee", employmentType: "casual" });
+  assert.deepEqual(JSON.parse(result.content[0].text), JSON.parse(JSON.stringify(result.details)));
+  assert.equal(plugin.calls[0].operation, "profile");
+  assert.equal(plugin.calls[0].sender, identity.requesterSenderId);
+  assert.equal(plugin.calls[0].session, `s-${createHash("sha256").update(identity.sessionKey).digest("hex")}`);
+  assert.deepEqual(plugin.calls[0].payload, {});
+  assert.deepEqual(JSON.parse(JSON.stringify((await tool.execute("bad", { phone: "+61400000002" })).details)), { code: "unavailable" });
+  assert.equal(plugin.calls.length, 1, "Caller-supplied identity must never reach the bridge");
 });
 
 test("trusted self identity signs prepare, records delivery and requires exact quoted confirmation", async () => {
   const plugin = loadPlugin();
   const deliveries = [];
-  const tool = plugin.tools[0].factory({ toolContext: { ...identity, delivery: { send: async (message) => { deliveries.push(message); } } } });
+  const tool = toolByName(plugin, "mam_leave_prepare").factory({ toolContext: { ...identity, delivery: { send: async (message) => { deliveries.push(message); } } } });
   const prepared = await tool.execute("test-call", { ...params, sender: "+61400000002", employeeId: "model-supplied", confirmed: true });
   assert.equal(prepared.details.code, "prepared");
   assert.match(prepared.details.delivery, /awaiting the provider receipt/);
@@ -158,7 +191,7 @@ test("trusted self identity signs prepare, records delivery and requires exact q
 test("failed display receipts retry the same provider ID through hook or confirmation", async () => {
   for (const retryViaHook of [true, false]) {
     const plugin = loadPlugin({}, 1);
-    const tool = plugin.tools[0].factory({ toolContext: { ...identity, delivery: { send: async () => {} } } });
+    const tool = toolByName(plugin, "mam_leave_prepare").factory({ toolContext: { ...identity, delivery: { send: async () => {} } } });
     await tool.execute("test", params);
     const sent = { success: true, to: identity.requesterSenderId, content: summary, messageId: "synthetic-outbound-1" };
     await plugin.hooks.get("message_sent")(sent, { ...hookContext, sessionKey: "other-session" });
@@ -176,7 +209,7 @@ test("failed display receipts retry the same provider ID through hook or confirm
 
 test("continued receipt failure does not attempt submission or claim success", async () => {
   const plugin = loadPlugin({}, 10);
-  await plugin.tools[0].factory({ toolContext: identity }).execute("test", params);
+  await toolByName(plugin, "mam_leave_prepare").factory({ toolContext: identity }).execute("test", params);
   await plugin.hooks.get("message_sent")({ success: true, to: identity.requesterSenderId, content: summary, messageId: "synthetic-outbound-1" }, hookContext);
   const result = await plugin.hooks.get("before_dispatch")(confirmEvent, hookContext);
   assert.match(result.text, /not confirmed yet/);

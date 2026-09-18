@@ -5,7 +5,7 @@ create schema auth;
 create function auth.uid() returns uuid language sql as $$select null::uuid$$;
 create function auth.jwt() returns jsonb language sql as $$select '{}'::jsonb$$;
 create table public.profiles(id uuid primary key,login_name text,account_status text);
-create table public.internal_org_people(id uuid primary key,auth_user_id uuid unique,company_key text,is_active boolean,node_kind text);
+create table public.internal_org_people(id uuid primary key,auth_user_id uuid unique,company_key text,is_active boolean,node_kind text,full_name text);
 create table private.employee_directory_details(person_id uuid primary key,phone text,country text,employment_type text);
 create function private.is_active_portal_account(p_user_id uuid default null) returns boolean language sql as $$select exists(select 1 from public.profiles where id=p_user_id and account_status='active')$$;
 create function private.current_active_portal_employee_id() returns uuid language sql as $$select null::uuid$$;
@@ -24,5 +24,5 @@ create table private.leave_notification_outbox(request_id uuid,event text,unique
 create function private.fixture_outbox() returns trigger language plpgsql as $$begin insert into private.leave_notification_outbox values(new.id,'leave-submitted') on conflict do nothing;return new;end$$;
 create trigger fixture_outbox after insert on public.leave_requests for each row execute function private.fixture_outbox();
 insert into public.profiles values('20000000-0000-4000-8000-000000000001','synthetic','active');
-insert into public.internal_org_people values('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','mam',true,'person');
+insert into public.internal_org_people values('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','mam',true,'person','Synthetic Employee');
 insert into private.employee_directory_details values('10000000-0000-4000-8000-000000000001','0400000001','Australia','full_time');

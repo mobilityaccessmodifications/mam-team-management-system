@@ -1,18 +1,27 @@
 import "server-only";
 import { createAdminClient } from "./supabase/admin";
-import type { BridgeResult, Employee, LeaveDraft, LeaveStore } from "./openclaw-leave-contract";
+import type { BridgeResult, Employee, LeaveDraft, LeaveStore, SelfProfileEmployee } from "./openclaw-leave-contract";
 
 type Snapshot = {
   complete: true; rows: Employee[]; fingerprint: string;
   receipt: { fingerprint: string; personId: string; userId: string; result: BridgeResult } | null;
   draft: LeaveDraft | null; draftFingerprint: string;
 };
+type SelfProfileSnapshot = { complete: true; rows: SelfProfileEmployee[] };
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 /** Optimistic transaction: reads once, computes a plan without side effects,
  * then commits everything in ONE RPC with source/draft CAS under database locks.
  * This is not a sequence of independent writes masquerading as a transaction. */
 export function createLeaveBridgeStore(): LeaveStore {
   return {
+    async selfProfileEmployees() {
+      const client = createAdminClient();
+      const response = await client.rpc("openclaw_self_profile_snapshot").abortSignal(AbortSignal.timeout(8000));
+      if (response.error) throw new Error("unavailable");
+      const snapshot = response.data as SelfProfileSnapshot;
+      if (!snapshot || snapshot.complete !== true || !Array.isArray(snapshot.rows) || snapshot.rows.length > 10000) throw new Error("unavailable");
+      return { complete: true, rows: snapshot.rows };
+    },
     async transaction(work, context) {
       const client = createAdminClient();
       const payload = context.packet.payload as Record<string, unknown>;

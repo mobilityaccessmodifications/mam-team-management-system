@@ -1,14 +1,16 @@
-# MAM OpenClaw Leave plugin
+# MAM OpenClaw self-profile and leave plugin
 
-This is a native OpenClaw plugin for the MAM People self-service leave bridge.
-It is deliberately not a bare MCP identity boundary.
+This is a native OpenClaw plugin for MAM People self-profile lookup and
+self-service leave. It is deliberately not a bare MCP identity boundary.
 
 ## Status and source
 
-**Local source only: not installed or enabled.** The source-controlled location
-is `integrations/openclaw-leave/` in the MAM People repository. Build output,
-dependencies, environment files and the temporary developer harness do not
-belong in Git. Source inclusion does not authorize deployment.
+The base leave plugin was released separately through MAM PR #121. The
+`mam_self_profile` extension in this branch is **local source only**: it has not
+been merged, migrated, deployed or enabled. The source-controlled location is
+`integrations/openclaw-leave/` in the MAM People repository. Build output,
+dependencies, environment files and temporary developer harnesses do not belong
+in Git. Source inclusion does not authorize deployment.
 
 The coordinating OpenClaw task reported `build` and `validate` success using
 OpenClaw 2026.9.4 in a temporary directory on the MAM VPS; validation returned
@@ -36,15 +38,26 @@ Verified artifact SHA-256:
 This is native build/validation evidence, not real-channel E2E. No install,
 enable, service restart or live messages were performed.
 
-The only model-visible tool is `mam_leave_prepare`. The tool gets the sender,
-account, direct-chat route, and session from OpenClaw's trusted tool context;
-none of those values are accepted as model arguments. It signs a short-lived
-request to the MAM bridge. The plugin sends the exact confirmation summary and
-records the real outbound WhatsApp message ID through `message_sent`. A
+The model-visible tools are deliberately narrow:
+
+- `mam_self_profile` has no arguments. It obtains the canonical sender, account,
+  direct-chat route and session from OpenClaw's trusted tool context, then asks
+  the People backend to resolve that sender. It returns only the caller's
+  `{name, employmentType}`. Phone numbers and internal person/user IDs are never
+  returned to the model.
+- `mam_leave_prepare` accepts only leave details. It gets identity and chat
+  context from the same trusted source, signs a short-lived request to the MAM
+  bridge, sends the exact confirmation summary, and records the real outbound
+  WhatsApp message ID through `message_sent`.
+
+Neither tool accepts a phone number, name, employee ID or user ID. A
 `before_dispatch` hook consumes only an exact `CONFIRM <challenge>` reply from
 the same approved direct chat, quoting that exact summary. It then calls the
 server bridge; approval, rejection, cancellation, editing, and selected-person
-operations are not registered.
+operations are not registered. The assistant should call `mam_self_profile`
+before collecting leave details. When the returned employment type is `casual`
+or `abn`, it must choose Unpaid leave without asking the employee to choose
+between paid and unpaid leave; the backend independently enforces that rule.
 
 The plugin fails closed when the bridge is disabled, the secret is missing, the
 endpoint is not the exact HTTPS leave path, the sender/session/DM route is
@@ -52,7 +65,7 @@ missing, a message receipt has no provider ID, or the Gateway restarts before a
 pending in-memory conversation is completed. A restart requires the employee to
 start a new request.
 
-## Gateway environment (future, separately approved activation)
+## Gateway environment
 
 These are process environment variables, not model/tool arguments:
 
@@ -79,9 +92,10 @@ npm run typecheck
 
 The smoke test uses minimal fake TypeBox and registration adapters and a fake
 fetch against `.invalid`. It tests registration intent, trusted identity,
-HMAC signing, exact summary/quote handling and restart failure, not actual SDK
-compatibility, hook delivery or production permissions. It reads no host
-environment credentials. The temporary VPS harness is not included.
+self-profile data minimization, rejection of model-supplied identity, HMAC
+signing, exact summary/quote handling and restart failure. It does not prove
+actual SDK compatibility, hook delivery or production permissions. It reads no
+host environment credentials. The temporary VPS harness is not included.
 
 ## Native build and validation (not installation)
 
@@ -102,30 +116,31 @@ Consult the [official plugin CLI reference](https://docs.openclaw.ai/cli/plugins
 for the exact installed version; a successful build/validate does not install
 or activate the integration.
 
-## Future installation while remaining disabled — STOP gate
+## Self-profile release — STOP gate
 
-No `plugins install`, `--link`, `--force` or `enable` command has been run or
-validated for this plugin. **Installer default activation and link semantics
-remain unverified. Do not use an install-then-disable sequence on a live gateway.**
+The base leave plugin's prior release does not authorize this extension. Do not
+copy the changed runtime to the live gateway or apply the new profile migration
+until the exact branch has passed review and the production target/release has
+been explicitly approved.
 
-After separate installation approval, the operator must:
+After separate release approval, the operator must:
 
-1. Verify the MAM VPS/account, running host version, reviewed source hash and
-   dependency artifact. Do not overwrite an existing plugin or force an install.
-2. Keep gateway and People `MAM_OPENCLAW_LEAVE_ENABLED=false`, and the database
-   release gate false. Do not add the tool to the messaging allowlist yet.
-3. In an isolated gateway profile with no real channels or credentials, verify
-   the installed-version procedure preserves an explicit disabled plugin entry
-   throughout installation. If not provable, stop before any live installation.
-4. Only then document and execute the verified installation procedure on the
-   approved target, preserving unrelated plugin configuration. Inspect effective
-   plugin state and confirm `mam-openclaw-leave` remains disabled and its tool is
-   unavailable. `activation.onStartup` in the manifest is not proof of disabled
-   installation.
-5. End at installed-but-disabled. Actual enablement requires completed backend
-   release checks, external-review authorization and non-production end-to-end
-   host identity/receipt/quote tests, plus explicit activation approval.
+1. Verify the MAM GitHub identity, production Supabase/Vercel target, MAM VPS,
+   running OpenClaw version and reviewed artifact hashes.
+2. Apply only the reviewed additive self-profile migration and verify that its
+   public snapshot facade is executable only by `service_role`; the private
+   function must remain inaccessible to all API roles. Run the hash-pinned
+   `scripts/deploy-openclaw-self-profile.mjs inspect|apply` only through the MAM
+   `codex-project-credential exec supabase` route.
+3. Merge through the reviewed GitHub flow and verify the resulting Vercel
+   deployment. Never direct-deploy application code from a local checkout.
+4. Build and validate the exact plugin artifact in an isolated gateway profile,
+   then update the existing plugin while preserving messaging restrictions and
+   unrelated configuration.
+5. Verify tool registration and configuration without sending a real WhatsApp
+   message or querying another employee's data. A real-channel test requires
+   separate authorization.
 
-At eventual activation only `mam_leave_prepare` may be allowed. Keep every
+Only `mam_self_profile` and `mam_leave_prepare` may be model-visible. Keep every
 approval/review tool denied, WhatsApp groups disabled, and service-role/database
 credentials off the VPS. See [backend release blockers](../../docs/openclaw-leave-bridge.md).

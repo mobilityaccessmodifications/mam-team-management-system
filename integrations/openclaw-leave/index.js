@@ -7,6 +7,7 @@ const E164 = /^\+[1-9][0-9]{7,14}$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const SAFE_ID = /^[A-Za-z0-9:_-]{1,128}$/u;
 const SECRET = /^[A-Za-z0-9_-]{43,128}$/u;
+const EMPLOYMENT_TYPES = new Set(["abn", "casual", "full_time", "part_time"]);
 const MAX_PENDING = 4;
 const pending = new Map();
 
@@ -162,6 +163,16 @@ function visiblePrepareResult(result, shown) {
   };
 }
 
+function visibleSelfProfile(result) {
+  const profile = result?.code === "profile" && result.profile && typeof result.profile === "object" && !Array.isArray(result.profile)
+    ? result.profile : null;
+  const name = typeof profile?.name === "string" ? profile.name.trim() : "";
+  const employmentType = profile?.employmentType;
+  if (!name || name.length > 200 || /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u.test(name)) return null;
+  if (employmentType !== null && !EMPLOYMENT_TYPES.has(employmentType)) return null;
+  return { name, employmentType };
+}
+
 async function recordShown(item) {
   if (item.shown) return true;
   if (!item.outboundMessageId) return false;
@@ -182,22 +193,23 @@ function confirmationText(result) {
 }
 
 const prepareParameters = Type.Object({
-  leaveType: Type.String({ description: "One of Annual leave, Sick leave, Carer's leave, or Unpaid leave." }),
+  leaveType: Type.String({ description: "One of Annual leave, Sick leave, Carer's leave, or Unpaid leave. If mam_self_profile reports casual or abn, use Unpaid leave without asking paid versus unpaid." }),
   startDate: Type.String({ description: "First leave date in YYYY-MM-DD format." }),
   endDate: Type.String({ description: "Last leave date in YYYY-MM-DD format." }),
   startTime: Type.Optional(Type.Union([Type.String(), Type.Null()], { description: "Optional start time in HH:MM, 15-minute intervals." })),
   endTime: Type.Optional(Type.Union([Type.String(), Type.Null()], { description: "Optional end time in HH:MM, 15-minute intervals." })),
   employeeNote: Type.Optional(Type.String({ description: "Optional note, copied exactly from the employee's message." })),
 }, { additionalProperties: false });
+const selfProfileParameters = Type.Object({}, { additionalProperties: false });
 
 const plugin = defineToolPlugin({
   id: "mam-openclaw-leave",
   name: "MAM Leave",
-  description: "Secure self-service MAM leave requests for approved WhatsApp employees.",
+  description: "Secure self-profile lookup and self-service MAM leave requests for approved WhatsApp employees.",
   tools: (tool) => [tool({
     name: "mam_leave_prepare",
     label: "Prepare MAM leave request",
-    description: "Prepare a leave request only for the authenticated WhatsApp sender. The trusted sender phone number is the sole employee identity and leave subject. Never ask for or accept a name, phone number, employee ID, user ID, leave subject, addressee, manager, approver, status, confirmation flag, or another person's identity. Collect only leave type, start and end dates, optional partial-day times, and an optional note. Reviewer routing is resolved by the server. It sends an exact summary and waits for a real WhatsApp reply with CONFIRM.",
+    description: "Prepare a leave request only for the authenticated WhatsApp sender. Call mam_self_profile first in the same conversation. The trusted sender phone number is the sole employee identity and leave subject. Never ask for or accept a name, phone number, employee ID, user ID, leave subject, addressee, manager, approver, status, confirmation flag, or another person's identity. If the self profile reports casual or abn, use Unpaid leave and do not ask whether the leave is paid or unpaid. Collect only leave type when still needed, start and end dates, optional partial-day times, and an optional note. Reviewer routing is resolved by the server. It sends an exact summary and waits for a real WhatsApp reply with CONFIRM.",
     parameters: prepareParameters,
     optional: true,
     factory({ toolContext }) {
@@ -221,6 +233,29 @@ const plugin = defineToolPlugin({
             return { content: [{ type: "text", text: "I could not deliver the confirmation summary. Please try the leave request again." }], details: { code: "unavailable" } };
           }
           const output = visiblePrepareResult(result, item.shown);
+          return { content: [{ type: "text", text: JSON.stringify(output) }], details: output };
+        },
+      };
+    },
+  }), tool({
+    name: "mam_self_profile",
+    label: "Read my MAM employee profile",
+    description: "Read only the authenticated WhatsApp sender's own name and employment type. Call this before an employee-specific answer, before collecting any leave request, and when the sender asks who they are. This tool has no identity arguments: never ask for or accept a phone number, name, employee ID, user ID, or another person's identity. A casual or abn sender can request Unpaid leave only; do not ask paid versus unpaid. Never expose internal IDs or the sender phone number.",
+    parameters: selfProfileParameters,
+    optional: true,
+    factory({ toolContext }) {
+      const identity = conversation(toolContext);
+      const cfg = configured();
+      if (!identity || !cfg || identity.account !== cfg.account) return null;
+      return {
+        name: "mam_self_profile",
+        executionMode: "sequential",
+        async execute(_id, params) {
+          if (params !== undefined && params !== null && (typeof params !== "object" || Array.isArray(params) || Object.keys(params).length !== 0)) {
+            return { content: [{ type: "text", text: "Self profile is unavailable." }], details: { code: "unavailable" } };
+          }
+          const output = visibleSelfProfile(await bridge(identity, "profile", {}));
+          if (!output) return { content: [{ type: "text", text: "Self profile is unavailable." }], details: { code: "unavailable" } };
           return { content: [{ type: "text", text: JSON.stringify(output) }], details: output };
         },
       };
