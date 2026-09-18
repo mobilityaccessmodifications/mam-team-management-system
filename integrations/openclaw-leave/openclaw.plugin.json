@@ -1,0 +1,27 @@
+{
+  "id": "mam-openclaw-leave",
+  "name": "MAM Leave",
+  "description": "Secure self-service MAM leave requests for approved WhatsApp employees.",
+  "categories": [
+    "tools"
+  ],
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "version": "0.1.0",
+  "contracts": {
+    "tools": [
+      "mam_leave_prepare"
+    ]
+  },
+  "toolMetadata": {
+    "mam_leave_prepare": {
+      "optional": true
+    }
+  }
+}

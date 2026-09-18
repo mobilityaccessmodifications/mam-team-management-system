@@ -1,0 +1,22 @@
+{
+  "name": "@mam/openclaw-leave",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MAM People self-service leave bridge for OpenClaw WhatsApp.",
+  "dependencies": {
+    "typebox": "1.3.18"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.9.4 <2026.10.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.9.4 <2026.10.0",
+      "minGatewayVersion": "2026.9.4"
+    }
+  }
+}
