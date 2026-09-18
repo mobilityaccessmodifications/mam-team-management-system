@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { Type } from "typebox";
 import { defineToolPlugin } from "openclaw/plugin-sdk/tool-plugin";
+import { createPluginRuntimeStore } from "openclaw/plugin-sdk/runtime-store";
 
 const BRIDGE_PATH = "/api/internal/integrations/openclaw/leave";
 const E164 = /^\+[1-9][0-9]{7,14}$/u;
@@ -9,7 +10,23 @@ const SAFE_ID = /^[A-Za-z0-9:_-]{1,128}$/u;
 const SECRET = /^[A-Za-z0-9_-]{43,128}$/u;
 const EMPLOYMENT_TYPES = new Set(["abn", "casual", "full_time", "part_time"]);
 const MAX_PENDING = 4;
-const pending = new Map();
+// Tool-only registries and the Gateway can load separate module graphs. Only
+// the Gateway service owns this process-local state; discovery cannot create it.
+const gatewayStore = createPluginRuntimeStore({ key: "plugin-runtime:mam-openclaw-leave:gateway-v1", errorMessage: "MAM leave gateway is unavailable" });
+
+function activeGateway() {
+  const owner = gatewayStore.tryGetRuntime();
+  return owner?.active ? owner : null;
+}
+
+function isCurrent(owner) {
+  return owner?.active === true && activeGateway() === owner;
+}
+
+function diagnostic(owner, stage, code) {
+  // Fixed labels only: never log exceptions, phone numbers, summaries or notes.
+  owner?.logger?.warn?.(`MAM leave: stage=${stage} code=${code}`);
+}
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -85,12 +102,18 @@ function parseChallenge(summary) {
   return match && UUID.test(match[1]) ? match[1] : null;
 }
 
-function remember(identity, result) {
+function remember(owner, identity, result) {
+  if (!isCurrent(owner)) return null;
+  const pending = owner.pending;
   if (result?.code !== "prepared" || typeof result.draftId !== "string" || typeof result.digest !== "string" || typeof result.summary !== "string") return null;
   const challenge = parseChallenge(result.summary);
   const expiresAt = Date.parse(result.expiresAt ?? "");
   if (!UUID.test(result.draftId) || !/^[a-f0-9]{64}$/u.test(result.digest) || !challenge || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
-  const item = { ...identity, draftId: result.draftId, digest: result.digest, summary: result.summary, challenge, expiresAt, outboundMessageId: null, shown: false, createdAt: Date.now() };
+  if (sha256(result.summary) !== result.digest) return null;
+  // A literal block keeps employee notes from becoming WhatsApp markdown. The
+  // server-signed summary inside it is unchanged. Quote checks bind this display.
+  const deliveryText = `\`\`\`\n${result.summary}\n\`\`\``;
+  const item = { ...identity, owner, draftId: result.draftId, digest: result.digest, summary: result.summary, deliveryText, challenge, expiresAt, outboundMessageId: null, shown: false, createdAt: Date.now() };
   const list = (pending.get(identity.key) ?? []).filter((entry) => entry.expiresAt > Date.now());
   list.push(item);
   while (list.length > MAX_PENDING) list.shift();
@@ -99,13 +122,15 @@ function remember(identity, result) {
 }
 
 function forget(item) {
+  const pending = item.owner.pending;
   const list = pending.get(item.key) ?? [];
   const next = list.filter((entry) => entry !== item);
   if (next.length) pending.set(item.key, next);
   else pending.delete(item.key);
 }
 
-function prune() {
+function prune(owner) {
+  const pending = owner.pending;
   const now = Date.now();
   for (const [key, list] of pending) {
     const next = list.filter((item) => item.expiresAt > now);
@@ -141,34 +166,38 @@ async function bridge(identity, operation, payload) {
       body,
       redirect: "error",
       cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
+      // Backend snapshot + commit can take 8s + 15s. A shorter client timeout
+      // can lose a successful commit response and unnecessarily invite retries.
+      signal: AbortSignal.timeout(30_000),
     });
     const data = await response.json().catch(() => null);
-    if (!response.ok || !data || typeof data !== "object" || Array.isArray(data) || typeof data.code !== "string") return { code: "unavailable" };
+    if (!response.ok) {
+      diagnostic(activeGateway(), operation, `http_${response.status}`);
+      return { code: response.status === 409 && ["expired", "conflict"].includes(data?.code) ? data.code : "unavailable" };
+    }
+    if (!data || typeof data !== "object" || Array.isArray(data) || typeof data.code !== "string") return { code: "unavailable" };
     return data;
   } catch {
+    diagnostic(activeGateway(), operation, "transport_failed");
     return { code: "unavailable" };
   }
 }
 
-async function deliverSummary(api, toolContext, identity, text, signal) {
+async function deliverSummary(owner, toolContext, item, signal) {
+  if (!isCurrent(owner)) throw new Error("gateway_unavailable");
+  owner.validatePreparedSummary(item);
+  signal?.throwIfAborted();
   if (typeof toolContext.delivery?.send === "function") {
-    await toolContext.delivery.send({ text });
+    await toolContext.delivery.send({ text: item.deliveryText });
+    if (!isCurrent(owner)) throw new Error("gateway_replaced");
+    signal?.throwIfAborted();
     return null;
   }
-  const adapter = await api?.runtime?.channel?.outbound?.loadAdapter?.("whatsapp");
-  const sendText = adapter?.sendText;
-  const cfg = toolContext.getRuntimeConfig?.() ?? toolContext.runtimeConfig ?? api?.config;
-  if (typeof sendText !== "function" || !cfg) throw new Error("Trusted WhatsApp delivery is unavailable");
-  const result = await sendText({
-    cfg,
-    to: identity.sender,
-    text,
-    accountId: identity.account,
-    ...(signal ? { signal } : {}),
-  });
+  const result = await owner.sendPreparedSummary(item, signal);
+  if (!isCurrent(owner)) throw new Error("gateway_replaced");
+  signal?.throwIfAborted();
   const messageId = typeof result?.messageId === "string" ? result.messageId.trim() : "";
-  if (!messageId) throw new Error("Trusted WhatsApp delivery returned no receipt");
+  if (!SAFE_ID.test(messageId)) throw new Error("receipt_missing");
   return messageId;
 }
 
@@ -195,6 +224,7 @@ function visibleSelfProfile(result) {
 }
 
 async function recordShown(item) {
+  if (!isCurrent(item.owner)) return false;
   if (item.shown) return true;
   if (!item.outboundMessageId) return false;
   if (item.shownPromise) return item.shownPromise;
@@ -202,7 +232,7 @@ async function recordShown(item) {
   // Concurrent hook/confirmation retries share one in-flight registration.
   item.shownPromise = bridge(item, "shown", {
     draftId: item.draftId, digest: item.digest, outboundMessageId: item.outboundMessageId,
-  }).then((result) => { item.shown = result.code === "shown"; return item.shown; });
+  }).then((result) => { item.shown = isCurrent(item.owner) && result.code === "shown"; return item.shown; });
   try { return await item.shownPromise; } finally { item.shownPromise = null; }
 }
 
@@ -210,7 +240,7 @@ function confirmationText(result) {
   if (result.code === "submitted" && result.status === "Pending") return "Your leave request has been submitted and is now pending manager approval.";
   if (result.code === "expired") return "That leave confirmation has expired. Please start the leave request again.";
   if (result.code === "conflict") return "That confirmation could not be matched to the exact leave summary. Please start the leave request again.";
-  return "I could not submit that leave request. Please start the leave request again.";
+  return "I could not verify submission yet. Please reply to the same summary with the same CONFIRM code again shortly; do not start a duplicate request.";
 }
 
 const prepareParameters = Type.Object({
@@ -235,7 +265,7 @@ const plugin = defineToolPlugin({
     description: prepareDescription,
     parameters: prepareParameters,
     optional: true,
-    factory({ api, toolContext }) {
+    factory({ toolContext }) {
       const identity = conversation(toolContext);
       const cfg = configured();
       if (!identity || !cfg || identity.account !== cfg.account) return null;
@@ -246,19 +276,26 @@ const plugin = defineToolPlugin({
         parameters: prepareParameters,
         executionMode: "sequential",
         async execute(_id, params, signal) {
-          prune();
+          const owner = activeGateway();
+          if (!owner) return { content: [{ type: "text", text: "Leave service is temporarily unavailable." }], details: { code: "unavailable" } };
+          prune(owner);
           const result = await bridge(identity, "prepare", payloadFromParams(params));
           if (result.code !== "prepared") return { content: [{ type: "text", text: result.code === "needs_input" ? "Collect the missing leave details before calling this tool again." : "Leave service is temporarily unavailable." }], details: result };
-          const item = remember(identity, result);
+          const item = remember(owner, identity, result);
           if (!item) return { content: [{ type: "text", text: "Leave service is temporarily unavailable." }], details: { code: "unavailable" } };
           try {
-            const messageId = await deliverSummary(api, toolContext, identity, item.summary, signal);
+            const messageId = await deliverSummary(owner, toolContext, item, signal);
             if (messageId) {
               item.outboundMessageId = messageId;
               await recordShown(item);
             }
-          } catch {
+          } catch (error) {
+            const deliveryCode = ["gateway_unavailable", "gateway_replaced", "receipt_missing", "summary_too_long", "summary_not_literal"].includes(error?.message) ? error.message : "adapter_failed";
+            diagnostic(owner, "delivery", deliveryCode);
             forget(item);
+            if (error?.message === "summary_too_long" || error?.message === "summary_not_literal") {
+              return { content: [{ type: "text", text: "Please shorten the optional note or remove special formatting, then prepare the request again. Nothing has been submitted." }], details: { code: "needs_input", missing: ["employeeNote"] } };
+            }
             return { content: [{ type: "text", text: "I could not deliver the confirmation summary. Please try the leave request again." }], details: { code: "unavailable" } };
           }
           const output = visiblePrepareResult(result, item.shown);
@@ -298,18 +335,62 @@ const plugin = defineToolPlugin({
 const baseRegister = plugin.register;
 plugin.register = (api) => {
   baseRegister(api);
+  let gatewayOwner;
+  api.registerService({
+    id: "mam-leave-delivery",
+    reload: { configPrefixes: ["channels.whatsapp", "messages"] },
+    async start(context) {
+      if (activeGateway()) throw new Error("MAM leave already has a Gateway owner");
+      // This public channel adapter must be resolved in the Gateway registry,
+      // not the optional-tool discovery registry (which has no channel entries).
+      const adapter = await api.runtime.channel.outbound.loadAdapter("whatsapp");
+      if (typeof adapter?.sendText !== "function") throw new Error("MAM WhatsApp delivery adapter is unavailable");
+      const owner = { active: true, pending: new Map(), logger: context.logger };
+      owner.validatePreparedSummary = (item) => {
+        const cfg = configured();
+        if (!isCurrent(owner) || item.owner !== owner || cfg?.account !== item.account
+          || !owner.pending.get(item.key)?.includes(item) || sha256(item.summary) !== item.digest) throw new Error("draft_unavailable");
+        const text = item.deliveryText;
+        const limit = Math.min(4000, api.runtime.channel.text.resolveTextChunkLimit(context.config, "whatsapp", item.account, { fallbackLimit: 4000 }));
+        if (text.length > limit) throw new Error("summary_too_long");
+        if (adapter.sanitizeText?.({ text }) !== text) throw new Error("summary_not_literal");
+        return text;
+      };
+      owner.sendPreparedSummary = async (item, signal) => {
+        const text = owner.validatePreparedSummary(item);
+        signal?.throwIfAborted();
+        // Neither the model nor a caller may select a recipient, account, body,
+        // media or alternate config. These all belong to this verified draft.
+        return await adapter.sendText({ cfg: context.config, to: item.sender,
+          text, accountId: item.account, signal,
+          formatting: { chunkMode: "length" } });
+      };
+      gatewayOwner = owner;
+      gatewayStore.setRuntime(owner);
+      context.logger?.info?.("MAM leave: gateway delivery ready");
+    },
+    stop() {
+      if (!gatewayOwner) return;
+      gatewayOwner.active = false;
+      gatewayOwner.pending.clear();
+      if (gatewayStore.tryGetRuntime() === gatewayOwner) gatewayStore.clearRuntime();
+      gatewayOwner = undefined;
+    },
+  });
 
     api.on("message_sent", async (event, context) => {
-      prune();
+      const owner = gatewayOwner;
+      if (!isCurrent(owner)) return;
+      prune(owner);
       if (!event.success || typeof event.messageId !== "string" || !event.messageId || context.channelId !== "whatsapp") return;
       const sender = senderE164(event.to);
       if (!sender || event.to.includes("@g.us")) return;
       const account = context.accountId ?? "default";
       const session = typeof context.sessionKey === "string" ? `s-${sha256(context.sessionKey.trim())}` : null;
       if (!session) return;
-      for (const item of pending.values()) {
+      for (const item of owner.pending.values()) {
         const candidate = item.find((entry) => entry.account === account && entry.sender === sender && entry.session === session
-          && entry.summary === event.content && (!entry.outboundMessageId || entry.outboundMessageId === event.messageId));
+          && entry.deliveryText === event.content && (!entry.outboundMessageId || entry.outboundMessageId === event.messageId));
         if (!candidate) continue;
         candidate.outboundMessageId = event.messageId;
         await recordShown(candidate);
@@ -318,16 +399,23 @@ plugin.register = (api) => {
     });
 
     api.on("before_dispatch", async (event, context) => {
-      prune();
+      const owner = gatewayOwner;
+      if (!isCurrent(owner)) return;
+      prune(owner);
       const content = typeof event.content === "string" ? event.content : "";
       if (!/^CONFIRM [0-9a-f-]{36}$/iu.test(content)) return;
       const identity = hookConversation(event, context);
       if (!identity) return { handled: true, text: "Please send that confirmation in the approved MAM WhatsApp direct chat." };
-      const list = pending.get(identity.key) ?? [];
+      const list = owner.pending.get(identity.key) ?? [];
       const item = list.find((entry) => entry.challenge && content === `CONFIRM ${entry.challenge}`);
       if (!item) return { handled: true, text: "That leave confirmation is no longer available. Please start the leave request again." };
       const replyTo = event.replyToIdFull ?? event.replyToId ?? context.replyToIdFull ?? context.replyToId;
-      if (!item.outboundMessageId || replyTo !== item.outboundMessageId || (event.replyToIsQuote !== true && context.replyToIsQuote !== true)) {
+      // WhatsApp 2026.9.4 maps its native stanza quote ID/body but omits
+      // isQuote. In that case require the exact displayed body as well as ID.
+      const quoted = event.replyToIsQuote ?? context.replyToIsQuote;
+      const quoteBody = event.replyToBody ?? context.replyToBody;
+      if (!item.outboundMessageId || replyTo !== item.outboundMessageId || quoted === false
+        || (quoted !== true && quoteBody !== item.deliveryText)) {
         return { handled: true, text: "Please use WhatsApp Reply on the exact leave summary message, then send the CONFIRM code exactly as shown." };
       }
       if (!await recordShown(item)) {
