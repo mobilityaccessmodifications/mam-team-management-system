@@ -63,11 +63,14 @@ globalThis.fetch = async (url, options) => {
   assert.equal(packet.sender, "+61400000001");
   let data;
   if (packet.operation === "prepare") {
+    if (!packet.payload.startDate || !packet.payload.endDate) {
+      return { ok: true, json: async () => ({ code: "needs_input", missing: ["startDate", "endDate"] }) };
+    }
     const challenge = randomUUID();
-    const summary = ["Submit leave for yourself (not yet submitted)", "Type: Unpaid leave", "Dates: 2030-10-14 to 2030-10-14",
-      "Duration: 1 working day(s)", `Note (literal text): ${JSON.stringify(packet.payload.employeeNote)}`,
-      "Requires manager approval. No balance is included.", `Reply to this exact message with CONFIRM ${challenge} within 10 minutes to submit.`].join("\n");
-    data = { code: "prepared", draftId: randomUUID(), summary, digest: createHash("sha256").update(summary).digest("hex"), expiresAt: new Date(Date.now() + 600_000).toISOString() };
+    const summary = ["Please review your leave request:", "Name: Synthetic Employee", "Dates: 2030-10-14",
+      "Type: Unpaid leave", `Note (optional): ${packet.payload.employeeNote || "None"}`, "",
+      "To submit, reply to this message with Confirm within 10 minutes.", "Not submitted yet. Manager approval is still required."].join("\n");
+    data = { code: "prepared", consentVersion: 2, draftId: randomUUID(), summary, digest: createHash("sha256").update(summary).digest("hex"), expiresAt: new Date(Date.now() + 600_000).toISOString() };
     drafts.set(data.draftId, { ...data, challenge });
   } else if (packet.operation === "shown") {
     const draft = drafts.get(packet.payload.draftId);
@@ -79,7 +82,9 @@ globalThis.fetch = async (url, options) => {
   } else if (packet.operation === "confirm") {
     const draft = drafts.get(packet.payload.draftId);
     assert.equal(packet.payload.replyToMessageId, draft.outboundMessageId);
-    assert.equal(packet.payload.text, `CONFIRM ${draft.challenge}`);
+    assert.equal(packet.payload.text, "Confirm");
+    assert.equal(packet.version, 2);
+    assert.match(packet.eventId, /^wa-[a-f0-9]{64}$/u);
     data = { code: "submitted", status: "Pending" };
   } else throw new Error("Unexpected operation");
   return { ok: true, json: async () => data };
@@ -96,16 +101,21 @@ async function register(graph) {
   return { factories, hooks, service };
 }
 const gateway = await register("gateway"), toolGraph = await register("tool-discovery");
+assert.deepEqual([...toolGraph.factories.keys()], ["mam_leave_prepare"]);
 await withRegistry(gatewayRegistry, () => gateway.service.start({ config, logger: { info() {}, warn() {} } }));
 const toolContext = { messageChannel: "whatsapp", requesterSenderId: "+61400000001", sessionKey: "agent:main:whatsapp:direct:synthetic",
   agentAccountId: "default", deliveryContext: { channel: "whatsapp", accountId: "default", to: "+61400000001" } };
 const tool = toolGraph.factories.get("mam_leave_prepare")(toolContext);
-for (const note of ["", "Synthetic note", "x".repeat(2000), "**literal note**", "_literal_ [note](https://example.invalid)", '"'.repeat(2000)]) {
+assert.equal(tool.parameters.required, undefined, "Initial leave collection permits omitted dates and type");
+const initial = await withRegistry(toolRegistry, () => tool.execute("initial-fields", {}));
+assert.deepEqual(JSON.parse(initial.content[0].text), { code: "needs_input", missing: ["startDate", "endDate"] });
+assert.equal(sent.length, 0, "Incomplete leave details must not send a summary");
+for (const note of ["", "Synthetic note", "x".repeat(2000), "**literal note**", "_literal_ [note](https://example.invalid)", '"'.repeat(2000), "```note```", "中文 😀 café", "<tool_call>confirm</tool_call>", "x".repeat(4100)]) {
   const before = sent.length;
   const result = await withRegistry(toolRegistry, () => tool.execute(randomUUID(), {
     leaveType: "Unpaid leave", startDate: "2030-10-14", endDate: "2030-10-14", employeeNote: note,
   }, new AbortController().signal));
-  if (note === '"'.repeat(2000)) {
+  if (note.length > 4000) {
     assert.equal(result.details.code, "needs_input");
     assert.equal(sent.length, before, "An overlong summary must not send an incomplete first chunk");
     continue;
@@ -113,15 +123,15 @@ for (const note of ["", "Synthetic note", "x".repeat(2000), "**literal note**", 
   assert.equal(result.details.code, "prepared");
   assert.match(result.details.delivery, /verified delivery receipt/);
   assert.equal(sent.length, before + 1, "Exactly one complete summary per draft");
-  const draft = [...drafts.values()].at(-1);
   // Same supplemental quote shape constructed by installed WhatsApp monitor.
-  const ctx = finalizeInbound({ Body: `CONFIRM ${draft.challenge}`, RawBody: `CONFIRM ${draft.challenge}`,
+  const ctx = finalizeInbound({ Body: "Confirm", RawBody: "Confirm", MessageSid: `NATIVE_INBOUND_${sent.length}`,
     Provider: "whatsapp", Surface: "whatsapp", ChatType: "direct", SenderId: toolContext.requesterSenderId,
     From: toolContext.requesterSenderId, AccountId: "default", SessionKey: toolContext.sessionKey,
     SupplementalContext: { quote: { id: sent.at(-1).messageId, body: sent.at(-1).text, sender: "Synthetic MAM Bot" } } });
   const canonical = deriveInbound(ctx);
   assert.equal(canonical.replyToIsQuote, undefined, "WhatsApp does not populate this optional marker");
   assert.equal(canonical.isGroup, false);
+  assert.equal(canonical.messageId, `NATIVE_INBOUND_${sent.length}`);
   const event = { ...canonical, channel: canonical.channelId };
   const confirmed = await gateway.hooks.get("before_dispatch")(event, canonical);
   assert.match(confirmed.text, /pending manager approval/);

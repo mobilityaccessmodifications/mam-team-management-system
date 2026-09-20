@@ -203,3 +203,123 @@ test('contract never dispatches mail or accesses credentials itself', () => {
   const code = fs.readFileSync('src/lib/openclaw-leave-contract.ts', 'utf8');
   assert.doesNotMatch(code, /createAdminClient|dispatchLeaveNotifications|process\.env|fetch\(/);
 });
+
+async function readyV2(f, overrides = {}) {
+  const d = (await f.call(f.packet('prepare', { ...input(), ...overrides }, { version: 2 }))).body;
+  assert.equal(d.code, 'prepared');
+  assert.equal(d.consentVersion, 2);
+  assert.equal((await f.call(f.packet('shown', { draftId: d.draftId, digest: d.digest, outboundMessageId: 'v2-summary' }, { version: 2 }))).body.code, 'shown');
+  return { d, confirm: f.packet('confirm', { draftId: d.draftId, digest: d.digest, replyToMessageId: 'v2-summary', text: 'Confirm' }, { version: 2 }) };
+}
+
+test('v2 summary uses authoritative name and only key leave fields without a visible token', async () => {
+  const f = fixture(), { d } = await readyV2(f);
+  assert.match(d.summary, /^Name: Synthetic Employee$/m);
+  assert.match(d.summary, /^Dates: 2026-10-12$/m);
+  assert.match(d.summary, /^Type: Annual leave$/m);
+  assert.match(d.summary, /^Note \(optional\): None$/m);
+  assert.match(d.summary, /reply to this message with Confirm/);
+  assert.doesNotMatch(d.summary, /CONFIRM [a-f0-9-]{36}|Duration:|Phone:|User ID|hours/);
+  assert.equal(d.digest, crypto.createHash('sha256').update(d.summary).digest('hex'));
+  assert.equal(f.profileReads(), 0, 'Summary name belongs to the transaction snapshot, not a second profile read');
+  assert.equal(f.state().leaves.length, 0);
+});
+
+test('v2 keeps exact note and part-day dates, times and timezone in the signed summary', async () => {
+  const f = fixture(), note = 'Literal **note** ``` text 中文 😀';
+  const { d } = await readyV2(f, { endDate: '2026-10-13', startTime: '12:00', endTime: '15:00', employeeNote: note });
+  assert.match(d.summary, /^Dates: 2026-10-12 to 2026-10-13$/m);
+  assert.match(d.summary, /^Times: 12:00 to 15:00 \(Australia\/Melbourne\)$/m);
+  assert.ok(d.summary.includes(`Note (optional): ${note}`));
+});
+
+test('v2 requires real displayed-summary binding but accepts ordinary Confirm casing and spacing', async () => {
+  for (const text of ['Confirm', 'CONFIRM', 'confirm', ' \tConfirm\r\n']) {
+    const f = fixture(), { confirm } = await readyV2(f);
+    confirm.payload.text = text;
+    assert.equal((await f.call(confirm, baseTime + 1000)).body.status, 'Pending');
+    assert.equal(f.state().leaves.length, 1);
+    const again = await f.call({ ...confirm, eventId: 'another-real-reply' }, baseTime + 2000);
+    assert.equal(again.body.status, 'Pending');
+    assert.equal(f.state().leaves.length, 1);
+  }
+  for (const bad of [{ text: 'yes' }, { text: 'Confirm please' }, { replyToMessageId: null }, { replyToMessageId: 'old-summary' }, { digest: '0'.repeat(64) }]) {
+    const f = fixture(), { confirm } = await readyV2(f);
+    confirm.payload = { ...confirm.payload, ...bad };
+    assert.equal((await f.call(confirm, baseTime + 1000)).status, 409);
+    assert.equal(f.state().leaves.length, 0);
+  }
+});
+
+test('v1 and v2 consent cannot be mixed or downgraded', async () => {
+  const a = fixture(), legacy = await a.ready();
+  assert.equal((await a.call({ ...legacy.confirm, version: 2, payload: { ...legacy.confirm.payload, text: 'Confirm' } }, baseTime + 1000)).status, 409);
+  const b = fixture(), modern = await readyV2(b);
+  const challenge = b.state().drafts.get(modern.d.draftId).challenge;
+  for (const version of [1, 2]) assert.equal((await b.call({ ...modern.confirm, version, payload: { ...modern.confirm.payload, text: `CONFIRM ${challenge}` } }, baseTime + 1000)).status, 409);
+  assert.equal(a.state().leaves.length + b.state().leaves.length, 0);
+});
+
+test('v2 name and employment changes and missing names fail closed', async () => {
+  for (const change of [{ fullName: 'Changed Employee' }, { employmentType: 'part_time' }]) {
+    const f = fixture(), { confirm } = await readyV2(f);
+    f.setRows([{ ...employee(), ...change }]);
+    assert.equal((await f.call(confirm, baseTime + 1000)).status, 409);
+    assert.equal(f.state().leaves.length, 0);
+  }
+  for (const fullName of [undefined, '', 'Hidden\u202e']) {
+    const g = fixture(); g.setRows([{ ...employee(), fullName }]);
+    assert.equal((await g.call(g.packet('prepare', input(), { version: 2 }))).status, 409);
+    assert.equal(g.state().drafts.size, 0);
+  }
+});
+
+test('v2 has no standalone profile endpoint and never preloads one during preparation', async () => {
+  const f = fixture();
+  assert.equal((await f.call(f.packet('profile', {}, { version: 2 }))).status, 400);
+  assert.equal(f.profileReads(), 0);
+  assert.equal(f.calls(), 0);
+  const result = await f.call(f.packet('prepare', {}, { version: 2 }));
+  assert.deepEqual(result.body, { code: 'needs_input', missing: ['leaveType', 'startDate', 'endDate'],
+    availableLeaveTypes: ['Annual leave', 'Sick leave', "Carer's leave", 'Unpaid leave'] });
+  assert.doesNotMatch(JSON.stringify(result.body), /Synthetic|full_time|personId|userId|phone|profile/);
+  assert.equal(f.profileReads(), 0);
+  assert.equal(f.state().drafts.size, 0);
+});
+
+test('v2 resolves missing leave type internally for casual and ABN without exporting a profile', async () => {
+  for (const employmentType of ['casual', 'abn']) {
+    const f = fixture(); f.setRows([{ ...employee(), employmentType }]);
+    const incomplete = await f.call(f.packet('prepare', {}, { version: 2 }));
+    assert.deepEqual(incomplete.body, { code: 'needs_input', missing: ['startDate', 'endDate'] });
+    const result = await f.call(f.packet('prepare', { startDate: '2026-10-12', endDate: '2026-10-12' }, { version: 2 }));
+    assert.equal(result.body.code, 'prepared');
+    assert.match(result.body.summary, /^Name: Synthetic Employee$/m);
+    assert.match(result.body.summary, /^Type: Unpaid leave$/m);
+    assert.match(result.body.summary, /^Note \(optional\): None$/m);
+    assert.equal(result.body.profile, undefined);
+    assert.equal(f.profileReads(), 0);
+    assert.equal(f.state().leaves.length, 0);
+  }
+});
+
+test('v2 never silently rewrites an explicit paid choice and never accepts model employment data', async () => {
+  const f = fixture(); f.setRows([{ ...employee(), employmentType: 'casual' }]);
+  const result = await f.call(f.packet('prepare', input(), { version: 2 }));
+  assert.equal(result.body.code, 'needs_input');
+  assert.deepEqual(result.body.availableLeaveTypes, ['Unpaid leave']);
+  assert.match(result.body.instruction, /do not silently change/);
+  assert.equal(f.state().drafts.size, 0);
+  assert.doesNotMatch(JSON.stringify(result.body), /Synthetic|casual|fullName|profile/);
+  assert.equal((await f.call(f.packet('prepare', { ...input(), employmentType: 'full_time' }, { version: 2 }))).status, 400);
+  for (const employmentType of ['full_time', 'part_time']) {
+    const g = fixture(); g.setRows([{ ...employee(), employmentType }]);
+    const missing = await g.call(g.packet('prepare', { startDate: '2026-10-12', endDate: '2026-10-12' }, { version: 2 }));
+    assert.deepEqual(missing.body.missing, ['leaveType']);
+    assert.equal(g.state().drafts.size, 0);
+  }
+  for (const employmentType of [null, 'unknown']) {
+    const g = fixture(); g.setRows([{ ...employee(), employmentType }]);
+    assert.equal((await g.call(g.packet('prepare', { ...input(), leaveType: 'Unpaid leave' }, { version: 2 }))).status, 409);
+  }
+});

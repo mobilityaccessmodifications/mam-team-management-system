@@ -8,8 +8,7 @@ const E164 = /^\+[1-9][0-9]{7,14}$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const SAFE_ID = /^[A-Za-z0-9:_-]{1,128}$/u;
 const SECRET = /^[A-Za-z0-9_-]{43,128}$/u;
-const EMPLOYMENT_TYPES = new Set(["abn", "casual", "full_time", "part_time"]);
-const MAX_PENDING = 4;
+const MAX_PENDING = 1;
 // Tool-only registries and the Gateway can load separate module graphs. Only
 // the Gateway service owns this process-local state; discovery cannot create it.
 const gatewayStore = createPluginRuntimeStore({ key: "plugin-runtime:mam-openclaw-leave:gateway-v1", errorMessage: "MAM leave gateway is unavailable" });
@@ -96,24 +95,17 @@ function payloadFromParams(params) {
   };
 }
 
-function parseChallenge(summary) {
-  if (typeof summary !== "string") return null;
-  const match = /^Reply to this exact message with CONFIRM ([0-9a-f-]{36}) within 10 minutes to submit\.$/mu.exec(summary);
-  return match && UUID.test(match[1]) ? match[1] : null;
-}
-
 function remember(owner, identity, result) {
   if (!isCurrent(owner)) return null;
   const pending = owner.pending;
   if (result?.code !== "prepared" || typeof result.draftId !== "string" || typeof result.digest !== "string" || typeof result.summary !== "string") return null;
-  const challenge = parseChallenge(result.summary);
   const expiresAt = Date.parse(result.expiresAt ?? "");
-  if (!UUID.test(result.draftId) || !/^[a-f0-9]{64}$/u.test(result.digest) || !challenge || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+  if (result.consentVersion !== 2 || !UUID.test(result.draftId) || !/^[a-f0-9]{64}$/u.test(result.digest) || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
   if (sha256(result.summary) !== result.digest) return null;
   // A literal block keeps employee notes from becoming WhatsApp markdown. The
   // server-signed summary inside it is unchanged. Quote checks bind this display.
   const deliveryText = `\`\`\`\n${result.summary}\n\`\`\``;
-  const item = { ...identity, owner, draftId: result.draftId, digest: result.digest, summary: result.summary, deliveryText, challenge, expiresAt, outboundMessageId: null, shown: false, createdAt: Date.now() };
+  const item = { ...identity, owner, draftId: result.draftId, digest: result.digest, summary: result.summary, deliveryText, expiresAt, outboundMessageId: null, shown: false, createdAt: Date.now() };
   const list = (pending.get(identity.key) ?? []).filter((entry) => entry.expiresAt > Date.now());
   list.push(item);
   while (list.length > MAX_PENDING) list.shift();
@@ -139,16 +131,17 @@ function prune(owner) {
   }
 }
 
-async function bridge(identity, operation, payload) {
+async function bridge(identity, operation, payload, inboundMessageId) {
   const cfg = configured();
   if (!cfg || identity.account !== cfg.account) return { code: "unavailable" };
   const packet = {
-    version: 1,
+    version: 2,
     account: identity.account,
     channel: "whatsapp",
     sender: identity.sender,
     session: identity.session,
-    eventId: `ev-${randomUUID()}`,
+    // Bind confirmations to the real provider event, not a fresh transport retry.
+    eventId: inboundMessageId ? `wa-${sha256(JSON.stringify([identity.account, identity.sender, identity.session, inboundMessageId]))}` : `ev-${randomUUID()}`,
     operation,
     payload,
   };
@@ -209,22 +202,12 @@ function visiblePrepareResult(result, shown) {
     summary: result.summary,
     delivery: shown ? "The exact summary has a verified delivery receipt. Do not send another copy."
       : "Delivery requested; awaiting the provider receipt. Do not claim delivery or submission. Do not send another copy. If no summary arrives, start a new request.",
-    instruction: "Do not claim that leave has been submitted. Submission happens only after the employee replies to that exact WhatsApp message with the requested CONFIRM code.",
+    instruction: "Do not claim that leave has been submitted. The employee must use WhatsApp Reply on that exact summary and send Confirm. No long code is needed. Do not send another summary or ask for a note if none was provided.",
   };
 }
 
-function visibleSelfProfile(result) {
-  const profile = result?.code === "profile" && result.profile && typeof result.profile === "object" && !Array.isArray(result.profile)
-    ? result.profile : null;
-  const name = typeof profile?.name === "string" ? profile.name.trim() : "";
-  const employmentType = profile?.employmentType;
-  if (!name || name.length > 200 || /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u.test(name)) return null;
-  if (employmentType !== null && !EMPLOYMENT_TYPES.has(employmentType)) return null;
-  return { name, employmentType };
-}
-
 async function recordShown(item) {
-  if (!isCurrent(item.owner)) return false;
+  if (!isCurrent(item.owner) || !item.owner.pending.get(item.key)?.includes(item)) return false;
   if (item.shown) return true;
   if (!item.outboundMessageId) return false;
   if (item.shownPromise) return item.shownPromise;
@@ -240,25 +223,23 @@ function confirmationText(result) {
   if (result.code === "submitted" && result.status === "Pending") return "Your leave request has been submitted and is now pending manager approval.";
   if (result.code === "expired") return "That leave confirmation has expired. Please start the leave request again.";
   if (result.code === "conflict") return "That confirmation could not be matched to the exact leave summary. Please start the leave request again.";
-  return "I could not verify submission yet. Please reply to the same summary with the same CONFIRM code again shortly; do not start a duplicate request.";
+  return "I could not verify submission yet. Please reply to the same summary with Confirm again shortly; do not start a duplicate request.";
 }
 
 const prepareParameters = Type.Object({
-  leaveType: Type.String({ description: "One of Annual leave, Sick leave, Carer's leave, or Unpaid leave. If mam_self_profile reports casual or abn, use Unpaid leave without asking paid versus unpaid." }),
-  startDate: Type.String({ description: "First leave date in YYYY-MM-DD format." }),
-  endDate: Type.String({ description: "Last leave date in YYYY-MM-DD format." }),
+  leaveType: Type.Optional(Type.String({ description: "One of Annual leave, Sick leave, Carer's leave, or Unpaid leave, only if the employee supplied it. Otherwise omit it: the server resolves permitted types and defaults casual/ABN to Unpaid leave." })),
+  startDate: Type.Optional(Type.String({ description: "First leave date in YYYY-MM-DD format, if known." })),
+  endDate: Type.Optional(Type.String({ description: "Last leave date in YYYY-MM-DD format, if known; same as startDate for a clearly requested single day." })),
   startTime: Type.Optional(Type.Union([Type.String(), Type.Null()], { description: "Optional start time in HH:MM, 15-minute intervals." })),
   endTime: Type.Optional(Type.Union([Type.String(), Type.Null()], { description: "Optional end time in HH:MM, 15-minute intervals." })),
   employeeNote: Type.Optional(Type.String({ description: "Optional note, copied exactly from the employee's message." })),
 }, { additionalProperties: false });
-const selfProfileParameters = Type.Object({}, { additionalProperties: false });
-const prepareDescription = "Prepare a leave request only for the authenticated WhatsApp sender. Call mam_self_profile first in the same conversation. The trusted sender phone number is the sole employee identity and leave subject. Never ask for or accept a name, phone number, employee ID, user ID, leave subject, addressee, manager, approver, status, confirmation flag, or another person's identity. If the self profile reports casual or abn, use Unpaid leave and do not ask whether the leave is paid or unpaid. Collect only leave type when still needed, start and end dates, optional partial-day times, and an optional note. Reviewer routing is resolved by the server. It sends an exact summary and waits for a real WhatsApp reply with CONFIRM.";
-const selfProfileDescription = "Read only the authenticated WhatsApp sender's own name and employment type. Call this before an employee-specific answer, before collecting any leave request, and when the sender asks who they are. This tool has no identity arguments: never ask for or accept a phone number, name, employee ID, user ID, or another person's identity. A casual or abn sender can request Unpaid leave only; do not ask paid versus unpaid. Never expose internal IDs or the sender phone number.";
+const prepareDescription = "Prepare leave only after the authenticated WhatsApp sender explicitly asks to apply for leave, never for greetings, ordinary conversation, startup or general policy questions. Call with the details already supplied; do not ask paid versus unpaid first. The server resolves eligibility internally, defaults casual/ABN to Unpaid leave if no type was supplied, and returns any missing fields and available types. Ask only for those missing fields; never silently replace an explicitly requested type that is unavailable. The trusted sender phone number is the sole employee identity and leave subject. Never ask for or accept a name, phone number, employee ID, user ID, employment type, leave subject, addressee, manager, approver, status, confirmation flag, or another person's identity. No separate profile lookup is needed or available. A note is optional: if none was supplied, use an empty note without an extra question. Ask about partial-day times only when requested. Reviewer routing is server-side. It sends the exact confirmation summary; only the employee's subsequent quoted Confirm reply can submit the request.";
 
 const plugin = defineToolPlugin({
   id: "mam-openclaw-leave",
   name: "MAM Leave",
-  description: "Secure self-profile lookup and self-service MAM leave requests for approved WhatsApp employees.",
+  description: "Self-service MAM leave requests with server-resolved identity for approved WhatsApp employees.",
   tools: (tool) => [tool({
     name: "mam_leave_prepare",
     label: "Prepare MAM leave request",
@@ -279,8 +260,17 @@ const plugin = defineToolPlugin({
           const owner = activeGateway();
           if (!owner) return { content: [{ type: "text", text: "Leave service is temporarily unavailable." }], details: { code: "unavailable" } };
           prune(owner);
+          // Invalidate the prior local summary as soon as a new preparation
+          // starts, even if validation or delivery then fails. Concurrent or
+          // delayed prepare completions must not restore an older summary.
+          owner.pending.delete(identity.key);
+          const revision = {};
+          owner.preparing.set(identity.key, revision);
           const result = await bridge(identity, "prepare", payloadFromParams(params));
-          if (result.code !== "prepared") return { content: [{ type: "text", text: result.code === "needs_input" ? "Collect the missing leave details before calling this tool again." : "Leave service is temporarily unavailable." }], details: result };
+          if (!isCurrent(owner) || owner.preparing.get(identity.key) !== revision) return { content: [{ type: "text", text: "That request changed. Please prepare the current leave details again." }], details: { code: "unavailable" } };
+          owner.preparing.delete(identity.key);
+          // Only content is guaranteed to reach the model; details is UI metadata.
+          if (result.code !== "prepared") return { content: [{ type: "text", text: result.code === "needs_input" ? JSON.stringify(result) : "Leave service is temporarily unavailable." }], details: result };
           const item = remember(owner, identity, result);
           if (!item) return { content: [{ type: "text", text: "Leave service is temporarily unavailable." }], details: { code: "unavailable" } };
           try {
@@ -303,32 +293,6 @@ const plugin = defineToolPlugin({
         },
       };
     },
-  }), tool({
-    name: "mam_self_profile",
-    label: "Read my MAM employee profile",
-    description: selfProfileDescription,
-    parameters: selfProfileParameters,
-    optional: true,
-    factory({ toolContext }) {
-      const identity = conversation(toolContext);
-      const cfg = configured();
-      if (!identity || !cfg || identity.account !== cfg.account) return null;
-      return {
-        name: "mam_self_profile",
-        label: "Read my MAM employee profile",
-        description: selfProfileDescription,
-        parameters: selfProfileParameters,
-        executionMode: "sequential",
-        async execute(_id, params) {
-          if (params !== undefined && params !== null && (typeof params !== "object" || Array.isArray(params) || Object.keys(params).length !== 0)) {
-            return { content: [{ type: "text", text: "Self profile is unavailable." }], details: { code: "unavailable" } };
-          }
-          const output = visibleSelfProfile(await bridge(identity, "profile", {}));
-          if (!output) return { content: [{ type: "text", text: "Self profile is unavailable." }], details: { code: "unavailable" } };
-          return { content: [{ type: "text", text: JSON.stringify(output) }], details: output };
-        },
-      };
-    },
   })],
 });
 
@@ -345,7 +309,7 @@ plugin.register = (api) => {
       // not the optional-tool discovery registry (which has no channel entries).
       const adapter = await api.runtime.channel.outbound.loadAdapter("whatsapp");
       if (typeof adapter?.sendText !== "function") throw new Error("MAM WhatsApp delivery adapter is unavailable");
-      const owner = { active: true, pending: new Map(), logger: context.logger };
+      const owner = { active: true, pending: new Map(), preparing: new Map(), logger: context.logger };
       owner.validatePreparedSummary = (item) => {
         const cfg = configured();
         if (!isCurrent(owner) || item.owner !== owner || cfg?.account !== item.account
@@ -373,6 +337,7 @@ plugin.register = (api) => {
       if (!gatewayOwner) return;
       gatewayOwner.active = false;
       gatewayOwner.pending.clear();
+      gatewayOwner.preparing.clear();
       if (gatewayStore.tryGetRuntime() === gatewayOwner) gatewayStore.clearRuntime();
       gatewayOwner = undefined;
     },
@@ -403,30 +368,34 @@ plugin.register = (api) => {
       if (!isCurrent(owner)) return;
       prune(owner);
       const content = typeof event.content === "string" ? event.content : "";
-      if (!/^CONFIRM [0-9a-f-]{36}$/iu.test(content)) return;
+      if (!/^[ \t\r\n]*confirm[ \t\r\n]*$/iu.test(content)) return;
       const identity = hookConversation(event, context);
       if (!identity) return { handled: true, text: "Please send that confirmation in the approved MAM WhatsApp direct chat." };
       const list = owner.pending.get(identity.key) ?? [];
-      const item = list.find((entry) => entry.challenge && content === `CONFIRM ${entry.challenge}`);
-      if (!item) return { handled: true, text: "That leave confirmation is no longer available. Please start the leave request again." };
       const replyTo = event.replyToIdFull ?? event.replyToId ?? context.replyToIdFull ?? context.replyToId;
+      if (!replyTo) return { handled: true, text: "Please use WhatsApp Reply on your leave summary, then send Confirm." };
+      const item = list.find((entry) => entry.outboundMessageId && entry.outboundMessageId === replyTo);
+      if (!item || owner.preparing.has(identity.key)) return { handled: true, text: "That leave confirmation is no longer available. Please start the leave request again." };
+      const inboundMessageId = event.messageId ?? context.messageId;
+      if (typeof inboundMessageId !== "string" || !SAFE_ID.test(inboundMessageId)) return { handled: true, text: "I could not verify that confirmation. Please reply to your leave summary with Confirm again." };
       // WhatsApp 2026.9.4 maps its native stanza quote ID/body but omits
       // isQuote. In that case require the exact displayed body as well as ID.
       const quoted = event.replyToIsQuote ?? context.replyToIsQuote;
       const quoteBody = event.replyToBody ?? context.replyToBody;
       if (!item.outboundMessageId || replyTo !== item.outboundMessageId || quoted === false
         || (quoted !== true && quoteBody !== item.deliveryText)) {
-        return { handled: true, text: "Please use WhatsApp Reply on the exact leave summary message, then send the CONFIRM code exactly as shown." };
+        return { handled: true, text: "Please use WhatsApp Reply on the exact leave summary message, then send Confirm." };
       }
       if (!await recordShown(item)) {
-        return { handled: true, text: "The summary delivery receipt is not confirmed yet. Please reply to the same summary with the same CONFIRM code again shortly. Nothing new has been submitted by this attempt." };
+        return { handled: true, text: "The summary delivery receipt is not confirmed yet. Please reply to the same summary with Confirm again shortly. Nothing new has been submitted by this attempt." };
       }
+      if (!isCurrent(owner) || !owner.pending.get(identity.key)?.includes(item) || owner.preparing.has(identity.key)) return { handled: true, text: "That request changed. Please use the latest leave summary." };
       const result = await bridge(identity, "confirm", {
         draftId: item.draftId,
         digest: item.digest,
         replyToMessageId: replyTo,
         text: content,
-      });
+      }, inboundMessageId);
       if (result.code === "submitted") forget(item);
       return { handled: true, text: confirmationText(result) };
     });

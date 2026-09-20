@@ -9,7 +9,7 @@ const source = readFileSync(new URL("index.js", root), "utf8");
 const bridgePath = "/api/internal/integrations/openclaw/leave";
 const key = "synthetic-test-key-".padEnd(48, "x");
 const challenge = "30000000-0000-4000-8000-000000000001";
-const summary = `Synthetic leave summary\nReply to this exact message with CONFIRM ${challenge} within 10 minutes to submit.`;
+const summary = "Please review your leave request:\nName: Synthetic Employee\nDates: 2030-10-14\nType: Unpaid leave\nNote (optional): None\n\nTo submit, reply to this message with Confirm within 10 minutes.\nNot submitted yet. Manager approval is still required.";
 const deliveryText = `\`\`\`\n${summary}\n\`\`\``;
 const env = {
   MAM_OPENCLAW_LEAVE_ENABLED: "true",
@@ -27,7 +27,7 @@ const hookContext = { channelId: "whatsapp", accountId: "default", sessionKey: i
 
 // Deliberate offline shims, NOT an OpenClaw SDK/build or WhatsApp E2E test.
 // No module resolution, host process environment, credentials or real fetch.
-function loadPlugin(overrides = {}, failShown = 0, stores = new Map()) {
+function loadPlugin(overrides = {}, failShown = 0, stores = new Map(), prepareReply) {
   const imports = [
     'import { createHash, createHmac, randomUUID } from "node:crypto";',
     'import { Type } from "typebox";',
@@ -66,10 +66,10 @@ function loadPlugin(overrides = {}, failShown = 0, stores = new Map()) {
       const packet = JSON.parse(options.body);
       calls.push(packet);
       if (packet.operation === "shown" && failShown-- > 0) throw new Error("Synthetic response lost");
-      const data = packet.operation === "profile" ? {
-        code: "profile", profile: { name: "Synthetic Employee", employmentType: "casual" },
-      } : packet.operation === "prepare" ? {
-        code: "prepared", draftId: "10000000-0000-4000-8000-000000000001",
+      assert.ok(["prepare", "shown", "confirm"].includes(packet.operation), "No standalone profile operation");
+      const preparation = packet.operation === "prepare" && typeof prepareReply === "function" ? await prepareReply(packet) : prepareReply;
+      const data = packet.operation === "prepare" ? preparation ?? {
+        code: "prepared", consentVersion: 2, draftId: "10000000-0000-4000-8000-000000000001",
         digest: createHash("sha256").update(summary).digest("hex"), summary,
         expiresAt: new Date(Date.now() + 600_000).toISOString(),
       } : packet.operation === "shown" ? { code: "shown" }
@@ -105,37 +105,33 @@ function toolByName(plugin, name) {
 const params = { leaveType: "Annual leave", startDate: "2030-10-14", endDate: "2030-10-14" };
 const confirmEvent = {
   channel: "whatsapp", senderId: identity.requesterSenderId, isGroup: false,
-  content: `CONFIRM ${challenge}`, replyToId: "synthetic-outbound-1", replyToIsQuote: true,
+  content: "Confirm", messageId: "synthetic-confirm-1", replyToId: "synthetic-outbound-1", replyToIsQuote: true,
 };
 
-test("native plugin package exposes only self profile and prepare, with no temporary harness", () => {
+test("native plugin package exposes only leave preparation, with no profile tool or temporary harness", () => {
   const files = readdirSync(root);
   for (const required of [".gitignore", "README.md", "index.js", "openclaw.plugin.json", "package.json"]) assert.ok(files.includes(required));
   assert.ok(!files.some((name) => /harness|^\.env/.test(name)));
   const manifest = JSON.parse(readFileSync(new URL("openclaw.plugin.json", root), "utf8"));
   const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8"));
-  assert.deepEqual([...manifest.contracts.tools].sort(), ["mam_leave_prepare", "mam_self_profile"].sort());
+  assert.deepEqual([...manifest.contracts.tools], ["mam_leave_prepare"]);
   assert.equal(manifest.toolMetadata.mam_leave_prepare.optional, true);
-  assert.equal(manifest.toolMetadata.mam_self_profile.optional, true);
+  assert.equal(manifest.toolMetadata.mam_self_profile, undefined);
   assert.equal(pkg.private, true);
   assert.equal(pkg.dependencies.typebox, "1.3.18");
   const plugin = loadPlugin();
-  assert.equal(plugin.tools.length, 2);
+  assert.equal(plugin.tools.length, 1);
   const prepare = toolByName(plugin, "mam_leave_prepare");
-  const profile = toolByName(plugin, "mam_self_profile");
   assert.deepEqual([...plugin.hooks.keys()].sort(), ["before_dispatch", "message_sent"]);
   assert.equal(prepare.parameters.additionalProperties, false);
   assert.deepEqual(Object.keys(prepare.parameters.properties).sort(),
     ["leaveType", "startDate", "endDate", "startTime", "endTime", "employeeNote"].sort());
   assert.match(prepare.description, /trusted sender phone number is the sole employee identity/i);
   assert.match(prepare.description, /never ask for or accept.*addressee.*approver/i);
-  assert.match(prepare.description, /casual or abn.*Unpaid leave/i);
+  assert.match(prepare.description, /casual\/ABN.*Unpaid leave/i);
   assert.match(prepare.parameters.properties.employeeNote.description, /optional note/i);
   assert.doesNotMatch(prepare.parameters.properties.employeeNote.description, /\breason\b/i);
-  assert.equal(profile.parameters.additionalProperties, false);
-  assert.deepEqual(Object.keys(profile.parameters.properties), []);
-  assert.match(profile.description, /authenticated WhatsApp sender's own name and employment type/i);
-  assert.match(profile.description, /no identity arguments/i);
+  assert.doesNotMatch(source, /name: "mam_self_profile"|bridge\(identity, "profile"/);
 });
 
 test("disabled, untrusted, group, wrong-account and malformed-endpoint contexts fail closed", () => {
@@ -148,7 +144,6 @@ test("disabled, untrusted, group, wrong-account and malformed-endpoint contexts 
   for (const context of [{ ...identity, delivery: undefined }, { ...identity, delivery: {} }]) {
     const plugin = loadPlugin();
     assert.notEqual(toolByName(plugin, "mam_leave_prepare").factory({ toolContext: context }), null);
-    assert.notEqual(toolByName(plugin, "mam_self_profile").factory({ toolContext: context }), null);
   }
   for (const override of [
     { MAM_OPENCLAW_LEAVE_ENABLED: undefined }, { MAM_OPENCLAW_LEAVE_BRIDGE_SECRET: "" },
@@ -171,18 +166,43 @@ test("runtime factories return complete OpenClaw tools with their declared schem
   }
 });
 
-test("self profile has no identity arguments and returns only this trusted sender's name and employment type", async () => {
+test("no standalone personal-profile capability is exposed to any chat", async () => {
   const plugin = loadPlugin();
-  const tool = toolByName(plugin, "mam_self_profile").factory({ toolContext: identity });
-  const result = await tool.execute("profile", {});
-  assert.deepEqual(JSON.parse(JSON.stringify(result.details)), { name: "Synthetic Employee", employmentType: "casual" });
-  assert.deepEqual(JSON.parse(result.content[0].text), JSON.parse(JSON.stringify(result.details)));
-  assert.equal(plugin.calls[0].operation, "profile");
-  assert.equal(plugin.calls[0].sender, identity.requesterSenderId);
-  assert.equal(plugin.calls[0].session, `s-${createHash("sha256").update(identity.sessionKey).digest("hex")}`);
-  assert.deepEqual(plugin.calls[0].payload, {});
-  assert.deepEqual(JSON.parse(JSON.stringify((await tool.execute("bad", { phone: "+61400000002" })).details)), { code: "unavailable" });
-  assert.equal(plugin.calls.length, 1, "Caller-supplied identity must never reach the bridge");
+  await plugin.start();
+  assert.equal(plugin.tools.find(tool => tool.name === "mam_self_profile"), undefined);
+  assert.equal(plugin.calls.length, 0);
+});
+
+test("missing fields and available types are in model-visible content, not just UI details", async () => {
+  const reply = { code: "needs_input", missing: ["leaveType"], availableLeaveTypes: ["Unpaid leave"],
+    instruction: "Ask whether the employee wants Unpaid leave instead." };
+  const plugin = loadPlugin({}, 0, new Map(), reply);
+  await plugin.start({ sendText: async () => { throw new Error("Incomplete request must not send a summary"); } });
+  const result = await toolByName(plugin, "mam_leave_prepare").factory({ toolContext: identity }).execute("missing", {});
+  assert.deepEqual(JSON.parse(result.content[0].text), reply);
+  assert.equal(plugin.calls.length, 1);
+  assert.equal(plugin.calls[0].operation, "prepare");
+});
+
+test("out-of-order prepare completion cannot replace or invalidate the current quoted draft", async () => {
+  const pending = [], deliveries = [];
+  const plugin = loadPlugin({}, 0, new Map(), () => new Promise(resolve => pending.push(resolve)));
+  await plugin.start({ sendText: async message => { deliveries.push(message.text); return { messageId: confirmEvent.replyToId }; } });
+  const tool = toolByName(plugin, "mam_leave_prepare").factory({ toolContext: { ...identity, delivery: undefined } });
+  const first = tool.execute("first", params);
+  const second = tool.execute("second", params);
+  const reply = (suffix) => ({ code: "prepared", consentVersion: 2,
+    draftId: "10000000-0000-4000-8000-00000000000" + suffix,
+    summary: summary + suffix, digest: createHash("sha256").update(summary + suffix).digest("hex"),
+    expiresAt: new Date(Date.now() + 600000).toISOString() });
+  pending[1](reply("2"));
+  assert.equal((await second).details.code, "prepared");
+  pending[0](reply("1"));
+  assert.equal((await first).details.code, "unavailable");
+  assert.equal(deliveries.length, 1);
+  assert.ok(deliveries[0].includes(summary + "2"));
+  assert.match((await plugin.hooks.get("before_dispatch")(confirmEvent, hookContext)).text, /pending manager approval/);
+  assert.equal(plugin.calls.at(-1).payload.draftId, reply("2").draftId);
 });
 
 test("prepare uses the Gateway service adapter when host-bound delivery is absent", async () => {
@@ -230,8 +250,10 @@ test("trusted self identity signs prepare, records delivery and requires exact q
     [{ ...confirmEvent, isGroup: true }, hookContext],
     [{ ...confirmEvent, replyToId: "different" }, hookContext],
     [{ ...confirmEvent, replyToIsQuote: false }, hookContext],
-    [{ ...confirmEvent, content: ` ${confirmEvent.content} ` }, hookContext],
-    [{ ...confirmEvent, content: `\n${confirmEvent.content}\n` }, hookContext],
+    [{ ...confirmEvent, content: `CONFIRM ${challenge}` }, hookContext],
+    [{ ...confirmEvent, content: "yes" }, hookContext],
+    [{ ...confirmEvent, messageId: undefined }, hookContext],
+    [{ ...confirmEvent, replyToId: undefined }, hookContext],
     [confirmEvent, { ...hookContext, sessionKey: "other-session" }],
     [confirmEvent, { ...hookContext, accountId: "other" }],
   ]) await hook(event, context);
@@ -325,4 +347,47 @@ test("service replacement during delivery cannot register a stale receipt or con
   assert.deepEqual(plugin.calls.map((call) => call.operation), ["prepare"]);
   await plugin.start();
   assert.match((await plugin.hooks.get("before_dispatch")(confirmEvent, hookContext)).text, /no longer available/);
+});
+
+test("ordinary chat and startup do not preload a personal profile", async () => {
+  const plugin = loadPlugin();
+  await plugin.start();
+  for (const tool of plugin.tools) tool.factory({ toolContext: identity });
+  await plugin.hooks.get("before_dispatch")({ ...confirmEvent, content: "Hello" }, hookContext);
+  await plugin.hooks.get("before_dispatch")({ ...confirmEvent, content: "What is the leave policy?" }, hookContext);
+  assert.equal(plugin.calls.length, 0);
+  assert.match(toolByName(plugin, "mam_leave_prepare").description, /never for greetings, ordinary conversation, startup or general policy/);
+  assert.match(toolByName(plugin, "mam_leave_prepare").description, /empty note without an extra question/);
+});
+
+test("quoted plain Confirm preserves actual text and a stable provider event identity", async () => {
+  const events = [];
+  for (const content of ["Confirm", " Confirm ", "\tCONFIRM\n"]) {
+    const plugin = loadPlugin();
+    await plugin.start();
+    await toolByName(plugin, "mam_leave_prepare").factory({ toolContext: { ...identity, delivery: undefined } }).execute("test", params);
+    const result = await plugin.hooks.get("before_dispatch")({ ...confirmEvent, content }, hookContext);
+    assert.match(result.text, /pending manager approval/);
+    const packet = plugin.calls.at(-1);
+    assert.equal(packet.version, 2);
+    assert.equal(packet.payload.text, content, 'Never fabricate a legacy UUID confirmation');
+    assert.equal(packet.payload.replyToMessageId, confirmEvent.replyToId);
+    assert.match(packet.eventId, /^wa-[a-f0-9]{64}$/);
+    events.push(packet.eventId);
+  }
+  assert.equal(new Set(events).size, 1, 'Same native event maps to one backend replay key');
+});
+
+test("old quoted summary cannot confirm after a replacement summary is prepared", async () => {
+  const plugin = loadPlugin();
+  let count = 0;
+  await plugin.start({ sendText: async () => ({ messageId: `out-${++count}` }) });
+  const tool = toolByName(plugin, "mam_leave_prepare").factory({ toolContext: { ...identity, delivery: undefined } });
+  await tool.execute("first", params);
+  await tool.execute("second", { ...params, startDate: '2030-10-15', endDate: '2030-10-15' });
+  const refused = await plugin.hooks.get("before_dispatch")({ ...confirmEvent, replyToId: 'out-1' }, hookContext);
+  assert.match(refused.text, /no longer available/);
+  assert.equal(plugin.calls.filter(call => call.operation === 'confirm').length, 0);
+  const accepted = await plugin.hooks.get("before_dispatch")({ ...confirmEvent, replyToId: 'out-2' }, hookContext);
+  assert.match(accepted.text, /pending manager approval/);
 });
