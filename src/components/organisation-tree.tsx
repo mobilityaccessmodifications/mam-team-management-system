@@ -474,9 +474,10 @@ function measureNode(
   depth: number,
   branchLayouts: Readonly<Record<string, BranchLayout>>,
   chartLayout: OrganisationLayout,
+  compactTeams: boolean,
 ): MeasuredNode {
   const useDefault = chartLayout === "default" && !branchLayouts[node.id];
-  const displayChildren = useDefault ? defaultDisplayChildren(node) : node.children;
+  const displayChildren = useDefault && compactTeams ? defaultDisplayChildren(node) : node.children;
   const children = collapsedIds.has(node.id)
     ? []
     : displayChildren.map((child) =>
@@ -486,6 +487,7 @@ function measureNode(
           depth + 1,
           branchLayouts,
           chartLayout,
+          compactTeams,
         ),
       );
 
@@ -585,9 +587,10 @@ function layoutForest(
   collapsedIds: Set<string>,
   branchLayouts: Readonly<Record<string, BranchLayout>>,
   chartLayout: OrganisationLayout = "default",
+  compactTeams = true,
 ): ChartLayout {
   const boxes = forest.map((root) =>
-    measureNode(root, collapsedIds, 0, branchLayouts, chartLayout),
+    measureNode(root, collapsedIds, 0, branchLayouts, chartLayout, compactTeams),
   );
   const contentWidth =
     boxes.reduce((width, box) => width + box.width, 0) +
@@ -965,9 +968,7 @@ export function OrganisationTree({
     const handleFullscreen = () => {
       const active = document.fullscreenElement === rootRef.current;
       setFullscreen(active);
-      // Full-screen is the editing canvas. Entering it directly should expose
-      // the same drag-and-drop mode as the Arrange button.
-      if (active) setArrangeMode(canArrange);
+      // Fullscreen changes framing only. Arrange is an explicit action.
       if (!active) {
         if (linkGuideActive) setInteractionMessage("Add line cancelled.");
         const activeDrag = nodeDragRef.current;
@@ -1187,17 +1188,16 @@ export function OrganisationTree({
   }, [collapsedIds, searchAncestorIds]);
 
   // Relationship editing always shows structural team nodes and actual lines.
-  const displayLayout = chartLayout === "default" && (arrangeMode || linkGuide || normalise(query))
-    ? "grouped" : chartLayout;
+  const compactTeams = !arrangeMode && !linkGuide && !normalise(query);
   const layout = useMemo(
-    () => layoutForest(forest, effectiveCollapsedIds, branchLayouts, displayLayout),
-    [branchLayouts, displayLayout, effectiveCollapsedIds, forest],
+    () => layoutForest(forest, effectiveCollapsedIds, branchLayouts, chartLayout, compactTeams),
+    [branchLayouts, chartLayout, compactTeams, effectiveCollapsedIds, forest],
   );
   // A PDF should retain the complete reporting structure even when someone has
   // temporarily collapsed a branch in their interactive view.
   const printableLayout = useMemo(
-    () => layoutForest(forest, new Set<string>(), branchLayouts, chartLayout),
-    [branchLayouts, chartLayout, forest],
+    () => layoutForest(forest, new Set<string>(), branchLayouts, chartLayout, compactTeams),
+    [branchLayouts, chartLayout, compactTeams, forest],
   );
   const layoutNodesById = useMemo(
     () => new Map(layout.nodes.map((item) => [item.node.id, item])),

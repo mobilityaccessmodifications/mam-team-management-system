@@ -47,3 +47,35 @@ test('Manual layouts preserve structural nodes; collapse and unknown roles remai
   const expanded = {...leader, children: [...leader.children, node('special', 'Specialist')]};
   assert.ok(layoutForest([expanded], new Set(), {}).nodes.some(p => p.node.id === 'special'));
 });
+
+test('Minor default regroups nested staff into the same four columns', () => {
+  const scheduler = node('scheduler', 'Scheduler', [
+    node('admin', 'Administrator', [], {reportsTo: 'scheduler'}),
+    node('scheduler2', 'Scheduler', [node('installer', 'Installer', [], {reportsTo:'scheduler2'})], {reportsTo:'scheduler'}),
+  ], {reportsTo:'lead'});
+  const estimator = node('estimator', 'Estimator', [node('estimator2', 'Estimator', [], {reportsTo:'estimator'})], {reportsTo:'lead'});
+  const root = node('lead', 'Minor Mods Team Leader', [scheduler, estimator]);
+  const original = JSON.stringify(root);
+  const result = layoutForest([root], new Set(), {});
+  const card = id => result.nodes.find(item => item.node.id === id);
+  assert.equal(result.nodes.length, 7);
+  assert.equal(card('scheduler').x, card('scheduler2').x);
+  assert.equal(card('estimator').x, card('estimator2').x);
+  assert.ok(card('scheduler').x < card('installer').x);
+  assert.ok(card('installer').x < card('estimator').x);
+  assert.ok(card('estimator').x < card('admin').x);
+  assert.equal(new Set(['scheduler','installer','estimator','admin'].map(id => card(id).y)).size, 1);
+  assert.equal(card('installer').node.reportsTo, 'scheduler2');
+  assert.equal(JSON.stringify(root), original);
+  // The explicit editing view shows the real nesting while keeping defaults.
+  const editing = layoutForest([root], new Set(), {}, 'default', false);
+  assert.ok(editing.nodes.find(p=>p.node.id==='installer').depth > card('installer').depth);
+});
+
+test('Equipsy stays vertical when structural editing or search is active', () => {
+  const root = node('eq', 'Leader', [node('eq-a','Operations'),node('eq-b','Sales')], {company:'equipsy'});
+  const display = layoutForest([root], new Set(), {}, 'default', true).nodes;
+  const editing = layoutForest([root], new Set(), {}, 'default', false).nodes;
+  assert.deepEqual(display, editing);
+  assert.equal(display[1].x, display[2].x);
+});
