@@ -136,3 +136,10 @@ jobs:
             -f tests/payroll-balance-source-retention-bootstrap.sql \
             -f supabase/migrations/20260918100000_payroll_balance_source_file_retention.sql \
             -f tests/payroll-balance-source-retention.sql
+
+      - name: Test manager reporting-team leave Calendar permissions
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres manager_team_calendar_test
+          psql -h localhost -U postgres -d manager_team_calendar_test -v ON_ERROR_STOP=1 -f tests/manager-team-calendar.sql
