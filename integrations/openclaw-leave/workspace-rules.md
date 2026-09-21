@@ -39,10 +39,20 @@ generic personal-assistant and memory instructions elsewhere in this workspace.
 - Call `mam_leave_prepare` again with the collected details. Its exact
   server-rendered summary contains the employee's name, leave dates, leave type
   and optional note; include the times and timezone for part-day requests.
-- Do not send a second copy or rewrite the summary. Ask the employee to use
-  WhatsApp Reply on that summary and send `Confirm`. No long code is needed.
-- A standalone Confirm without replying to the summary cannot submit leave.
-  Do not guess which draft it refers to or prepare a duplicate request from it.
+- If the employee changes any detail before confirming, reuse the unchanged
+  details and prepare the complete updated request. This replaces the old draft.
+  While collecting an edit, there is no older draft that can still be submitted.
+  Drafts are temporary in-memory state, not saved People Hub applications.
+- Do not send a second copy or rewrite the summary. In one short follow-up,
+  say: "Send Confirm within 10 minutes to submit your latest summary for manager
+  approval, or tell me what to change." No WhatsApp Reply gesture is needed.
+  These instructions belong in the follow-up, not in the field-only summary.
+- A standalone `Confirm` submits only this sender's latest delivered summary.
+  Do not prepare a new request from Confirm or interpret it as an edit. Only
+  after confirmation does the service save the application to People Hub.
+- If the service could not verify a submission, ask for Confirm again to check
+  the same application. Do not prepare a replacement until its outcome is known.
+  A confirmed submission is not an editable draft: later changes do not undo it.
 - The trusted incoming-message handler, not the language model, processes the
   employee's confirmation. Never call a submission tool or claim submission
   before the service confirms success. Preparation alone does not submit leave.

@@ -27,6 +27,8 @@ const createRuntimeChannel = await native("runtime-channel-", "createRuntimeChan
 const withRegistry = await native("gateway-request-scope-", "withPluginRuntimeRegistryScope");
 const finalizeInbound = await native("inbound-context-", "finalizeInboundContext");
 const deriveInbound = await native("message-hook-mappers-", "deriveInboundMessageHookContext");
+const visibilityPolicy = await native("source-reply-delivery-mode-", "resolveSourceReplyVisibilityPolicy");
+const { upsertSessionEntry } = await import(pathToFileURL(join(sdkRoot, "dist/plugin-sdk/session-store-runtime.js")));
 const { whatsappPlugin } = await import(pathToFileURL(join(whatsappRoot, "dist/channel-plugin-api.js")));
 const { setWhatsAppRuntime } = await import(pathToFileURL(join(whatsappRoot, "dist/runtime-setter-api.js")));
 const sendFile = readdirSync(join(whatsappRoot, "dist")).find((file) => /^send-[A-Za-z0-9_-]{8}\.js$/u.test(file));
@@ -66,24 +68,18 @@ globalThis.fetch = async (url, options) => {
     if (!packet.payload.startDate || !packet.payload.endDate) {
       return { ok: true, json: async () => ({ code: "needs_input", missing: ["startDate", "endDate"] }) };
     }
-    const challenge = randomUUID();
     const summary = ["Please review your leave request:", "Name: Synthetic Employee", "Dates: 2030-10-14",
-      "Type: Unpaid leave", `Note (optional): ${packet.payload.employeeNote || "None"}`, "",
-      "To submit, reply to this message with Confirm within 10 minutes.", "Not submitted yet. Manager approval is still required."].join("\n");
-    data = { code: "prepared", consentVersion: 2, draftId: randomUUID(), summary, digest: createHash("sha256").update(summary).digest("hex"), expiresAt: new Date(Date.now() + 600_000).toISOString() };
-    drafts.set(data.draftId, { ...data, challenge });
-  } else if (packet.operation === "shown") {
-    const draft = drafts.get(packet.payload.draftId);
-    assert.equal(packet.payload.digest, draft.digest);
-    assert.equal(sent.at(-1).text, `\`\`\`\n${draft.summary}\n\`\`\``, "Actual WhatsApp rendering must preserve the complete literal summary");
-    assert.equal(sent.at(-1).messageId, packet.payload.outboundMessageId);
-    draft.outboundMessageId = packet.payload.outboundMessageId;
-    data = { code: "shown" };
+      "Type: Unpaid leave", `Note (optional): ${packet.payload.employeeNote || "None"}`].join("\n");
+    data = { code: "prepared", consentVersion: 3, draftId: randomUUID(), draftToken: `synthetic-opaque-${randomUUID()}`, summary,
+      digest: createHash("sha256").update(summary).digest("hex"), expiresAt: new Date(Date.now() + 600_000).toISOString() };
+    drafts.set(data.draftToken, data);
   } else if (packet.operation === "confirm") {
-    const draft = drafts.get(packet.payload.draftId);
-    assert.equal(packet.payload.replyToMessageId, draft.outboundMessageId);
+    const draft = drafts.get(packet.payload.draftToken);
+    const shown = sent.find(item => item.messageId === packet.payload.shownMessageId);
+    assert.equal(shown.text, `\`\`\`\n${draft.summary}\n\`\`\``);
+    assert.equal(packet.payload.replyToMessageId, null, "Standalone consent never fabricates a native quote");
     assert.equal(packet.payload.text, "Confirm");
-    assert.equal(packet.version, 2);
+    assert.equal(packet.version, 3);
     assert.match(packet.eventId, /^wa-[a-f0-9]{64}$/u);
     data = { code: "submitted", status: "Pending" };
   } else throw new Error("Unexpected operation");
@@ -105,6 +101,12 @@ assert.deepEqual([...toolGraph.factories.keys()], ["mam_leave_prepare"]);
 await withRegistry(gatewayRegistry, () => gateway.service.start({ config, logger: { info() {}, warn() {} } }));
 const toolContext = { messageChannel: "whatsapp", requesterSenderId: "+61400000001", sessionKey: "agent:main:whatsapp:direct:synthetic",
   agentAccountId: "default", deliveryContext: { channel: "whatsapp", accountId: "default", to: "+61400000001" } };
+const sessionEntry = { sessionId: randomUUID(), updatedAt: Date.now(), agentHarnessId: "codex", chatType: "direct" };
+await upsertSessionEntry({ agentId: "main", sessionKey: toolContext.sessionKey, entry: sessionEntry });
+const sourcePolicy = visibilityPolicy({ cfg: config, ctx: { Body: "Confirm", ChatType: "direct", Provider: "whatsapp", Surface: "whatsapp" },
+  defaultVisibleReplies: "message_tool", messageToolAvailable: true, sendPolicy: "allow" });
+assert.equal(sourcePolicy.suppressDelivery, true, "Reproduce native Codex automatic-hook-text suppression");
+assert.equal(sourcePolicy.sendPolicyDenied, false, "Suppression is not authorization to ignore a real deny");
 const tool = toolGraph.factories.get("mam_leave_prepare")(toolContext);
 assert.equal(tool.parameters.required, undefined, "Initial leave collection permits omitted dates and type");
 const initial = await withRegistry(toolRegistry, () => tool.execute("initial-fields", {}));
@@ -123,22 +125,36 @@ for (const note of ["", "Synthetic note", "x".repeat(2000), "**literal note**", 
   assert.equal(result.details.code, "prepared");
   assert.match(result.details.delivery, /verified delivery receipt/);
   assert.equal(sent.length, before + 1, "Exactly one complete summary per draft");
-  // Same supplemental quote shape constructed by installed WhatsApp monitor.
+  assert.doesNotMatch(JSON.stringify(result), /synthetic-opaque/);
+  // Real mapper shape for a standalone WhatsApp Confirm, without a quote.
   const ctx = finalizeInbound({ Body: "Confirm", RawBody: "Confirm", MessageSid: `NATIVE_INBOUND_${sent.length}`,
     Provider: "whatsapp", Surface: "whatsapp", ChatType: "direct", SenderId: toolContext.requesterSenderId,
     From: toolContext.requesterSenderId, AccountId: "default", SessionKey: toolContext.sessionKey,
-    SupplementalContext: { quote: { id: sent.at(-1).messageId, body: sent.at(-1).text, sender: "Synthetic MAM Bot" } } });
+    Timestamp: Date.now() + 1000 });
   const canonical = deriveInbound(ctx);
   assert.equal(canonical.replyToIsQuote, undefined, "WhatsApp does not populate this optional marker");
   assert.equal(canonical.isGroup, false);
   assert.equal(canonical.messageId, `NATIVE_INBOUND_${sent.length}`);
   const event = { ...canonical, channel: canonical.channelId };
-  const confirmed = await gateway.hooks.get("before_dispatch")(event, canonical);
-  assert.match(confirmed.text, /pending manager approval/);
+  // Exercise discovery-graph hooks too: they must use the one Gateway owner.
+  const confirmed = await toolGraph.hooks.get("before_dispatch")(event, canonical);
+  assert.equal(confirmed.handled, true);
+  assert.equal(confirmed.text, undefined, "No automatic second delivery when visibility mode changes");
+  assert.equal(sent.length, before + 2, "One explicit confirmation reply reaches the real adapter despite message_tool mode");
+  assert.match(sent.at(-1).text, /pending manager approval/);
   const count = packets.filter((packet) => packet.operation === "confirm").length;
   await gateway.hooks.get("before_dispatch")(event, canonical);
   assert.equal(packets.filter((packet) => packet.operation === "confirm").length, count);
+  assert.equal(sent.length, before + 2, "Same provider event cannot double-send feedback");
 }
+assert.ok(packets.every(packet => ["prepare", "confirm"].includes(packet.operation)), "No pre-confirm database-writing operation");
+const denyEvent = { channel: "whatsapp", senderId: toolContext.requesterSenderId, isGroup: false,
+  messageId: "NATIVE_DENIED", content: "Confirm", timestamp: Date.now() + 1000 };
+const denyContext = { channelId: "whatsapp", accountId: "default", sessionKey: toolContext.sessionKey };
+await upsertSessionEntry({ agentId: "main", sessionKey: toolContext.sessionKey, entry: { ...sessionEntry, sendPolicy: "deny" } });
+const beforeDenied = [sent.length, packets.length];
+assert.equal((await gateway.hooks.get("before_dispatch")(denyEvent, denyContext)).handled, true);
+assert.deepEqual([sent.length, packets.length], beforeDenied, "Native session deny blocks reply and submission");
 gateway.service.stop();
 assert.equal((await tool.execute("stopped", {})).details.code, "unavailable");
-console.log("PASS: actual SDK tool-only lookup failure reproduced; separate module graphs; real WhatsApp adapter with offline listener; prepare -> one exact summary -> native quote -> one submission; 2000-character note; service stop.");
+console.log("PASS: installed SDK + real offline WhatsApp adapter; Codex message_tool suppression reproduced; standalone Confirm -> one explicit reply; real native sendPolicy deny; hidden token; no shown/revise writes; duplicate event; formatting; service stop. No network or live data.");

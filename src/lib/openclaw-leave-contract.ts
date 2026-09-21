@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomUUID, randomBytes, createCipheriv, createDecipheriv, timingSafeEqual } from "node:crypto";
 import { normalizeAllowlistPhone } from "./openclaw-allowlist";
 
 // Protocol logic is shared by the route and synthetic transaction tests.
@@ -26,7 +26,8 @@ export type SelfProfile = { name: string; employmentType: string | null };
 export type LeaveDraft = {
   id: string; identity: Identity; personId: string; userId: string;
   fields: LeaveFields; summary: string; digest: string; challenge: string;
-  consentVersion?: 1 | 2; employmentType?: string | null;
+  consentVersion: 3; employmentType: string | null; fullName: string;
+  issuedAt: number;
   expiresAt: number; shownMessageId?: string; shownAt?: number;
   result?: { requestId: string; status: "Pending" };
 };
@@ -35,31 +36,20 @@ export type BridgeResult = {
   profile?: SelfProfile;
   missing?: string[]; draftId?: string; summary?: string; digest?: string;
   expiresAt?: string; requestId?: string; status?: "Pending";
-  consentVersion?: 2;
+  consentVersion?: 3; draftToken?: string;
   availableLeaveTypes?: string[]; instruction?: string;
 };
-/** All methods execute in ONE serializable database transaction. No network
- * calls, emails or in-memory production persistence inside this boundary.
- * Concurrent/retried event keys must serialize; rollback includes the leave,
- * draft, replay receipt and existing notification outbox together. */
-export interface LeaveTransaction {
-  // Complete authoritative snapshot: never a paginated/allowlist-cache subset.
-  employees(): Promise<{ complete: true; rows: Employee[] }>;
-  receipt(key: string): Promise<{ fingerprint: string; personId: string; userId: string; result: BridgeResult } | null>;
-  saveReceipt(key: string, fingerprint: string, employee: Employee, result: BridgeResult): Promise<void>;
-  draft(id: string): Promise<LeaveDraft | null>;
-  saveDraft(draft: LeaveDraft): Promise<void>;
-  // Internal ONLY: actor is server-resolved, never accepted from HTTP/MCP input.
-  // Reuse existing validation, employment policy, reviewer routing, Pending
-  // status and notification outbox; never selected-profile/admin impersonation.
-  // Reject overlapping active leave; enforce DB uniqueness on draftId.
-  submitSelf(employee: Employee, fields: LeaveFields, draftId: string): Promise<{ requestId: string; status: "Pending" }>;
-}
+export type LeaveSnapshot = {
+  complete: true; rows: Employee[]; fingerprint: string;
+  receipt: { fingerprint: string; personId: string; userId: string; result: BridgeResult } | null;
+  submitted: { identity: Identity; personId: string; userId: string; tokenHash: string; result: { requestId: string; status: "Pending" } } | null;
+};
 export interface LeaveStore {
-  // Read-only, complete snapshot used only for the authenticated sender's
-  // minimal self profile. No caller-selected identity reaches this boundary.
-  selfProfileEmployees(): Promise<{ complete: true; rows: SelfProfileEmployee[] }>;
-  transaction<T>(work: (tx: LeaveTransaction) => Promise<T>, context: { key: string; fingerprint: string; packet: ObjectValue }): Promise<T>;
+  // Both calls re-read authoritative employees. Preparation invokes ONLY snapshot.
+  snapshot(key: string, draftId: string | null): Promise<LeaveSnapshot>;
+  // Only confirmation reaches this atomic persistence boundary.
+  submit(plan: { key: string; fingerprint: string; sourceFingerprint: string; packet: ObjectValue;
+    employee: Employee; draft: LeaveDraft; tokenHash: string }): Promise<BridgeResult>;
 }
 type EmployeeSource<T extends Employee> = {
   employees(): Promise<{ complete: true; rows: T[] }>;
@@ -119,28 +109,12 @@ function fields(value: unknown, employee?: Employee): LeaveFields | { missing: s
   if (employeeNote.length > 2000 || /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(employeeNote)) fail("invalid_request");
   return { leaveType: v.leaveType as string, startDate, endDate, startTime, endTime, employeeNote };
 }
-function summary(input: LeaveFields, employee: Employee, challenge: string, version = 1) {
-  if (version === 2) {
+function summary(input: LeaveFields, employee: Employee) {
     const name = profile({ ...employee, fullName: employee.fullName ?? null }).name;
     const dates = input.startDate === input.endDate ? input.startDate : `${input.startDate} to ${input.endDate}`;
     return ["Please review your leave request:", `Name: ${name}`, `Dates: ${dates}`,
       ...(input.startTime && input.endTime ? [`Times: ${input.startTime} to ${input.endTime} (Australia/Melbourne)`] : []),
-      `Type: ${input.leaveType}`, `Note (optional): ${input.employeeNote || "None"}`,
-      "", "To submit, reply to this message with Confirm within 10 minutes.",
-      "Not submitted yet. Manager approval is still required."].join("\n");
-  }
-  let days = 0;
-  for (let d = +new Date(input.startDate); d <= +new Date(input.endDate); d += 86400000) {
-    if (new Date(d).getUTCDay() % 6 !== 0) days++;
-  }
-  const duration = input.startTime && input.endTime
-    ? `${input.startDate} ${input.startTime} to ${input.endDate} ${input.endTime} (Australia/Melbourne; portal 06:00–18:00 weekday window)`
-    : `${days} working day(s)${employee.employmentType === "full_time" ? ` / ${(days * 7.6).toFixed(2)} hours` : ""}`;
-  return ["Submit leave for yourself (not yet submitted)", `Type: ${input.leaveType}`,
-    `Dates: ${input.startDate} to ${input.endDate}`, `Duration: ${duration}`,
-    `Note (literal text): ${JSON.stringify(input.employeeNote)}`,
-    "Requires manager approval. No balance is included.",
-    `Reply to this exact message with CONFIRM ${challenge} within 10 minutes to submit.`].join("\n");
+      `Type: ${input.leaveType}`, `Note (optional): ${input.employeeNote || "None"}`].join("\n");
 }
 function sameIdentity(a: Identity, b: Identity) { return a.account === b.account && a.sender === b.sender && a.session === b.session; }
 async function resolve<T extends Employee>(tx: EmployeeSource<T>, sender: string): Promise<T> {
@@ -164,6 +138,34 @@ function eligible(employee: Employee, input: LeaveFields) {
   if (!["full_time", "part_time"].includes(employee.employmentType ?? "") && input.leaveType !== "Unpaid leave") fail("not_available");
 }
 
+const TOKEN_DOMAIN = "mam-openclaw-leave:v3:draft:aes-256-gcm";
+function tokenKey(secret: string) { return createHmac("sha256", secret).update(TOKEN_DOMAIN).digest(); }
+function seal(draft: LeaveDraft, secret: string) {
+  const iv = randomBytes(12), cipher = createCipheriv("aes-256-gcm", tokenKey(secret), iv);
+  cipher.setAAD(Buffer.from(TOKEN_DOMAIN));
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(draft), "utf8"), cipher.final()]);
+  return `v3.${Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString("base64url")}`;
+}
+function unseal(value: unknown, secret: string): LeaveDraft {
+  const token = text(value, /^v3\.[A-Za-z0-9_-]{40,15000}$/);
+  try {
+    const bytes = Buffer.from(token.slice(3), "base64url");
+    if (bytes.toString("base64url") !== token.slice(3)) return fail("invalid_request");
+    const cipher = createDecipheriv("aes-256-gcm", tokenKey(secret), bytes.subarray(0, 12));
+    cipher.setAAD(Buffer.from(TOKEN_DOMAIN)); cipher.setAuthTag(bytes.subarray(12, 28));
+    const d = object(JSON.parse(Buffer.concat([cipher.update(bytes.subarray(28)), cipher.final()]).toString("utf8")));
+    exact(d, ["id", "identity", "personId", "userId", "fields", "summary", "digest", "challenge", "consentVersion", "employmentType", "fullName", "issuedAt", "expiresAt"]);
+    if (d.consentVersion !== 3 || !Number.isSafeInteger(d.issuedAt) || !Number.isSafeInteger(d.expiresAt) || Number(d.expiresAt) - Number(d.issuedAt) !== TTL) return fail("invalid_request");
+    text(d.id, UUID); text(d.personId, UUID); text(d.userId, UUID); text(d.challenge, UUID); text(d.digest, DIGEST);
+    const identity = object(d.identity); exact(identity, ["account", "sender", "session"]);
+    text(identity.account, ID); text(identity.session, ID); text(identity.sender, /^\+[1-9][0-9]{7,14}$/);
+    if (typeof d.summary !== "string" || hash(d.summary) !== d.digest || typeof d.fullName !== "string") return fail("invalid_request");
+    const parsed = fields(d.fields);
+    if ("missing" in parsed || JSON.stringify(parsed) !== JSON.stringify(d.fields)) return fail("invalid_request");
+    return d as unknown as LeaveDraft;
+  } catch { return fail("invalid_request"); }
+}
+
 /** The native adapter signs exact UTF-8 bytes, never model-provided identity.
  * Signature: hex HMAC-SHA256(key, `POST\n<path>\n<timestamp>\n<rawBody>`).
  * Do NOT expose a signing/confirm tool to the model. Missing adapter config
@@ -181,80 +183,57 @@ export async function handleLeaveBridge(
     try { parsed = JSON.parse(rawBody); } catch { return fail("invalid_request"); }
     const packet = object(parsed);
     exact(packet, ["version", "account", "channel", "sender", "session", "eventId", "operation", "payload"]);
-    if (![1, 2].includes(packet.version as number) || packet.channel !== "whatsapp" || packet.account !== config.account) fail("unauthorized");
-    const version = packet.version as 1 | 2;
+    // Retired versions must not create persistent preparation/display records.
+    if (packet.version !== 3) return { status: 409, body: { code: "restart_required" } };
+    if (packet.channel !== "whatsapp" || packet.account !== config.account) fail("unauthorized");
     const identity = { account: config.account, sender: text(packet.sender, /^\+[1-9][0-9]{7,14}$/), session: text(packet.session, ID) };
     if (normalizeAllowlistPhone(identity.sender) !== identity.sender) fail("unauthorized");
     const eventId = text(packet.eventId, ID);
     const payload = object(packet.payload);
-    if (!["profile", "prepare", "shown", "confirm"].includes(packet.operation as string)) fail("invalid_request");
+    if (!["prepare", "confirm"].includes(packet.operation as string)) fail("invalid_request");
     const key = hash(JSON.stringify([identity.account, identity.sender, eventId]));
     const fingerprint = hash(rawBody);
-    if (packet.operation === "profile") {
-      // Rolling compatibility for the old adapter only. v2 has no standalone
-      // profile operation: identity is resolved inside leave preparation.
-      if (version !== 1) fail("invalid_request");
-      exact(payload, []);
-      const employee = await resolve({ employees: () => store.selfProfileEmployees() }, identity.sender);
-      return { status: 200, body: { code: "profile", profile: profile(employee) } };
+    let draft: LeaveDraft | null = null;
+    if (packet.operation === "confirm") {
+      exact(payload, ["draftToken", "shownMessageId", "replyToMessageId", "text"]);
+      draft = unseal(payload.draftToken, config.key);
+      if (!sameIdentity(identity, draft.identity)) fail("not_available");
+      text(payload.shownMessageId, ID);
+      if (payload.replyToMessageId !== null && payload.replyToMessageId !== payload.shownMessageId) fail("conflict");
+      if (typeof payload.text !== "string" || !/^[ \t\r\n]*confirm[ \t\r\n]*$/i.test(payload.text)) fail("conflict");
+      if (draft.issuedAt > now) fail("conflict");
     }
-    const result = await store.transaction(async tx => {
-      const employee = await resolve(tx, identity.sender);
-      const previous = await tx.receipt(key);
-      if (previous) {
-        if (previous.fingerprint !== fingerprint || previous.personId !== employee.personId || previous.userId !== employee.userId) return fail("conflict");
-        return previous.result;
-      }
-      let result: BridgeResult;
-      if (packet.operation === "prepare") {
-        const input = fields(payload, version === 2 ? employee : undefined);
-        if ("missing" in input) result = { code: "needs_input", ...input };
-        else {
-          eligible(employee, input);
-          const id = randomUUID(), challenge = randomUUID();
-          const display = summary(input, employee, challenge, version);
-          const draft: LeaveDraft = { id, identity, personId: employee.personId, userId: employee.userId!, fields: input,
-            summary: display, digest: hash(display), challenge, ...(version === 2 ? { consentVersion: 2 as const, employmentType: employee.employmentType } : {}), expiresAt: now + TTL };
-          await tx.saveDraft(draft);
-          result = { code: "prepared", draftId: id, summary: display, digest: draft.digest, expiresAt: new Date(draft.expiresAt).toISOString(), ...(version === 2 ? { consentVersion: 2 as const } : {}) };
-        }
-      } else {
-        exact(payload, packet.operation === "shown" ? ["draftId", "digest", "outboundMessageId"] : ["draftId", "digest", "replyToMessageId", "text"]);
-        const draft = await tx.draft(text(payload.draftId, UUID));
-        if (!draft || !sameIdentity(identity, draft.identity) || draft.personId !== employee.personId || draft.userId !== employee.userId) return fail("not_available");
-        if ((draft.consentVersion ?? 1) !== version) return fail("conflict");
-        if (text(payload.digest, DIGEST) !== draft.digest) return fail("conflict");
-        // Expiry prevents NEW submissions, not receipt retrieval for a leave
-        // already committed. Identity/digest/quoted consent still bind retries.
-        if (draft.expiresAt <= now && !(packet.operation === "confirm" && draft.result)) return fail("expired");
-        if (!draft.result) {
-          if (version === 2 && draft.employmentType !== employee.employmentType) return fail("conflict");
-          eligible(employee, draft.fields);
-        }
-        if (packet.operation === "shown") {
-          const messageId = text(payload.outboundMessageId, ID);
-          if (draft.shownMessageId && draft.shownMessageId !== messageId) return fail("conflict");
-          if (draft.result) return fail("conflict");
-          draft.shownMessageId = messageId;
-          draft.shownAt ??= now;
-          result = { code: "shown" };
-        } else {
-          const confirmed = version === 2
-            ? typeof payload.text === "string" && /^[ \t\r\n]*confirm[ \t\r\n]*$/i.test(payload.text)
-            : payload.text === `CONFIRM ${draft.challenge}`;
-          if (!draft.shownMessageId || draft.shownAt === undefined || now <= draft.shownAt || payload.replyToMessageId !== draft.shownMessageId || !confirmed) return fail("conflict");
-          // Recompute the rendered summary on employment changes; never submit
-          // with different displayed hours/policy without a fresh confirmation.
-          if (!draft.result && hash(summary(draft.fields, employee, draft.challenge, version)) !== draft.digest) return fail("conflict");
-          draft.result ??= await tx.submitSelf(employee, draft.fields, draft.id);
-          if (draft.result.status !== "Pending" || !UUID.test(draft.result.requestId)) return fail("not_available");
-          result = { code: "submitted", ...draft.result };
-        }
-        await tx.saveDraft(draft);
-      }
-      await tx.saveReceipt(key, fingerprint, employee, result);
-      return result;
-    }, { key, fingerprint, packet });
+    const snapshot = await store.snapshot(key, draft?.id ?? null);
+    const employee = await resolve({ employees: async () => snapshot }, identity.sender);
+    if (!draft) {
+      const input = fields(payload, employee);
+      if ("missing" in input) return { status: 200, body: { code: "needs_input", ...input } };
+      eligible(employee, input);
+      const display = summary(input, employee);
+      const prepared: LeaveDraft = { id: randomUUID(), identity, personId: employee.personId, userId: employee.userId!,
+        fields: input, summary: display, digest: hash(display), challenge: randomUUID(), consentVersion: 3,
+        employmentType: employee.employmentType, fullName: profile({ ...employee, fullName: employee.fullName ?? null }).name,
+        issuedAt: now, expiresAt: now + TTL };
+      const draftToken = seal(prepared, config.key);
+      // Ensure the maximum legitimate confirm envelope still fits the route cap.
+      if (draftToken.length > 14000) fail("invalid_request");
+      return { status: 200, body: { code: "prepared", consentVersion: 3, draftId: prepared.id, summary: display,
+        digest: prepared.digest, expiresAt: new Date(prepared.expiresAt).toISOString(), draftToken } };
+    }
+    if (draft.personId !== employee.personId || draft.userId !== employee.userId) fail("not_available");
+    const previous = snapshot.receipt;
+    if (previous && (previous.fingerprint !== fingerprint || previous.personId !== employee.personId || previous.userId !== employee.userId)) fail("conflict");
+    const tokenHash = hash(payload.draftToken as string);
+    const submitted = snapshot.submitted;
+    if (submitted && (submitted.tokenHash !== tokenHash || submitted.personId !== employee.personId || submitted.userId !== employee.userId || !sameIdentity(submitted.identity, identity))) fail("conflict");
+    if (!previous && !submitted) {
+      if (draft.expiresAt <= now) fail("expired");
+      if (draft.employmentType !== employee.employmentType || draft.fullName !== profile({ ...employee, fullName: employee.fullName ?? null }).name || summary(draft.fields, employee) !== draft.summary) fail("conflict");
+      eligible(employee, draft.fields);
+    }
+    // Even a replay goes through the locked source-CAS transaction; never return
+    // a cached result after only a stale/unlocked identity read.
+    const result = await store.submit({ key, fingerprint, sourceFingerprint: snapshot.fingerprint, packet, employee, draft, tokenHash });
     return { status: 200, body: result };
   } catch (error) {
     if (error instanceof ContractError) return { status: error.code === "unauthorized" ? 401 : error.code === "invalid_request" ? 400 : 409, body: { code: error.code } };

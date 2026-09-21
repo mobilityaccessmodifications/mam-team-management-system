@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { Type } from "typebox";
 import { defineToolPlugin } from "openclaw/plugin-sdk/tool-plugin";
 import { createPluginRuntimeStore } from "openclaw/plugin-sdk/runtime-store";
+import { getSessionEntry, resolveSendPolicy } from "openclaw/plugin-sdk/session-store-runtime";
 
 const BRIDGE_PATH = "/api/internal/integrations/openclaw/leave";
 const E164 = /^\+[1-9][0-9]{7,14}$/u;
@@ -54,7 +55,7 @@ function conversation(context) {
   // converted into an employee identity.
   if (channel !== "whatsapp" || !sender || !to || sender !== to || !sessionKey || !SAFE_ID.test(`s-${sha256(sessionKey)}`)) return null;
   if (typeof account !== "string" || !SAFE_ID.test(account)) return null;
-  return { account, sender, session: `s-${sha256(sessionKey)}`, key: `${account}\u0000${sender}\u0000${sha256(sessionKey)}` };
+  return { account, sender, sessionKey, session: `s-${sha256(sessionKey)}`, key: `${account}\u0000${sender}\u0000${sha256(sessionKey)}` };
 }
 
 function hookConversation(event, context) {
@@ -65,7 +66,7 @@ function hookConversation(event, context) {
   const isGroup = event.isGroup;
   if (channel !== "whatsapp" || isGroup !== false || !sender || typeof sessionKey !== "string" || !sessionKey.trim() || !SAFE_ID.test(`s-${sha256(sessionKey.trim())}`)) return null;
   if (typeof account !== "string" || !SAFE_ID.test(account)) return null;
-  return { account, sender, session: `s-${sha256(sessionKey.trim())}`, key: `${account}\u0000${sender}\u0000${sha256(sessionKey.trim())}` };
+  return { account, sender, sessionKey: sessionKey.trim(), session: `s-${sha256(sessionKey.trim())}`, key: `${account}\u0000${sender}\u0000${sha256(sessionKey.trim())}` };
 }
 
 function configured() {
@@ -100,12 +101,13 @@ function remember(owner, identity, result) {
   const pending = owner.pending;
   if (result?.code !== "prepared" || typeof result.draftId !== "string" || typeof result.digest !== "string" || typeof result.summary !== "string") return null;
   const expiresAt = Date.parse(result.expiresAt ?? "");
-  if (result.consentVersion !== 2 || !UUID.test(result.draftId) || !/^[a-f0-9]{64}$/u.test(result.digest) || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+  if (result.consentVersion !== 3 || typeof result.draftToken !== "string" || result.draftToken.length > 14000 || !result.draftToken
+    || !UUID.test(result.draftId) || !/^[a-f0-9]{64}$/u.test(result.digest) || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
   if (sha256(result.summary) !== result.digest) return null;
   // A literal block keeps employee notes from becoming WhatsApp markdown. The
   // server-signed summary inside it is unchanged. Quote checks bind this display.
   const deliveryText = `\`\`\`\n${result.summary}\n\`\`\``;
-  const item = { ...identity, owner, draftId: result.draftId, digest: result.digest, summary: result.summary, deliveryText, expiresAt, outboundMessageId: null, shown: false, createdAt: Date.now() };
+  const item = { ...identity, owner, draftId: result.draftId, draftToken: result.draftToken, digest: result.digest, summary: result.summary, deliveryText, expiresAt, outboundMessageId: null, shown: false, createdAt: Date.now() };
   const list = (pending.get(identity.key) ?? []).filter((entry) => entry.expiresAt > Date.now());
   list.push(item);
   while (list.length > MAX_PENDING) list.shift();
@@ -125,17 +127,19 @@ function prune(owner) {
   const pending = owner.pending;
   const now = Date.now();
   for (const [key, list] of pending) {
-    const next = list.filter((item) => item.expiresAt > now);
+    const next = list.filter((item) => item.expiresAt > now || ((item.result || item.confirmationPacket) && item.createdAt + 3600_000 > now));
     if (next.length) pending.set(key, next);
     else pending.delete(key);
   }
+  for (const [key, event] of owner.confirmations) if (event.expiresAt <= now) owner.confirmations.delete(key);
+  for (const [key, turn] of owner.turns) if (turn.createdAt + 3600_000 <= now && !pending.has(key) && !owner.preparing.has(key)) owner.turns.delete(key);
 }
 
 async function bridge(identity, operation, payload, inboundMessageId) {
   const cfg = configured();
   if (!cfg || identity.account !== cfg.account) return { code: "unavailable" };
   const packet = {
-    version: 2,
+    version: 3,
     account: identity.account,
     channel: "whatsapp",
     sender: identity.sender,
@@ -176,7 +180,7 @@ async function bridge(identity, operation, payload, inboundMessageId) {
   }
 }
 
-async function deliverSummary(owner, toolContext, item, signal) {
+async function sendSummary(owner, toolContext, item, signal) {
   if (!isCurrent(owner)) throw new Error("gateway_unavailable");
   owner.validatePreparedSummary(item);
   signal?.throwIfAborted();
@@ -194,6 +198,16 @@ async function deliverSummary(owner, toolContext, item, signal) {
   return messageId;
 }
 
+async function deliverSummary(owner, toolContext, item, signal) {
+  // An earlier send already in flight must finish before a replacement sends;
+  // otherwise an old summary could become the last visible message.
+  const previous = owner.deliveries.get(item.key) ?? Promise.resolve();
+  const delivery = previous.catch(() => {}).then(() => sendSummary(owner, toolContext, item, signal));
+  owner.deliveries.set(item.key, delivery);
+  try { return await delivery; }
+  finally { if (owner.deliveries.get(item.key) === delivery) owner.deliveries.delete(item.key); }
+}
+
 function visiblePrepareResult(result, shown) {
   if (result.code === "needs_input") return result;
   if (result.code !== "prepared") return { code: "unavailable" };
@@ -202,7 +216,7 @@ function visiblePrepareResult(result, shown) {
     summary: result.summary,
     delivery: shown ? "The exact summary has a verified delivery receipt. Do not send another copy."
       : "Delivery requested; awaiting the provider receipt. Do not claim delivery or submission. Do not send another copy. If no summary arrives, start a new request.",
-    instruction: "Do not claim that leave has been submitted. The employee must use WhatsApp Reply on that exact summary and send Confirm. No long code is needed. Do not send another summary or ask for a note if none was provided.",
+    instruction: "Do not claim that leave has been submitted. In one short follow-up, tell the employee: Send Confirm within 10 minutes to submit your latest summary for manager approval, or tell me what to change. No WhatsApp Reply gesture is needed. Do not send another summary or ask for a note if none was provided.",
   };
 }
 
@@ -210,20 +224,18 @@ async function recordShown(item) {
   if (!isCurrent(item.owner) || !item.owner.pending.get(item.key)?.includes(item)) return false;
   if (item.shown) return true;
   if (!item.outboundMessageId) return false;
-  if (item.shownPromise) return item.shownPromise;
-  // Pin the first provider ID, but retain a retry path for that SAME receipt.
-  // Concurrent hook/confirmation retries share one in-flight registration.
-  item.shownPromise = bridge(item, "shown", {
-    draftId: item.draftId, digest: item.digest, outboundMessageId: item.outboundMessageId,
-  }).then((result) => { item.shown = isCurrent(item.owner) && result.code === "shown"; return item.shown; });
-  try { return await item.shownPromise; } finally { item.shownPromise = null; }
+  // Until human consent, both the draft and actual provider receipt are memory
+  // only. No People database draft/receipt or "shown" request is created.
+  item.shownAt = Date.now();
+  item.shown = true;
+  return true;
 }
 
 function confirmationText(result) {
   if (result.code === "submitted" && result.status === "Pending") return "Your leave request has been submitted and is now pending manager approval.";
   if (result.code === "expired") return "That leave confirmation has expired. Please start the leave request again.";
   if (result.code === "conflict") return "That confirmation could not be matched to the exact leave summary. Please start the leave request again.";
-  return "I could not verify submission yet. Please reply to the same summary with Confirm again shortly; do not start a duplicate request.";
+  return "I could not verify submission yet. Please send Confirm again shortly to check the same request; do not start a duplicate request.";
 }
 
 const prepareParameters = Type.Object({
@@ -234,7 +246,7 @@ const prepareParameters = Type.Object({
   endTime: Type.Optional(Type.Union([Type.String(), Type.Null()], { description: "Optional end time in HH:MM, 15-minute intervals." })),
   employeeNote: Type.Optional(Type.String({ description: "Optional note, copied exactly from the employee's message." })),
 }, { additionalProperties: false });
-const prepareDescription = "Prepare leave only after the authenticated WhatsApp sender explicitly asks to apply for leave, never for greetings, ordinary conversation, startup or general policy questions. Call with the details already supplied; do not ask paid versus unpaid first. The server resolves eligibility internally, defaults casual/ABN to Unpaid leave if no type was supplied, and returns any missing fields and available types. Ask only for those missing fields; never silently replace an explicitly requested type that is unavailable. The trusted sender phone number is the sole employee identity and leave subject. Never ask for or accept a name, phone number, employee ID, user ID, employment type, leave subject, addressee, manager, approver, status, confirmation flag, or another person's identity. No separate profile lookup is needed or available. A note is optional: if none was supplied, use an empty note without an extra question. Ask about partial-day times only when requested. Reviewer routing is server-side. It sends the exact confirmation summary; only the employee's subsequent quoted Confirm reply can submit the request.";
+const prepareDescription = "Prepare leave only after the authenticated WhatsApp sender explicitly asks to apply for leave, never for greetings, ordinary conversation, startup or general policy questions. Call with the details already supplied; do not ask paid versus unpaid first. The server resolves eligibility internally, defaults casual/ABN to Unpaid leave if no type was supplied, and returns any missing fields and available types. Ask only for those missing fields; never silently replace an explicitly requested type that is unavailable. The trusted sender phone number is the sole employee identity and leave subject. Never ask for or accept a name, phone number, employee ID, user ID, employment type, leave subject, addressee, manager, approver, status, confirmation flag, or another person's identity. No separate profile lookup is needed or available. A note is optional: if none was supplied, use an empty note without an extra question. Ask about partial-day times only when requested. Reviewer routing is server-side. On edits, prepare the complete updated details again; this replaces the previous unsubmitted draft. It sends the exact summary; only the employee's subsequent standalone Confirm message can submit the latest request. Never call this tool in response to Confirm.";
 
 const plugin = defineToolPlugin({
   id: "mam-openclaw-leave",
@@ -250,6 +262,8 @@ const plugin = defineToolPlugin({
       const identity = conversation(toolContext);
       const cfg = configured();
       if (!identity || !cfg || identity.account !== cfg.account) return null;
+      const factoryOwner = activeGateway();
+      const factoryTurn = factoryOwner?.turns.get(identity.key);
       return {
         name: "mam_leave_prepare",
         label: "Prepare MAM leave request",
@@ -260,6 +274,9 @@ const plugin = defineToolPlugin({
           const owner = activeGateway();
           if (!owner) return { content: [{ type: "text", text: "Leave service is temporarily unavailable." }], details: { code: "unavailable" } };
           prune(owner);
+          if (owner !== factoryOwner || owner.turns.get(identity.key) !== factoryTurn) return { content: [{ type: "text", text: "That request changed. Please prepare the current leave details again." }], details: { code: "unavailable" } };
+          const previous = owner.pending.get(identity.key)?.[0];
+          if (previous?.confirming || (previous?.confirmationPacket && !previous.result)) return { content: [{ type: "text", text: "The previous submission has not been verified yet. Ask the employee to send Confirm again to check it before starting another request." }], details: { code: "unavailable" } };
           // Invalidate the prior local summary as soon as a new preparation
           // starts, even if validation or delivery then fails. Concurrent or
           // delayed prepare completions must not restore an older summary.
@@ -288,6 +305,7 @@ const plugin = defineToolPlugin({
             }
             return { content: [{ type: "text", text: "I could not deliver the confirmation summary. Please try the leave request again." }], details: { code: "unavailable" } };
           }
+          if (!isCurrent(owner) || !owner.pending.get(identity.key)?.includes(item)) return { content: [{ type: "text", text: "That request changed. Please prepare the current leave details again." }], details: { code: "unavailable" } };
           const output = visiblePrepareResult(result, item.shown);
           return { content: [{ type: "text", text: JSON.stringify(output) }], details: output };
         },
@@ -309,11 +327,31 @@ plugin.register = (api) => {
       // not the optional-tool discovery registry (which has no channel entries).
       const adapter = await api.runtime.channel.outbound.loadAdapter("whatsapp");
       if (typeof adapter?.sendText !== "function") throw new Error("MAM WhatsApp delivery adapter is unavailable");
-      const owner = { active: true, pending: new Map(), preparing: new Map(), logger: context.logger };
+      const owner = { active: true, pending: new Map(), preparing: new Map(), deliveries: new Map(), turns: new Map(), confirmations: new Map(), logger: context.logger };
+      owner.canSend = (identity) => {
+        if (!isCurrent(owner) || configured()?.account !== identity.account) return false;
+        const agentId = /^agent:([A-Za-z0-9_-]+):/u.exec(identity.sessionKey)?.[1];
+        if (!agentId) return false;
+        try {
+          const entry = getSessionEntry({ agentId, sessionKey: identity.sessionKey, readConsistency: "latest" });
+          return !!entry && resolveSendPolicy({ cfg: context.config, entry, sessionKey: identity.sessionKey, channel: "whatsapp", chatType: "direct" }) === "allow";
+        } catch { return false; }
+      };
+      owner.sendConfirmation = async (identity, text) => {
+        // Explicit, fixed-text response to this authenticated inbound DM. Codex's
+        // message_tool-only mode suppresses automatic hook text, not permitted
+        // explicit replies. Re-check the real session/config deny policy; do not
+        // override visibleReplies or return text that could also auto-deliver.
+        if (!owner.canSend(identity)) return;
+        try {
+          await adapter.sendText({ cfg: context.config, to: identity.sender, text, accountId: identity.account,
+            formatting: { chunkMode: "length" } });
+        } catch { diagnostic(owner, "confirmation_delivery", "adapter_failed"); }
+      };
       owner.validatePreparedSummary = (item) => {
         const cfg = configured();
         if (!isCurrent(owner) || item.owner !== owner || cfg?.account !== item.account
-          || !owner.pending.get(item.key)?.includes(item) || sha256(item.summary) !== item.digest) throw new Error("draft_unavailable");
+          || !owner.pending.get(item.key)?.includes(item) || sha256(item.summary) !== item.digest || !owner.canSend(item)) throw new Error("draft_unavailable");
         const text = item.deliveryText;
         const limit = Math.min(4000, api.runtime.channel.text.resolveTextChunkLimit(context.config, "whatsapp", item.account, { fallbackLimit: 4000 }));
         if (text.length > limit) throw new Error("summary_too_long");
@@ -338,13 +376,16 @@ plugin.register = (api) => {
       gatewayOwner.active = false;
       gatewayOwner.pending.clear();
       gatewayOwner.preparing.clear();
+      gatewayOwner.deliveries.clear();
+      gatewayOwner.turns.clear();
+      gatewayOwner.confirmations.clear();
       if (gatewayStore.tryGetRuntime() === gatewayOwner) gatewayStore.clearRuntime();
       gatewayOwner = undefined;
     },
   });
 
     api.on("message_sent", async (event, context) => {
-      const owner = gatewayOwner;
+      const owner = activeGateway();
       if (!isCurrent(owner)) return;
       prune(owner);
       if (!event.success || typeof event.messageId !== "string" || !event.messageId || context.channelId !== "whatsapp") return;
@@ -364,40 +405,70 @@ plugin.register = (api) => {
     });
 
     api.on("before_dispatch", async (event, context) => {
-      const owner = gatewayOwner;
+      const owner = activeGateway();
       if (!isCurrent(owner)) return;
       prune(owner);
       const content = typeof event.content === "string" ? event.content : "";
-      if (!/^[ \t\r\n]*confirm[ \t\r\n]*$/iu.test(content)) return;
       const identity = hookConversation(event, context);
-      if (!identity) return { handled: true, text: "Please send that confirmation in the approved MAM WhatsApp direct chat." };
-      const list = owner.pending.get(identity.key) ?? [];
-      const replyTo = event.replyToIdFull ?? event.replyToId ?? context.replyToIdFull ?? context.replyToId;
-      if (!replyTo) return { handled: true, text: "Please use WhatsApp Reply on your leave summary, then send Confirm." };
-      const item = list.find((entry) => entry.outboundMessageId && entry.outboundMessageId === replyTo);
-      if (!item || owner.preparing.has(identity.key)) return { handled: true, text: "That leave confirmation is no longer available. Please start the leave request again." };
+      const isConfirm = /^[ \t\r\n]*confirm[ \t\r\n]*$/iu.test(content);
+      if (!identity || configured()?.account !== identity.account) return isConfirm ? { handled: true } : undefined;
       const inboundMessageId = event.messageId ?? context.messageId;
-      if (typeof inboundMessageId !== "string" || !SAFE_ID.test(inboundMessageId)) return { handled: true, text: "I could not verify that confirmation. Please reply to your leave summary with Confirm again." };
-      // WhatsApp 2026.9.4 maps its native stanza quote ID/body but omits
-      // isQuote. In that case require the exact displayed body as well as ID.
-      const quoted = event.replyToIsQuote ?? context.replyToIsQuote;
-      const quoteBody = event.replyToBody ?? context.replyToBody;
-      if (!item.outboundMessageId || replyTo !== item.outboundMessageId || quoted === false
-        || (quoted !== true && quoteBody !== item.deliveryText)) {
-        return { handled: true, text: "Please use WhatsApp Reply on the exact leave summary message, then send Confirm." };
+      if (!isConfirm) {
+        if (owner.turns.get(identity.key)?.messageId === inboundMessageId && inboundMessageId) return;
+        const previous = owner.pending.get(identity.key)?.[0];
+        // Confirmation is the linearization point: an edit received afterwards
+        // cannot undo an already authorized/in-flight submission. Unknown
+        // outcomes must be reconciled before a new draft can be prepared.
+        if (previous?.confirming) await previous.confirming;
+        if (previous?.confirmationPacket && !previous.result) {
+          await owner.sendConfirmation(identity, confirmationText({ code: "unavailable" }));
+          return { handled: true };
+        }
+        owner.turns.set(identity.key, { messageId: inboundMessageId, createdAt: Date.now() });
+        owner.pending.delete(identity.key);
+        owner.preparing.delete(identity.key);
+        return;
       }
-      if (!await recordShown(item)) {
-        return { handled: true, text: "The summary delivery receipt is not confirmed yet. Please reply to the same summary with Confirm again shortly. Nothing new has been submitted by this attempt." };
+      if (!owner.canSend(identity)) return { handled: true };
+      if (typeof inboundMessageId !== "string" || !SAFE_ID.test(inboundMessageId)) {
+        await owner.sendConfirmation(identity, "I could not verify that message. Please send Confirm again.");
+        return { handled: true };
       }
-      if (!isCurrent(owner) || !owner.pending.get(identity.key)?.includes(item) || owner.preparing.has(identity.key)) return { handled: true, text: "That request changed. Please use the latest leave summary." };
-      const result = await bridge(identity, "confirm", {
-        draftId: item.draftId,
-        digest: item.digest,
-        replyToMessageId: replyTo,
-        text: content,
-      }, inboundMessageId);
-      if (result.code === "submitted") forget(item);
-      return { handled: true, text: confirmationText(result) };
+      const eventKey = `${identity.key}\u0000${inboundMessageId}`;
+      const prior = owner.confirmations.get(eventKey);
+      if (prior) { await prior.promise; return { handled: true }; }
+      // Freeze the selected draft when the real message arrives, before any
+      // await. Duplicate delivery of this event can never select a later draft.
+      const item = owner.pending.get(identity.key)?.[0];
+      const replyTo = event.replyToIdFull ?? event.replyToId ?? context.replyToIdFull ?? context.replyToId ?? null;
+      const timestamp = typeof event.timestamp === "number" && Number.isFinite(event.timestamp)
+        ? (event.timestamp < 1e12 ? event.timestamp * 1000 : event.timestamp) : null;
+      const record = { expiresAt: Date.now() + 3600_000, promise: null };
+      owner.confirmations.set(eventKey, record);
+      record.promise = (async () => {
+        let text;
+        if (!item || owner.preparing.has(identity.key)) text = "There is no current leave summary to confirm. Please tell me your leave dates again.";
+        else if (replyTo && replyTo !== item.outboundMessageId) text = "That is an older leave summary. Please review the latest summary and send Confirm without quoting the older message.";
+        else if (!item.shown || !item.outboundMessageId || timestamp === null || timestamp < Math.floor(item.shownAt / 1000) * 1000) text = "Please wait for your latest leave summary, then send a new Confirm message. Nothing has been submitted by this message.";
+        else if (!item.result && !item.confirmationPacket && item.expiresAt <= Date.now()) text = confirmationText({ code: "expired" });
+        else {
+          if (!item.result) {
+            // Keep the SAME event and exact payload after a timeout, even if the
+            // employee retries in a new message. Never manufacture a quote.
+            item.confirmationPacket ??= { eventId: inboundMessageId, payload: { draftToken: item.draftToken,
+              shownMessageId: item.outboundMessageId, replyToMessageId: replyTo, text: content } };
+            if (!item.confirming) item.confirming = bridge(identity, "confirm", item.confirmationPacket.payload, item.confirmationPacket.eventId)
+              .then(result => { if (result.code === "submitted" && result.status === "Pending") item.result = result; return result; });
+            const result = await item.confirming;
+            item.confirming = null;
+            if (["expired", "conflict"].includes(result.code)) { item.confirmationPacket = null; forget(item); }
+            text = confirmationText(result);
+          } else text = confirmationText(item.result);
+        }
+        await owner.sendConfirmation(identity, text);
+      })();
+      await record.promise;
+      return { handled: true };
     });
 };
 
