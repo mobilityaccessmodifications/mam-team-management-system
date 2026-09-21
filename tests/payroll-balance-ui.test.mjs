@@ -159,3 +159,23 @@ test('annual request context names an unavailable balance instead of hiding or i
   assert.match(html, /Balance needs checking/);
   assert.doesNotMatch(html, /<strong>0<\/strong>/);
 });
+
+
+test('payroll availability permits approval despite a legacy accrual review flag', () => {
+  const payrollPerson = { ...person, accrualStatus: 'needs_review',
+    annualPayrollHours: 48, annualApprovedHours: 15.2, annualAvailableHours: 32.8,
+    canViewSickBalance: true, sickPayrollHours: 12, sickApprovedHours: 0, sickAvailableHours: 12,
+  };
+  assert.equal(approvalBalanceCoverage(payrollPerson, 'Annual leave', 7.6), 'Enough balance');
+  assert.equal(approvalBalanceCoverage(payrollPerson, 'Annual leave', 38), 'Not enough balance');
+  assert.equal(approvalBalanceCoverage(payrollPerson, 'Sick leave', 7.6), 'Enough balance');
+  assert.equal(approvalBalanceCoverage(payrollPerson, "Carer's leave", 15.2), 'Not enough balance');
+  assert.equal(approvalBalanceCoverage({...payrollPerson, annualAvailableHours:null}, 'Annual leave', 7.6), 'Check balance');
+  assert.equal(approvalBalanceCoverage({...payrollPerson, annualAvailableHours:NaN}, 'Annual leave', 7.6), 'Check balance');
+  assert.equal(approvalBalanceCoverage({...payrollPerson, annualAvailableHours:0}, 'Annual leave', 7.6), 'Not enough balance');
+  const html = renderToStaticMarkup(createElement(loaded.exports.ApprovalLeaveBalances, {
+    workspace: workspace([payrollPerson]), personId:'employee', requestId:'request', busy:false, async onSaved() {},
+  }));
+  assert.match(html, /32.8/);
+  assert.doesNotMatch(html, /Balance needs checking|Ask HR to confirm/);
+});

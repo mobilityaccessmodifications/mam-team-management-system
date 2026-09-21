@@ -151,7 +151,7 @@ export function ApprovalLeaveBalances({ workspace, personId, requestId, busy, on
         ? <ApprovalBalanceCard label="Sick leave" currentHours={person.sickPayrollHours ?? person.sickHours} approvedHours={person.sickApprovedHours} availableHours={person.sickAvailableHours} asOf={person.sickPayrollDate ?? person.sickAsOf} sick />
         : <BalanceCard label="Sick leave" hours={person.sickHours} sick /> : null}
     </div>
-    {person ? <LeaveAccrualNotice person={person} /> : null}
+    {person && !annualBreakdown && !sickBreakdown ? <LeaveAccrualNotice person={person} /> : null}
     {request?.pendingBalance ? <>
       <p>{request.balanceSufficient ? "Balance sufficient — ready for review." : "Waiting for enough leave. You’ll be notified when the balance is sufficient."}</p>
       <form className={styles.leaveBalanceEditor} onSubmit={async (event) => {
