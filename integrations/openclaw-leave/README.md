@@ -22,7 +22,11 @@ other instructions and access restrictions intact.
 
 The server renders Name, Dates, Type and Note (optional), plus times/timezone
 for part-day requests, from the same authoritative transaction snapshot. The
-employee uses WhatsApp Reply on that exact summary and types `Confirm`; casing
+summary contains only the request fields; the separate follow-up explains the
+Reply gesture, ten-minute deadline and manager approval. Existing v2 drafts with
+the exact former footer remain confirmable within their original expiry, with
+the same current-name, field, digest and quote checks.
+The employee uses WhatsApp Reply on that exact summary and types `Confirm`; casing
 and surrounding ASCII whitespace are accepted. There is no visible UUID and no
 unquoted/latest-draft inference. Receipt IDs, exact displayed text, current
 sender/account/session, expiry and idempotency remain required. Confirmation

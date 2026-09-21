@@ -202,7 +202,7 @@ function visiblePrepareResult(result, shown) {
     summary: result.summary,
     delivery: shown ? "The exact summary has a verified delivery receipt. Do not send another copy."
       : "Delivery requested; awaiting the provider receipt. Do not claim delivery or submission. Do not send another copy. If no summary arrives, start a new request.",
-    instruction: "Do not claim that leave has been submitted. The employee must use WhatsApp Reply on that exact summary and send Confirm. No long code is needed. Do not send another summary or ask for a note if none was provided.",
+    instruction: "Do not claim that leave has been submitted. In one short follow-up, tell the employee: To submit, long-press the summary above, select Reply, then type Confirm within 10 minutes. This sends your request for manager approval. A standalone Confirm does not submit it. Do not send another summary or ask for a note if none was provided.",
   };
 }
 
@@ -373,7 +373,7 @@ plugin.register = (api) => {
       if (!identity) return { handled: true, text: "Please send that confirmation in the approved MAM WhatsApp direct chat." };
       const list = owner.pending.get(identity.key) ?? [];
       const replyTo = event.replyToIdFull ?? event.replyToId ?? context.replyToIdFull ?? context.replyToId;
-      if (!replyTo) return { handled: true, text: "Please use WhatsApp Reply on your leave summary, then send Confirm." };
+      if (!replyTo) return { handled: true, text: "Nothing has been submitted. Long-press the leave summary, select Reply, then type Confirm." };
       const item = list.find((entry) => entry.outboundMessageId && entry.outboundMessageId === replyTo);
       if (!item || owner.preparing.has(identity.key)) return { handled: true, text: "That leave confirmation is no longer available. Please start the leave request again." };
       const inboundMessageId = event.messageId ?? context.messageId;

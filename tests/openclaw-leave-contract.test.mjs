@@ -218,8 +218,8 @@ test('v2 summary uses authoritative name and only key leave fields without a vis
   assert.match(d.summary, /^Dates: 2026-10-12$/m);
   assert.match(d.summary, /^Type: Annual leave$/m);
   assert.match(d.summary, /^Note \(optional\): None$/m);
-  assert.match(d.summary, /reply to this message with Confirm/);
-  assert.doesNotMatch(d.summary, /CONFIRM [a-f0-9-]{36}|Duration:|Phone:|User ID|hours/);
+  assert.equal(d.summary, 'Please review your leave request:\nName: Synthetic Employee\nDates: 2026-10-12\nType: Annual leave\nNote (optional): None');
+  assert.doesNotMatch(d.summary, /Confirm|CONFIRM [a-f0-9-]{36}|To submit|Not submitted yet|Manager approval|Duration:|Phone:|User ID|hours/);
   assert.equal(d.digest, crypto.createHash('sha256').update(d.summary).digest('hex'));
   assert.equal(f.profileReads(), 0, 'Summary name belongs to the transaction snapshot, not a second profile read');
   assert.equal(f.state().leaves.length, 0);
@@ -231,6 +231,33 @@ test('v2 keeps exact note and part-day dates, times and timezone in the signed s
   assert.match(d.summary, /^Dates: 2026-10-12 to 2026-10-13$/m);
   assert.match(d.summary, /^Times: 12:00 to 15:00 \(Australia\/Melbourne\)$/m);
   assert.ok(d.summary.includes(`Note (optional): ${note}`));
+});
+
+async function previousV2Draft(f, footer = 'To submit, reply to this message with Confirm within 10 minutes.\nNot submitted yet. Manager approval is still required.') {
+  const d = (await f.call(f.packet('prepare', input(), { version: 2 }))).body;
+  // Model the exact persisted draft shape produced before the copy-only release.
+  const stored = f.state().drafts.get(d.draftId);
+  stored.summary += '\n\n' + footer;
+  stored.digest = crypto.createHash('sha256').update(stored.summary).digest('hex');
+  const digest = stored.digest;
+  assert.equal((await f.call(f.packet('shown', { draftId: d.draftId, digest, outboundMessageId: 'old-v2-summary' }, { version: 2 }))).body.code, 'shown');
+  return f.packet('confirm', { draftId: d.draftId, digest, replyToMessageId: 'old-v2-summary', text: 'Confirm' }, { version: 2 });
+}
+
+test('v2 drafts with the exact previous summary footer still confirm after the copy release', async () => {
+  const f = fixture(), confirmation = await previousV2Draft(f);
+  assert.equal((await f.call(confirmation, baseTime + 1000)).body.code, 'submitted');
+  assert.equal(f.state().leaves.length, 1);
+});
+
+test('previous v2 rendering never bypasses current name or exact displayed-text validation', async () => {
+  const renamed = fixture(), confirmation = await previousV2Draft(renamed);
+  renamed.setRows([{ ...employee(), fullName: 'Changed Synthetic Name' }]);
+  assert.equal((await renamed.call(confirmation, baseTime + 1000)).status, 409);
+  assert.equal(renamed.state().leaves.length, 0);
+  const altered = fixture(), alteredConfirmation = await previousV2Draft(altered, 'Already approved.');
+  assert.equal((await altered.call(alteredConfirmation, baseTime + 1000)).status, 409);
+  assert.equal(altered.state().leaves.length, 0);
 });
 
 test('v2 requires real displayed-summary binding but accepts ordinary Confirm casing and spacing', async () => {

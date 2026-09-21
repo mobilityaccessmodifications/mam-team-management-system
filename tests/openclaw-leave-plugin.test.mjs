@@ -9,7 +9,7 @@ const source = readFileSync(new URL("index.js", root), "utf8");
 const bridgePath = "/api/internal/integrations/openclaw/leave";
 const key = "synthetic-test-key-".padEnd(48, "x");
 const challenge = "30000000-0000-4000-8000-000000000001";
-const summary = "Please review your leave request:\nName: Synthetic Employee\nDates: 2030-10-14\nType: Unpaid leave\nNote (optional): None\n\nTo submit, reply to this message with Confirm within 10 minutes.\nNot submitted yet. Manager approval is still required.";
+const summary = "Please review your leave request:\nName: Synthetic Employee\nDates: 2030-10-14\nType: Unpaid leave\nNote (optional): None";
 const deliveryText = `\`\`\`\n${summary}\n\`\`\``;
 const env = {
   MAM_OPENCLAW_LEAVE_ENABLED: "true",
@@ -218,6 +218,8 @@ test("prepare uses the Gateway service adapter when host-bound delivery is absen
   const prepared = await tool.execute("adapter-fallback", params, signal);
   assert.equal(prepared.details.code, "prepared");
   assert.match(prepared.details.delivery, /verified delivery receipt/i);
+  assert.match(prepared.details.instruction, /long-press the summary above, select Reply, then type Confirm within 10 minutes/);
+  assert.match(prepared.details.instruction, /manager approval/);
   assert.equal(deliveries.length, 1);
   assert.equal(deliveries[0].cfg, plugin.config);
   assert.equal(deliveries[0].to, identity.requesterSenderId);
@@ -226,6 +228,17 @@ test("prepare uses the Gateway service adapter when host-bound delivery is absen
   assert.equal(deliveries[0].signal, signal);
   assert.deepEqual(plugin.calls.map((call) => call.operation), ["prepare", "shown"]);
   assert.equal(plugin.calls[1].payload.outboundMessageId, "synthetic-adapter-receipt");
+});
+
+test("standalone Confirm explains the Reply gesture without submitting the current draft", async () => {
+  const plugin = loadPlugin();
+  await plugin.start();
+  const tool = toolByName(plugin, "mam_leave_prepare").factory({ toolContext: { ...identity, delivery: undefined } });
+  await tool.execute("prepare-before-standalone-confirm", params);
+  const reply = await plugin.hooks.get("before_dispatch")({ ...confirmEvent, replyToId: undefined, replyToIsQuote: undefined }, hookContext);
+  assert.equal(reply.handled, true);
+  assert.equal(reply.text, "Nothing has been submitted. Long-press the leave summary, select Reply, then type Confirm.");
+  assert.deepEqual(plugin.calls.map(call => call.operation), ["prepare", "shown"]);
 });
 
 test("trusted self identity signs prepare, records delivery and requires exact quoted confirmation", async () => {

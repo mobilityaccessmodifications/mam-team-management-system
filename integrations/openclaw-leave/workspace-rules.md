@@ -39,8 +39,10 @@ generic personal-assistant and memory instructions elsewhere in this workspace.
 - Call `mam_leave_prepare` again with the collected details. Its exact
   server-rendered summary contains the employee's name, leave dates, leave type
   and optional note; include the times and timezone for part-day requests.
-- Do not send a second copy or rewrite the summary. Ask the employee to use
-  WhatsApp Reply on that summary and send `Confirm`. No long code is needed.
+- Do not send a second copy or rewrite the summary. In one short follow-up,
+  tell the employee to long-press the summary above, select WhatsApp Reply,
+  then type `Confirm` within 10 minutes to submit it for manager approval.
+  These instructions belong in the follow-up, not in the field-only summary.
 - A standalone Confirm without replying to the summary cannot submit leave.
   Do not guess which draft it refers to or prepare a duplicate request from it.
 - The trusted incoming-message handler, not the language model, processes the

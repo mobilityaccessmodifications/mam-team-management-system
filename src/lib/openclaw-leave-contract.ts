@@ -125,9 +125,7 @@ function summary(input: LeaveFields, employee: Employee, challenge: string, vers
     const dates = input.startDate === input.endDate ? input.startDate : `${input.startDate} to ${input.endDate}`;
     return ["Please review your leave request:", `Name: ${name}`, `Dates: ${dates}`,
       ...(input.startTime && input.endTime ? [`Times: ${input.startTime} to ${input.endTime} (Australia/Melbourne)`] : []),
-      `Type: ${input.leaveType}`, `Note (optional): ${input.employeeNote || "None"}`,
-      "", "To submit, reply to this message with Confirm within 10 minutes.",
-      "Not submitted yet. Manager approval is still required."].join("\n");
+      `Type: ${input.leaveType}`, `Note (optional): ${input.employeeNote || "None"}`].join("\n");
   }
   let days = 0;
   for (let d = +new Date(input.startDate); d <= +new Date(input.endDate); d += 86400000) {
@@ -143,6 +141,14 @@ function summary(input: LeaveFields, employee: Employee, challenge: string, vers
     `Reply to this exact message with CONFIRM ${challenge} within 10 minutes to submit.`].join("\n");
 }
 function sameIdentity(a: Identity, b: Identity) { return a.account === b.account && a.sender === b.sender && a.session === b.session; }
+function matchesStoredSummary(draft: LeaveDraft, employee: Employee, version: number) {
+  const current = summary(draft.fields, employee, draft.challenge, version);
+  // Accept the exact former v2 rendering during its existing draft lifetime.
+  // Re-render from current authoritative identity; never trust arbitrary stored
+  // text or remove name/field revalidation to accommodate a copy-only release.
+  const candidates = version === 2 ? [current, `${current}\n\nTo submit, reply to this message with Confirm within 10 minutes.\nNot submitted yet. Manager approval is still required.`] : [current];
+  return candidates.some(value => value === draft.summary && hash(value) === draft.digest);
+}
 async function resolve<T extends Employee>(tx: EmployeeSource<T>, sender: string): Promise<T> {
   const snapshot = await tx.employees();
   if (snapshot.complete !== true || !Array.isArray(snapshot.rows) || snapshot.rows.length > 10000) return fail("not_available");
@@ -245,7 +251,7 @@ export async function handleLeaveBridge(
           if (!draft.shownMessageId || draft.shownAt === undefined || now <= draft.shownAt || payload.replyToMessageId !== draft.shownMessageId || !confirmed) return fail("conflict");
           // Recompute the rendered summary on employment changes; never submit
           // with different displayed hours/policy without a fresh confirmation.
-          if (!draft.result && hash(summary(draft.fields, employee, draft.challenge, version)) !== draft.digest) return fail("conflict");
+          if (!draft.result && !matchesStoredSummary(draft, employee, version)) return fail("conflict");
           draft.result ??= await tx.submitSelf(employee, draft.fields, draft.id);
           if (draft.result.status !== "Pending" || !UUID.test(draft.result.requestId)) return fail("not_available");
           result = { code: "submitted", ...draft.result };

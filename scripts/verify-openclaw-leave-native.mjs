@@ -68,8 +68,7 @@ globalThis.fetch = async (url, options) => {
     }
     const challenge = randomUUID();
     const summary = ["Please review your leave request:", "Name: Synthetic Employee", "Dates: 2030-10-14",
-      "Type: Unpaid leave", `Note (optional): ${packet.payload.employeeNote || "None"}`, "",
-      "To submit, reply to this message with Confirm within 10 minutes.", "Not submitted yet. Manager approval is still required."].join("\n");
+      "Type: Unpaid leave", `Note (optional): ${packet.payload.employeeNote || "None"}`].join("\n");
     data = { code: "prepared", consentVersion: 2, draftId: randomUUID(), summary, digest: createHash("sha256").update(summary).digest("hex"), expiresAt: new Date(Date.now() + 600_000).toISOString() };
     drafts.set(data.draftId, { ...data, challenge });
   } else if (packet.operation === "shown") {
