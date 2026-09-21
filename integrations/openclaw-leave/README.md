@@ -69,6 +69,14 @@ Approval, rejection, cancellation and applying for another person remain absent.
 
 ### Retry and ordering
 
+Once a draft exists, repeated preparation with the same normalized tool payload
+in the same incoming turn reuses its delivery receipt, including waiting
+for an in-flight send. It does not call the bridge again, send another summary,
+or extend expiry. A new incoming message or changed payload retains the existing
+replacement flow; no cross-turn or cross-person response cache is introduced.
+If callers overlap read-only bridge requests before either produces a draft,
+the existing latest-revision check allows only the winning result to send.
+
 A Confirm freezes its token, provider event ID and exact payload before network
 work. Duplicate delivery never selects a later draft. Parallel confirms share
 one submission; subsequent confirmations return the completed result. A lost
