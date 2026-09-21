@@ -7,6 +7,8 @@ const ts = require('typescript');
 test('route is disabled by default, rejects browser input and caps streamed body before database access', async () => {
   let calls = 0;
   const imports = {
+    'next/server': { after: () => assert.fail('Rejected requests cannot schedule email') },
+    '@/lib/leave-notification-outbox': { dispatchLeaveNotificationsForRequest: () => assert.fail('Rejected requests cannot dispatch email') },
     '@/lib/openclaw-leave-contract': { LEAVE_BRIDGE_PATH: '/api/internal/integrations/openclaw/leave', handleLeaveBridge: async () => { calls++; return { status: 401, body: { code: 'unauthorized' } }; } },
     '@/lib/openclaw-leave-store': { createLeaveBridgeStore: () => ({}) },
   };
