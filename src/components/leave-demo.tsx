@@ -588,6 +588,7 @@ export function LeaveDemo({
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [profilePickerQuery, setProfilePickerQuery] = useState("");
   const leaveRefreshSequence = useRef(0);
+  const leaveSubmission = useRef<{ fingerprint: string; key: string } | null>(null);
   const workScheduleRefreshSequence = useRef(0);
   const profileScopeEpoch = useRef(0);
   const workScheduleWorkspaceRef = useRef<WorkScheduleWorkspace | null>(null);
@@ -1628,11 +1629,17 @@ export function LeaveDemo({
         endTime: endTime || undefined,
         employeeNote,
       };
+      const fingerprint = JSON.stringify([requestForPersonId,
+        isPreviewingEmployeeAccess ? previewProfile?.id : null, requestInput]);
+      if (leaveSubmission.current?.fingerprint !== fingerprint) {
+        leaveSubmission.current = { fingerprint, key: crypto.randomUUID() };
+      }
+      const keyedInput = { ...requestInput, submissionKey: leaveSubmission.current.key };
       const next = requestForPersonId
-        ? await submitLeaveRequestForSelectedEmployee(requestForPersonId, requestInput)
+        ? await submitLeaveRequestForSelectedEmployee(requestForPersonId, keyedInput)
         : isPreviewingEmployeeAccess && previewProfile
-        ? await submitLeaveRequestForSelectedEmployee(previewProfile.id, requestInput)
-        : await submitLeaveRequest(requestInput);
+        ? await submitLeaveRequestForSelectedEmployee(previewProfile.id, keyedInput)
+        : await submitLeaveRequest(keyedInput);
       const attachmentResult = attachmentFiles.length
         ? await uploadLeaveAttachments(directorySupabase, next.id, attachmentFiles)
         : { uploaded: 0, failed: [] as string[] };
@@ -1641,6 +1648,7 @@ export function LeaveDemo({
       setShowRequestForm(false);
       setFormError("");
       form.reset();
+      leaveSubmission.current = null;
       navigate("leave");
       if (attachmentResult.failed.length) {
         announce(`Leave request saved. ${attachmentResult.failed.length} supporting ${attachmentResult.failed.length === 1 ? "file was" : "files were"} not attached; open the request to retry.`);

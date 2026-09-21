@@ -194,11 +194,12 @@ async function markFailed(
   claimToken: string,
   code: "network_error" | "provider_timeout" | "provider_rejected" | "invalid_response" | "configuration_error",
 ) {
-  await supabase.rpc("fail_employee_check_in_reminder_delivery", {
+  const result = await supabase.rpc("fail_employee_check_in_reminder_delivery", {
     p_reminder_id: reminderId,
     p_claim_token: claimToken,
     p_error_code: code,
   });
+  if (result.error) throw new Error("Reminder retry could not be recorded.");
 }
 
 /**
@@ -246,7 +247,7 @@ export async function GET(request: Request) {
   let failed = 0;
   let acceptedPendingFinalisation = 0;
 
-  await Promise.all(claimedData.map(async (candidate) => {
+  const outcomes = await Promise.allSettled(claimedData.map(async (candidate) => {
     if (!isClaimedReminder(candidate)) {
       failed += 1;
       return;
@@ -355,12 +356,14 @@ export async function GET(request: Request) {
     }
   }));
 
+  failed += outcomes.filter((outcome) => outcome.status === "rejected").length;
+  const ok = failed === 0 && acceptedPendingFinalisation === 0;
   return Response.json({
-    ok: true,
+    ok,
     claimed: claimedData.length,
     sent,
     failed,
     acceptedPendingFinalisation,
     backlogLikely: claimedData.length === DELIVERY_BATCH_LIMIT,
-  }, { headers: { "Cache-Control": "no-store" } });
+  }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }

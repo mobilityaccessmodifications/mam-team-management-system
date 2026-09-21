@@ -151,6 +151,7 @@ export type LeaveWorkspaceData = {
 };
 
 export type SubmitLeaveInput = {
+  submissionKey: string;
   leaveType: string;
   startDate: string;
   endDate: string;
@@ -568,6 +569,8 @@ function selectedPersonId(value: unknown) {
 function normaliseLeaveInput(input: SubmitLeaveInput) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error(SAVE_ERROR);
 
+  const submissionKey = requireText(input.submissionKey, SAVE_ERROR);
+  if (!UUID_PATTERN.test(submissionKey)) throw new Error(SAVE_ERROR);
   const leaveType = requireText(input.leaveType, "Choose a valid leave type.");
   if (!LEAVE_TYPES.has(leaveType)) throw new Error("Choose a valid leave type.");
   const startDate = requiredDate(input.startDate, "Choose a valid start date.");
@@ -586,7 +589,7 @@ function normaliseLeaveInput(input: SubmitLeaveInput) {
   const employeeNote = optionalText(input.employeeNote);
   if (employeeNote && employeeNote.length > 2000) throw new Error("Leave note must be 2,000 characters or fewer.");
 
-  return { leaveType, startDate, endDate, startTime, endTime, employeeNote };
+  return { submissionKey, leaveType, startDate, endDate, startTime, endTime, employeeNote };
 }
 
 function normaliseDecisionInput(input: DecideLeaveInput) {
@@ -1105,7 +1108,9 @@ export async function saveLeaveAccrualDay(personId: string, input: {
 export async function submitLeaveRequest(input: SubmitLeaveInput) {
   const checked = normaliseLeaveInput(input);
   const supabase = await requireLeaveSession();
-  const { data, error } = await supabase.rpc("submit_my_leave_request", {
+  const { data, error } = await supabase.rpc("submit_leave_request_once", {
+    p_submission_key: checked.submissionKey,
+    p_person_id: null,
     p_request_type_label: checked.leaveType,
     p_start_date: checked.startDate,
     p_end_date: checked.endDate,
@@ -1134,7 +1139,8 @@ export async function submitLeaveRequestForSelectedEmployee(
   const checked = normaliseLeaveInput(input);
   const supabase = await requireLeaveSession();
   // The database permits only System Admin or this employee's direct manager.
-  const { data, error } = await supabase.rpc("submit_selected_employee_leave_request", {
+  const { data, error } = await supabase.rpc("submit_leave_request_once", {
+    p_submission_key: checked.submissionKey,
     p_person_id: checkedPersonId,
     p_request_type_label: checked.leaveType,
     p_start_date: checked.startDate,
