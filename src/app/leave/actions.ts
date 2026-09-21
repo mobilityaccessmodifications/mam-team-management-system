@@ -73,6 +73,7 @@ export type LeaveCalendarEntry = Omit<
   "personId"
 > & {
   personId: string;
+  teamName: string;
 };
 
 /**
@@ -222,6 +223,7 @@ type CalendarRpcRow = Omit<
   "person_id" | "approval_required" | "submitted_at" | "assigned_reviewer_label" | "can_decide" | "can_cancel" | "can_attach" | "employee_note" | "manager_note"
 > & {
   person_id: string;
+  team_name: string;
 };
 
 type AttachmentRpcRow = {
@@ -479,6 +481,7 @@ function toCalendarEntry(value: unknown): LeaveCalendarEntry {
   return {
     id,
     personId: requiredUuid(row.person_id, LOAD_ERROR),
+    teamName: requireText(row.team_name, LOAD_ERROR),
     employee: requireText(row.employee_name, LOAD_ERROR),
     company: company(row.company_key, LOAD_ERROR),
     leaveType: requireText(row.leave_type_label, LOAD_ERROR),
@@ -867,7 +870,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
       { data: canImportPayrollBalances, error: payrollBalanceImportPermissionError },
       { data: entitlementPolicyData, error: entitlementPolicyError },
     ] = await Promise.all([
-      supabase.rpc("list_leave_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
+      supabase.rpc("list_leave_calendar_entries_with_teams_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("list_calendar_birthdays_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("list_employee_check_in_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("list_subscription_review_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
@@ -926,7 +929,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
     { data: canImportPayrollBalances, error: payrollBalanceImportPermissionError },
   ] = await Promise.all([
     supabase.rpc("list_leave_workspace_requests"),
-    supabase.rpc("list_leave_calendar_entries"),
+    supabase.rpc("list_leave_calendar_entries_with_teams"),
     supabase.rpc("list_calendar_birthdays"),
     supabase.rpc("list_employee_check_in_calendar_entries"),
     supabase.rpc("list_subscription_review_calendar_entries"),

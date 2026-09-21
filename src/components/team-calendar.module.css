@@ -385,3 +385,28 @@
     backdrop-filter: none;
   }
 }
+
+
+.filters { flex: 0 0 auto; border-bottom: 1px solid #d8dfdc; background: #fff; color: #182421; }
+.filters > summary { display: flex; align-items: center; gap: 8px; width: fit-content; min-height: 44px; padding: 8px 18px; cursor: pointer; font-size: 13px; font-weight: 650; list-style: none; }
+.filters > summary::-webkit-details-marker { display: none; }
+.filters > summary::after { content: "⌄"; margin-left: 4px; }
+.filters[open] > summary::after { content: "⌃"; }
+.filters > summary > span { border-radius: 20px; padding: 3px 8px; background: #fff1e8; color: #9a3d10; font-size: 12px; }
+.filterPanel { padding: 0 18px 16px; max-height: min(360px, 45dvh); overflow: auto; }
+.filterHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
+.filterHeading button { min-height: 36px; padding: 6px 10px; border: 1px solid #d8dfdc; border-radius: 8px; background: #fff; color: #182421; cursor: pointer; font: inherit; }
+.filterHeading button:disabled { opacity: .45; cursor: default; }
+.filterHeading button:active:not(:disabled) { transform: scale(.97); }
+.filterGroups { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.filterGroups fieldset { min-width: 0; border: 0; padding: 0; margin: 12px 0 0; }
+.filterGroups legend { margin-bottom: 6px; font-size: 12px; font-weight: 700; color: #60706a; }
+.filterOptions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 2px 12px; }
+.filterOptions label { display: flex; align-items: center; gap: 9px; min-height: 36px; font-size: 13px; cursor: pointer; overflow-wrap: anywhere; }
+.filterOptions input { width: 16px; height: 16px; flex: 0 0 auto; accent-color: #c34d14; }
+.filters :is(summary, button, input):focus-visible { outline: 3px solid #ef6a25; outline-offset: 3px; }
+@media (max-width: 640px) {
+  .filterGroups { grid-template-columns: 1fr; gap: 4px; }
+  .filterOptions label { min-height: 44px; }
+  .filterHeading button { min-height: 44px; }
+}

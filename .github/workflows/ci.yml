@@ -150,3 +150,10 @@ jobs:
         run: |
           createdb -h localhost -U postgres leave_notice_test
           psql -h localhost -U postgres -d leave_notice_test -v ON_ERROR_STOP=1 -f tests/leave-notice.sql
+
+      - name: Test cross-team approved Calendar visibility and team labels
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres calendar_team_filters_test
+          psql -h localhost -U postgres -d calendar_team_filters_test -v ON_ERROR_STOP=1 -f tests/calendar-team-filters.sql

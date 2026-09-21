@@ -238,3 +238,9 @@ Self-service Annual/Unpaid leave for non-ABN staff requires 14 calendar days’
 notice in Melbourne. Managers may still log leave on behalf of employees.
 Apply the reviewed insert-time policy with `scripts/deploy-leave-notice.py apply
 <reviewed-sha256>` through the MAM credential wrapper before merging its UI.
+
+### Calendar team filters (21 September 2026)
+
+Managers retain reporting-team Pending/Approved visibility and may also view other active teams’ Approved leave across both companies. Other employees retain existing scope; payroll grants retain archived approved history. New `list_leave_calendar_entries_with_teams` RPCs add only the HR team label to the existing authorised projections. Calendar filters use these labels and the permitted event layers, including search, without changing the selected view/date.
+
+Deploy `20260921180000_calendar_team_filters.sql` through `scripts/deploy-calendar-team-filters.py inspect` then `apply <reviewed-sha256>` using the MAM credential helper before merging the UI release. The script verifies the exact organisation/project, predecessor migration, source hash and deployed function grants.

@@ -24,6 +24,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Temporal } from "temporal-polyfill";
 
 import type { BirthdayCalendarEntry, CheckInCalendarEntry, PayrollBalanceReminderCalendarEntry, SubscriptionReviewCalendarEntry } from "@/app/leave/actions";
+import { CalendarFilters } from "@/components/calendar-filters";
+import { calendarEventIsVisible, calendarTeamOptions } from "@/lib/calendar-filters";
+import { syncCalendarEvents } from "@/lib/sync-calendar-events";
 import styles from "@/components/team-calendar.module.css";
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
@@ -58,7 +61,7 @@ type CalendarLeaveRequest = {
 };
 
 type EventKind = "approved" | "pending" | "balance-pending" | "birthday" | "check-in" | "subscription" | "payroll-balance" | "public-holiday";
-type MAMEventMeta = { kind: EventKind; subject: string; detail: string; dateLabel: string; priority: number };
+type MAMEventMeta = { kind: EventKind; subject: string; detail: string; dateLabel: string; priority: number; team?: string };
 
 type TeamCalendarProps = {
   birthdays: BirthdayCalendarEntry[];
@@ -167,7 +170,7 @@ function buildEvents(
       startTime: request.startTime,
       endTime: request.endTime,
       calendarId: kind,
-      meta: { kind, subject: request.employee, detail: `${request.status} · ${request.leaveType}${request.team ? ` · ${request.team}` : ""}`, dateLabel: `${formatDateRange(request.startDate, request.endDate)}${times}`, priority: kind === "pending" ? 4 : 5 },
+      meta: { kind, team: request.team, subject: request.employee, detail: `${request.status} · ${request.leaveType}${request.team ? ` · ${request.team}` : ""}`, dateLabel: `${formatDateRange(request.startDate, request.endDate)}${times}`, priority: kind === "pending" ? 4 : 5 },
     });
   });
 
@@ -258,6 +261,9 @@ function MobileEventDetail({ draftEvent, isOpen, onClose }: MobileEventProps) {
 }
 
 function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, showSubscriptionReviews, showPayrollBalanceReminders, reviewOnly, loading }: TeamCalendarProps) {
+  const [hiddenKinds, setHiddenKinds] = useState<string[]>([]);
+  const [hiddenTeams, setHiddenTeams] = useState<string[]>([]);
+  const teams = useMemo(() => calendarTeamOptions(requests), [requests]);
   const year = new Date().getFullYear();
   const calendarFrameRef = useRef<HTMLDivElement>(null);
   const [visibleYears, setVisibleYears] = useState([year - 1, year, year + 1]);
@@ -271,6 +277,11 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
     if (item.id === "payroll-balance") return showPayrollBalanceReminders;
     return !reviewOnly;
   }), [reviewOnly, showPayrollBalanceReminders, showSubscriptionReviews]);
+  const filteredEvents = useMemo(() => events.filter((event) => {
+    const meta = eventMeta(event);
+    return visibleCalendars.some((kind) => kind.id === meta.kind)
+      && calendarEventIsVisible(meta.kind, meta.team, hiddenKinds, hiddenTeams);
+  }), [events, visibleCalendars, hiddenKinds, hiddenTeams]);
   const defaultCalendar = visibleCalendars[0]?.id ?? "approved";
   const calendarVersion = `${reviewOnly ? "limited" : "team"}:${visibleCalendars.map((item) => item.id).join(",")}`;
   const onVisibleRangeChange = useCallback((start: Date, end: Date) => {
@@ -286,7 +297,7 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
   }, []);
   const calendar = useCalendarApp({
     views,
-    events,
+    events: filteredEvents,
     calendars: visibleCalendars,
     defaultCalendar,
     defaultView: ViewType.MONTH,
@@ -303,6 +314,9 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
     callbacks: { onVisibleRangeChange, onMoreEventsClick },
     theme: { mode: "light", colors: { background: "#ffffff", foreground: "#182421", text: "#182421", border: "#d8dfdc", card: "#ffffff", cardForeground: "#182421", hover: "#eef2f0", muted: "#eef2f0", mutedForeground: "#64736e", primary: "#c34d14", primaryForeground: "#ffffff", ring: "#ef6a24" } },
   }, calendarVersion);
+  useEffect(() => {
+    syncCalendarEvents(calendar.app, filteredEvents);
+  }, [calendar.app, filteredEvents]);
   useEffect(() => {
     calendarAppRef.current = calendar.app;
     return () => {
@@ -370,6 +384,10 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
 
   return (
     <section className={styles.calendarSection} aria-label={reviewOnly ? "Personal operations reminders" : "Team calendar"}>
+      <CalendarFilters kinds={visibleCalendars} teams={teams} hiddenKinds={hiddenKinds} hiddenTeams={hiddenTeams}
+        onKind={(id) => setHiddenKinds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])}
+        onTeam={(team) => setHiddenTeams((current) => current.includes(team) ? current.filter((item) => item !== team) : [...current, team])}
+        onReset={() => { setHiddenKinds([]); setHiddenTeams([]); }} />
       <div
         className={styles.calendarFrame}
         aria-busy={loading}
