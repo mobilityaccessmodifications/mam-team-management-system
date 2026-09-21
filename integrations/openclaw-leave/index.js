@@ -277,25 +277,49 @@ const plugin = defineToolPlugin({
           if (owner !== factoryOwner || owner.turns.get(identity.key) !== factoryTurn) return { content: [{ type: "text", text: "That request changed. Please prepare the current leave details again." }], details: { code: "unavailable" } };
           const previous = owner.pending.get(identity.key)?.[0];
           if (previous?.confirming || (previous?.confirmationPacket && !previous.result)) return { content: [{ type: "text", text: "The previous submission has not been verified yet. Ask the employee to send Confirm again to check it before starting another request." }], details: { code: "unavailable" } };
+          const payload = payloadFromParams(params);
+          const prepareKey = sha256(JSON.stringify(payload));
+          // Models can repeat a successful tool call. Reuse only the current
+          // turn's exact request, receipt and original expiry, never a new draft.
+          // Await an in-flight send too; a second call must not send alongside it.
+          // Before a draft exists, overlapping bridge reads intentionally retain
+          // latest-revision-wins below: only the winning result can send. This
+          // tool is declared sequential; we do not cache failed/incomplete reads.
+          if (factoryTurn && typeof factoryTurn.messageId === "string" && SAFE_ID.test(factoryTurn.messageId)
+            && previous && previous.prepareKey === prepareKey && previous.prepareTurn === factoryTurn
+            && !previous.result && !previous.confirmationPacket && previous.expiresAt > Date.now()) {
+            await previous.deliveryComplete?.catch(() => {});
+            signal?.throwIfAborted();
+            if (!isCurrent(owner) || owner.turns.get(identity.key) !== factoryTurn
+              || owner.pending.get(identity.key)?.[0] !== previous || previous.expiresAt <= Date.now()
+              || !owner.canSend(identity)) return { content: [{ type: "text", text: "That request changed. Please prepare the current leave details again." }], details: { code: "unavailable" } };
+            const output = visiblePrepareResult({ code: "prepared", summary: previous.summary }, previous.shown);
+            return { content: [{ type: "text", text: JSON.stringify(output) }], details: output };
+          }
           // Invalidate the prior local summary as soon as a new preparation
           // starts, even if validation or delivery then fails. Concurrent or
           // delayed prepare completions must not restore an older summary.
           owner.pending.delete(identity.key);
           const revision = {};
           owner.preparing.set(identity.key, revision);
-          const result = await bridge(identity, "prepare", payloadFromParams(params));
+          const result = await bridge(identity, "prepare", payload);
           if (!isCurrent(owner) || owner.preparing.get(identity.key) !== revision) return { content: [{ type: "text", text: "That request changed. Please prepare the current leave details again." }], details: { code: "unavailable" } };
           owner.preparing.delete(identity.key);
           // Only content is guaranteed to reach the model; details is UI metadata.
           if (result.code !== "prepared") return { content: [{ type: "text", text: result.code === "needs_input" ? JSON.stringify(result) : "Leave service is temporarily unavailable." }], details: result };
           const item = remember(owner, identity, result);
           if (!item) return { content: [{ type: "text", text: "Leave service is temporarily unavailable." }], details: { code: "unavailable" } };
+          item.prepareKey = prepareKey;
+          item.prepareTurn = factoryTurn;
           try {
-            const messageId = await deliverSummary(owner, toolContext, item, signal);
-            if (messageId) {
-              item.outboundMessageId = messageId;
-              await recordShown(item);
-            }
+            item.deliveryComplete = (async () => {
+              const messageId = await deliverSummary(owner, toolContext, item, signal);
+              if (messageId) {
+                item.outboundMessageId = messageId;
+                await recordShown(item);
+              }
+            })();
+            await item.deliveryComplete;
           } catch (error) {
             const deliveryCode = ["gateway_unavailable", "gateway_replaced", "receipt_missing", "summary_too_long", "summary_not_literal"].includes(error?.message) ? error.message : "adapter_failed";
             diagnostic(owner, "delivery", deliveryCode);

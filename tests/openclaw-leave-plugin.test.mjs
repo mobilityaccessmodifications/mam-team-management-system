@@ -108,6 +108,74 @@ test("prepare is read-only, token stays hidden, standalone Confirm uses true sen
   await f.dispatch(f.event()); assert.equal(f.calls.length, 2, "New Confirm returns the same completed request");
 });
 
+test("identical same-turn prepares share one summary and original confirmation receipt", async () => {
+  const f = fixture(); await f.start();
+  await f.dispatch(f.event({ content: 'I want leave' }));
+  const first = await f.tool().execute('a', params);
+  const again = await f.tool().execute('b', { endDate: params.endDate, startDate: params.startDate, leaveType: params.leaveType, startTime: null, endTime: null, employeeNote: '' });
+  assert.deepEqual(again, first);
+  assert.equal(f.calls.length, 1); assert.equal(f.sent.length, 1);
+  await f.dispatch(f.event());
+  assert.equal(f.calls.at(-1).payload.shownMessageId, 'OUT_1');
+  assert.doesNotMatch(JSON.stringify(again), /opaque-synthetic-token/);
+});
+
+test("duplicate during summary delivery waits for the same send", async () => {
+  let release;
+  const f = fixture({ send: () => new Promise(resolve => { release = resolve; }) }); await f.start();
+  await f.dispatch(f.event({ content: 'I want leave' }));
+  const a = f.tool().execute('a', params); await new Promise(resolve => setImmediate(resolve));
+  const b = f.tool().execute('b', params); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.sent.length, 1); assert.equal(f.calls.length, 1);
+  release({ messageId: 'ONE_RECEIPT' });
+  assert.equal((await a).details.code, 'prepared'); assert.equal((await b).details.code, 'prepared');
+});
+
+test("dedupe cannot survive edits, expiry, or a new incoming turn", async () => {
+  const f = fixture(); await f.start(); await f.tool().execute('a', params);
+  await f.tool().execute('edited', { ...params, employeeNote: 'Changed note' });
+  assert.equal(f.sent.length, 2);
+  await f.dispatch(f.event({ content: 'Keep that request' }));
+  await f.tool().execute('new-turn', { ...params, employeeNote: 'Changed note' });
+  assert.equal(f.sent.length, 3);
+  f.tick(600001);
+  await f.tool().execute('expired', { ...params, employeeNote: 'Changed note' });
+  assert.equal(f.sent.length, 4); assert.equal(f.calls.length, 4);
+});
+
+test("dedupe rechecks send policy and does not refresh the confirmation lifetime", async () => {
+  const f = fixture(); await f.start(); await f.dispatch(f.event({ content: 'I want leave' })); await f.tool().execute('a', params);
+  f.policy.entry.sendPolicy = 'deny';
+  assert.equal((await f.tool().execute('denied', params)).details.code, 'unavailable');
+  f.policy.entry.sendPolicy = 'allow'; f.tick(599000);
+  assert.equal((await f.tool().execute('repeat', params)).details.code, 'prepared');
+  assert.equal(f.sent.length, 1); f.tick(2000); await f.dispatch(f.event());
+  assert.equal(f.calls.length, 1, 'Expired original draft cannot submit');
+});
+
+test("failed in-flight delivery cannot be reused or silently retried by its duplicate", async () => {
+  let reject;
+  const f = fixture({ send: () => new Promise((_, fail) => { reject = fail; }) }); await f.start();
+  await f.dispatch(f.event({ content: 'I want leave' }));
+  const a = f.tool().execute('a', params); await new Promise(resolve => setImmediate(resolve));
+  const b = f.tool().execute('b', params); reject(new Error('synthetic send failure'));
+  assert.equal((await a).details.code, 'unavailable'); assert.equal((await b).details.code, 'unavailable');
+  assert.equal(f.sent.length, 1); assert.equal(f.calls.length, 1);
+});
+
+test("missing or invalid incoming message provenance cannot authorize cache reuse", async () => {
+  for (const messageId of [undefined, '', 'invalid id']) {
+    const f = fixture(); await f.start();
+    await f.dispatch(f.event({ content: 'I want leave', messageId }));
+    await f.tool().execute('a', params); await f.tool().execute('b', params);
+    assert.equal(f.calls.length, 2); assert.equal(f.sent.length, 2);
+    f.stop();
+  }
+  const f = fixture(); await f.start();
+  await f.tool().execute('without-hook-a', params); await f.tool().execute('without-hook-b', params);
+  assert.equal(f.calls.length, 2); f.stop();
+});
+
 test("editing invalidates the old summary immediately before collecting new fields", async () => {
   const f = fixture(); await f.start(); const staleTool = f.tool(); await staleTool.execute("a", params);
   await f.dispatch(f.event({ content: "Actually make it Friday" })); await f.dispatch(f.event());
