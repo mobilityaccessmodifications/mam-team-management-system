@@ -86,9 +86,12 @@ export function approvalBalanceCoverage(person: LeaveBalancePerson | undefined, 
   if (leaveType !== "Annual leave" && !sick) return null;
   if (!person || !(sick ? person.canViewSickBalance : person.canViewBalance)) return null;
   const availableField = sick ? "sickAvailableHours" : "annualAvailableHours";
-  const balance = Object.hasOwn(person, availableField)
+  // The payroll snapshot minus approved leave is authoritative for approval.
+  // Accrual reconciliation only blocks legacy estimated balances, not this value.
+  const hasPayrollAvailability = Object.hasOwn(person, availableField);
+  const balance = hasPayrollAvailability
     ? person[availableField]
     : sick ? person.sickHours : person.hours;
-  if (requiredHours == null || balance == null || !Number.isFinite(balance) || person.accrualStatus === "needs_review") return "Check balance";
+  if (requiredHours == null || balance == null || !Number.isFinite(balance) || (!hasPayrollAvailability && person.accrualStatus === "needs_review")) return "Check balance";
   return balance >= requiredHours ? "Enough balance" : "Not enough balance";
 }

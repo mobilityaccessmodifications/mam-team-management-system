@@ -139,3 +139,5 @@ Every active, currently authorised reviewer of a pending request may see that ap
 The bulk “Leave balances & team requests” controls are available only inside the actual Super Admin version of the Balance tab. An explicit payroll-import delegate receives the same Balance tab but only its staged import/reminder tools. The tab is hidden from all other employee and reviewer workspaces, including Change profile previews. Reviewers still receive the relevant annual and sick balances beside the specific request they are authorised to review; this does not grant access to bulk controls.
 
 Employees’ own annual leave balance and the existing authorised manager team-request action appear separately as compact self-service controls. They do not expose the bulk balance list, payroll import register, balance editors or accrual settings.
+
+- Approval coverage uses the supplied payroll balance less approved People Hub leave when that breakdown is available. An older automatic-accrual reconciliation flag does not block this known available balance; missing or non-finite availability still requires checking. Legacy estimated balances retain their reconciliation hold.
