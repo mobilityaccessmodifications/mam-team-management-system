@@ -8905,3 +8905,8 @@
     background: var(--sidebar);
   }
 }
+
+
+.leaveNoticeDialog { width: min(440px, calc(100vw - 32px)); }
+.leaveNoticeDialog > p { margin: 0; padding: 20px; line-height: 1.6; }
+.leaveNoticeDialog > footer { display: flex; justify-content: flex-end; padding: 0 20px 20px; }

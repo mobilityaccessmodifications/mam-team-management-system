@@ -194,6 +194,7 @@ test("extracted request dialog keeps dates aligned, team choices scoped and form
     "@/components/ui/use-dialog-focus": { useDialogFocus: (...args) => calls.push(["focus", ...args]) },
     "@/lib/leave-attachments": load("src/lib/leave-attachments.ts"),
     "@/lib/leave-request-options": load("src/lib/leave-request-options.ts"),
+    "@/lib/leave-notice": load("src/lib/leave-notice.ts", { "@/lib/leave-priority": { melbourneToday: () => "2026-09-21" } }),
     "@/lib/leave-priority": { sickEvidenceDeadline: () => "2026-10-12" },
     "@/lib/victorian-public-holidays": { getVictorianPublicHolidays: () => [] },
     "@/components/leave-demo.module.css": { default: {} },

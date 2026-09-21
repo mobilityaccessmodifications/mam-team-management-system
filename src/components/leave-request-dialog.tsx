@@ -1,5 +1,5 @@
 import { ChevronDown, UsersRound, X } from "lucide-react";
-import { type FormEvent, useRef } from "react";
+import { type FormEvent, type RefObject, useRef } from "react";
 import type { LeaveWorkspaceData } from "@/app/leave/actions";
 import { LeaveRequestBalance, SickEvidenceNotice } from "@/components/leave-priority-controls";
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
@@ -8,6 +8,7 @@ import { LEAVE_ATTACHMENT_ACCEPT } from "@/lib/leave-attachments";
 import { START_TIME_OPTIONS, END_TIME_OPTIONS } from "@/lib/leave-request-options";
 import { sickEvidenceDeadline, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import { getVictorianPublicHolidays } from "@/lib/victorian-public-holidays";
+import { LEAVE_NOTICE_MESSAGE, requiresLeaveNotice } from "@/lib/leave-notice";
 import styles from "@/components/leave-demo.module.css";
 
 const VICTORIAN_PUBLIC_HOLIDAY_DATES = new Set(
@@ -63,13 +64,15 @@ export function LeaveRequestDialog({
   setFormStartDate: (value: string) => void;
   setFormEndDate: (value: string) => void;
 }) {
+  const sendButtonRef = useRef<HTMLButtonElement>(null);
   const leaveRequestDialogRef = useRef<HTMLElement>(null);
   const leaveRequestInitialFocusRef = useRef<HTMLSelectElement>(null);
   useDialogFocus(true, leaveRequestDialogRef, leaveRequestInitialFocusRef, closeLeaveRequestForm);
   const requestedTeamMember = teamRequestPeople.find((person) => person.personId === requestForPersonId);
   return (
+    <>
     <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeLeaveRequestForm()}>
-      <section className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
+      <section inert={formError === LEAVE_NOTICE_MESSAGE} className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
         <header><div><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={closeLeaveRequestForm} aria-label="Close request form"><X size={19} /></button></header>
         <div className={styles.formPerson}>
           <span className={styles.avatarOrange}>{leaveRequestPersonInitials}</span>
@@ -98,7 +101,14 @@ export function LeaveRequestDialog({
           ) : null}
         </div>
         {formLeaveType === "Annual leave" ? <LeaveRequestBalance workspace={leavePriority} personId={requestForPersonId || activeProfile.id} self={!requestForPersonId} /> : null}
-        <form className={styles.form} onSubmit={submitRequest} onChange={() => setFormError("")}>
+        <form className={styles.form} onSubmit={(event) => {
+          if (requiresLeaveNotice({ employmentType, leaveType: formLeaveType, startDate: formStartDate, onBehalfOf: Boolean(requestForPersonId && requestForPersonId !== activeProfile.id) })) {
+            event.preventDefault();
+            setFormError(LEAVE_NOTICE_MESSAGE);
+            return;
+          }
+          submitRequest(event);
+        }} onChange={() => setFormError("")}>
           <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" value={formLeaveType} onChange={(event) => setFormLeaveType(event.target.value)} required>{(requestedTeamMember ? (requestedTeamMember.paidLeave ? ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"] : ["Unpaid leave"]).map((value) => ({ value, label: value })) : availableLeaveTypes).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
           {!requestForPersonId && !hasPaidLeaveEntitlement ? <p className={styles.leavePolicyNote} role="note">
             {employmentType === "abn" ? "ABN" : employmentType === "casual" ? "Casual" : "Unclassified"} employees can record Unpaid leave only.
@@ -117,10 +127,26 @@ export function LeaveRequestDialog({
             <small className={styles.privacyNote}>Visible to your approver and HR.</small>
           </div>
           </details>
-          {formError ? <p className={styles.formError} role="alert">{formError}</p> : null}
-          <footer><button className={styles.secondaryButton} type="button" onClick={closeLeaveRequestForm} disabled={isMutating}>Cancel</button><button className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : "Send request"}</button></footer>
+          {formError && formError !== LEAVE_NOTICE_MESSAGE ? <p className={styles.formError} role="alert">{formError}</p> : null}
+          <footer><button className={styles.secondaryButton} type="button" onClick={closeLeaveRequestForm} disabled={isMutating}>Cancel</button><button ref={sendButtonRef} className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : "Send request"}</button></footer>
         </form>
       </section>
     </ModalBackdrop>
+    {formError === LEAVE_NOTICE_MESSAGE ? <LeaveNoticeDialog returnFocusRef={sendButtonRef} onClose={() => setFormError("")} /> : null}
+    </>
   );
+}
+
+
+function LeaveNoticeDialog({ onClose, returnFocusRef }: { onClose: () => void; returnFocusRef: RefObject<HTMLButtonElement | null> }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  useDialogFocus(true, dialogRef, buttonRef, onClose, returnFocusRef);
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation">
+    <section className={`${styles.modal} ${styles.leaveNoticeDialog}`} ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby="leave-notice-title" aria-describedby="leave-notice-message" tabIndex={-1}>
+      <header><h2 id="leave-notice-title">Speak to your manager</h2></header>
+      <p id="leave-notice-message">{LEAVE_NOTICE_MESSAGE}</p>
+      <footer><button ref={buttonRef} type="button" className={styles.primaryButton} onClick={onClose}>Back to request</button></footer>
+    </section>
+  </ModalBackdrop>;
 }
