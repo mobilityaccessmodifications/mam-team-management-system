@@ -16,11 +16,13 @@ Safer People System is the private people portal for Mobility Access Modificatio
 
 MAM people use the orange accent and Equipsy people use blue. Company is also stated in text, so colour is never the only company indicator.
 
+The chart opens in **Default** layout: Equipsy reports stack vertically, and Minor Mods shows Scheduler, Installer, Estimator and Administrator columns beneath its team leader. Structural team headings are compacted for this display only; reporting records stay intact. Users can choose Horizontal, Vertical or By role, adjust individual branches, or choose Default again to restore the preset. These visual choices are local to the open chart. Search and relationship editing retain the structural team nodes; small screens retain the readable stacked tree.
+
 The current live reporting baseline places all active Team Leaders under the MAM Director. Minor Mods is grouped beneath its Team Leader into Scheduling team, Estimating team, Trades team, Admin team and an intentionally empty CSO team; these are safe structural organisation nodes, not private employee records.
 
 ## What works now
 
-After login, the server verifies that the Supabase Auth user is linked to an active directory person. Every employee can use the live organisation tree, search it, and open a selected person’s work email. The tree does not expose a private employee list or private profile fields.
+After login, the server verifies that the Supabase Auth user is linked to an active directory person. Managers, HR and System Admin can use the complete live organisation tree, search it, and open a selected person’s work email. Ordinary employees cannot open the organisation chart. The tree does not expose a private employee list or private profile fields.
 
 Every active linked employee also has a top-right **My profile** control. It shows that person’s own safe work identity, team and manager context, their HR-managed work email, and their own private contact details. They may update only their phone number, personal email and date of birth. Work email is intentionally read-only and must be changed by HR. The controlled System Admin may use **Change profile** to exercise a selected real employee workflow for testing. The signed-in Auth identity and audit actor always remain the real System Admin, whose existing server-side permissions are retained; the selected employee never receives or inherits those permissions.
 
