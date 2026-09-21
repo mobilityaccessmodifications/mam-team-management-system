@@ -10,10 +10,15 @@ concurrency:
   cancel-in-progress: false
 jobs:
   recover:
+    if: github.ref == 'refs/heads/main'
+    environment: people-hub-production
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22

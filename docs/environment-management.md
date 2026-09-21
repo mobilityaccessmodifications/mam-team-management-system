@@ -114,9 +114,11 @@ Production Check-In reminders use the MAM n8n scheduler every 15 minutes from 08
 
 GitHub Actions `Background recovery` runs independently of n8n every 15 minutes.
 It calls only the three leased notification workers through `/api/cron/recovery`.
-The GitHub repository secret `MAM_PEOPLE_HUB_CRON_SECRET` matches Vercel Production
+The GitHub `people-hub-production` environment secret
+`MAM_PEOPLE_HUB_CRON_SECRET` matches Vercel Production
 `MAM_BACKGROUND_RECOVERY_SECRET`; it is a separate credential from `CRON_SECRET`
-and cannot invoke cleanup or other internal jobs. Failed runs remain visible in
+and cannot invoke cleanup or other internal jobs. The GitHub environment only
+allows the `main` branch; manual runs also check out `main`. Failed runs remain visible in
 GitHub Actions; delivery failures must return a non-2xx response.
 
 Check-in reminders missed before their due date can be claimed on the next

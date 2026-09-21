@@ -9,7 +9,8 @@ export async function proxy(request: NextRequest) {
   // No cookie refresh/network dependency or browser redirect may precede it.
   if (pathname === "/api/internal/integrations/openclaw/whatsapp-allowlist"
     || pathname === "/api/internal/integrations/openclaw/leave"
-    || pathname === "/api/cron/openclaw-leave-cleanup") {
+    || pathname === "/api/cron/openclaw-leave-cleanup"
+    || pathname === "/api/cron/recovery") {
     return NextResponse.next({ request });
   }
   const isLoginRoute = pathname.startsWith("/login");

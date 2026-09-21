@@ -86,3 +86,21 @@ test('Outlook CC expression produces no invalid blank recipient',()=>{
   assert.deepEqual(evaluate({}),[]);
   assert.deepEqual(evaluate({ccRecipients:'hr@example.test, accounts@example.test'}),['hr@example.test','accounts@example.test']);
 });
+
+test('recovery reaches its bearer-authenticated handler without a browser session or Supabase cookie refresh',async()=>{
+  const {proxy}=load('src/proxy.ts',{
+    '@supabase/ssr':{createServerClient:()=>{throw new Error('Recovery must not depend on cookie refresh');}},
+    'next/server':{NextResponse:{next:()=>({status:200}),redirect:()=>({status:307})}},
+    '@/lib/supabase/config':{isSupabaseConfigured:()=>false,requireSupabaseConfig:()=>{throw new Error('Unexpected browser configuration');}},
+  });
+  const request=(pathname)=>({nextUrl:{pathname,clone:()=>new URL(`https://synthetic.example${pathname}`)}});
+  assert.equal((await proxy(request('/api/cron/recovery'))).status,200);
+  for(const path of ['/api/cron/recovery/other','/api/cron/not-authorised','/'])assert.equal((await proxy(request(path))).status,307);
+});
+test('manual recovery runs only trusted main code in its branch-restricted credential environment',()=>{
+  const workflow=readFileSync('.github/workflows/background-recovery.yml','utf8');
+  assert.match(workflow,/if: github\.ref == 'refs\/heads\/main'/);
+  assert.match(workflow,/environment: people-hub-production/);
+  assert.match(workflow,/ref: main/);
+  assert.match(workflow,/persist-credentials: false/);
+});
