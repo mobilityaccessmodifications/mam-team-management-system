@@ -233,3 +233,8 @@ name, dates, duration and status; ordinary employees remain self-only.
 Deploy the reviewed `20260921160000_manager_team_leave_calendar.sql` with
 `scripts/deploy-manager-team-calendar.py apply <reviewed-sha256>` through the
 MAM Supabase credential wrapper; `inspect` verifies the deployed scope.
+
+Self-service Annual/Unpaid leave for non-ABN staff requires 14 calendar days’
+notice in Melbourne. Managers may still log leave on behalf of employees.
+Apply the reviewed insert-time policy with `scripts/deploy-leave-notice.py apply
+<reviewed-sha256>` through the MAM credential wrapper before merging its UI.

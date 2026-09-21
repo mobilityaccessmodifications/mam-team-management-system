@@ -143,3 +143,10 @@ jobs:
         run: |
           createdb -h localhost -U postgres manager_team_calendar_test
           psql -h localhost -U postgres -d manager_team_calendar_test -v ON_ERROR_STOP=1 -f tests/manager-team-calendar.sql
+
+      - name: Test self-service leave notice policy
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres leave_notice_test
+          psql -h localhost -U postgres -d leave_notice_test -v ON_ERROR_STOP=1 -f tests/leave-notice.sql

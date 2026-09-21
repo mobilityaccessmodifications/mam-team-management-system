@@ -1,5 +1,6 @@
 "use server";
 
+import { LEAVE_NOTICE_MESSAGE } from "@/lib/leave-notice";
 import { dispatchLeaveNotificationsForRequest } from "@/lib/leave-notification-outbox";
 
 import { revalidatePath } from "next/cache";
@@ -682,7 +683,8 @@ function userFacingSubmitError(error: unknown) {
       ? error.message
       : "";
   if (
-    message === "Choose a valid leave type."
+    message === LEAVE_NOTICE_MESSAGE
+    || message === "Choose a valid leave type."
     || message === "End date must be on or after start date."
     || message === "Choose at least one weekday for this request."
     || message === "Timed leave must start and end on weekdays."
