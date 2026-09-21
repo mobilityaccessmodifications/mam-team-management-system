@@ -157,3 +157,17 @@ jobs:
         run: |
           createdb -h localhost -U postgres calendar_team_filters_test
           psql -h localhost -U postgres -d calendar_team_filters_test -v ON_ERROR_STOP=1 -f tests/calendar-team-filters.sql
+
+      - name: Test idempotent leave submission and authorization
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres reliable_leave_submission_test
+          psql -h localhost -U postgres -d reliable_leave_submission_test -v ON_ERROR_STOP=1 -f tests/reliable-leave-submission.sql
+
+      - name: Test missed check-in catch-up and exclusive leases
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres check_in_retry_catchup_test
+          psql -h localhost -U postgres -d check_in_retry_catchup_test -v ON_ERROR_STOP=1 -f tests/check-in-retry-catchup.sql

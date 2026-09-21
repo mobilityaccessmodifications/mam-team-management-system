@@ -107,4 +107,30 @@ Every AI session should:
 5. Never copy credentials into chat, Memory, shell profiles or another project.
 # Reminder operations
 
-Production Check-In reminders use the MAM n8n scheduler daily at 08:00 Australia/Melbourne to call the People System's `CRON_SECRET`-protected dispatcher. The dispatcher claims up to ten reminders, sends the bounded batch concurrently, and returns `backlogLikely: true` when another in-window retry may be needed. The MAM receiver workflow sends through the approved MAM Outlook connection to the server-resolved manager/admin and CCs `hr@mobilityaccess.com.au`. The existing leave/birthday scheduler also calls the consolidated priority endpoint; on each published Victorian business-day run its service-only payroll outbox may send one named-recipient balance reminder through that same Outlook connection with no CC, continuing until both current-month snapshots are complete. Keep `CRON_SECRET`, `N8N_CHECKIN_REMINDER_WEBHOOK_ORIGIN`, `N8N_CHECKIN_REMINDER_WEBHOOK_URL`, `N8N_CHECKIN_REMINDER_WEBHOOK_SECRET`, `CHECK_IN_RESOURCE_ORIGIN`, `CHECK_IN_MANAGER_GUIDE_URL`, `CHECK_IN_FORM_URL`, `CHECK_IN_PROBATION_TEMPLATES_URL`, `CHECK_IN_LEGACY_FORMS_FOLDER_URL`, `MAM_N8N_LEAVE_WEBHOOK_ORIGIN`, `MAM_N8N_LEAVE_WEBHOOK_URL`, and `MAM_N8N_LEAVE_WEBHOOK_SECRET` in Vercel Production only. Email reminder dispatch does not use Vercel Cron.
+Production Check-In reminders use the MAM n8n scheduler every 15 minutes from 08:00–16:59 Australia/Melbourne to call the People System's `CRON_SECRET`-protected dispatcher. The dispatcher claims up to ten reminders, sends the bounded batch concurrently, and returns `backlogLikely: true` when another in-window retry may be needed. The MAM receiver workflow sends through the approved MAM Outlook connection to the server-resolved manager/admin and CCs `hr@mobilityaccess.com.au`. The existing leave/birthday scheduler also calls the consolidated priority endpoint; on each published Victorian business-day run its service-only payroll outbox may send one named-recipient balance reminder through that same Outlook connection with no CC, continuing until both current-month snapshots are complete. Keep `CRON_SECRET`, `N8N_CHECKIN_REMINDER_WEBHOOK_ORIGIN`, `N8N_CHECKIN_REMINDER_WEBHOOK_URL`, `N8N_CHECKIN_REMINDER_WEBHOOK_SECRET`, `CHECK_IN_RESOURCE_ORIGIN`, `CHECK_IN_MANAGER_GUIDE_URL`, `CHECK_IN_FORM_URL`, `CHECK_IN_PROBATION_TEMPLATES_URL`, `CHECK_IN_LEGACY_FORMS_FOLDER_URL`, `MAM_N8N_LEAVE_WEBHOOK_ORIGIN`, `MAM_N8N_LEAVE_WEBHOOK_URL`, and `MAM_N8N_LEAVE_WEBHOOK_SECRET` in Vercel Production only. Email reminder dispatch does not use Vercel Cron.
+
+
+### Background recovery
+
+GitHub Actions `Background recovery` runs independently of n8n every 15 minutes.
+It calls only the three leased notification workers through `/api/cron/recovery`.
+The GitHub `people-hub-production` environment secret
+`MAM_PEOPLE_HUB_CRON_SECRET` matches Vercel Production
+`MAM_BACKGROUND_RECOVERY_SECRET`; it is a separate credential from `CRON_SECRET`
+and cannot invoke cleanup or other internal jobs. The GitHub environment only
+allows the `main` branch; manual runs also check out `main`. Failed runs remain visible in
+GitHub Actions; delivery failures must return a non-2xx response.
+
+Check-in reminders missed before their due date can be claimed on the next
+business day. Past-due and historic-cutover records remain review items; deploying
+recovery must not replay them automatically. Daily leave reminders represent the
+current pending request, so old daily notifications must not be replayed in a
+burst. Unknown provider outcomes require Sent Items reconciliation before manual
+replay. The existing n8n static-data deduplication is not a transactional email
+provider guarantee.
+
+Portal submissions carry a stable UUID across retries. A private database receipt
+binds that key to the authenticated actor and input hash in the same transaction
+as the leave request and notification outbox. A changed payload cannot reuse it.
+Payroll file deletion confirms absent Storage objects before retrying database
+finalisation; the existing minimum 30-day retention remains enforced in SQL.

@@ -1,0 +1,28 @@
+name: Background recovery
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: people-hub-background-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: github.ref == 'refs/heads/main'
+    environment: people-hub-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Recover queued notifications
+        env:
+          MAM_PEOPLE_HUB_CRON_SECRET: ${{ secrets.MAM_PEOPLE_HUB_CRON_SECRET }}
+        run: node scripts/recover-background-jobs.mjs

@@ -86,8 +86,19 @@ export async function runLeaveAttachmentMaintenance() {
       .remove(validArchives.map((archive) => archive.storagePath));
     if (removalError) throw new Error("Payroll source archive deletion failed.");
     const expectedObjects = validArchives.filter((archive) => archive.wasUploaded).length;
-    if (!Array.isArray(removed) || removed.length < expectedObjects) {
-      throw new Error("Payroll source archive deletion was incomplete.");
+    if (!Array.isArray(removed)) throw new Error("Payroll source archive deletion was incomplete.");
+    if (removed.length < expectedObjects) {
+      // A previous run may have deleted objects before its database commit
+      // failed. Finalise only after Storage confirms every object is absent.
+      // Network, permission and generic 400 errors are not proof of absence.
+      const checks = await Promise.all(validArchives.map(async (archive) => {
+        const [folder, name] = archive.storagePath.split("/");
+        const result = await admin.storage.from("payroll-balance-archives")
+          .list(folder, { search: name, limit: 100 });
+        return !result.error && Array.isArray(result.data)
+          && !result.data.some((entry) => entry.name === name);
+      }));
+      if (!checks.every(Boolean)) throw new Error("Payroll source archive deletion was incomplete.");
     }
 
     const completed = await admin.rpc("complete_payroll_balance_source_archive_deletion", {
