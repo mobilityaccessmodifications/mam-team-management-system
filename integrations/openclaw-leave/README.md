@@ -43,6 +43,14 @@ The People backend verifies the token, current identity/name/employment, leave
 rules and actual signed confirmation packet. One confirm-only transaction
 creates the formal Pending request, normal reviewers/outbox, and successful
 replay/nonce records. No new database draft exists before human confirmation.
+After a verified submission (including a successful confirmation replay), the
+HTTP route schedules the same request-scoped notification dispatcher used by
+the portal through Next.js `after`. Mail does not delay the WhatsApp submission
+response or turn an already-committed request into a reported failure. The
+existing queue claims, recipient rules and stable delivery keys remain in force;
+the MAM n8n five-minute queue worker remains the retry fallback. Preparation and
+rejected confirmations never schedule email, and this path never drains unrelated
+requests or creates another notification event.
 Existing v1/v2 HTTP packets are refused with a restart-required response; old
 stored protocol records follow the existing cleanup schedule, not ad-hoc deletion.
 Approval, rejection, cancellation and applying for another person remain absent.
