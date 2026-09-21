@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import test from 'node:test';
+import * as dayflow from '@dayflow/core';
+import { Temporal } from 'temporal-polyfill';
+const require = createRequire(import.meta.url);
+const ts = require('typescript');
+const loaded = {};
+new Function('require','exports',ts.transpileModule(readFileSync('src/lib/sync-calendar-events.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(()=>dayflow,loaded);
+const event = (id) => dayflow.createAllDayEvent({id,title:id,start:Temporal.PlainDate.from('2026-10-12'),end:Temporal.PlainDate.from('2026-10-12'),calendarId:'approved',meta:{team:'Synthetic team'}});
+test('filtering and reset update the real DayFlow store without resetting the active date/view or sending mutations', () => {
+  let mutationCount=0;
+  const app = new dayflow.CalendarApp({views:[dayflow.createMonthView(),dayflow.createAgendaView()],events:[event('a'),event('b')],callbacks:{onEventBatchChange:()=>{mutationCount++;}}});
+  app.changeView(dayflow.ViewType.AGENDA);
+  app.setCurrentDate(new Date('2026-10-12T12:00:00Z'));
+  const date=app.getCurrentDate().getTime();
+  loaded.syncCalendarEvents(app,[event('b')]);
+  assert.deepEqual(app.getAllEvents().map(e=>e.id),['b']);
+  assert.equal(app.state.currentView,dayflow.ViewType.AGENDA);
+  assert.equal(app.getCurrentDate().getTime(),date);
+  loaded.syncCalendarEvents(app,[event('a'),event('b')]);
+  assert.equal(app.getAllEvents().length,2);
+  loaded.syncCalendarEvents(app,[]);
+  assert.equal(app.getAllEvents().length,0);
+  assert.equal(mutationCount,0);
+});
+test('refreshed metadata and names replace stale event details', () => {
+  const app=new dayflow.CalendarApp({views:[dayflow.createMonthView()],events:[event('a')]});
+  const revised={...event('a'),title:'Updated name',meta:{team:'Updated team'}};
+  loaded.syncCalendarEvents(app,[revised]);
+  assert.equal(app.getAllEvents()[0].title,'Updated name');
+  assert.equal(app.getAllEvents()[0].meta.team,'Updated team');
+});

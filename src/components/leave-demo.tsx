@@ -437,7 +437,7 @@ function toCalendarLeaveRequest(record: LeaveCalendarEntry): LeaveRequest {
     personId: record.personId,
     employee: record.employee,
     initials: initialsForName(record.employee),
-    team: record.company === "mam" ? "MAM" : "Equipsy",
+    team: `${record.company === "mam" ? "MAM" : "Equipsy"} · ${record.teamName}`,
     leaveType: record.leaveType,
     startDate: record.startDate,
     endDate: record.endDate,
@@ -1934,6 +1934,7 @@ export function LeaveDemo({
             <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} canAccessBalance={canAccessBalance} balanceContent={<><PayrollBalanceImporter hideManagementControls={isPreviewingEmployeeAccess} onSaved={refreshLeaveWorkspace} /><LeavePriorityControls key={previewPersonId || "self"} previewPersonId={previewPersonId} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /></>} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onDeleteSupportingFile={deleteSupportingFile} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} />
           </LeaveWorkspaceLoadBoundary> : null}
           {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <TeamCalendar
+            key={isPreviewingEmployeeAccess ? activeProfile.id : "signed-in"}
             birthdays={calendarHidesTeamEvents ? [] : calendarBirthdays}
             checkIns={calendarHidesTeamEvents ? [] : calendarCheckIns}
             requests={calendarHidesTeamEvents ? [] : calendarRequests}

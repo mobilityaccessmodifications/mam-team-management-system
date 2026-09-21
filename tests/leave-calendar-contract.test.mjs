@@ -59,6 +59,7 @@ const validCalendarRow = {
   id: "10000000-0000-4000-8000-000000000001",
   person_id: "20000000-0000-4000-8000-000000000001",
   employee_name: "Former Example (archived)",
+  team_name: "Synthetic team",
   company_key: "mam",
   leave_type_label: "Approved leave",
   start_date: "2026-08-03",
