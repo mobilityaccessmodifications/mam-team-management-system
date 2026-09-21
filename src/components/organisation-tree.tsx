@@ -31,6 +31,8 @@ import {
   useState,
 } from "react";
 
+import { defaultBranchLayout, defaultDisplayChildren, isMinorModsLeader, minorRoleGroup, type OrganisationLayout } from "@/lib/organisation-layout";
+
 import styles from "@/components/organisation-tree.module.css";
 import { OrganisationChartControls, OrganisationFilterMenu, type OrganisationFilter } from "@/components/organisation-controls";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
@@ -331,11 +333,6 @@ function normalise(value: string) {
   return value.trim().toLocaleLowerCase();
 }
 
-function isStevenMakris(node: TreeNode) {
-  const name = normalise(node.name);
-  return name === "steven makris" || name === "steve makris";
-}
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -476,15 +473,19 @@ function measureNode(
   collapsedIds: Set<string>,
   depth: number,
   branchLayouts: Readonly<Record<string, BranchLayout>>,
+  chartLayout: OrganisationLayout,
 ): MeasuredNode {
+  const useDefault = chartLayout === "default" && !branchLayouts[node.id];
+  const displayChildren = useDefault ? defaultDisplayChildren(node) : node.children;
   const children = collapsedIds.has(node.id)
     ? []
-    : node.children.map((child) =>
+    : displayChildren.map((child) =>
         measureNode(
           child,
           collapsedIds,
           depth + 1,
           branchLayouts,
+          chartLayout,
         ),
       );
 
@@ -500,20 +501,15 @@ function measureNode(
     };
   }
 
-  // Group the same-title direct reports into vertical stacks by default. This
-  // keeps a warehouse's labourers/welders together without changing who they
-  // report to. Steven's direct leadership area remains side by side.
-  // A local visual switch can override either default without altering data.
-  const requestedLayout = branchLayouts[node.id];
-  const automaticLayout: BranchLayout = isStevenMakris(node)
-    ? "horizontal"
-    : "grouped";
-  const effectiveLayout = requestedLayout ?? automaticLayout;
+  const effectiveLayout = branchLayouts[node.id]
+    ?? (chartLayout === "default" ? defaultBranchLayout(node) : chartLayout);
 
   if (effectiveLayout === "grouped") {
     const groupsByKey = new Map<string, MeasuredNode[]>();
     for (const child of children) {
-      const key = normalise(child.node.position || companyLabels[child.node.company]) || "other";
+      const key = useDefault && isMinorModsLeader(node)
+        ? minorRoleGroup(child.node.position)
+        : normalise(child.node.position || companyLabels[child.node.company]) || "other";
       const group = groupsByKey.get(key) ?? [];
       group.push(child);
       groupsByKey.set(key, group);
@@ -588,9 +584,10 @@ function layoutForest(
   forest: TreeNode[],
   collapsedIds: Set<string>,
   branchLayouts: Readonly<Record<string, BranchLayout>>,
+  chartLayout: OrganisationLayout = "default",
 ): ChartLayout {
   const boxes = forest.map((root) =>
-    measureNode(root, collapsedIds, 0, branchLayouts),
+    measureNode(root, collapsedIds, 0, branchLayouts, chartLayout),
   );
   const contentWidth =
     boxes.reduce((width, box) => width + box.width, 0) +
@@ -839,6 +836,7 @@ export function OrganisationTree({
   const [branchLayouts, setBranchLayouts] = useState<
     Record<string, BranchLayout>
   >({});
+  const [chartLayout, setChartLayout] = useState<OrganisationLayout>("default");
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [panning, setPanning] = useState(false);
   const [arrangeMode, setArrangeMode] = useState(false);
@@ -1188,15 +1186,18 @@ export function OrganisationTree({
     );
   }, [collapsedIds, searchAncestorIds]);
 
+  // Relationship editing always shows structural team nodes and actual lines.
+  const displayLayout = chartLayout === "default" && (arrangeMode || linkGuide || normalise(query))
+    ? "grouped" : chartLayout;
   const layout = useMemo(
-    () => layoutForest(forest, effectiveCollapsedIds, branchLayouts),
-    [branchLayouts, effectiveCollapsedIds, forest],
+    () => layoutForest(forest, effectiveCollapsedIds, branchLayouts, displayLayout),
+    [branchLayouts, displayLayout, effectiveCollapsedIds, forest],
   );
   // A PDF should retain the complete reporting structure even when someone has
   // temporarily collapsed a branch in their interactive view.
   const printableLayout = useMemo(
-    () => layoutForest(forest, new Set<string>(), branchLayouts),
-    [branchLayouts, forest],
+    () => layoutForest(forest, new Set<string>(), branchLayouts, chartLayout),
+    [branchLayouts, chartLayout, forest],
   );
   const layoutNodesById = useMemo(
     () => new Map(layout.nodes.map((item) => [item.node.id, item])),
@@ -1599,6 +1600,7 @@ export function OrganisationTree({
   };
 
   const resetView = () => {
+    setChartLayout("default");
     setFocusedRootId(null);
     setCompanyFilter("all");
     setQuery("");
@@ -2403,6 +2405,23 @@ export function OrganisationTree({
             ) : null}
           </div>
 
+          <label className={styles.layoutSelect}>
+            <span className={styles.srOnly}>Organisation layout</span>
+            <select aria-label="Organisation layout" value={chartLayout} onChange={(event) => {
+              setChartLayout(event.target.value as OrganisationLayout);
+              setBranchLayouts({});
+              setManualOffsets({});
+              setCollapsedIds(new Set());
+              setArrangeMode(false);
+              setOpenNodeActionsId(null);
+              setInteractionMessage("Chart layout updated.");
+            }} disabled={Boolean(linkGuide) || saving}>
+              <option value="default">Default</option>
+              <option value="horizontal">Horizontal</option>
+              <option value="vertical">Vertical</option>
+              <option value="grouped">By role</option>
+            </select>
+          </label>
           <OrganisationFilterMenu companyFilter={companyFilter} onSelect={(filter) => {
             setCompanyFilter(filter);
             setFocusedRootId(null);
@@ -2527,7 +2546,7 @@ export function OrganisationTree({
                   );
                   return (
                     <g key={connector.id}>
-                      {canUseRelationshipEditor ? (
+                      {canUseRelationshipEditor && child?.reportsTo === connector.fromId ? (
                         <path
                           aria-label={`Edit reporting line for ${child?.name ?? "this employee"}`}
                           className={styles.connectorTarget}
