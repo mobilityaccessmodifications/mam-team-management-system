@@ -1,9 +1,51 @@
-# MAM OpenClaw self-profile and leave plugin
+# MAM OpenClaw leave plugin
 
-This is a native OpenClaw plugin for MAM People self-profile lookup and
-self-service leave. It is deliberately not a bare MCP identity boundary.
+This is a native OpenClaw plugin for MAM People self-service leave. It is
+deliberately not a bare MCP identity boundary.
 
 ## Status and source
+
+### Quoted Confirm protocol (v2)
+
+The v2 plugin exposes only `mam_leave_prepare`, not a standalone profile tool.
+Identity and employment eligibility are resolved inside server-side preparation;
+the model receives missing fields (without a personal profile) or a completed
+summary. Casual/ABN requests default to Unpaid leave when no type was supplied;
+an explicit unavailable paid type is never silently rewritten. Unknown employment
+types fail closed. The agent is instructed to use this tool only after explicit
+leave intent, never for greetings, startup or general policy questions. There is
+no automatic profile-loading hook, but natural-language intent remains an agent
+decision, not a claimed cryptographic gate. An omitted note adds no question.
+`workspace-rules.md` is the source-controlled MAM instruction block; deployment
+replaces only the corresponding block in the Gateway's AGENTS.md, leaving all
+other instructions and access restrictions intact.
+
+The server renders Name, Dates, Type and Note (optional), plus times/timezone
+for part-day requests, from the same authoritative transaction snapshot. The
+employee uses WhatsApp Reply on that exact summary and types `Confirm`; casing
+and surrounding ASCII whitespace are accepted. There is no visible UUID and no
+unquoted/latest-draft inference. Receipt IDs, exact displayed text, current
+sender/account/session, expiry and idempotency remain required. Confirmation
+packets retain the actual inbound text and provider message ID; the adapter
+never fabricates a legacy UUID confirmation or a nonexistent quote.
+
+Wire version 2 and immutable draft `consentVersion: 2` distinguish this from
+legacy quoted-code drafts. Legacy/v2 consent cannot be mixed. Current employee
+names join the database identity fingerprint; name or employment changes need
+fresh preparation. The Gateway keeps only the current preparation revision,
+including when more input is needed. The database never invalidates other drafts
+by commit arrival order; stale, locally unreachable drafts expire normally.
+
+Release requires the reviewed additive migration
+`20260920120000_openclaw_quoted_confirm.sql` first, then the GitHub-triggered
+People deployment, then the reviewed native plugin and workspace block. The
+database migration and production rollout need explicit authorization. Preserve
+the legacy path during this ordering; v1 profile remains only for rollout
+compatibility. Remove the retired `mam_self_profile` staff-tool allowance without
+adding any permission. Keep phone allowlists and messaging restrictions unchanged.
+No WhatsApp messages or real leave submissions are part of deployment checks.
+Use `scripts/deploy-openclaw-quoted-confirm.mjs inspect|apply <reviewed-sha256>`
+through MAM's credential helper; it pins targets, function bodies and permissions.
 
 The self-profile and leave plugin is released through GitHub (PRs #121–124).
 The historical validation notes below describe earlier artifacts, not the current
@@ -73,26 +115,17 @@ Verified artifact SHA-256:
 This is native build/validation evidence, not real-channel E2E. No install,
 enable, service restart or live messages were performed.
 
-The model-visible tools are deliberately narrow:
+The only model-visible tool is `mam_leave_prepare`. It accepts leave details,
+never a phone number, name, employee ID, employment type or user ID. Identity,
+account, direct-chat route and session come from trusted OpenClaw context.
+The server resolves the caller, eligible types and missing fields; a completed
+draft produces the exact summary and a real outbound WhatsApp delivery receipt.
+No standalone profile is exported to the model.
 
-- `mam_self_profile` has no arguments. It obtains the canonical sender, account,
-  direct-chat route and session from OpenClaw's trusted tool context, then asks
-  the People backend to resolve that sender. It returns only the caller's
-  `{name, employmentType}`. Phone numbers and internal person/user IDs are never
-  returned to the model.
-- `mam_leave_prepare` accepts only leave details. It gets identity and chat
-  context from the same trusted source, signs a short-lived request to the MAM
-  bridge, sends the exact confirmation summary, and records the real outbound
-  WhatsApp message ID through `message_sent`.
-
-Neither tool accepts a phone number, name, employee ID or user ID. A
-`before_dispatch` hook consumes only an exact `CONFIRM <challenge>` reply from
-the same approved direct chat, quoting that exact summary. It then calls the
-server bridge; approval, rejection, cancellation, editing, and selected-person
-operations are not registered. The assistant should call `mam_self_profile`
-before collecting leave details. When the returned employment type is `casual`
-or `abn`, it must choose Unpaid leave without asking the employee to choose
-between paid and unpaid leave; the backend independently enforces that rule.
+The `before_dispatch` hook accepts a plain `Confirm` reply from that same
+authenticated direct chat only when it quotes the exact displayed summary.
+The model cannot sign or synthesize confirmation. Approval, rejection,
+cancellation, editing and selected-person operations are not registered.
 
 The plugin fails closed when the bridge is disabled, the secret is missing, the
 endpoint is not the exact HTTPS leave path, the sender/session/DM route is
@@ -127,7 +160,7 @@ npm run typecheck
 
 The smoke test uses minimal fake TypeBox and registration adapters and a fake
 fetch against `.invalid`. It tests registration intent, trusted identity,
-self-profile data minimization, rejection of model-supplied identity, HMAC
+absence of a standalone profile tool, rejection of model-supplied identity, HMAC
 signing, exact summary/quote handling and restart failure. It does not prove
 actual SDK compatibility, hook delivery or production permissions. It reads no
 host environment credentials. The temporary VPS harness is not included.
@@ -151,7 +184,7 @@ Consult the [official plugin CLI reference](https://docs.openclaw.ai/cli/plugins
 for the exact installed version; a successful build/validate does not install
 or activate the integration.
 
-## Self-profile release — STOP gate
+## Historical v1 self-profile release — STOP gate
 
 The base leave plugin's prior release does not authorize this extension. Do not
 copy the changed runtime to the live gateway or apply the new profile migration

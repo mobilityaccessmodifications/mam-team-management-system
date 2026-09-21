@@ -19,13 +19,14 @@ export type LeaveFields = {
 export type Employee = {
   personId: string; userId: string | null; company: string; active: boolean;
   nodeKind: string; accountActive: boolean; phone: string | null; country: string | null;
-  employmentType: string | null;
+  employmentType: string | null; fullName?: string | null;
 };
 export type SelfProfileEmployee = Employee & { fullName: string | null };
 export type SelfProfile = { name: string; employmentType: string | null };
 export type LeaveDraft = {
   id: string; identity: Identity; personId: string; userId: string;
   fields: LeaveFields; summary: string; digest: string; challenge: string;
+  consentVersion?: 1 | 2; employmentType?: string | null;
   expiresAt: number; shownMessageId?: string; shownAt?: number;
   result?: { requestId: string; status: "Pending" };
 };
@@ -34,6 +35,8 @@ export type BridgeResult = {
   profile?: SelfProfile;
   missing?: string[]; draftId?: string; summary?: string; digest?: string;
   expiresAt?: string; requestId?: string; status?: "Pending";
+  consentVersion?: 2;
+  availableLeaveTypes?: string[]; instruction?: string;
 };
 /** All methods execute in ONE serializable database transaction. No network
  * calls, emails or in-memory production persistence inside this boundary.
@@ -83,12 +86,23 @@ function date(value: unknown): string {
   if (!Number.isFinite(+d) || d.toISOString().slice(0, 10) !== s || s < "2000-01-01" || s > "2100-12-31") fail("invalid_request");
   return s;
 }
-function fields(value: unknown): LeaveFields | { missing: string[] } {
-  const v = object(value);
+function fields(value: unknown, employee?: Employee): LeaveFields | { missing: string[]; availableLeaveTypes?: string[]; instruction?: string } {
+  let v = object(value);
   const allowed = ["leaveType", "startDate", "endDate", "startTime", "endTime", "employeeNote"];
   if (Object.keys(v).some(k => !allowed.includes(k))) fail("invalid_request");
+  let availableLeaveTypes: string[] | undefined;
+  if (employee) {
+    if (!EMPLOYMENT_TYPES.includes(employee.employmentType ?? "")) fail("not_available");
+    availableLeaveTypes = ["casual", "abn"].includes(employee.employmentType!) ? ["Unpaid leave"] : TYPES;
+    // Resolve eligibility here, without exporting a separate personal profile
+    // to the model. Never silently rewrite an explicitly requested paid type.
+    if ((v.leaveType === undefined || v.leaveType === "") && availableLeaveTypes.length === 1) v = { ...v, leaveType: "Unpaid leave" };
+    else if (typeof v.leaveType === "string" && TYPES.includes(v.leaveType) && !availableLeaveTypes.includes(v.leaveType)) {
+      return { missing: ["leaveType"], availableLeaveTypes, instruction: "That leave type is not available. Ask whether the employee wants Unpaid leave instead; do not silently change their choice." };
+    }
+  }
   const missing = ["leaveType", "startDate", "endDate"].filter(k => v[k] === undefined || v[k] === "");
-  if (missing.length) return { missing };
+  if (missing.length) return { missing, ...(availableLeaveTypes && missing.includes("leaveType") ? { availableLeaveTypes } : {}) };
   if (typeof v.leaveType !== "string" || !TYPES.includes(v.leaveType)) fail("invalid_request");
   const startDate = date(v.startDate), endDate = date(v.endDate);
   const days = (+new Date(endDate) - +new Date(startDate)) / 86400000;
@@ -105,7 +119,16 @@ function fields(value: unknown): LeaveFields | { missing: string[] } {
   if (employeeNote.length > 2000 || /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(employeeNote)) fail("invalid_request");
   return { leaveType: v.leaveType as string, startDate, endDate, startTime, endTime, employeeNote };
 }
-function summary(input: LeaveFields, employee: Employee, challenge: string) {
+function summary(input: LeaveFields, employee: Employee, challenge: string, version = 1) {
+  if (version === 2) {
+    const name = profile({ ...employee, fullName: employee.fullName ?? null }).name;
+    const dates = input.startDate === input.endDate ? input.startDate : `${input.startDate} to ${input.endDate}`;
+    return ["Please review your leave request:", `Name: ${name}`, `Dates: ${dates}`,
+      ...(input.startTime && input.endTime ? [`Times: ${input.startTime} to ${input.endTime} (Australia/Melbourne)`] : []),
+      `Type: ${input.leaveType}`, `Note (optional): ${input.employeeNote || "None"}`,
+      "", "To submit, reply to this message with Confirm within 10 minutes.",
+      "Not submitted yet. Manager approval is still required."].join("\n");
+  }
   let days = 0;
   for (let d = +new Date(input.startDate); d <= +new Date(input.endDate); d += 86400000) {
     if (new Date(d).getUTCDay() % 6 !== 0) days++;
@@ -158,7 +181,8 @@ export async function handleLeaveBridge(
     try { parsed = JSON.parse(rawBody); } catch { return fail("invalid_request"); }
     const packet = object(parsed);
     exact(packet, ["version", "account", "channel", "sender", "session", "eventId", "operation", "payload"]);
-    if (packet.version !== 1 || packet.channel !== "whatsapp" || packet.account !== config.account) fail("unauthorized");
+    if (![1, 2].includes(packet.version as number) || packet.channel !== "whatsapp" || packet.account !== config.account) fail("unauthorized");
+    const version = packet.version as 1 | 2;
     const identity = { account: config.account, sender: text(packet.sender, /^\+[1-9][0-9]{7,14}$/), session: text(packet.session, ID) };
     if (normalizeAllowlistPhone(identity.sender) !== identity.sender) fail("unauthorized");
     const eventId = text(packet.eventId, ID);
@@ -167,6 +191,9 @@ export async function handleLeaveBridge(
     const key = hash(JSON.stringify([identity.account, identity.sender, eventId]));
     const fingerprint = hash(rawBody);
     if (packet.operation === "profile") {
+      // Rolling compatibility for the old adapter only. v2 has no standalone
+      // profile operation: identity is resolved inside leave preparation.
+      if (version !== 1) fail("invalid_request");
       exact(payload, []);
       const employee = await resolve({ employees: () => store.selfProfileEmployees() }, identity.sender);
       return { status: 200, body: { code: "profile", profile: profile(employee) } };
@@ -180,26 +207,30 @@ export async function handleLeaveBridge(
       }
       let result: BridgeResult;
       if (packet.operation === "prepare") {
-        const input = fields(payload);
-        if ("missing" in input) result = { code: "needs_input", missing: input.missing };
+        const input = fields(payload, version === 2 ? employee : undefined);
+        if ("missing" in input) result = { code: "needs_input", ...input };
         else {
           eligible(employee, input);
           const id = randomUUID(), challenge = randomUUID();
-          const display = summary(input, employee, challenge);
+          const display = summary(input, employee, challenge, version);
           const draft: LeaveDraft = { id, identity, personId: employee.personId, userId: employee.userId!, fields: input,
-            summary: display, digest: hash(display), challenge, expiresAt: now + TTL };
+            summary: display, digest: hash(display), challenge, ...(version === 2 ? { consentVersion: 2 as const, employmentType: employee.employmentType } : {}), expiresAt: now + TTL };
           await tx.saveDraft(draft);
-          result = { code: "prepared", draftId: id, summary: display, digest: draft.digest, expiresAt: new Date(draft.expiresAt).toISOString() };
+          result = { code: "prepared", draftId: id, summary: display, digest: draft.digest, expiresAt: new Date(draft.expiresAt).toISOString(), ...(version === 2 ? { consentVersion: 2 as const } : {}) };
         }
       } else {
         exact(payload, packet.operation === "shown" ? ["draftId", "digest", "outboundMessageId"] : ["draftId", "digest", "replyToMessageId", "text"]);
         const draft = await tx.draft(text(payload.draftId, UUID));
         if (!draft || !sameIdentity(identity, draft.identity) || draft.personId !== employee.personId || draft.userId !== employee.userId) return fail("not_available");
+        if ((draft.consentVersion ?? 1) !== version) return fail("conflict");
         if (text(payload.digest, DIGEST) !== draft.digest) return fail("conflict");
         // Expiry prevents NEW submissions, not receipt retrieval for a leave
         // already committed. Identity/digest/quoted consent still bind retries.
         if (draft.expiresAt <= now && !(packet.operation === "confirm" && draft.result)) return fail("expired");
-        if (!draft.result) eligible(employee, draft.fields);
+        if (!draft.result) {
+          if (version === 2 && draft.employmentType !== employee.employmentType) return fail("conflict");
+          eligible(employee, draft.fields);
+        }
         if (packet.operation === "shown") {
           const messageId = text(payload.outboundMessageId, ID);
           if (draft.shownMessageId && draft.shownMessageId !== messageId) return fail("conflict");
@@ -208,10 +239,13 @@ export async function handleLeaveBridge(
           draft.shownAt ??= now;
           result = { code: "shown" };
         } else {
-          if (!draft.shownMessageId || draft.shownAt === undefined || now <= draft.shownAt || payload.replyToMessageId !== draft.shownMessageId || payload.text !== `CONFIRM ${draft.challenge}`) return fail("conflict");
+          const confirmed = version === 2
+            ? typeof payload.text === "string" && /^[ \t\r\n]*confirm[ \t\r\n]*$/i.test(payload.text)
+            : payload.text === `CONFIRM ${draft.challenge}`;
+          if (!draft.shownMessageId || draft.shownAt === undefined || now <= draft.shownAt || payload.replyToMessageId !== draft.shownMessageId || !confirmed) return fail("conflict");
           // Recompute the rendered summary on employment changes; never submit
           // with different displayed hours/policy without a fresh confirmation.
-          if (!draft.result && hash(summary(draft.fields, employee, draft.challenge)) !== draft.digest) return fail("conflict");
+          if (!draft.result && hash(summary(draft.fields, employee, draft.challenge, version)) !== draft.digest) return fail("conflict");
           draft.result ??= await tx.submitSelf(employee, draft.fields, draft.id);
           if (draft.result.status !== "Pending" || !UUID.test(draft.result.requestId)) return fail("not_available");
           result = { code: "submitted", ...draft.result };
