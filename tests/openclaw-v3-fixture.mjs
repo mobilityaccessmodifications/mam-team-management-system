@@ -10,7 +10,9 @@ export function load(file, imports) {
   return mod.exports;
 }
 const phone=load('src/lib/openclaw-allowlist.ts',{'server-only':{},'node:crypto':crypto,'libphonenumber-js/max':require('libphonenumber-js/max')});
-export const api=load('src/lib/openclaw-leave-contract.ts',{'server-only':{},'node:crypto':crypto,'./openclaw-allowlist':phone});
+const priority=load('src/lib/leave-priority.ts',{});
+export const notice=load('src/lib/leave-notice.ts',{'@/lib/leave-priority':priority});
+export const api=load('src/lib/openclaw-leave-contract.ts',{'server-only':{},'node:crypto':crypto,'./openclaw-allowlist':phone,'./leave-notice':notice});
 export const config={key:'synthetic-only-key-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',account:'mam-test'};
 export const now=Date.parse('2026-09-21T01:00:00Z');
 export const employee=()=>({personId:'10000000-0000-4000-8000-000000000001',userId:'20000000-0000-4000-8000-000000000001',

@@ -3,6 +3,7 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
+import { fixture as bridgeFixture } from './openclaw-v3-fixture.mjs';
 
 const root = new URL("../integrations/openclaw-leave/", import.meta.url);
 const source = readFileSync(new URL("index.js", root), "utf8");
@@ -129,6 +130,26 @@ test("needs_input and failed delivery never restore an older draft", async () =>
     const bad = fixture(options); await bad.start(); assert.notEqual((await bad.tool().execute("bad", params)).details.code, "prepared");
     await bad.dispatch(bad.event()); assert.equal(bad.calls.length, 1);
   }
+});
+
+test("real notice rejection reaches the model and cannot confirm an older summary", async () => {
+  const backend = bridgeFixture();
+  const blocked = (await backend.call(backend.packet('prepare', { leaveType: 'Annual leave', startDate: '2026-09-24' }))).body;
+  assert.equal(blocked.code, 'needs_input');
+  let reject = false;
+  const f = fixture({ prepare: (packet, prepared) => reject ? blocked : prepared(packet) });
+  await f.start();
+  await f.tool().execute('eligible', params);
+  assert.equal(f.sent.length, 1);
+  reject = true;
+  const result = await f.tool().execute('short-notice-edit', { ...params, startDate: '2026-09-24' });
+  assert.deepEqual(JSON.parse(result.content[0].text), blocked);
+  assert.match(result.content[0].text, /please speak to your manager/);
+  assert.equal(f.sent.length, 1, 'No blocked-request summary is sent');
+  await f.dispatch(f.event());
+  assert.equal(f.calls.filter(p => p.operation === 'confirm').length, 0);
+  assert.equal(backend.writes(), 0);
+  f.stop();
 });
 
 test("out-of-order prepare completions cannot restore an older request", async () => {

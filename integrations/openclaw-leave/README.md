@@ -14,6 +14,18 @@ An unavailable explicitly requested type is not silently changed. Notes are
 optional. The server renders Name, Dates, Type and Note, plus times/timezone for
 part-day requests. The summary contains no repeated submission instructions.
 
+Preparation also checks the portal's 14-calendar-day notice policy using the
+current Melbourne date and the authenticated sender's authoritative employment
+type. Non-ABN Annual/Unpaid requests starting earlier are stopped as soon as
+type and start date are known, without collecting the remaining fields. The
+existing `needs_input` response carries an English manager-contact instruction
+and no missing fields, summary or draft token. The unchanged native adapter
+clears any older draft and passes the instruction to the model; Confirm cannot
+submit that blocked preparation. ABN unpaid and Sick/Carer's requests retain
+their existing eligibility rules. The database insert-time notice guard remains
+the final enforcement layer, including for older drafts. No manager override
+or on-behalf capability is exposed through WhatsApp.
+
 The follow-up says: "Send Confirm within 10 minutes to submit your latest summary
 for manager approval, or tell me what to change." WhatsApp Reply is not required.
 A quoted Confirm is also accepted only if it refers to the current summary;
