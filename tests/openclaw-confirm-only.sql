@@ -9,6 +9,20 @@ do $$begin
  assert (select count(*)=4 from public.leave_requests);
 end$$;
 
+-- A disabled release must not even return employee data during preparation.
+-- Checking the gate remains read-only; neither case creates protocol records.
+update private.openclaw_leave_release_gate set enabled=false where singleton;
+begin read only;
+set local role service_role;
+do $$begin
+ begin
+  perform public.openclaw_leave_v3_snapshot(repeat('b3',32),null);
+  raise exception 'Disabled preparation accepted' using errcode='ZX001';
+ exception when insufficient_privilege then null; end;
+end$$;
+commit;
+update private.openclaw_leave_release_gate set enabled=true where singleton;
+
 create table public.fixture_openclaw_v3_plan(person uuid,draft jsonb,packet jsonb,snapshot jsonb,token_hash text);
 grant select on public.fixture_openclaw_v3_plan to service_role;
 do $$declare p uuid:='10000000-0000-4000-8000-000000000001'; d jsonb; pkt jsonb;

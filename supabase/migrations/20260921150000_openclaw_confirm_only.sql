@@ -3,13 +3,21 @@ begin;
 -- Preparation is read-only. Existing private cache tables hold ONLY successful
 -- v3 nonces/receipts, and retain their existing bounded cleanup policy.
 create function public.openclaw_leave_v3_snapshot(p_key text,p_draft_id uuid)
-returns jsonb language sql stable security definer set search_path = '' as $$
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+begin
+  -- Stateless preparation no longer passes through the old gated commit RPC.
+  -- Keep disabled rollouts closed without introducing any preparation writes.
+  if not coalesce((select enabled from private.openclaw_leave_release_gate where singleton),false) then
+    raise exception 'Bridge not released' using errcode='42501';
+  end if;
+  return (
   with people as (select private.openclaw_leave_people() as rows)
   select jsonb_build_object('complete',true,'rows',people.rows,
     'fingerprint',encode(sha256(convert_to(people.rows::text,'UTF8')),'hex'),
     'receipt',(select body from private.openclaw_leave_receipts where key=p_key),
     'submitted',(select body from private.openclaw_leave_drafts where id=p_draft_id))
-  from people;
+  from people);
+end;
 $$;
 revoke all on function public.openclaw_leave_v3_snapshot(text,uuid) from public,anon,authenticated,service_role;
 grant execute on function public.openclaw_leave_v3_snapshot(text,uuid) to service_role;
