@@ -25,9 +25,15 @@ export function minorRoleGroup(position: string) {
 /** Compact presentation only. The source records and reportsTo IDs stay intact. */
 export function defaultDisplayChildren(node: OrganisationLayoutNode) {
   if (!isMinorModsLeader(node)) return node.children;
-  return node.children.flatMap((child) => {
-    const structuralTeam = child.kind === "org_unit"
-      && /schedul|estimat|trade|install|admin|\bcso\b/i.test(`${child.name} ${child.position}`);
-    return structuralTeam ? child.children : [child];
-  }).sort((left, right) => minorRoleGroup(left.position).localeCompare(minorRoleGroup(right.position)));
+  const people: OrganisationLayoutNode[] = [];
+  const collect = (children: OrganisationLayoutNode[]) => {
+    for (const child of children) {
+      // Group the whole team by role even when the stored tree contains
+      // intermediate people or structural teams. Never mutate reportsTo.
+      if (child.kind !== "org_unit") people.push({ ...child, children: [] });
+      collect(child.children);
+    }
+  };
+  collect(node.children);
+  return people.sort((left, right) => minorRoleGroup(left.position).localeCompare(minorRoleGroup(right.position)));
 }
