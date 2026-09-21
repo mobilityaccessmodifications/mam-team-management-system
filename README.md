@@ -226,3 +226,10 @@ the reviewed receiver validator through `scripts/deploy-priority-n8n.py` so
 birthday reminders have no CC. Merge the application through GitHub only after
 both server-side boundaries are verified; the app's Change Profile path calls
 the new selected-scope RPC.
+
+Managers’ Calendar includes their active reporting subtree’s pending and approved
+leave, including indirect reports through org units. Shared entries expose only
+name, dates, duration and status; ordinary employees remain self-only.
+Deploy the reviewed `20260921160000_manager_team_leave_calendar.sql` with
+`scripts/deploy-manager-team-calendar.py apply <reviewed-sha256>` through the
+MAM Supabase credential wrapper; `inspect` verifies the deployed scope.
