@@ -77,8 +77,10 @@ if (operation === "apply") {
  if not coalesce((${prerequisiteCheck}) and (${bodyCheck(oldHashes)}) and (${permissionsCheck}),false)
  then raise exception 'OpenClaw prerequisite, function or permission drift'; end if; end $mam$;`;
     const record = `insert into supabase_migrations.schema_migrations(version,name,statements) values(${literal(version)},${literal(name)},ARRAY[${literal(sql)}]);`;
-    await query(sql.replace("begin;", `begin;\nset local lock_timeout='5s';\nset local statement_timeout='60s';\n${guard}`)
-      .replace("\ncommit;", `\n${record}\nnotify pgrst,'reload schema';\ncommit;`));
+    // SQL contains dollar quotes and $' regex suffixes; replacement callbacks
+    // preserve them literally instead of expanding JavaScript replacement tokens.
+    await query(sql.replace("begin;", () => `begin;\nset local lock_timeout='5s';\nset local statement_timeout='60s';\n${guard}`)
+      .replace("\ncommit;", () => `\n${record}\nnotify pgrst,'reload schema';\ncommit;`));
   }
   state = await inspect();
   requireCondition(state.prerequisites && state.quoted_confirm_bodies && state.service_only_permissions && historyMatches(await query(historyQuery)), "Incomplete quoted-Confirm deployment");
