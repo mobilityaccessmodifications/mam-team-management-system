@@ -98,3 +98,42 @@ test('legacy sick copies have stable receipts and never expose balances to the e
   assert.equal(new Set(keys.reviewers).size,1);assert.equal(new Set(keys.employee).size,1);
   assert.notEqual(keys.employee[0],keys.reviewers[0]);
 });
+
+test('balance-free submissions use separate stable copies and retain the legacy dedupe key',async(t)=>{
+  const oldFetch=globalThis.fetch; const saved={...process.env};
+  t.after(()=>{globalThis.fetch=oldFetch;for(const k of ['MAM_N8N_LEAVE_WEBHOOK_URL','MAM_N8N_LEAVE_WEBHOOK_ORIGIN','MAM_N8N_LEAVE_WEBHOOK_SECRET']) {
+    if(saved[k]===undefined)delete process.env[k];else process.env[k]=saved[k];
+  }});
+  Object.assign(process.env,{MAM_N8N_LEAVE_WEBHOOK_URL:'https://example.test/hook',MAM_N8N_LEAVE_WEBHOOK_ORIGIN:'https://example.test',MAM_N8N_LEAVE_WEBHOOK_SECRET:'synthetic'});
+  const bodies=[],acks=[];
+  const row={delivery_id:id,claim_token:id,payload:{requestId:id,event:'leave-submitted',leaveType:'Annual leave',employeeEmails:['employee@example.test','personal@example.test'],managerEmail:'manager@example.test'}};
+  const {dispatchLeaveNotificationOutbox:run}=load('src/lib/leave-notification-outbox.ts',{
+    'server-only':{},'node:crypto':require('node:crypto'),
+    '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{
+      if(name==='claim_leave_notification_outbox')return {data:[row],error:null};
+      acks.push(args);return {data:true,error:null};
+    }})},
+  });
+  const validator=new Function('$input','$getWorkflowStaticData',fs.readFileSync('workflows/leave-notification-validator.n8n.txt','utf8'));
+  const state={}; let failEmployee=true;
+  globalThis.fetch=async(url,options)=>{
+    const body=JSON.parse(options.body);bodies.push(body);
+    const out=validator({first:()=>({json:{headers:{'content-type':'application/json'},body:{version:1,employeeName:'Synthetic Person',employeeEmail:null,company:'mam',startDate:'2026-10-01',endDate:'2026-10-01',startTime:null,endTime:null,days:1,hours:7.6,status:'Pending',...body}}})},()=>state)[0].json;
+    if(body.audience==='employee'&&failEmployee)throw new Error('offline');
+    assert.equal(out.outcome,body.audience==='reviewers'&&bodies.length>2?'duplicate':'send');
+    state.leaveNotificationEvents[body.eventKey]={state:'sent',at:Date.now()};
+    return Response.json({ok:true,sent:true,eventKey:body.eventKey,actualRecipient:out.deliveryRecipient??out.actualRecipient});
+  };
+  assert.equal((await run()).failed,1);
+  assert.equal(acks.at(-1).p_delivered,false);
+  // Model an unsuccessful provider attempt after its reservation expires.
+  const employeeKey=bodies[1].eventKey;
+  state.leaveNotificationEvents[employeeKey].at=Date.now()-21*60*1000;
+  failEmployee=false;assert.equal((await run()).sent,1);
+  assert.deepEqual(bodies.map(b=>b.audience),['reviewers','employee','reviewers','employee']);
+  assert.equal(bodies[0].eventKey,bodies[2].eventKey);
+  assert.equal(bodies[1].eventKey,bodies[3].eventKey);
+  assert.notEqual(bodies[0].eventKey,bodies[1].eventKey);
+  const legacy=`leave:${id}:leave-submitted:${require('node:crypto').createHash('sha256').update(id).digest('hex').slice(0,24)}`;
+  assert(bodies.every(b=>b.legacyEventKey===legacy&&!('leaveBalance' in b)));
+});

@@ -101,6 +101,7 @@ test('failure to schedule notifications never reports an already committed leave
 function outbox({ failFirst = false, claimFails = false } = {}) {
   const warnings = [], claims = [], keys = [], deliveries = [];
   let delivered = false, networkFailure = failFirst;
+  const state = {};
   const validate = new Function('$input', '$getWorkflowStaticData',
     fs.readFileSync('workflows/leave-notification-validator.n8n.txt', 'utf8'));
   const row = { delivery_id: id, claim_token: id, payload: {
@@ -133,12 +134,16 @@ function outbox({ failFirst = false, claimFails = false } = {}) {
     keys.push(body.eventKey);
     if (networkFailure) { networkFailure = false; throw new Error('synthetic timeout'); }
     // Exercise the actual receiver's current routing contract, offline.
-    const output = validate({ first: () => ({ json: { headers: { 'content-type': 'application/json' }, body } }) }, () => ({}))[0].json;
-    assert.equal(output.outcome, 'send');
-    assert.equal(output.deliveryRecipient, 'manager@example.test,employee@example.test');
-    assert.equal(output.ccRecipients, 'hr@mobilityaccess.com.au');
-    deliveries.push(output);
-    return Response.json({ ok: true, sent: true, eventKey: body.eventKey, actualRecipient: output.confirmationRecipient });
+    const output = validate({ first: () => ({ json: { headers: { 'content-type': 'application/json' }, body } }) }, () => state)[0].json;
+    assert(['send','duplicate'].includes(output.outcome));
+    const expected = body.audience === 'employee' ? 'employee@example.test' : 'manager@example.test,hr@mobilityaccess.com.au';
+    assert.equal(output.deliveryRecipient ?? output.actualRecipient, expected);
+    if(output.outcome==='send') {
+      assert.equal(output.ccRecipients, '');
+      deliveries.push(output);
+      state.leaveNotificationEvents[body.eventKey] = {state:'sent',at:Date.now()};
+    }
+    return Response.json({ ok: true, sent:output.outcome==='send',alreadySent:output.outcome==='duplicate',eventKey: body.eventKey, actualRecipient: expected });
   } });
   return { dispatch: dispatcher.dispatchLeaveNotificationsForRequest, warnings, claims, keys, deliveries,
     delivered: () => delivered };
@@ -153,8 +158,8 @@ test('confirmed route and successful replay use the existing queue once and pres
   }
   assert.equal(q.claims.length, 2);
   assert.equal(q.delivered(), true);
-  assert.equal(q.deliveries.length, 1);
-  assert.equal(q.keys.length, 1);
+  assert.equal(q.deliveries.length, 2);
+  assert.equal(q.keys.length, 2);
   assert.deepEqual(q.warnings, []);
 });
 
@@ -163,14 +168,14 @@ test('mail failure stays retryable without changing submission; replay reuses th
   assert.deepEqual(await (await h.POST(request())).json(), submitted.body);
   await h.jobs.shift()();
   assert.equal(q.delivered(), false);
-  assert.equal(q.deliveries.length, 0);
+  assert.equal(q.deliveries.length, 1);
   assert.equal(q.warnings.length, 1);
   assert.deepEqual(await (await h.POST(request())).json(), submitted.body);
   await h.jobs.shift()(); // Synthetic claim represents the due queue retry.
   assert.equal(q.delivered(), true);
-  assert.equal(q.deliveries.length, 1);
-  assert.equal(q.keys.length, 2);
-  assert.equal(new Set(q.keys).size, 1);
+  assert.equal(q.deliveries.length, 2);
+  assert.equal(q.keys.length, 4);
+  assert.equal(new Set(q.keys).size, 2);
 });
 
 test('notification claim failure does not turn successful confirmation into unavailable', async () => {
