@@ -491,7 +491,7 @@ export function SubscriptionRegister({
       {registerState.state === "ready" ? <div className={styles.toolSummary}>
         {hasSubscriptionFilters ? <button className={styles.clearFilters} type="button" onClick={() => setSubscriptionFilters(emptySubscriptionFilters)}>Clear filters</button> : null}
         <button className={styles.filterSummaryButton} type="button" ref={filterButtonRef} aria-expanded={showFilters} aria-controls={filterPanelId} onClick={() => setShowFilters((open) => !open)}>
-          <Filter size={16} aria-hidden="true" /><span><strong>Filters{hasSubscriptionFilters ? ` · ${Object.values(subscriptionFilters).filter(Boolean).length}` : ""}</strong><span className={styles.count} aria-live="polite">{subscriptionCountLabel(filteredSubscriptions, registerState.subscriptions.length)}</span></span><ChevronDown size={16} aria-hidden="true" />
+          <Filter size={16} aria-hidden="true" /><span><strong>Filters{hasSubscriptionFilters ? ` · ${Object.values(subscriptionFilters).filter(Boolean).length}` : ""}</strong></span><ChevronDown size={16} aria-hidden="true" />
         </button>
       </div> : null}
     </div>
@@ -503,7 +503,7 @@ export function SubscriptionRegister({
       }
     }}>
       <div className={styles.filterGrid}>{subscriptionFilterFields.map(({ key, label }) => <label key={key}><span>{label}</span><select value={subscriptionFilters[key]} onChange={(event) => setSubscriptionFilter(key, event.target.value)}><option value="">All</option>{subscriptionFilterOptions[key].map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>)}</div>
-      <div className={styles.filterPanelFooter}><span>Filters combine and apply immediately.</span><button className={styles.secondaryAction} type="button" onClick={() => { setShowFilters(false); filterButtonRef.current?.focus(); }}>Done</button></div>
+      <div className={styles.filterPanelFooter}><span aria-live="polite">{subscriptionCountLabel(filteredSubscriptions, registerState.subscriptions.length)}</span><button className={styles.secondaryAction} type="button" onClick={() => { setShowFilters(false); filterButtonRef.current?.focus(); }}>Done</button></div>
     </section> : null}
 
     {registerState.state === "loading" ? <div className={styles.loadingState}><LoaderCircle className={styles.spinner} size={22} aria-hidden="true" /><span>Loading subscriptions…</span></div> : null}
