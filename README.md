@@ -246,3 +246,22 @@ Apply the reviewed insert-time policy with `scripts/deploy-leave-notice.py apply
 Managers retain reporting-team Pending/Approved visibility and may also view other active teams’ Approved leave across both companies. Other employees retain existing scope; payroll grants retain archived approved history. New `list_leave_calendar_entries_with_teams` RPCs add only the HR team label to the existing authorised projections. Calendar filters use these labels and the permitted event layers, including search, without changing the selected view/date.
 
 Deploy `20260921180000_calendar_team_filters.sql` through `scripts/deploy-calendar-team-filters.py inspect` then `apply <reviewed-sha256>` using the MAM credential helper before merging the UI release. The script verifies the exact organisation/project, predecessor migration, source hash and deployed function grants.
+
+### Comparison-only payroll uploads
+
+Gerard’s importer identity is configured in the private comparison-only importer
+allowlist. His parsed uploads save an immutable comparison against current
+available annual/sick hours (stored payroll hours minus approved People Hub leave),
+rounded to two decimal places for comparison. Missing balances and unmatched rows
+are flagged; no leave balance is overwritten, including through the old commit RPC.
+Snapshot dates are retained so reviewers can distinguish different reporting periods.
+A durable, leased alert queue sends a count-only warning to
+marketing@mobilityaccess.com.au through the existing authenticated n8n receiver.
+The leave-notification cron and independent recovery scheduler retry delivery.
+Repeated staging of the same open batch does not create another alert.
+Source files retain the existing minimum 30-day archive. Recent imports can reopen
+the saved comparison for the uploader or Super Admin. Comparison uploads satisfy
+monthly file-upload reminders; resolving differences remains a separate review.
+Deploy `20260922150000_payroll_comparison_alerts.sql` with the target-checked
+`scripts/deploy-payroll-comparison.py`, configure the verified Gerard grant, and
+publish the reviewed n8n receiver before releasing the application.

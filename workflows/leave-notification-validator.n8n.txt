@@ -3,7 +3,7 @@ const HR = 'hr@mobilityaccess.com.au';
 const ACCOUNTS = 'accounts@mobilityaccess.com.au';
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 const APP_URL = 'https://mam-team-management-system-ten.vercel.app';
-const EVENTS = ['leave-submitted', 'leave-approved', 'leave-declined', 'leave-cancelled', 'leave-conditionally-approved', 'leave-reminder', 'team-birthday', 'payroll-balance-reminder'];
+const EVENTS = ['payroll-comparison-alert', 'leave-submitted', 'leave-approved', 'leave-declined', 'leave-cancelled', 'leave-conditionally-approved', 'leave-reminder', 'team-birthday', 'payroll-balance-reminder'];
 const STATUSES = ['Pending', 'Approved', 'Declined', 'Cancelled', 'Approved – pending leave balance'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -49,6 +49,21 @@ try {
     'startDate', 'endDate', 'startTime', 'endTime', 'days', 'hours', 'status', 'employeeNote', 'managerNote', 'managerEmail'];
   if (!String(headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) return reject('content-type');
   if (!body || body.version !== 1 || !EVENTS.includes(body.event) || JSON.stringify(body).length > 20000) return reject('body-shape');
+  if (body.event === 'payroll-comparison-alert') {
+    if (Object.keys(body).length !== 5 || !UUID.test(String(body.batchId))
+      || body.eventKey !== `payroll-comparison:${body.batchId}`
+      || !Number.isInteger(body.differenceCount) || body.differenceCount < 1 || body.differenceCount > 2000) return reject('comparison-shape');
+    const recipient = 'marketing@mobilityaccess.com.au';
+    const state = $getWorkflowStaticData('global');
+    if (!object(state.leaveNotificationEvents)) state.leaveNotificationEvents = {};
+    const previous = state.leaveNotificationEvents[body.eventKey];
+    if (previous?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true, actualRecipient: recipient, eventKey: body.eventKey } }];
+    if (previous?.state === 'processing' && Date.now() - previous.at < PROCESSING) return reject('delivery-in-flight');
+    state.leaveNotificationEvents[body.eventKey] = {state:'processing',at:Date.now()};
+    return [{json:{outcome:'send',mamDelivery:true,deliveryRecipient:recipient,confirmationRecipient:recipient,ccRecipients:'',eventKey:body.eventKey,
+      emailSubject:'[People Hub] Leave balance differences require review',
+      emailHtml:'<p>A payroll upload has ' + body.differenceCount + ' leave balance differences or unmatched entries.</p><p>Existing balances have not been changed.</p><p>Open Leave → Balance → Recent imports to review uploaded and system balances.</p><p>Reference: ' + escape(body.batchId) + '</p><p><a href="' + APP_URL + '/?view=leave">People Hub</a></p>'}}];
+  }
   if (body.event === 'payroll-balance-reminder') {
     const payrollRequired = ['version', 'event', 'eventKey', 'requestId', 'recipientName', 'recipientEmail', 'reminderMonth', 'missingCompanies'];
     if (Object.keys(body).length !== payrollRequired.length

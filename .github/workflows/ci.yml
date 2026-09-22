@@ -177,3 +177,10 @@ jobs:
         run: |
           createdb -h localhost -U postgres check_in_retry_catchup_test
           psql -h localhost -U postgres -d check_in_retry_catchup_test -v ON_ERROR_STOP=1 -f tests/check-in-retry-catchup.sql
+
+      - name: Test comparison-only payroll upload and alert retry leases
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres payroll_comparison_test
+          psql -h localhost -U postgres -d payroll_comparison_test -v ON_ERROR_STOP=1 -f tests/payroll-comparison.sql

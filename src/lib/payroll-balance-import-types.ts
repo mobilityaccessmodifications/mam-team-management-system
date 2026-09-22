@@ -21,7 +21,22 @@ export type PayrollImportPreviewRow = {
   willApplySick: boolean;
 };
 
+export type PayrollComparisonRow = {
+  rowId: number;
+  employeeName: string;
+  company: string;
+  kind: string;
+  uploadedHours: number;
+  systemHours: number | null;
+  fileAsOf: string;
+  systemAsOf: string | null;
+  different: boolean;
+};
+
 export type PayrollImportBatch = {
+  comparisonOnly: boolean;
+  differenceCount: number;
+  comparisonRows: PayrollComparisonRow[];
   batchId: string;
   version: number;
   status: "staged" | "committed";
@@ -40,7 +55,7 @@ export type PayrollImportReminder = {
   complete: boolean;
 };
 
-export type PayrollImportBatchSummary = Omit<PayrollImportBatch, "version" | "rows"> & {
+export type PayrollImportBatchSummary = Omit<PayrollImportBatch, "version" | "rows" | "comparisonOnly" | "differenceCount" | "comparisonRows"> & {
   rowCount: number;
 };
 
