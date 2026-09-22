@@ -1,3 +1,4 @@
+import {Receiver} from './notification-workflow-harness.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -114,22 +115,19 @@ test('balance-free submissions use separate stable copies and retain the legacy 
       acks.push(args);return {data:true,error:null};
     }})},
   });
-  const validator=new Function('$input','$getWorkflowStaticData',fs.readFileSync('workflows/leave-notification-validator.n8n.txt','utf8'));
-  const confirm=new Function('$','$input','$getWorkflowStaticData',fs.readFileSync('workflows/leave-notification-confirmation.n8n.txt','utf8'));
-  const state={}; let failEmployee=true;
+  const receiver=new Receiver(); let failEmployee=true;
   globalThis.fetch=async(url,options)=>{
     const body=JSON.parse(options.body);bodies.push(body);
     // A connection failure before the receiver runs has no send side effect.
     // Ambiguous failures after reservation are covered by notification-receipts.
     if(body.audience==='employee'&&failEmployee)throw new Error('offline before receipt');
-    const out=validator({first:()=>({json:{headers:{'content-type':'application/json'},body:{version:1,employeeName:'Synthetic Person',employeeEmail:null,company:'mam',startDate:'2026-10-01',endDate:'2026-10-01',startTime:null,endTime:null,days:1,hours:7.6,status:'Pending',...body}}})},()=>state)[0].json;
-    assert.equal(out.outcome,body.audience==='reviewers'&&bodies.length>2?'duplicate':'send');
-    const receipt=out.outcome==='send'?confirm(()=>({all:()=>[{json:out}]}),{all:()=>[{json:{statusCode:202}}]},()=>state)[0].json:out;
+    const receipt=receiver.run({version:1,employeeName:'Synthetic Person',employeeEmail:null,company:'mam',startDate:'2026-10-01',endDate:'2026-10-01',startTime:null,endTime:null,days:1,hours:7.6,status:'Pending',...body});
+    assert.equal(receipt.alreadySent,body.audience==='reviewers'&&bodies.length>2);
     return Response.json(receipt);
   };
   assert.equal((await run()).failed,1);
   assert.equal(acks.at(-1).p_delivered,false);
-  assert.equal(state.leaveNotificationEvents[bodies[1].eventKey],undefined);
+  assert.equal(receiver.api.rows.has(bodies[1].eventKey),false);
   failEmployee=false;assert.equal((await run()).sent,1);
   assert.deepEqual(bodies.map(b=>b.audience),['reviewers','employee','reviewers','employee']);
   assert.equal(bodies[0].eventKey,bodies[2].eventKey);

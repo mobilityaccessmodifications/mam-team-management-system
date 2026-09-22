@@ -1,0 +1,8 @@
+const request = receiptSingle($('Confirm Leave HR Delivery').all());
+const reply = receiptSingle($input.all());
+if (!receiptKeys(reply, ['ok', 'sent', 'alreadySent', 'eventKey', 'actualRecipient', 'actualCcRecipients', 'providerReceipt'])
+  || reply.ok !== true || reply.sent !== true || reply.alreadySent !== false || reply.eventKey !== request.eventKey) receiptFail();
+const evidence = receiptEvidence(reply);
+if (evidence.actualRecipient !== request.recipient || evidence.actualCcRecipients !== request.cc
+  || JSON.stringify(evidence.providerReceipt) !== JSON.stringify(receiptProvider(request.providerReceipt))) receiptFail();
+return [{ json: { ok: true, sent: true, alreadySent: false, eventKey: reply.eventKey, ...evidence } }];

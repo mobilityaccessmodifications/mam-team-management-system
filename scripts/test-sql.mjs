@@ -11,6 +11,10 @@ console.log(`Disposable PostgreSQL socket: ${socket}`);
 try {
   const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (replay.status !== 0) throw new Error("Full migration replay failed");
+  command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/notification-delivery-receipts.sql")]);
+  const receipts = spawnSync(process.execPath, [path.join(sourceRoot, "tests/run-notification-delivery-sql.mjs"),
+    socket, "mam_test_notification_concurrency"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
+  if (receipts.status !== 0) throw new Error("Durable notification PostgreSQL concurrency tests failed");
   createDatabase(socket, "openclaw_leave_test");
   sql(socket, "openclaw_leave_test", "select 1");
   const openclaw = spawnSync(process.execPath, [fileURLToPath(new URL("../tests/run-openclaw-confirm-only-sql.mjs", import.meta.url)), socket], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
