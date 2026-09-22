@@ -62,9 +62,11 @@ end$$;
 select * from public.submit_selected_employee_leave_request('10000000-0000-4000-8000-000000000003','Annual leave','2030-12-09','2030-12-27');
 do $$declare r uuid; definition text; delivery record; retry record; begin
   select id into strict r from public.leave_requests;
+  -- Fix the requested duration for the exact-threshold reminder fixture.
+  update public.leave_requests set hours=120 where id=r;
   perform public.decide_leave_with_balance(r,'Approved – pending leave balance',null);
-  assert not private.leave_payroll_balance_sufficient(r), 'Days do not imply paid hours';
-  perform public.set_leave_balance_required_hours(r,120);
+  assert (select required_hours=120 from private.leave_balance_approvals where request_id=r), 'Requested hours are saved automatically';
+  assert not private.leave_payroll_balance_sufficient(r), 'Balance below requested hours cannot qualify';
   update public.leave_requests set submitted_at=timestamptz '2030-08-01 10:00:00+10' where id=r;
   select pg_get_functiondef('public.claim_leave_priority_reminders(integer)'::regprocedure) into definition;
   execute replace(definition, 'now() at time zone ''Australia/Melbourne''', 'timestamp ''2030-09-10 08:00:00''');

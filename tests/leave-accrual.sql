@@ -79,11 +79,13 @@ end$$;
 select public.set_employee_annual_leave_balance('10000000-0000-4000-8000-000000000002',10,(now() at time zone 'Australia/Melbourne')::date-365,false);
 do $$declare r uuid;begin
  select id into r from public.submit_selected_employee_leave_request('10000000-0000-4000-8000-000000000002','Annual leave','2030-12-09','2030-12-13');
+ -- Synthetic duration isolates the exact accrual threshold; no manual RPC override.
+ update public.leave_requests set hours=162 where id=r;
  perform public.decide_leave_with_balance(r,'Approved – pending leave balance',null);
- perform public.set_leave_balance_required_hours(r,162);
+ assert (select required_hours=162 from private.leave_balance_approvals where request_id=r);
  update private.leave_balance_approvals set approved_at=now()-interval '2 days' where request_id=r;
  assert private.leave_payroll_balance_sufficient(r),'Accrual alone can cover a conditional request';
- perform public.set_leave_balance_required_hours(r,162.0001);
+ update private.leave_balance_approvals set required_hours=162.0001 where request_id=r;
  assert not private.leave_payroll_balance_sufficient(r),'Never round a near-threshold balance into sufficiency';
  update public.leave_requests set status='cancelled' where id=r;
 end$$;
