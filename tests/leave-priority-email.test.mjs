@@ -35,6 +35,15 @@ test('multiline textarea notes are accepted and HTML remains escaped',()=>{
   assert.equal(run('leave-approved',{employeeNote:'bad\u0000note'}).outcome,'rejected');
   assert.equal(run('leave-approved',{employeeName:'name\nheader'}).outcome,'rejected');
 });
+for (const company of ['mam','equipsy']) test(`${company} decline email delivers reviewer notes to applicant`,()=>{
+  const note='Please reapply for fewer paid days.\nUse unpaid leave for the remainder.';
+  const out=run('leave-declined',{company,status:'Declined',managerNote:note});
+  assert.equal(out.outcome,'send');
+  assert.equal(out.deliveryRecipient,'employee@example.test');
+  assert.ok(out.emailHtml.includes('Please reapply for fewer paid days.'));
+  assert.ok(out.emailHtml.includes('Use unpaid leave for the remainder.'));
+  assert.ok(!out.ccRecipients.includes('accounts'));
+});
 for(const event of ['leave-approved','leave-declined','leave-conditionally-approved']) test(event,()=>{
   const out=run(event,{status:event==='leave-conditionally-approved'?'Approved – pending leave balance':event==='leave-approved'?'Approved':'Declined',managerNote:'<unsafe>'});
   assert.equal(out.deliveryRecipient,'employee@example.test');

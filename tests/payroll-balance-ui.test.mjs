@@ -139,11 +139,12 @@ test('duration pill reports the requested balance, including sick leave', () => 
 });
 
 test('annual balance appears in the request context for the authorised target only', () => {
-  const props = {workspace:{...workspace([{...person,accrualStatus:'needs_review'}]),canManageBalances:true},personId:'employee'};
+  const props = {workspace:{...workspace([{...person,annualPayrollHours:60,annualApprovedHours:7.6,annualAvailableHours:52.4,accrualStatus:'needs_review'}]),canManageBalances:true},personId:'employee'};
   const html=renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance,{workspace:props.workspace,personId:'employee',self:true}));
   assert.match(html,/My annual leave/);
-  assert.match(html,/<strong>60<\/strong>/);
-  assert.match(html,/Balance needs checking/);
+  assert.match(html,/<strong>60 <span>hours<\/span><\/strong>/);
+  assert.match(html,/Banked hours only/);
+  assert.doesNotMatch(html,/Balance needs checking/);
   assert.doesNotMatch(html,/Edit annual|Edit sick|Accrual settings/);
   assert.equal(renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance,{workspace:props.workspace,personId:'different',self:true})), '');
 });
@@ -156,8 +157,21 @@ test('annual request context names an unavailable balance instead of hiding or i
   }));
   assert.match(html, /My annual leave/);
   assert.match(html, /Unavailable/);
-  assert.match(html, /Balance needs checking/);
+  assert.match(html, /Banked hours only/);
   assert.doesNotMatch(html, /<strong>0<\/strong>/);
+});
+
+test('request and approval cards preserve negative payroll and available values', () => {
+  const data = workspace([{...person, annualPayrollHours:-2, annualApprovedHours:7.6, annualAvailableHours:-9.6}]);
+  for (const component of [loaded.exports.LeaveRequestBalance, loaded.exports.ApprovalLeaveBalances]) {
+    const html=renderToStaticMarkup(createElement(component,{workspace:data, personId:'employee', requestedHours:7.6}));
+    assert.match(html, /data-negative="true">-2 /);
+    assert.match(html, /data-negative="true">-9.6 /);
+    if (component===loaded.exports.LeaveRequestBalance) {
+      assert.match(html,/This request uses/);
+      assert.match(html,/data-negative="true">-17.2 /);
+    }
+  }
 });
 
 

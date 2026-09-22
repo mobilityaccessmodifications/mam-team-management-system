@@ -1640,6 +1640,10 @@ export function LeaveDemo({
         : isPreviewingEmployeeAccess && previewProfile
         ? await submitLeaveRequestForSelectedEmployee(previewProfile.id, keyedInput)
         : await submitLeaveRequest(keyedInput);
+      if ("error" in next) {
+        setFormError(next.error);
+        return;
+      }
       const attachmentResult = attachmentFiles.length
         ? await uploadLeaveAttachments(directorySupabase, next.id, attachmentFiles)
         : { uploaded: 0, failed: [] as string[] };

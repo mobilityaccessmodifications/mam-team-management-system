@@ -34,6 +34,7 @@ function ApprovalBalanceCard({
   availableHours,
   asOf,
   sick = false,
+  requestedHours,
 }: {
   label: string;
   currentHours?: number | null;
@@ -41,11 +42,12 @@ function ApprovalBalanceCard({
   availableHours?: number | null;
   asOf?: string | null;
   sick?: boolean;
+  requestedHours?: number | null;
 }) {
   const Icon = sick ? HeartPulse : Palmtree;
   const amount = (hours?: number | null, negative = false) => hours == null
     ? <strong className={styles.balanceUnavailable}>Unavailable</strong>
-    : <strong data-negative={hours < 0 || undefined}>{negative && hours !== 0 ? "−" : ""}{balanceHours(Math.abs(hours))} <span>hours</span></strong>;
+    : <strong data-negative={hours < 0 || undefined}>{balanceHours(negative ? -Math.abs(hours) : hours)} <span>hours</span></strong>;
 
   return <article className={`${styles.balanceCard} ${styles.balanceBreakdownCard}`} data-kind={sick ? "sick" : "annual"}>
     <header>
@@ -56,14 +58,19 @@ function ApprovalBalanceCard({
       <div><dt>Current Xero balance</dt><dd>{amount(currentHours)}</dd></div>
       <div><dt>Approved leave in People Hub</dt><dd>{amount(approvedHours, true)}</dd></div>
       <div className={styles.balanceAvailable}><dt>Available after approved leave</dt><dd>{amount(availableHours)}</dd></div>
+      {requestedHours !== undefined ? <>
+        <div><dt>This request uses</dt><dd>{amount(requestedHours, true)}</dd></div>
+        <div className={styles.balanceAvailable}><dt>Remaining after this request</dt><dd>{amount(availableHours == null || requestedHours == null ? null : availableHours - requestedHours)}</dd></div>
+      </> : null}
     </dl>
   </article>;
 }
 
-export function LeaveRequestBalance({ workspace, personId, self = false }: {
+export function LeaveRequestBalance({ workspace, personId, self = false, requestedHours = null }: {
   workspace?: LeavePriorityWorkspace;
   personId: string;
   self?: boolean;
+  requestedHours?: number | null;
 }) {
   const person = workspace?.people.find((candidate) => (
     candidate.personId === personId
@@ -73,8 +80,8 @@ export function LeaveRequestBalance({ workspace, personId, self = false }: {
   if (!person) return null;
 
   return <div className={styles.requestBalance}>
-    <BalanceCard label={self ? "My annual leave" : "Annual leave balance"} hours={person.hours} />
-    <LeaveAccrualNotice person={person} />
+    <ApprovalBalanceCard label={self ? "My annual leave" : "Annual leave balance"} currentHours={person.annualPayrollHours} approvedHours={person.annualApprovedHours} availableHours={person.annualAvailableHours} asOf={person.annualPayrollDate} requestedHours={requestedHours} />
+    <p className={styles.leavePolicyNote}>Banked hours only. Future accrual is not included.</p>
   </div>;
 }
 
