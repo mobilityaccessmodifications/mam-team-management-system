@@ -56,20 +56,19 @@ test('deduplicates sent event and fails closed without a manager',()=>{
   assert.equal(out.outcome,'duplicate'); assert.equal(out.actualRecipient,'manager@example.test,hr@mobilityaccess.com.au');
   assert.equal(run('leave-submitted',{managerEmail:null}).outcome,'rejected');
 });
-test('conditional approval reminder asks the manager to finalise without naming a balance',()=>{
+test('conditional approval reminder explains the leave balance condition',()=>{
   const out=run('leave-reminder',{status:'Approved – pending leave balance'});
   assert(out.emailHtml.includes('finalise approval'));
-  assert(!out.emailHtml.toLowerCase().includes('balance'));
+  assert(out.emailHtml.includes('approved, subject to sufficient leave balance'));
   assert.equal(out.ccRecipients,'');
 });
-test('every leave email omits balance language from its subject and body',()=>{
+test('ordinary leave emails omit balance language from their subject and body',()=>{
   const cases = [
     ['leave-submitted', {}],
     ['leave-approved', {status:'Approved'}],
     ['leave-declined', {status:'Declined'}],
     ['leave-cancelled', {status:'Cancelled',wasApproved:true}],
-    ['leave-conditionally-approved', {status:'Approved – pending leave balance'}],
-    ['leave-reminder', {status:'Approved – pending leave balance'}],
+    ['leave-reminder', {status:'Pending'}],
   ];
   for (const [event, extra] of cases) {
     const out = run(event, extra);
