@@ -1,5 +1,5 @@
 import { ChevronDown, UsersRound, X } from "lucide-react";
-import { type FormEvent, type RefObject, useRef } from "react";
+import { type FormEvent, type RefObject, useRef, useState } from "react";
 import type { LeaveWorkspaceData } from "@/app/leave/actions";
 import { LeaveRequestBalance, SickEvidenceNotice } from "@/components/leave-priority-controls";
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
@@ -9,6 +9,7 @@ import { START_TIME_OPTIONS, END_TIME_OPTIONS } from "@/lib/leave-request-option
 import { sickEvidenceDeadline, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import { getVictorianPublicHolidays } from "@/lib/victorian-public-holidays";
 import { LEAVE_NOTICE_MESSAGE, requiresLeaveNotice } from "@/lib/leave-notice";
+import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, requestedLeaveHours } from "@/lib/leave-request-balance";
 import styles from "@/components/leave-demo.module.css";
 
 const VICTORIAN_PUBLIC_HOLIDAY_DATES = new Set(
@@ -69,10 +70,16 @@ export function LeaveRequestDialog({
   const leaveRequestInitialFocusRef = useRef<HTMLSelectElement>(null);
   useDialogFocus(true, leaveRequestDialogRef, leaveRequestInitialFocusRef, closeLeaveRequestForm);
   const requestedTeamMember = teamRequestPeople.find((person) => person.personId === requestForPersonId);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const balancePerson = leavePriority?.people.find((person) => person.personId === (requestForPersonId || activeProfile.id));
+  const requestedHours = requestedLeaveHours(formStartDate, formEndDate, startTime, endTime,
+    balancePerson?.requestFullDayHours ?? (employmentType === "full_time" ? 7.6 : 7.5));
+  const balanceError = formError === INSUFFICIENT_BALANCE_MESSAGE || formError === UNAVAILABLE_BALANCE_MESSAGE;
   return (
     <>
     <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeLeaveRequestForm()}>
-      <section inert={formError === LEAVE_NOTICE_MESSAGE} className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
+      <section inert={formError === LEAVE_NOTICE_MESSAGE || balanceError} className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
         <header><div><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={closeLeaveRequestForm} aria-label="Close request form"><X size={19} /></button></header>
         <div className={styles.formPerson}>
           <span className={styles.avatarOrange}>{leaveRequestPersonInitials}</span>
@@ -100,11 +107,17 @@ export function LeaveRequestDialog({
             </label>
           ) : null}
         </div>
-        {formLeaveType === "Annual leave" ? <LeaveRequestBalance workspace={leavePriority} personId={requestForPersonId || activeProfile.id} self={!requestForPersonId} /> : null}
+        {formLeaveType === "Annual leave" ? <LeaveRequestBalance workspace={leavePriority} personId={requestForPersonId || activeProfile.id} self={!requestForPersonId} requestedHours={requestedHours} /> : null}
         <form className={styles.form} onSubmit={(event) => {
           if (requiresLeaveNotice({ employmentType, leaveType: formLeaveType, startDate: formStartDate, onBehalfOf: Boolean(requestForPersonId && requestForPersonId !== activeProfile.id) })) {
             event.preventDefault();
             setFormError(LEAVE_NOTICE_MESSAGE);
+            return;
+          }
+          const available = balancePerson?.annualAvailableHours;
+          if (formLeaveType === "Annual leave" && requestedHours != null && available != null && requestedHours > available) {
+            event.preventDefault();
+            setFormError(INSUFFICIENT_BALANCE_MESSAGE);
             return;
           }
           submitRequest(event);
@@ -115,7 +128,7 @@ export function LeaveRequestDialog({
           </p> : null}
           <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" value={formStartDate} onChange={(event) => { const nextDate = event.target.value; setFormStartDate(nextDate); setFormEndDate(nextDate); }} required /></label><label><span>End date</span><input name="endDate" type="date" min={formStartDate} value={formEndDate} onChange={(event) => setFormEndDate(event.target.value)} required /></label></div>
           {formLeaveType === "Sick leave" ? <SickEvidenceNotice dueDate={sickEvidenceDeadline(formEndDate, VICTORIAN_PUBLIC_HOLIDAY_DATES)} hasEvidence={false} /> : null}
-          <details className={styles.timeRange}><summary>Part-day leave</summary><div className={styles.formRow}><label><span>Starts</span><select name="startTime" defaultValue=""><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>Ends</span><select name="endTime" defaultValue=""><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>First and last day only.</p></details>
+          <details className={styles.timeRange}><summary>Part-day leave</summary><div className={styles.formRow}><label><span>Starts</span><select name="startTime" value={startTime} onChange={(event) => setStartTime(event.target.value)}><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>Ends</span><select name="endTime" value={endTime} onChange={(event) => setEndTime(event.target.value)}><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>First and last day only.</p></details>
           <details className={styles.requestExtras}><summary>Note & files</summary>
           <div className={styles.requestExtrasContent}>
             <label><span>Note</span><textarea name="employeeNote" rows={3} /></label>
@@ -132,20 +145,20 @@ export function LeaveRequestDialog({
         </form>
       </section>
     </ModalBackdrop>
-    {formError === LEAVE_NOTICE_MESSAGE ? <LeaveNoticeDialog returnFocusRef={sendButtonRef} onClose={() => setFormError("")} /> : null}
+    {formError === LEAVE_NOTICE_MESSAGE || balanceError ? <LeaveNoticeDialog message={formError} title={balanceError ? (formError === INSUFFICIENT_BALANCE_MESSAGE ? "Not enough balance" : "Balance unavailable") : "Speak to your manager"} returnFocusRef={sendButtonRef} onClose={() => setFormError("")} /> : null}
     </>
   );
 }
 
 
-function LeaveNoticeDialog({ onClose, returnFocusRef }: { onClose: () => void; returnFocusRef: RefObject<HTMLButtonElement | null> }) {
+function LeaveNoticeDialog({ onClose, returnFocusRef, message, title }: { onClose: () => void; returnFocusRef: RefObject<HTMLButtonElement | null>; message: string; title: string }) {
   const dialogRef = useRef<HTMLElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   useDialogFocus(true, dialogRef, buttonRef, onClose, returnFocusRef);
   return <ModalBackdrop className={styles.modalBackdrop} role="presentation">
     <section className={`${styles.modal} ${styles.leaveNoticeDialog}`} ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby="leave-notice-title" aria-describedby="leave-notice-message" tabIndex={-1}>
-      <header><h2 id="leave-notice-title">Speak to your manager</h2></header>
-      <p id="leave-notice-message">{LEAVE_NOTICE_MESSAGE}</p>
+      <header><h2 id="leave-notice-title">{title}</h2></header>
+      <p id="leave-notice-message">{message}</p>
       <footer><button ref={buttonRef} type="button" className={styles.primaryButton} onClick={onClose}>Back to request</button></footer>
     </section>
   </ModalBackdrop>;

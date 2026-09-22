@@ -6,6 +6,7 @@ export type LeaveBalancePerson = {
   name: string;
   canSubmit: boolean;
   paidLeave: boolean;
+  requestFullDayHours?: number;
   canViewBalance: boolean;
   hours: number | null;
   asOf: string | null;

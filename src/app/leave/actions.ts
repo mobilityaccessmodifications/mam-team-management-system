@@ -1,6 +1,7 @@
 "use server";
 
 import { LEAVE_NOTICE_MESSAGE } from "@/lib/leave-notice";
+import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE } from "@/lib/leave-request-balance";
 import { dispatchLeaveNotificationsForRequest } from "@/lib/leave-notification-outbox";
 
 import { revalidatePath } from "next/cache";
@@ -690,6 +691,8 @@ function userFacingSubmitError(error: unknown) {
       : "";
   if (
     message === LEAVE_NOTICE_MESSAGE
+    || message === INSUFFICIENT_BALANCE_MESSAGE
+    || message === UNAVAILABLE_BALANCE_MESSAGE
     || message === "Choose a valid leave type."
     || message === "End date must be on or after start date."
     || message === "Choose at least one weekday for this request."
@@ -1119,7 +1122,7 @@ export async function submitLeaveRequest(input: SubmitLeaveInput) {
     p_employee_note: checked.employeeNote ?? null,
   });
 
-  if (error) throw new Error(userFacingSubmitError(error));
+  if (error) return { error: userFacingSubmitError(error) };
   const result = toSubmitResult(data);
   await dispatchLeaveNotificationsForRequest(result.id);
   revalidatePath("/");
@@ -1150,7 +1153,7 @@ export async function submitLeaveRequestForSelectedEmployee(
     p_employee_note: checked.employeeNote ?? null,
   });
 
-  if (error) throw new Error(userFacingSubmitError(error));
+  if (error) return { error: userFacingSubmitError(error) };
   const result = toSubmitResult(data);
   await dispatchLeaveNotificationsForRequest(result.id);
   revalidatePath("/");

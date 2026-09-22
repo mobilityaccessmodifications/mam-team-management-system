@@ -188,12 +188,13 @@ test("chart controls keep zoom limits, read-only permissions and action wiring",
 test("extracted request dialog keeps dates aligned, team choices scoped and form feedback live", () => {
   const calls = [];
   const { LeaveRequestDialog } = load("src/components/leave-request-dialog.tsx", {
-    react: { useRef: value => ({ current: value }) },
+    react: { useRef: value => ({ current: value }), useState: value => [value, () => {}] },
     "@/components/leave-priority-controls": { LeaveRequestBalance: "balance", SickEvidenceNotice: "evidence" },
     "@/components/ui/modal-backdrop": { ModalBackdrop: "backdrop" },
     "@/components/ui/use-dialog-focus": { useDialogFocus: (...args) => calls.push(["focus", ...args]) },
     "@/lib/leave-attachments": load("src/lib/leave-attachments.ts"),
     "@/lib/leave-request-options": load("src/lib/leave-request-options.ts"),
+    "@/lib/leave-request-balance": load("src/lib/leave-request-balance.ts"),
     "@/lib/leave-notice": load("src/lib/leave-notice.ts", { "@/lib/leave-priority": { melbourneToday: () => "2026-09-21" } }),
     "@/lib/leave-priority": { sickEvidenceDeadline: () => "2026-10-12" },
     "@/lib/victorian-public-holidays": { getVictorianPublicHolidays: () => [] },
