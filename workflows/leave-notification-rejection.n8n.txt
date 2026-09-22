@@ -1,0 +1,13 @@
+// Return only reconciliation metadata, never a current/fixed recipient fallback
+// or the rejected request's HR payload.
+return [{ json: {
+  ok: false, sent: false, alreadySent: false, error: 'Request rejected.',
+  rejectionCode: String($json.rejectionCode ?? 'missing'),
+  ...($json.reconciliationRequired === true ? {
+    reconciliationRequired: true,
+    eventKey: $json.eventKey, receiptEventKey: $json.receiptEventKey,
+    ...(typeof $json.actualRecipient === 'string' ? { actualRecipient: $json.actualRecipient } : {}),
+    ...(typeof $json.actualCcRecipients === 'string' ? { actualCcRecipients: $json.actualCcRecipients } : {}),
+    ...($json.providerReceipt?.accepted === true ? { providerReceipt: $json.providerReceipt } : {}),
+  } : {}),
+} }];

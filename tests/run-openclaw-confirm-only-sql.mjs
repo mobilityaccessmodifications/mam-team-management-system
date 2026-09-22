@@ -1,12 +1,13 @@
 // Explicit synthetic socket/database only; no production URL or credentials.
 import {readFileSync} from 'node:fs';
 import {spawnSync,spawn} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+import {target,postgresEnv} from '../scripts/local-test-postgres.mjs';
 const [socket,database='openclaw_leave_test']=process.argv.slice(2);
-if(!/^\/private\/tmp\/mam-openclaw-pg\.[A-Za-z0-9]+$/.test(socket??'')||!/^openclaw_leave_test(_[0-9]+)?$/.test(database))throw new Error('Synthetic local target required');
-const env={PATH:process.env.PATH};
-const base=spawnSync(process.execPath,['tests/run-openclaw-leave-sql.mjs',socket,database],{env,stdio:'inherit'});
+const args=target(socket,database);
+const env=postgresEnv;
+const base=spawnSync(process.execPath,[fileURLToPath(new URL('./run-openclaw-leave-sql.mjs',import.meta.url)),socket,database],{env,stdio:'inherit'});
 if(base.status!==0)process.exit(base.status??1);
-const args=['-h',socket,'-p','55439','-d',database,'-v','ON_ERROR_STOP=1'];
 function sql(text){const r=spawnSync('psql',args,{input:text,encoding:'utf8',env});process.stdout.write(r.stdout??'');process.stderr.write(r.stderr??'');if(r.status!==0)throw new Error('Synthetic SQL failed');}
 sql(readFileSync('supabase/migrations/20260921150000_openclaw_confirm_only.sql','utf8')+'\n'+readFileSync('tests/openclaw-confirm-only.sql','utf8'));
 const confirm=key=>new Promise((resolve,reject)=>{

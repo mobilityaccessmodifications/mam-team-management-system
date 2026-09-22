@@ -41,6 +41,54 @@ function upload(name, contents, type = "text/csv") {
   };
 }
 
+// A real, values-only OOXML workbook exercises read-excel-file and parseSheet.
+function xlsx(rows, sheetName = "Annual leave") {
+  const { strToU8, zipSync } = require("fflate");
+  const escape = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
+  const data = rows.map((row, index) => `<row r="${index + 1}">${row.map((cell, column) =>
+    cell == null ? "" : `<c r="${String.fromCharCode(65 + column)}${index + 1}" t="inlineStr"><is><t>${escape(cell)}</t></is></c>`
+  ).join("")}</row>`).join("");
+  return Buffer.from(zipSync(Object.fromEntries(Object.entries({
+    "[Content_Types].xml": '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/></Types>',
+    "_rels/.rels": '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+    "xl/workbook.xml": `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escape(sheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+    "xl/worksheets/sheet1.xml": `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${data}</sheetData></worksheet>`,
+  }).map(([path, xml]) => [path, strToU8(xml)]))));
+}
+
+for (const extension of ["csv", "xlsx"]) {
+  const tidyFile = (kind, includeColumn = true) => {
+    const rows = [
+      ["Company", "Employee", "As of", "Hours", ...(includeColumn ? ["Leave Type"] : [])],
+      ["MAM", "Synthetic Employee", "2026-09-10", "12", ...(includeColumn ? [kind] : [])],
+    ];
+    return extension === "csv"
+      ? upload("mam-annual-leave.csv", rows.map((row) => row.join(",")).join("\n"))
+      : upload("mam-annual-leave.xlsx", xlsx(rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  };
+
+  test(`${extension}: explicit unsupported categories cannot inherit a filename or sheet category`, async () => {
+    for (const kind of ["Unpaid leave", "Long service leave", "Unknown category", "42"]) {
+      await assert.rejects(parsePayrollBalanceFiles([tidyFile(kind)]), /row 2: leave type is not recognised/);
+    }
+  });
+
+  test(`${extension}: missing and blank categories may inherit a filename or sheet category`, async () => {
+    for (const file of [tidyFile("", false), tidyFile(null), tidyFile("   ")]) {
+      const result = await parsePayrollBalanceFiles([file]);
+      assert.equal(result.rows[0].annualHours, 12);
+      assert.equal(result.rows[0].sickHours, null);
+    }
+  });
+
+  test(`${extension}: an explicit supported category wins over filename and sheet hints`, async () => {
+    const result = await parsePayrollBalanceFiles([tidyFile("Sick Leave Accrual")]);
+    assert.equal(result.rows[0].annualHours, null);
+    assert.equal(result.rows[0].sickHours, 12);
+  });
+}
+
 test("prepares one canonical private archive payload and parses the same buffered bytes", async () => {
   let reads = 0;
   const file = upload("mam-balances.csv", [

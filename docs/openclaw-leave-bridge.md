@@ -1,5 +1,13 @@
 # WhatsApp self-leave bridge — local implementation draft, NOT enabled
 
+S01 update: all phone identity resolution now requires independent enrollment in
+the private verified-phone registry. See [verified identity rollout](openclaw-phone-identity-rollout.md)
+for the SystemAdmin enrollment/revocation RPCs, sealed enrollment-version checks,
+legacy DB commit retirement and the required empty-registry rollout. This task
+has not approved or created production mappings. Contact edits never authorize
+OpenClaw access. Historical v1/v2 behavior described below is not a supported
+write path; the current HTTP route accepts v3 and old confirmations must restart.
+
 Status: contract, HMAC HTTP route, optimistic-CAS store and additive migration
 draft exist locally. There is **no production migration, secret provisioning or
 VPS installation**. Full-stack database and native adapter verification is still

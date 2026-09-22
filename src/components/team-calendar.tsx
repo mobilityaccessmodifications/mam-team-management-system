@@ -57,11 +57,13 @@ type CalendarLeaveRequest = {
   endDate: string;
   startTime?: string;
   endTime?: string;
+  days: number;
+  hours?: number;
   status: "Pending" | "Approved" | "Declined" | "Cancelled" | typeof BALANCE_PENDING_STATUS;
 };
 
 type EventKind = "approved" | "pending" | "balance-pending" | "birthday" | "check-in" | "subscription" | "payroll-balance" | "public-holiday";
-type MAMEventMeta = { kind: EventKind; subject: string; detail: string; dateLabel: string; priority: number; team?: string };
+type MAMEventMeta = { kind: EventKind; subject: string; detail: string; dateLabel: string; priority: number; team?: string; duration?: { days: number; hours?: number } };
 
 type TeamCalendarProps = {
   birthdays: BirthdayCalendarEntry[];
@@ -106,6 +108,11 @@ function formatDate(date: string) {
 
 function formatDateRange(start: string, end: string) {
   return start === end ? formatDate(start) : `${formatDate(start)} – ${formatDate(end)}`;
+}
+
+function formatLeaveDuration({ days, hours }: NonNullable<MAMEventMeta["duration"]>) {
+  const weekdays = `${days} ${days === 1 ? "weekday" : "weekdays"}`;
+  return hours == null ? weekdays : `${hours} ${hours === 1 ? "hour" : "hours"} · ${weekdays}`;
 }
 
 function milestoneLabel(milestone: CheckInCalendarEntry["milestone"]) {
@@ -170,7 +177,7 @@ function buildEvents(
       startTime: request.startTime,
       endTime: request.endTime,
       calendarId: kind,
-      meta: { kind, team: request.team, subject: request.employee, detail: `${request.status} · ${request.leaveType}${request.team ? ` · ${request.team}` : ""}`, dateLabel: `${formatDateRange(request.startDate, request.endDate)}${times}`, priority: kind === "pending" ? 4 : 5 },
+      meta: { kind, team: request.team, subject: request.employee, detail: `${request.status} · ${request.leaveType}${request.team ? ` · ${request.team}` : ""}`, dateLabel: `${formatDateRange(request.startDate, request.endDate)}${times}`, duration: { days: request.days, hours: request.hours }, priority: kind === "pending" ? 4 : 5 },
     });
   });
 
@@ -227,6 +234,7 @@ function EventDetail({ event, onClose }: EventDetailContentProps) {
         <button type="button" onClick={onClose} aria-label="Close event details"><X size={18} /></button>
       </div>
       <div className={styles.eventDetailDate}><Clock3 size={16} /><span>{meta.dateLabel}</span></div>
+      {meta.duration ? <div className={styles.eventDetailDate}><Clock3 size={16} aria-hidden="true" /><span>Duration: {formatLeaveDuration(meta.duration)}</span></div> : null}
     </div>
   );
 }

@@ -2,6 +2,17 @@
 
 ## Implementation status
 
+S01 changes the authorization source in forward migration
+`20260922230000_openclaw_verified_phone_identity.sql`. It is a local fix only;
+this task neither applies production SQL nor enrolls any real number. The registry
+starts empty, and all existing phone contacts remain unverified. See
+[verified phone rollout](openclaw-phone-identity-rollout.md) for the required
+independent ownership checks and SystemAdmin enrollment/revocation RPCs.
+An HR contact edit is never verification. Actual approved enrollment is a release
+prerequisite; an empty registry produces an authoritative empty allowlist.
+
+Historical implementation evidence below describes the original migration only:
+
 Implementation is undergoing authorized review/release; do not assume production
 is wired until the release evidence is recorded below. Migration:
 `supabase/migrations/20260917045203_openclaw_phone_allowlist.sql`.
@@ -48,27 +59,26 @@ anything (Next.js supplies HEAD/OPTIONS and rejects unsupported methods).
 
 ## Data and authorization boundaries
 
-- Scope is **exactly** active `public.internal_org_people` with `company_key =
-  'mam'`, joined on ID/person_id to `private.employee_directory_details.phone`.
-  Equipsy and inactive rows are excluded in SQL. No details row means no number.
-- Phone normalization uses pinned `libphonenumber-js/max` numbering-plan metadata.
-  International `+` and `00` prefixes are supported. Local numbers use the private
-  directory country (English name or ISO code); only a blank country defaults to
-  Australia for this MAM-only integration. Unknown nonblank countries reject local
-  numbers. Australian `04`, missing trunk zero, `61`, and `0011` formats, spaces,
-  balanced parentheses, dots, hyphens and full-width digits are normalized.
-  Extensions, letters, multiple numbers and invalid numbering plans are rejected.
-  Validation does not prove ownership, reachability or WhatsApp registration.
-  Source records are never rewritten; HR must verify ownership and reassignment.
-- Country parsing uses service-only `openclaw_whatsapp_allowlist_snapshot_v2`,
-  added by migration `20260917051434_openclaw_phone_country_context.sql`.
-  The internal envelope is version 2; the external four-field version 1 response
-  and digest are unchanged and never expose country. The old RPC remains available
-  for rolling deployment. Apply only the reviewed migration using the deployment
-  helper's `--country-context` option, without rotating the existing secret.
-- Missing/invalid numbers are excluded. If multiple active MAM records normalize
-  to the same number, **all copies are excluded** as ambiguous. An inactive or
-  non-MAM row does not participate in this active-MAM snapshot.
+- Scope is active MAM people with an active linked portal account and an enrolled
+  canonical number in `private.openclaw_phone_identities`. The enrolled user must
+  still equal the person's linked user. Company, archive, node kind and account
+  status are revalidated in the same snapshot query. Contact `phone` and `country`
+  fields do not participate in authorization, including for legacy consumers.
+- The registry accepts canonical E.164 syntax only (`+`, nonzero first digit,
+  8–15 digits). A unique constraint prevents assigning one number twice. The
+  backend additionally validates numbering plans using pinned
+  `libphonenumber-js/max`. Neither syntax nor numbering-plan validity proves
+  ownership or WhatsApp registration: an authorized operator must independently
+  verify ownership and record an evidence reference before enrollment.
+- The service-only `openclaw_whatsapp_allowlist_snapshot_v2` retains its internal
+  version 2 envelope, with verified `phone` and null `country`. The external
+  four-field version 1 response and digest are unchanged. The old version 1 RPC
+  also reads the registry; it cannot fall back to contacts. The legacy deployment
+  helper's `--country-context` option does not install the S01 migration.
+- Missing or revoked identities are excluded. Defensive duplicate exclusion in
+  the HTTP serializer remains, but employee contact edits cannot cause duplicates
+  in the trusted source. Only the guarded SystemAdmin RPC changes enrollment;
+  there are no direct browser or service-role registry/audit table grants.
 - Private SECURITY DEFINER implementation has an empty search path and only
   service_role EXECUTE. Public RPC wrapper is SECURITY INVOKER and service-role
   only. No private table grants are added. Browser roles cannot call either.
@@ -79,7 +89,7 @@ anything (Next.js supplies HEAD/OPTIONS and rejects unsupported methods).
   schema, shape and count; >10,000 rows or malformed rows fail the whole request.
   RPC timeout is 8 seconds. Failures never become successful empty lists.
 - A successfully validated empty result is authoritative: revoke all employee
-  access immediately. All-invalid source records can legitimately produce empty.
+  access immediately. The initial empty registry deliberately produces empty.
 
 ## Separate VPS synchronizer (not implemented here)
 
@@ -125,6 +135,10 @@ as a smoke test. Log status/digest/timestamps, not bearer tokens or phone lists.
 
 ## Release/wiring checklist
 
+- S01 requires fresh, explicit approval for its production migration and actual
+  number mappings. The historical approval below does not authorize this change.
+  Complete [the verified identity rollout](openclaw-phone-identity-rollout.md)
+  before enabling access; do not bulk copy directory contacts into the registry.
 - User authorized this specific internal diff's external read-only Codex review
   and production wiring/release on 2026-09-17. Review code/SQL and rerun tests;
   approval alone is not evidence of review or deployment success.
@@ -141,6 +155,16 @@ as a smoke test. Log status/digest/timestamps, not bearer tokens or phone lists.
   requires disabling the channel. Never roll back to an open access policy.
 
 ## Verification
+
+S01: `node --test tests/openclaw-verified-identity.test.mjs` checks missing
+verification, canonical identity, revocation and same-number re-enrollment.
+`node tests/run-openclaw-identity-sql.mjs <disposable-socket> openclaw_leave_test_<digits>`
+requires a fresh synthetic database and `/private/tmp/mam-openclaw-pg.<suffix>`
+Unix socket on port 55439. It verifies real self-service contact edits, ACLs,
+SystemAdmin-only enrollment, evidence validation, unique assignment, audit/CAS,
+archive/company/account exclusion, every legacy source, SQL sender binding,
+sealed enrollment versions, receipt replay and a two-connection revocation race.
+The older allowlist fixture below tests its historical migration, not S01.
 
 `node --test tests/openclaw-allowlist.test.mjs` exercises auth, normalization,
 duplicate exclusion, strict snapshot validation, digest, handler failure and

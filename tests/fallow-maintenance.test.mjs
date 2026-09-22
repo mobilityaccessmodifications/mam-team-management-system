@@ -195,6 +195,7 @@ test("extracted request dialog keeps dates aligned, team choices scoped and form
     "@/components/ui/use-dialog-focus": { useDialogFocus: (...args) => calls.push(["focus", ...args]) },
     "@/lib/leave-attachments": load("src/lib/leave-attachments.ts"),
     "@/lib/leave-request-options": load("src/lib/leave-request-options.ts"),
+    "@/lib/leave-date-range": load("src/lib/leave-date-range.ts"),
     "@/lib/leave-request-balance": load("src/lib/leave-request-balance.ts"),
     "@/lib/leave-notice": load("src/lib/leave-notice.ts", { "@/lib/leave-priority": { melbourneToday: () => "2026-09-21" } }),
     "@/lib/leave-priority": { sickEvidenceDeadline: () => "2026-10-12" },
@@ -204,7 +205,7 @@ test("extracted request dialog keeps dates aligned, team choices scoped and form
   const elements = node => !node || typeof node !== "object" ? [] : Array.isArray(node)
     ? node.flatMap(elements) : [node, ...elements(node.props?.children)];
   const props = {
-    activeProfile: { id: "self", team: "MAM" }, requestForPersonId: "team-1",
+    activeProfile: { id: "self", team: "MAM" }, requestForPersonId: "team-1", onBehalfOf: true,
     teamRequestPeople: [{ personId: "team-1", name: "Synthetic team member", paidLeave: false }],
     canApplyForLeave: true, formLeaveType: "Unpaid leave", availableLeaveTypes: [],
     formStartDate: "2026-09-17", formEndDate: "2026-09-17", formError: "Previous error", isMutating: false,

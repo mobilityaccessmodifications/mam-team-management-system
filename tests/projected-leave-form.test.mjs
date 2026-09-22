@@ -15,6 +15,7 @@ function render({available=8,status='projected',key,loading=false}={}) {
     '@/lib/leave-attachments':{},'@/lib/leave-request-options':{START_TIME_OPTIONS:[],END_TIME_OPTIONS:[]},
     '@/lib/leave-priority':{},'@/lib/victorian-public-holidays':{getVictorianPublicHolidays:()=>[]},
     '@/lib/leave-notice':{requiresLeaveNotice:()=>false,LEAVE_NOTICE_MESSAGE:'notice'},
+    '@/lib/leave-date-range':{MAX_LEAVE_SPAN_DAYS:366,leaveDateRangeError:()=>null},
     '@/lib/leave-request-balance':balance,'@/components/leave-demo.module.css':{default:{}},
   };
   const mod={};new Function('exports','require',ts.transpileModule(fs.readFileSync('src/components/leave-request-dialog.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText)(mod,id=>{assert.ok(id in imports,id);return imports[id];});

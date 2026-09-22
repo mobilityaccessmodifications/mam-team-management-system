@@ -115,9 +115,9 @@ export function EmployeePicker({
       setHighlightedIndex((index) => Math.max(index - 1, 0));
       return;
     }
-    if (event.key === "Enter" && open && filteredAssignees.length) {
+    if (event.key === "Enter" && open) {
       event.preventDefault();
-      choose(filteredAssignees[highlightedIndex] ?? filteredAssignees[0]);
+      if (filteredAssignees.length) choose(filteredAssignees[highlightedIndex] ?? filteredAssignees[0]);
       return;
     }
     if (event.key === "Escape" && open) {
@@ -139,6 +139,7 @@ export function EmployeePicker({
         aria-activedescendant={open && filteredAssignees.length ? `${listboxId}-option-${highlightedIndex}` : undefined}
         aria-autocomplete="list"
         aria-controls={open ? listboxId : undefined}
+        aria-describedby={open ? `${listboxId}-selection ${listboxId}-results` : undefined}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label="Search employees"
@@ -164,8 +165,13 @@ export function EmployeePicker({
       ><X size={15} /></button> : null}
       <ChevronDown className={styles.chevron} data-open={open} size={16} aria-hidden="true" />
     </div>
+    {open ? <p className={styles.resultCount} id={`${listboxId}-selection`}>
+      {selected ? `Current selection: ${selected.fullName}. Choose a result to change it, or press Escape to keep it.` : "Choose an employee from the results."}
+    </p> : null}
+    <div className={styles.resultCount} id={`${listboxId}-results`} role="status" aria-live="polite" aria-atomic="true" hidden={!open}>
+      {open ? filteredAssignees.length ? `${filteredAssignees.length} ${filteredAssignees.length === 1 ? "employee" : "employees"} found.` : "No employees match that search. Change your search or press Escape to keep the current selection." : ""}
+    </div>
     {open ? <div className={styles.listbox} id={listboxId} role="listbox" aria-label="Employees">
-      <div className={styles.resultCount}>{filteredAssignees.length} {filteredAssignees.length === 1 ? "employee" : "employees"}</div>
       {filteredAssignees.length ? filteredAssignees.map((assignee, index) => <button
         aria-selected={assignee.personId === selectedId}
         className={styles.option}

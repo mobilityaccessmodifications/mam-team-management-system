@@ -154,6 +154,7 @@ export function SubscriptionCredentialEditor({
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const initialFocusRef = useRef<HTMLInputElement>(null);
+  const unlockFocusRef = useRef<HTMLButtonElement>(null);
   const [draft, setDraft] = useState<SubscriptionCredentialDraft>(EMPTY_DRAFT);
   const [credentialVersion, setCredentialVersion] = useState(0);
   const [hasStoredCredential, setHasStoredCredential] = useState(credentialsSaved);
@@ -168,25 +169,34 @@ export function SubscriptionCredentialEditor({
 
   useEffect(() => {
     if (!loading && sensitiveVisible) initialFocusRef.current?.focus();
+    else if (!loading) unlockFocusRef.current?.focus();
   }, [loading, sensitiveVisible]);
 
   // This lock clears plaintext from React state rather than merely masking the
-  // inputs. Saved values require another explicitly authorised reveal; a new
-  // unsaved record stays editable but its typed values are cleared as well.
+  // inputs. Each explicit reveal or fresh entry starts a new bounded session.
   useEffect(() => {
     if (!sensitiveVisible) return;
-    const timer = window.setTimeout(() => {
+    function clearSensitiveValues() {
       setDraft(EMPTY_DRAFT);
       setCredentialVersion(0);
+      setSensitiveVisible(false);
+      setPasswordVisible(false);
       if (hasStoredCredential) {
-        setSensitiveVisible(false);
-        setPasswordVisible(false);
         setNotice("Sensitive values are hidden again.");
       } else {
         setNotice("Unsaved values were cleared for privacy. Enter them again before saving.");
       }
-    }, 60_000);
-    return () => window.clearTimeout(timer);
+    }
+    function clearWhenHidden() {
+      if (document.visibilityState === "hidden") clearSensitiveValues();
+    }
+    const timer = window.setTimeout(clearSensitiveValues, 60_000);
+    document.addEventListener("visibilitychange", clearWhenHidden);
+    clearWhenHidden();
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", clearWhenHidden);
+    };
   }, [hasStoredCredential, sensitiveVisible]);
 
   function changeField(field: keyof SubscriptionCredentialDraft, value: string) {
@@ -291,14 +301,14 @@ export function SubscriptionCredentialEditor({
         <div><h2 id="credential-dialog-title">{serviceName}</h2>{planName ? <p>{planName}</p> : null}</div>
         <button className={styles.iconButton} type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close credentials"><X size={19} /></button>
       </header>
-      {loading ? <div className={styles.dialogState}><LoaderCircle className={styles.spinner} size={22} /> Opening encrypted credentials…</div> : hasStoredCredential && !sensitiveVisible ? <div className={styles.lockedCredentialState}>
+      {loading ? <div className={styles.dialogState}><LoaderCircle className={styles.spinner} size={22} /> Opening encrypted credentials…</div> : !sensitiveVisible ? <div className={styles.lockedCredentialState}>
         <LockKeyhole size={22} />
-        <div><strong>Credentials locked</strong></div>
+        <div><strong>{hasStoredCredential ? "Credentials locked" : "Unsaved credentials cleared"}</strong></div>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         {notice ? <p className={styles.notice} role="status"><CheckCircle2 size={15} />{notice}</p> : null}
-        <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady}>Close</button><button className={styles.primaryAction} type="button" onClick={() => void reveal()}><Eye size={16} /> Reveal credentials</button></footer>
+        <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady}>Close</button><button ref={unlockFocusRef} className={styles.primaryAction} type="button" onClick={() => { if (hasStoredCredential) void reveal(); else { setNotice(""); setError(""); setSensitiveVisible(true); } }}><Eye size={16} />{hasStoredCredential ? "Reveal credentials" : "Enter credentials again"}</button></footer>
       </div> : <form onSubmit={save}>
-        <p className={styles.safetyNote}><LockKeyhole size={16} /> Hidden after 1 minute.</p>
+        <p className={styles.safetyNote}><LockKeyhole size={16} /> Hidden after 1 minute or when you leave this tab.</p>
         <label><span>Login URL <small>Optional</small></span><input ref={initialFocusRef} type="url" inputMode="url" autoComplete="off" data-1p-ignore="true" data-lpignore="true" value={draft.loginUrl} onChange={(event) => changeField("loginUrl", event.target.value)} placeholder="https://…" /></label>
         <label><span>Account email <small>Optional</small></span><input type="email" autoComplete="off" data-1p-ignore="true" data-lpignore="true" value={draft.accountEmail} onChange={(event) => changeField("accountEmail", event.target.value)} placeholder="billing@example.com" /></label>
         <label><span>Username / account ID <small>Optional</small></span><input autoComplete="off" data-1p-ignore="true" data-lpignore="true" value={draft.username} onChange={(event) => changeField("username", event.target.value)} placeholder="Account name or ID" /></label>

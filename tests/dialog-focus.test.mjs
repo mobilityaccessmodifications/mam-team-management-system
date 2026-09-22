@@ -16,6 +16,7 @@ function harness(mobile = true) {
     querySelectorAll() { return this.controls; }
     getAttribute(name) { return this.attrs[name] ?? null; }
     hasAttribute(name) { return name in this.attrs; }
+    matches(selector) { return selector === ":disabled" && this.hasAttribute("disabled"); }
     removeAttribute(name) { delete this.attrs[name]; }
     getClientRects() { return this.visible ? [{}] : []; }
     closest() { return null; }

@@ -10,7 +10,7 @@ const userId = "10000000-0000-4000-8000-000000000002";
 const actorId = "10000000-0000-4000-8000-000000000003";
 const changeToken = "10000000-0000-4000-8000-000000000004";
 
-function loadArchiveAction({ archiveOutcome, failInspection = false }) {
+function loadArchiveAction({ archiveOutcome, failInspection = false, providerTimeout = false, failFinalise = false }) {
   const state = {
     personActive: true,
     accountStatus: "active",
@@ -18,6 +18,8 @@ function loadArchiveAction({ archiveOutcome, failInspection = false }) {
     banned: false,
     claimStatus: null,
     providerUpdates: 0,
+    providerStatus: "not_started",
+    archiveCalls: 0,
   };
 
   const admin = {
@@ -30,8 +32,8 @@ function loadArchiveAction({ archiveOutcome, failInspection = false }) {
           if (failInspection && selected === "is_active") {
             return { data: null, error: { message: "transport failure" } };
           }
-          if (table === "internal_org_people" && selected === "auth_user_id") {
-            return { data: { auth_user_id: userId }, error: null };
+          if (table === "internal_org_people" && selected === "auth_user_id,is_active") {
+            return { data: { auth_user_id: userId, is_active: state.personActive }, error: null };
           }
           if (table === "internal_org_people" && selected === "is_active") {
             return { data: { is_active: state.personActive }, error: null };
@@ -54,12 +56,26 @@ function loadArchiveAction({ archiveOutcome, failInspection = false }) {
       async updateUserById(_id, input) {
         state.providerUpdates += 1;
         state.banned = input.ban_duration !== "none";
+        if (providerTimeout) throw new Error("provider response lost");
         return { data: { user: { id: userId } }, error: null };
       },
     } },
+    async rpc(name, args) {
+      if (name === "claim_portal_account_status_execution") {
+        if (state.providerStatus !== "not_started") return { data: state.providerStatus, error: null };
+        state.providerStatus = "executing";
+        return { data: "execute", error: null };
+      }
+      if (name === "record_portal_account_status_execution") {
+        state.providerStatus = args.p_succeeded ? "succeeded" : "unknown";
+        return { data: true, error: null };
+      }
+      throw new Error(`Unexpected admin RPC ${name}`);
+    },
   };
 
   const supabase = {
+    auth: { getUser: async () => ({ data: { user: { id: actorId } }, error: null }) },
     async rpc(name) {
       if (name === "begin_portal_account_status_change") {
         state.claimStatus = "pending";
@@ -73,6 +89,8 @@ function loadArchiveAction({ archiveOutcome, failInspection = false }) {
         };
       }
       if (name === "archive_employee_directory_record") {
+        state.archiveCalls += 1;
+        if (archiveOutcome === "rejected") return { data: null, error: { message: "Record the return of this employee's active IT devices" } };
         if (archiveOutcome === "committed") {
           state.personActive = false;
           state.accountStatus = "disabled";
@@ -81,8 +99,12 @@ function loadArchiveAction({ archiveOutcome, failInspection = false }) {
         throw new Error("response connection closed");
       }
       if (name === "finalise_portal_account_status_change") {
+        if (failFinalise && state.archiveCalls === 1 && !state.retrying) throw new Error("database unavailable");
         state.claimStatus = "finalised";
-        return { data: [{ account_status: state.accountStatus }], error: null };
+        return { data: [{ person_id: personId, auth_user_id: userId, account_status: state.accountStatus }], error: null };
+      }
+      if (name === "inspect_portal_account_status_change" || name === "inspect_portal_account_status_request") {
+        return { data: [{ person_id: personId, auth_user_id: userId, change_token: changeToken, claim_status: state.claimStatus, provider_status: state.providerStatus }], error: null };
       }
       if (name === "cancel_portal_account_status_change") {
         state.claimStatus = "cancelled";
@@ -91,6 +113,14 @@ function loadArchiveAction({ archiveOutcome, failInspection = false }) {
       throw new Error(`Unexpected RPC ${name}`);
     },
   };
+
+  const helper = { exports: {} };
+  const helperSource = ts.transpileModule(readFileSync("src/lib/portal-account-status.ts", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  new Function("require", "module", "exports", helperSource)(
+    (id) => id === "server-only" ? {} : require(id), helper, helper.exports,
+  );
 
   const source = ts.transpileModule(
     readFileSync("src/app/people/actions.ts", "utf8"),
@@ -101,6 +131,7 @@ function loadArchiveAction({ archiveOutcome, failInspection = false }) {
     (id) => {
       if (id === "next/cache") return { revalidatePath() {} };
       if (id === "@/lib/supabase/admin") return { createAdminClient: () => admin };
+      if (id === "@/lib/portal-account-status") return helper.exports;
       if (id === "@/lib/employee-directory") {
         return {
           requireEmployeeDirectoryManager: async () => ({ supabase, actorUserId: actorId }),
@@ -140,7 +171,7 @@ test("an archive response failure does not restore Auth after the database commi
   assert.equal(state.providerUpdates, 1);
 });
 
-test("an archive response failure restores Auth only after rollback is confirmed", async () => {
+test("an archive rollback retains the provider receipt and never compensates Auth", async () => {
   const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "rolled_back" });
 
   const result = await archiveEmployeeDirectoryRecord(archiveInput);
@@ -148,9 +179,13 @@ test("an archive response failure restores Auth only after rollback is confirmed
   assert.equal(result.ok, false);
   assert.equal(state.personActive, true);
   assert.equal(state.accountStatus, "active");
-  assert.equal(state.banned, false);
-  assert.equal(state.claimStatus, "cancelled");
-  assert.equal(state.providerUpdates, 2);
+  assert.equal(state.banned, true);
+  assert.equal(state.claimStatus, "pending");
+  assert.equal(state.providerUpdates, 1);
+  assert.match(result.message, /pending claim/);
+  await archiveEmployeeDirectoryRecord(archiveInput);
+  assert.equal(state.providerUpdates, 1, "retry must use the durable receipt, never call Auth again");
+  assert.equal(state.archiveCalls, 2);
 });
 
 test("an unconfirmed archive response keeps Auth disabled and the claim pending", async () => {
@@ -166,4 +201,36 @@ test("an unconfirmed archive response keeps Auth disabled and the claim pending"
   assert.equal(state.banned, true);
   assert.equal(state.claimStatus, "pending");
   assert.equal(state.providerUpdates, 1);
+});
+
+test("an ambiguous provider response blocks archive and cannot replay or compensate", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed", providerTimeout: true });
+  assert.equal((await archiveEmployeeDirectoryRecord(archiveInput)).ok, false);
+  assert.equal((await archiveEmployeeDirectoryRecord(archiveInput)).ok, false);
+  assert.equal(state.providerUpdates, 1);
+  assert.equal(state.archiveCalls, 0);
+  assert.equal(state.claimStatus, "pending");
+  assert.equal(state.providerStatus, "unknown");
+});
+
+test("a definite archive rejection explains the retained disable and pending claim", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "rejected" });
+  const result = await archiveEmployeeDirectoryRecord(archiveInput);
+  assert.equal(result.ok, false);
+  assert.match(result.message, /hardware return date/);
+  assert.match(result.message, /remains disabled with a pending claim/);
+  assert.equal(state.providerUpdates, 1);
+  assert.equal(state.claimStatus, "pending");
+});
+
+test("an already archived retry only finalises its confirmed claim, without Auth or archive replay", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed", failFinalise: true });
+  assert.equal((await archiveEmployeeDirectoryRecord(archiveInput)).ok, false);
+  assert.equal(state.personActive, false);
+  assert.equal(state.claimStatus, "pending");
+  state.retrying = true;
+  assert.equal((await archiveEmployeeDirectoryRecord(archiveInput)).ok, true);
+  assert.equal(state.claimStatus, "finalised");
+  assert.equal(state.providerUpdates, 1);
+  assert.equal(state.archiveCalls, 1);
 });

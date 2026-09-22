@@ -21,11 +21,12 @@ export type Employee = {
   personId: string; userId: string | null; company: string; active: boolean;
   nodeKind: string; accountActive: boolean; phone: string | null; country: string | null;
   employmentType: string | null; fullName?: string | null;
+  phoneIdentityVersion: string;
 };
 export type SelfProfileEmployee = Employee & { fullName: string | null };
 export type SelfProfile = { name: string; employmentType: string | null };
 export type LeaveDraft = {
-  id: string; identity: Identity; personId: string; userId: string;
+  id: string; identity: Identity; personId: string; userId: string; phoneIdentityVersion: string;
   fields: LeaveFields; summary: string; digest: string; challenge: string;
   consentVersion: 3; employmentType: string | null; fullName: string;
   issuedAt: number;
@@ -132,12 +133,13 @@ function sameIdentity(a: Identity, b: Identity) { return a.account === b.account
 async function resolve<T extends Employee>(tx: EmployeeSource<T>, sender: string): Promise<T> {
   const snapshot = await tx.employees();
   if (snapshot.complete !== true || !Array.isArray(snapshot.rows) || snapshot.rows.length > 10000) return fail("not_available");
-  // Count BEFORE filtering portal eligibility: a shared active MAM number with
-  // an unlinked/disabled account is still ambiguous, not a reason to pick one.
-  const matches = snapshot.rows.filter(p => p.active && p.company === "mam" && normalizeAllowlistPhone(p.phone, p.country) === sender);
+  // SQL supplies only independently enrolled, canonical identities. Never
+  // normalize a directory contact into an authorization or accept old snapshots.
+  const matches = snapshot.rows.filter(p => p.active && p.company === "mam" && p.phone === sender);
   if (matches.length !== 1) return fail("not_available");
   const p = matches[0];
-  if (p.nodeKind !== "person" || !p.accountActive || !p.userId || !UUID.test(p.userId) || !UUID.test(p.personId)) return fail("not_available");
+  if (p.nodeKind !== "person" || !p.accountActive || !p.userId || !UUID.test(p.userId) || !UUID.test(p.personId)
+    || typeof p.phoneIdentityVersion !== "string" || !UUID.test(p.phoneIdentityVersion)) return fail("not_available");
   return p;
 }
 function profile(employee: SelfProfileEmployee): SelfProfile {
@@ -166,9 +168,10 @@ function unseal(value: unknown, secret: string): LeaveDraft {
     const cipher = createDecipheriv("aes-256-gcm", tokenKey(secret), bytes.subarray(0, 12));
     cipher.setAAD(Buffer.from(TOKEN_DOMAIN)); cipher.setAuthTag(bytes.subarray(12, 28));
     const d = object(JSON.parse(Buffer.concat([cipher.update(bytes.subarray(28)), cipher.final()]).toString("utf8")));
-    exact(d, ["id", "identity", "personId", "userId", "fields", "summary", "digest", "challenge", "consentVersion", "employmentType", "fullName", "issuedAt", "expiresAt"]);
+    exact(d, ["id", "identity", "personId", "userId", "phoneIdentityVersion", "fields", "summary", "digest", "challenge", "consentVersion", "employmentType", "fullName", "issuedAt", "expiresAt"]);
     if (d.consentVersion !== 3 || !Number.isSafeInteger(d.issuedAt) || !Number.isSafeInteger(d.expiresAt) || Number(d.expiresAt) - Number(d.issuedAt) !== TTL) return fail("invalid_request");
     text(d.id, UUID); text(d.personId, UUID); text(d.userId, UUID); text(d.challenge, UUID); text(d.digest, DIGEST);
+    text(d.phoneIdentityVersion, UUID);
     const identity = object(d.identity); exact(identity, ["account", "sender", "session"]);
     text(identity.account, ID); text(identity.session, ID); text(identity.sender, /^\+[1-9][0-9]{7,14}$/);
     if (typeof d.summary !== "string" || hash(d.summary) !== d.digest || typeof d.fullName !== "string") return fail("invalid_request");
@@ -223,6 +226,7 @@ export async function handleLeaveBridge(
       eligible(employee, input);
       const display = summary(input, employee);
       const prepared: LeaveDraft = { id: randomUUID(), identity, personId: employee.personId, userId: employee.userId!,
+        phoneIdentityVersion: employee.phoneIdentityVersion,
         fields: input, summary: display, digest: hash(display), challenge: randomUUID(), consentVersion: 3,
         employmentType: employee.employmentType, fullName: profile({ ...employee, fullName: employee.fullName ?? null }).name,
         issuedAt: now, expiresAt: now + TTL };
@@ -232,7 +236,8 @@ export async function handleLeaveBridge(
       return { status: 200, body: { code: "prepared", consentVersion: 3, draftId: prepared.id, summary: display,
         digest: prepared.digest, expiresAt: new Date(prepared.expiresAt).toISOString(), draftToken } };
     }
-    if (draft.personId !== employee.personId || draft.userId !== employee.userId) fail("not_available");
+    if (draft.personId !== employee.personId || draft.userId !== employee.userId
+      || draft.phoneIdentityVersion !== employee.phoneIdentityVersion) fail("not_available");
     const previous = snapshot.receipt;
     if (previous && (previous.fingerprint !== fingerprint || previous.personId !== employee.personId || previous.userId !== employee.userId)) fail("conflict");
     const tokenHash = hash(payload.draftToken as string);

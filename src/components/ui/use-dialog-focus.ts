@@ -8,6 +8,7 @@ const DIALOG_FOCUSABLE = [
   "input:not([disabled])",
   "select:not([disabled])",
   "textarea:not([disabled])",
+  "details > summary:first-of-type",
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
@@ -29,7 +30,7 @@ let pageOverflow = "";
 
 function visibleControls(dialog: HTMLElement) {
   return Array.from(dialog.querySelectorAll<HTMLElement>(DIALOG_FOCUSABLE))
-    .filter((element) => element.tabIndex >= 0 && !element.hasAttribute("disabled")
+    .filter((element) => element.tabIndex >= 0 && !element.matches(":disabled")
       && !element.closest("[inert]") && element.getClientRects().length > 0
       && window.getComputedStyle(element).visibility !== "hidden");
 }

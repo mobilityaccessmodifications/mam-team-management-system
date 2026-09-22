@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 
 import { approvalBalanceCoverage, approvalRequestHours } from "@/lib/leave-priority";
 
@@ -77,23 +78,11 @@ import {
   requestEmployeeWorkScheduleChange,
   reviewEmployeeWorkScheduleChange,
 } from "@/app/work-schedule/actions";
-import {
-  AccountManagement,
-  type AccountDto,
-} from "@/components/account-management";
-import { AssetRegister } from "@/components/asset-register";
-import { AnalyticsApiManagement } from "@/components/analytics-api-management";
+import type { AccountDto } from "@/components/account-management";
 import { getOrganisationPersonWorkEmail } from "@/app/people/actions";
 import { CheckInRegister } from "@/components/check-in-register";
 import { CheckInWorkspace } from "@/components/check-in-workspace";
 import { CheckInTasks } from "@/components/check-in-tasks";
-import { EmployeeDirectory } from "@/components/employee-directory";
-import { EmployeeTeamDirectory } from "@/components/employee-team-directory";
-import { ManagerEmployeeDirectory } from "@/components/manager-employee-directory";
-import { PayrollBalanceImporter } from "@/components/payroll-balance-importer";
-import { SubscriptionCredentialVault } from "@/components/subscription-credential-vault";
-import { SubscriptionRegister } from "@/components/subscription-register";
-import { TeamCalendar } from "@/components/team-calendar";
 import {
   WorkScheduleHome,
   WorkScheduleTasks,
@@ -110,7 +99,6 @@ import { uploadLeaveAttachments } from "@/components/leave-attachment-upload";
 import { LeaveRequestDialog } from "@/components/leave-request-dialog";
 import { LEAVE_ATTACHMENT_ACCEPT, MAX_LEAVE_ATTACHMENTS, validateLeaveAttachmentFiles } from "@/lib/leave-attachments";
 import { formatClockTime, TIME_VALUES } from "@/lib/leave-request-options";
-import { PeopleOperationsDemo } from "@/components/people-operations-demo";
 import type {
   OrganisationCompany,
   OrganisationPerson,
@@ -130,6 +118,23 @@ import type {
 
 type AppView = "home" | "leave" | "calendar" | "people";
 type LeaveSection = "requests" | "approvals" | "balance";
+
+// These capability-gated panels mount only when opened. Keep their calendar,
+// spreadsheet and device tooling outside the home route's synchronous bundle.
+function PanelLoading() {
+  return <p role="status" aria-live="polite" aria-busy="true">Loading workspace…</p>;
+}
+const AccountManagement = dynamic(() => import("@/components/account-management").then((module) => module.AccountManagement), { loading: PanelLoading });
+const AssetRegister = dynamic(() => import("@/components/asset-register").then((module) => module.AssetRegister), { loading: PanelLoading });
+const AnalyticsApiManagement = dynamic(() => import("@/components/analytics-api-management").then((module) => module.AnalyticsApiManagement), { loading: PanelLoading });
+const EmployeeDirectory = dynamic(() => import("@/components/employee-directory").then((module) => module.EmployeeDirectory), { loading: PanelLoading });
+const EmployeeTeamDirectory = dynamic(() => import("@/components/employee-team-directory").then((module) => module.EmployeeTeamDirectory), { loading: PanelLoading });
+const ManagerEmployeeDirectory = dynamic(() => import("@/components/manager-employee-directory").then((module) => module.ManagerEmployeeDirectory), { loading: PanelLoading });
+const PayrollBalanceImporter = dynamic(() => import("@/components/payroll-balance-importer").then((module) => module.PayrollBalanceImporter), { loading: PanelLoading });
+const SubscriptionCredentialVault = dynamic(() => import("@/components/subscription-credential-vault").then((module) => module.SubscriptionCredentialVault), { loading: PanelLoading });
+const SubscriptionRegister = dynamic(() => import("@/components/subscription-register").then((module) => module.SubscriptionRegister), { loading: PanelLoading });
+const TeamCalendar = dynamic(() => import("@/components/team-calendar").then((module) => module.TeamCalendar), { loading: PanelLoading });
+const PeopleOperationsDemo = dynamic(() => import("@/components/people-operations-demo").then((module) => module.PeopleOperationsDemo), { loading: PanelLoading });
 
 function resolveAuthorisedLeaveSection(
   section: LeaveSection,
@@ -1280,6 +1285,12 @@ export function LeaveDemo({
   const requestedTeamMember = requestForPersonId
     ? teamRequestPeople.find((person) => person.personId === requestForPersonId)
     : undefined;
+  // Use the same target for form policy and dispatch, retaining a stale team
+  // selection so the server rejects it instead of silently submitting for self.
+  const leaveRequestTargetPersonId = requestForPersonId
+    || (isPreviewingEmployeeAccess ? previewProfile?.id : undefined);
+  const leaveRequestOnBehalfOf = Boolean(leaveRequestTargetPersonId && leaveRequestTargetPersonId !== currentPersonId
+    && (requestedTeamMember || (!requestForPersonId && isPreviewingEmployeeAccess)));
   const leaveRequestPersonName = requestedTeamMember?.name ?? activeProfile.name;
   const leaveRequestPersonInitials = requestedTeamMember
     ? initialsForName(requestedTeamMember.name)
@@ -1635,16 +1646,13 @@ export function LeaveDemo({
         endTime: endTime || undefined,
         employeeNote,
       };
-      const fingerprint = JSON.stringify([requestForPersonId,
-        isPreviewingEmployeeAccess ? previewProfile?.id : null, requestInput]);
+      const fingerprint = JSON.stringify([leaveRequestTargetPersonId, requestInput]);
       if (leaveSubmission.current?.fingerprint !== fingerprint) {
         leaveSubmission.current = { fingerprint, key: crypto.randomUUID() };
       }
       const keyedInput = { ...requestInput, submissionKey: leaveSubmission.current.key };
-      const next = requestForPersonId
-        ? await submitLeaveRequestForSelectedEmployee(requestForPersonId, keyedInput)
-        : isPreviewingEmployeeAccess && previewProfile
-        ? await submitLeaveRequestForSelectedEmployee(previewProfile.id, keyedInput)
+      const next = leaveRequestTargetPersonId
+        ? await submitLeaveRequestForSelectedEmployee(leaveRequestTargetPersonId, keyedInput)
         : await submitLeaveRequest(keyedInput);
       if ("error" in next) {
         setFormError(next.error);
@@ -2080,6 +2088,7 @@ export function LeaveDemo({
         leaveRequestPersonInitials={leaveRequestPersonInitials}
         leaveRequestPersonName={leaveRequestPersonName}
         requestForPersonId={requestForPersonId}
+        onBehalfOf={leaveRequestOnBehalfOf}
         activeProfile={activeProfile}
         teamRequestPeople={teamRequestPeople}
         isMutating={isMutating}
@@ -2285,9 +2294,11 @@ function RequestsView({ profile, requests, allRequests, selected, filter, canRev
         <div className={styles.filterTabs} role="group" aria-label="Leave request status">{filters.map((item) => <button aria-pressed={filter === item} className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item === BALANCE_PENDING_STATUS ? "Waiting for balance" : item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => request.status === item).length}</span></button>)}</div>
       </div>
       <div className={`${styles.recordsGrid} ${isEmployee ? styles.employeeRecordsGrid : ""} ${!selected ? styles.recordsGridNoDetail : ""} ${mobileDetailDialogOpen ? styles.recordsGridMobileDetailOpen : ""}`}>
-        <div className={styles.recordsTable} role="table" aria-label="Leave requests">
-          <div className={`${styles.tableHead} ${isEmployee ? styles.employeeTableRow : ""}`} role="row">{!isEmployee ? <span>Employee</span> : null}<span>Leave</span><span>Dates</span><span>Duration</span><span>Status</span><span /></div>
-          {requests.map((request) => <button className={`${styles.tableRow} ${isEmployee ? styles.employeeTableRow : ""} ${selected?.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} role="row" key={request.id}>{!isEmployee ? <span><i>{request.initials}</i><b>{request.personId === profile.id ? "You" : request.employee}<small>{request.team}</small></b></span> : null}<span><b>{request.leaveType}</b></span><span>{request.dateLabel}</span><span>{formatDuration(request)}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} /></button>)}
+        <div className={styles.recordsTable}>
+          <div className={`${styles.tableHead} ${isEmployee ? styles.employeeTableRow : ""}`} aria-hidden="true">{!isEmployee ? <span>Employee</span> : null}<span>Leave</span><span>Dates</span><span>Duration</span><span>Status</span><span /></div>
+          <ul className={styles.recordsList} role="list" aria-label="Leave requests">
+          {requests.map((request) => <li key={request.id}><button className={`${styles.tableRow} ${isEmployee ? styles.employeeTableRow : ""} ${selected?.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} aria-label={`View leave details for ${request.personId === profile.id ? "you" : request.employee}: ${request.leaveType}, ${request.dateLabel}, ${formatDuration(request)}, ${request.status}`}>{!isEmployee ? <span><i aria-hidden="true">{request.initials}</i><b>{request.personId === profile.id ? "You" : request.employee}<small>{request.team}</small></b></span> : null}<span><b>{request.leaveType}</b></span><span>{request.dateLabel}</span><span>{formatDuration(request)}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} aria-hidden="true" /></button></li>)}
+          </ul>
           {!requests.length ? <div className={styles.emptyState}><Search size={23} /><strong>{allRequests.length ? "No matching requests" : "No leave requests"}</strong></div> : null}
         </div>
         {selected ? <>
@@ -2365,7 +2376,9 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
 
 function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, onNote, onSelect, onDecision, onDeleteSupportingFile }: { leavePriority?: LeavePriorityWorkspace; onBalancesSaved: () => Promise<void>; pending: LeaveRequest[]; selected?: LeaveRequest; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; onNote: (note: string) => void; onSelect: (id: string) => void; onDecision: (status: LeaveDecision) => void; onDeleteSupportingFile: (attachmentId: string) => Promise<void> }) {
   const person = leavePriority?.people.find((person) => person.personId === selected?.personId);
-  const coverage = selected ? approvalBalanceCoverage(person, selected.leaveType, approvalRequestHours(selected)) : null;
+  const priorityRequest = leavePriority?.requests.find((request) => request.id === selected?.id);
+  const coverage = selected ? approvalBalanceCoverage(person, selected.leaveType, approvalRequestHours(selected),
+    selected.status === BALANCE_PENDING_STATUS ? { ...priorityRequest, pendingBalance: true } : priorityRequest) : null;
   const annual = selected?.leaveType === "Annual leave";
   const insufficient = annual && coverage === "Not enough balance";
   const needsCheck = annual && coverage !== "Enough balance" && !insufficient;
@@ -2377,7 +2390,7 @@ function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, sele
     {selected ? <section className={`${styles.panel} ${styles.approvalRecord}`}>
       <header className={styles.approvalHeader}><span className={styles.avatarOrange}>{selected.initials}</span><span><h2>{selected.employee}</h2></span><StatusPill status={selected.status} /></header>
       <strong className={styles.requestDetailsHeading}>Request details</strong>
-      <div className={styles.factGrid}><article><CalendarDays size={17} /><span><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><span className={styles.approvalDuration}><strong>{formatDuration(selected)}</strong>{selected.hours == null && approvalRequestHours(selected) != null ? <span>{approvalRequestHours(selected)} hours</span> : null}<ApprovalBalancePill workspace={leavePriority} personId={selected.personId} leaveType={selected.leaveType} requiredHours={approvalRequestHours(selected)} /></span>{formatTimeRange(selected) ? <small>{formatTimeRange(selected)}</small> : null}</span></article><article><ClipboardList size={17} /><span><strong>{selected.leaveType}</strong></span></article></div>
+      <div className={styles.factGrid}><article><CalendarDays size={17} /><span><strong>{selected.dateLabel}</strong></span></article><article><Clock3 size={17} /><span><span className={styles.approvalDuration}><strong>{formatDuration(selected)}</strong>{selected.hours == null && approvalRequestHours(selected) != null ? <span>{approvalRequestHours(selected)} hours</span> : null}<ApprovalBalancePill workspace={leavePriority} personId={selected.personId} requestId={selected.id} leaveType={selected.leaveType} requiredHours={approvalRequestHours(selected)} pendingBalance={selected.status === BALANCE_PENDING_STATUS} /></span>{formatTimeRange(selected) ? <small>{formatTimeRange(selected)}</small> : null}</span></article><article><ClipboardList size={17} /><span><strong>{selected.leaveType}</strong></span></article></div>
       <ApprovalLeaveBalances key={`balances:${selected.id}`} workspace={leavePriority} personId={selected.personId} requestId={selected.id} busy={busy || readOnly} onSaved={onBalancesSaved} />
       {selected.employeeNote ? <div className={styles.privateNote}><span>Note</span><p>{selected.employeeNote}</p></div> : null}
       <AttachmentList attachments={attachmentsByRequestId.get(selected.id) ?? []} busy={busy} onDelete={onDeleteSupportingFile} />

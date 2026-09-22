@@ -195,21 +195,32 @@ async function requireAccessAdministrator() {
   return supabase;
 }
 
-export async function getPayrollBalanceImportWorkspace(): Promise<PayrollImportWorkspace | null> {
-  const { supabase } = await requireSession();
-  const { data, error } = await supabase.rpc("get_payroll_balance_import_workspace");
-  if (error || !data) return null;
+export type PayrollImportWorkspaceResult =
+  | { status: "ready"; workspace: PayrollImportWorkspace }
+  | { status: "forbidden" }
+  | { status: "error"; message: string };
+
+export async function getPayrollBalanceImportWorkspace(): Promise<PayrollImportWorkspaceResult> {
   try {
+    const { supabase } = await requireSession();
+    const { data, error } = await supabase.rpc("get_payroll_balance_import_workspace");
+    if (error || !data) return { status: "error", message: LOAD_ERROR };
     const row = record(data);
-    if (row.canImport !== true) return null;
+    // Only an explicit capability denial means the feature is unavailable.
+    // RPC, session and payload failures remain recoverable load errors.
+    if (row.canImport === false) return { status: "forbidden" };
+    if (row.canImport !== true || !Array.isArray(row.recentBatches)) throw new Error(LOAD_ERROR);
     return {
-      canImport: true,
-      canManageAccess: boolean(row.canManageAccess),
-      reminder: mapReminder(row.reminder),
-      recentBatches: Array.isArray(row.recentBatches) ? row.recentBatches.map(mapBatchSummary) : [],
+      status: "ready",
+      workspace: {
+        canImport: true,
+        canManageAccess: boolean(row.canManageAccess),
+        reminder: mapReminder(row.reminder),
+        recentBatches: row.recentBatches.map(mapBatchSummary),
+      },
     };
   } catch {
-    throw new Error(LOAD_ERROR);
+    return { status: "error", message: LOAD_ERROR };
   }
 }
 
