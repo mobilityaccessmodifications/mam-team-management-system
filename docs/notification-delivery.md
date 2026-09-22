@@ -1,85 +1,96 @@
-# Notification privacy and receiver release
+# Notification privacy and durable delivery
 
 Submission emails are independent reviewer and applicant copies for every leave
-category, not just legacy sick-balance snapshots. Reviewers include HR, exclude
-the applicant's recorded addresses, and receive no applicant address in their
-To/CC headers. The applicant receives their own confirmation without reviewer CC.
-Approval/decline routing is unchanged. Whenever Accounts receives a decision
-email, manager notes are omitted for both companies. No email contains balances.
+category. Reviewers include HR, exclude the applicant's recorded addresses, and
+receive no applicant address in To/CC. The applicant receives their own copy
+without reviewer CC. Approval/decline routing is unchanged. Decision copies sent
+to Accounts omit manager notes for both companies. No email contains balances.
+Birthday reminders remain manager-only without HR CC.
 
-Each copy retains its own stable key. Receiver receipts retain the original
-normalized To and CC plus minimal provider acknowledgement metadata. Duplicate
-success returns that original evidence only when both recipient sets still
-match. A changed To or CC returns `receipt-recipient-mismatch`, `ok: false` and
-`reconciliationRequired: true`, with the original evidence; it never sends to
-the replacement address or acknowledges it as delivered. The duplicate-response
-and rejection-response nodes must be published with the validator and
-confirmation nodes so these fields survive the final response.
+## Send boundary
 
-Legacy receipts containing only state/time return
-`receipt-evidence-unavailable` without inventing recipients. A shared legacy
-key blocks both new submission copies and requires reconciliation even when
-its original recipients are known (`legacy-receipt-reconciliation`). A
-current copy's own confirmed receipt takes precedence over the shared key.
-Legacy sick split keys are unchanged. Processing receipts block concurrent
-replays; after 20 minutes their result is `receipt-delivery-unknown`, not a
-license to send again. A late success may still confirm its matching original
-reservation. Provider rejection never produces a success receipt for either
-company. Sender nodes that expose no message/request ID record null; a node
-acknowledgement is not proof of inbox delivery.
+All leave, birthday, payroll-reminder and comparison-alert branches of the MAM
+leave email receiver use one durable reservation contract. n8n validates the
+message and final recipients, then calls the fixed portal receipt endpoint using
+its existing webhook HeaderAuth credential. Native HTTP Request nodes never
+follow redirects or retry a reservation. Supabase keys remain server-side.
 
-All leave, birthday/priority, payroll-reminder and comparison-alert branches
-use the same capacity and retention policy. At 5,000 stored keys, new keys fail
-closed with the sanitized error `MAM notification receipt capacity reached;
-reconciliation required.` Existing duplicates and confirmations still work;
-even an existing 5,001-key cache is preserved instead of truncated. Unexpired
-receipts keep all evidence. After 90 days, unrelated sent receipts may lose
-To/CC/provider metadata but retain a minimal sent tombstone. The current key,
-its legacy key and every processing reservation remain protected. Expiry does
-not permit a second send, and tombstones count toward the limit.
+`POST /api/internal/integrations/notifications/receipts` accepts only bounded,
+authenticated reserve/confirm requests. Its three service-only database RPCs
+expose no browser/admin replay capability. Private RLS tables have no direct
+application-role grants. The receiver receives a token only when a new event key
+is inserted atomically. Concurrent requests, retries and a lost reserve response
+never receive that token again. No database transaction spans an Outlook send.
 
-Capacity therefore requires operator reconciliation or a reviewed move to
-durable deduplication storage; simply waiting for the TTL does not free slots.
-Do not delete receipts, acknowledge current addresses from old evidence, or
-manually drain/re-send a backlog. Verify original provider evidence and outbox
-state under separate authorization before resolving unknown deliveries. The
-new evaluator tests exercise shared-state interleavings, not n8n's storage
-durability or multi-worker locking. Static workflow data is not a transactional
-cross-worker lock: verify execution serialization and persistence at release,
-or use an atomic durable reservation store before claiming that guarantee.
+Only a fresh grant reaches a sender. A successful sender result is reduced to
+provider acceptance, message/request IDs when available, and status code when
+available. n8n durably confirms the bound token and original To/CC before returning
+success. Provider rejection, network uncertainty or a lost confirmation leaves a
+processing reservation that blocks automatic re-sending. After 20 minutes it is
+reported as `receipt-delivery-unknown`; time alone never permits a takeover.
+An exact late confirmation with the original token is allowed.
 
-The receiver deliberately rejects new unsplit submissions. Deploy its reviewed
-code before merging the split-aware dispatcher: old application instances keep
-those events queued for retry rather than exposing applicant addresses. Deploy
-with `python3 scripts/deploy-notification-review.py inspect`, then `apply` with
-the reviewed bundle hash printed by its `hash` mode. Verify MAM n8n first. The
-helper preserves credentials, connections, Outlook settings and static receipts.
-Merge through GitHub and verify the exact resulting Vercel production SHA.
+Matching duplicates return the original proven recipient sets and provider
+acknowledgement. Changed To/CC returns `receipt-recipient-mismatch` and requires
+reconciliation, not a send to a replacement address. Missing historical evidence
+returns `receipt-evidence-unavailable`. A shared legacy submission key blocks
+both new split copies (`legacy-receipt-reconciliation`); a copy's own confirmed
+receipt takes precedence. Provider acceptance is not proof of inbox delivery.
 
-Full receiver execution retention remains disabled because it contains HR data.
-The leave receiver now uses the existing sanitized internal error alert workflow,
-like the check-in receiver and dispatchers. Durable database error state and the
-independent GitHub recovery workflow remain available; raw mail logging is not
-required for operational visibility. Do not change the sender OAuth identity
-based on a stale runbook label alone.
+The database retains permanent no-resend keys, without the old 5,000-key static
+cache limit. A bounded retention operation minimizes recipient/provider evidence
+on unrelated sent receipts older than 90 days while preserving tombstones. The
+current key and its legacy key are protected during reserve; processing records
+are not deleted. Maintenance never creates permission to send again.
 
-The R02/R03 changes are repository templates and local synthetic tests only;
-their live deployment has not been verified. The release helper now includes
-all four code nodes and checks the reviewed e88b366 baseline hashes, the
-historical rejection-node hash, or the desired code, preserving connections,
-sender configuration and static data.
-Any different live version requires fresh inspection. At release, verify the
-rejection response preserves the reconciliation result, the capacity error
-reaches the existing sanitized error workflow, and no raw HR execution data is
-retained. Run the offline regression suite with:
+## Reviewed release and recovery
 
-```sh
-node --test tests/notification-receipts.test.mjs tests/leave-priority-email.test.mjs tests/payroll-comparison-email.test.mjs tests/openclaw-leave-email.test.mjs tests/security-outbox.test.mjs tests/notification-review-deploy.test.mjs
-```
+Application releases go through reviewed GitHub PRs into `main`, then the exact
+Vercel deployment must be verified. The forward database migration is additive
+and creates a disabled receipt store. The old receiver remains authoritative
+until the explicit paused cutover; an application deploy alone is not completion.
 
-The September review's payroll-unsupported claim did not match the live receiver:
-its validator hash matched the checked-in payroll-capable code. Check-in catch-up
-was already deployed in migration `20260921191000`; past-due history is
-intentionally not automatically mailed. Birthday reminders remain manager-only
-without HR CC; the caller now reflects that policy as well. An old local checkout
-is not production drift and must not be reset or fast-forwarded over other work.
+1. Verify the exact MAM Supabase, GitHub, Vercel and n8n targets. Run all local and
+   CI gates, including real concurrent PostgreSQL sessions and synthetic Next.js
+   HTTP tests. Review the entire API/SQL/n8n/deployment bundle together.
+2. Apply the hash-pinned additive migration through the approved credential
+   helper/Management API. Merge the reviewed API release and verify production.
+   An authenticated GET exposes only `{version: 1, ready: false}` at this stage.
+3. Pause only receiver `D6UG5ACZGILCpsOk`. Drain its pinned 30-second execution
+   timeout and verify zero nonterminal executions. Take two stable reads and
+   create a private task-temporary snapshot containing every legacy key/state/time.
+4. Import the complete frozen snapshot in one transaction, preserving known sent
+   and unknown states without inventing recipients or provider evidence. Record
+   the exact snapshot SHA-256, count and import time. Keep `ready=false`.
+5. Apply the hash-pinned n8n nodes/connections while inactive. Preserve Outlook
+   credentials, recipients, static data, timeout and sanitized error workflow.
+   Verify the saved topology and the existing credential's GET-only API access.
+6. Verify the unchanged frozen snapshot and reviewed inactive topology, enable
+   the store with the matching import proof, then activate only this receiver.
+   Read back its active version and API/database readiness. Do not replay history
+   or send a real test email as part of deployment.
+
+If a write times out, inspect exact state before any retry. If a cutover check
+fails, keep the affected receiver inactive and fix forward. Do not restore the
+unsafe static-cache sender after durable reservations have begun. Keep recovery
+snapshots private until the cutover is verified; never commit receipt exports.
+
+Do not delete/reset receipts or manually replay unknown deliveries. Resolving
+them needs separately authorized provider/outbox reconciliation. Full n8n
+execution retention stays disabled because messages contain HR information;
+the existing sanitized error workflow and database error state provide alerts.
+Do not change OAuth identity based on an old runbook label.
+
+## Verification and limitations
+
+`npm test` exercises the exact deployed n8n templates and their topology, the
+bounded API, and deployment guards. `node tests/run-notification-receipt-http.mjs`
+uses a real local Next.js/Supabase-client path with synthetic HTTP RPC fixtures
+and no mail sender. `npm run test:sql` replays all migrations and exercises real
+PostgreSQL permissions, transactions, concurrency, legacy collisions and
+no-resend tombstones; CI repeats it on PostgreSQL 16 and 17.
+
+Offline tests do not establish production provider acceptance. Production release
+evidence belongs in the release PR, including exact deployment/workflow versions,
+import counts, readiness and checks not performed. WhatsApp remains separately
+paused until independently verified phone enrollment and reopening approval.

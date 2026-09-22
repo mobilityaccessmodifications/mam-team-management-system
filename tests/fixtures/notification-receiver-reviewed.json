@@ -1,0 +1,272 @@
+{
+  "id": "D6UG5ACZGILCpsOk",
+  "name": "MAM People System - Leave Email Delivery",
+  "versionId": "07108502-d6a3-4396-b68d-5b9abe0a5d4e",
+  "nodes": [
+    {
+      "id": "0902b11b-693f-43a2-b480-0ec9ceb20267",
+      "name": "Receive Leave Notification",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -900,
+        0
+      ],
+      "webhookId": "d3b3880b-951d-4ca9-a419-7ec24097aa07",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mam-people-system-leave-hr-v1",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tGtpwegru8OxtdCt",
+          "name": "MAM Team Management - Notification Webhook Header"
+        }
+      }
+    },
+    {
+      "id": "f9024fd5-9f2e-4b14-ac37-c46ff9dd6532",
+      "name": "Validate and Reserve Leave Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -650,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Executed inside the authenticated MAM n8n Code node; tested without network.\nconst HR = 'hr@mobilityaccess.com.au';\nconst ACCOUNTS = 'accounts@mobilityaccess.com.au';\nconst EMAIL = /^[^\\s@,;]+@[^\\s@,;]+\\.[^\\s@,;]+$/;\nconst APP_URL = 'https://mam-team-management-system-ten.vercel.app';\nconst EVENTS = ['payroll-comparison-alert', 'leave-submitted', 'leave-approved', 'leave-declined', 'leave-cancelled', 'leave-conditionally-approved', 'leave-reminder', 'team-birthday', 'payroll-balance-reminder'];\nconst STATUSES = ['Pending', 'Approved', 'Declined', 'Cancelled', 'Approved – pending leave balance'];\nconst UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst DATE = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst TIME = /^(?:[01]\\d|2[0-3]):[0-5]\\d$/;\nconst TTL = 90 * 24 * 60 * 60 * 1000;\nconst PROCESSING = 20 * 60 * 1000;\nconst reject = (code) => [{ json: { outcome: 'rejected', ok: false, sent: false, alreadySent: false, rejectionCode: code } }];\nconst object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);\nconst text = (value, max) => typeof value === 'string' && value.length > 0 && value.length <= max\n  && value === value.trim() && !/[\\u0000-\\u001f\\u007f]/.test(value);\nconst optionalText = (value, max) => value === null || value === undefined || (typeof value === 'string'\n  && value.length <= max && value === value.trim() && !/[\\u0000-\\u001f\\u007f]/.test(value));\n// Notes are body content, not headers: allow normal textarea whitespace.\nconst optionalNote = (value, max) => value === null || value === undefined || (typeof value === 'string'\n  && value.length <= max && value === value.trim() && !/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/.test(value));\nconst escape = (value) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;')\n  .replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#39;');\nconst validDate = (value) => {\n  if (!DATE.test(String(value))) return false;\n  const date = new Date(`${value}T00:00:00.000Z`);\n  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;\n};\nconst friendlyDate = (value) => {\n  const [year, month, day] = value.split('-').map(Number);\n  return new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Australia/Melbourne' })\n    .format(new Date(Date.UTC(year, month - 1, day, 12)));\n};\nconst friendlyMonth = (value) => {\n  const [year, month] = value.split('-').map(Number);\n  return new Intl.DateTimeFormat('en-AU', { month: 'long', year: 'numeric', timeZone: 'Australia/Melbourne' })\n    .format(new Date(Date.UTC(year, month - 1, 1, 12)));\n};\nconst emailList = (value) => {\n  const raw = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[;,]/) : [];\n  const emails = raw.map((email) => String(email).trim().toLowerCase()).filter((email) => EMAIL.test(email));\n  return [...new Set(emails)];\n};\ntry {\n  const input = $input.first().json ?? {};\n  const headers = object(input.headers) ? input.headers : {};\n  const body = object(input.body) ? input.body : null;\n  const required = ['version', 'event', 'eventKey', 'requestId', 'employeeName', 'employeeEmail', 'company', 'leaveType',\n    'startDate', 'endDate', 'startTime', 'endTime', 'days', 'hours', 'status', 'employeeNote', 'managerNote', 'managerEmail'];\n  if (!String(headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) return reject('content-type');\n  if (!body || body.version !== 1 || !EVENTS.includes(body.event) || JSON.stringify(body).length > 20000) return reject('body-shape');\n  if (body.event === 'payroll-comparison-alert') {\n    if (Object.keys(body).length !== 5 || !UUID.test(String(body.batchId))\n      || body.eventKey !== `payroll-comparison:${body.batchId}`\n      || !Number.isInteger(body.differenceCount) || body.differenceCount < 1 || body.differenceCount > 2000) return reject('comparison-shape');\n    const recipient = 'marketing@mobilityaccess.com.au';\n    const state = $getWorkflowStaticData('global');\n    if (!object(state.leaveNotificationEvents)) state.leaveNotificationEvents = {};\n    const previous = state.leaveNotificationEvents[body.eventKey];\n    if (previous?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true, actualRecipient: recipient, eventKey: body.eventKey } }];\n    if (previous?.state === 'processing' && Date.now() - previous.at < PROCESSING) return reject('delivery-in-flight');\n    state.leaveNotificationEvents[body.eventKey] = {state:'processing',at:Date.now()};\n    return [{json:{outcome:'send',mamDelivery:true,deliveryRecipient:recipient,confirmationRecipient:recipient,ccRecipients:'',eventKey:body.eventKey,\n      emailSubject:'[People Hub] Leave balance differences require review',\n      emailHtml:'<p>A payroll upload has ' + body.differenceCount + ' leave balance differences or unmatched entries.</p><p>Existing balances have not been changed.</p><p>Open Leave → Balance → Recent imports to review uploaded and system balances.</p><p>Reference: ' + escape(body.batchId) + '</p><p><a href=\"' + APP_URL + '/?view=leave\">People Hub</a></p>'}}];\n  }\n  if (body.event === 'payroll-balance-reminder') {\n    const payrollRequired = ['version', 'event', 'eventKey', 'requestId', 'recipientName', 'recipientEmail', 'reminderMonth', 'missingCompanies'];\n    if (Object.keys(body).length !== payrollRequired.length\n      || !payrollRequired.every((key) => Object.prototype.hasOwnProperty.call(body, key))) return reject('payroll-body-shape');\n    if (!UUID.test(String(body.requestId))) return reject('request-id');\n    if (!validDate(body.reminderMonth) || !String(body.reminderMonth).endsWith('-01')) return reject('payroll-month');\n    if (String(body.eventKey) !== `payroll-balance:${body.requestId}:${body.reminderMonth.slice(0, 7)}`) return reject('event-key');\n    if (!text(body.recipientName, 80)\n      || typeof body.recipientEmail !== 'string'\n      || body.recipientEmail !== body.recipientEmail.trim().toLowerCase()\n      || body.recipientEmail.length > 254\n      || !EMAIL.test(body.recipientEmail)) return reject('payroll-recipient');\n    if (!Array.isArray(body.missingCompanies)\n      || body.missingCompanies.length < 1\n      || body.missingCompanies.length > 2\n      || new Set(body.missingCompanies).size !== body.missingCompanies.length\n      || body.missingCompanies.some((company) => !['mam', 'equipsy'].includes(company))) return reject('payroll-companies');\n\n    const now = Date.now();\n    const state = $getWorkflowStaticData('global');\n    const raw = object(state.leaveNotificationEvents) ? state.leaveNotificationEvents : {};\n    const events = {};\n    for (const [key, value] of Object.entries(raw)) {\n      if (object(value) && Number.isFinite(value.at) && now - value.at <= TTL && Object.keys(events).length < 5000) {\n        events[key] = { state: value.state === 'sent' ? 'sent' : 'processing', at: value.at };\n      }\n    }\n    state.leaveNotificationEvents = events;\n    const previous = events[body.eventKey];\n    if (previous?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true,\n      actualRecipient: body.recipientEmail, eventKey: body.eventKey } }];\n    if (previous?.state === 'processing' && now - previous.at < PROCESSING) return reject('delivery-in-flight');\n    events[body.eventKey] = { state: 'processing', at: now };\n\n    const companyLabels = body.missingCompanies.map((company) => company === 'mam' ? 'MAM' : 'Equipsy');\n    const monthLabel = friendlyMonth(body.reminderMonth);\n    const emailHtml = [\n      '<p>Hi ' + escape(body.recipientName) + ',</p>',\n      '<p>The ' + escape(monthLabel) + ' banked leave balance update is due.</p>',\n      '<p><strong>Still required:</strong> ' + escape(companyLabels.join(' and ')) + '</p>',\n      '<p>Upload the latest CSV or Excel leave-balance files in People Hub.</p>',\n      '<p><a href=\"' + APP_URL + '/?view=leave\" style=\"display:inline-block;padding:10px 16px;background:#ef6c24;color:#fff;text-decoration:none;border-radius:6px;font-weight:600\">Open payroll balance upload</a></p>',\n    ].join('');\n    return [{ json: { outcome: 'send', mamDelivery: true, deliveryRecipient: body.recipientEmail,\n      confirmationRecipient: body.recipientEmail, ccRecipients: '', eventKey: body.eventKey,\n      emailSubject: `[MAM] Monthly banked leave update due — ${monthLabel}`, emailHtml } }];\n  }\n  if (!required.every((key) => Object.prototype.hasOwnProperty.call(body, key))) return reject('body-shape');\n  if (!UUID.test(String(body.requestId))) return reject('request-id');\n  const eventEscaped = String(body.event).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n  if (!new RegExp(`^leave:${body.requestId}:${eventEscaped}:[0-9a-f]{24}$`, 'i').test(String(body.eventKey))) return reject('event-key');\n  if (!text(body.employeeName, 160) || !['mam', 'equipsy'].includes(body.company) || !text(body.leaveType, 120)) return reject('employee-data');\n  if (!validDate(body.startDate) || !validDate(body.endDate) || body.endDate < body.startDate) return reject('dates');\n  if (!optionalText(body.startTime, 5) || (body.startTime !== null && !TIME.test(body.startTime))) return reject('start-time');\n  if (!optionalText(body.endTime, 5) || (body.endTime !== null && !TIME.test(body.endTime))) return reject('end-time');\n  if (!['number', 'object'].includes(typeof body.days) || (body.days !== null && (!Number.isFinite(body.days) || body.days <= 0))) return reject('days');\n  if (!['number', 'object'].includes(typeof body.hours) || (body.hours !== null && (!Number.isFinite(body.hours) || body.hours <= 0))) return reject('hours');\n  if (body.fullDayHours !== undefined && (!Number.isFinite(body.fullDayHours) || body.fullDayHours <= 0 || body.fullDayHours > 24)) return reject('full-day-hours');\n  if (!STATUSES.includes(body.status) || !optionalNote(body.employeeNote, 4000) || !optionalNote(body.managerNote, 4000)) return reject('status-or-notes');\n  const managerEmails = typeof body.managerEmail === 'string' ? body.managerEmail.split(',') : [];\n  if (!(body.managerEmail === null || (managerEmails.length > 0 && managerEmails.length <= 10\n    && managerEmails.every((email) => email.length <= 254 && EMAIL.test(email))))) return reject('manager-email');\n  const managers = [...new Set(managerEmails.map((email) => email.toLowerCase()))];\n  const employeeEmails = emailList(Array.isArray(body.employeeEmails) ? body.employeeEmails : body.employeeEmail);\n  const sick = body.leaveType === 'Sick leave' || body.leaveType === \"Carer's leave\";\n  const split = body.audience !== undefined;\n  // Old application instances leave their event queued until the split-aware\n  // dispatcher retries. Never fall back to exposing applicant addresses in To.\n  if (body.event === 'leave-submitted' && !split) return reject('audience-required');\n  if (split && (body.event !== 'leave-submitted' || !['employee', 'reviewers'].includes(body.audience))) return reject('audience');\n  if (body.legacyEventKey !== undefined && (!split\n    || !new RegExp(`^leave:${body.requestId}:leave-submitted:[0-9a-f]{24}$`, 'i').test(String(body.legacyEventKey))\n    || body.legacyEventKey === body.eventKey)) return reject('legacy-event-key');\n  const snapshot = body.leaveBalance;\n  if (snapshot !== undefined && snapshot !== null && (!object(snapshot)\n    || snapshot.kind !== (sick ? 'sick' : 'annual') || (!sick && body.leaveType !== 'Annual leave')\n    || !['current', 'check_balance'].includes(snapshot.status)\n    || (snapshot.hours !== null && !Number.isFinite(snapshot.hours))\n    || (snapshot.status === 'check_balance' && snapshot.hours !== null))) return reject('leave-balance');\n  const employeeDelivery = body.audience === 'employee' || ['leave-approved', 'leave-declined', 'leave-conditionally-approved'].includes(body.event);\n  const managerDelivery = ['leave-submitted', 'leave-cancelled', 'leave-reminder', 'team-birthday'].includes(body.event);\n  if (employeeDelivery && employeeEmails.length === 0) return reject('employee-email');\n  if (managerDelivery && managers.length === 0) return reject('manager-email');\n  const now = Date.now();\n  const state = $getWorkflowStaticData('global');\n  const raw = object(state.leaveNotificationEvents) ? state.leaveNotificationEvents : {};\n  const events = {};\n  for (const [key, value] of Object.entries(raw)) {\n    if (object(value) && Number.isFinite(value.at) && now - value.at <= TTL && Object.keys(events).length < 5000) {\n      events[key] = { state: value.state === 'sent' ? 'sent' : 'processing', at: value.at };\n    }\n  }\n  state.leaveNotificationEvents = events;\n  const reviewers = [...new Set([...managers, HR])].filter((email) => !employeeEmails.includes(email));\n  const confirmationRecipient = split ? (body.audience === 'employee' ? employeeEmails : reviewers).join(',')\n    : managerDelivery ? managers.join(',') : employeeEmails.join(',');\n  if (!confirmationRecipient) return reject('recipient');\n  const deliveryRecipient = confirmationRecipient;\n  const ccRecipients = split || body.event === 'leave-reminder' || body.event === 'team-birthday' ? '' : [HR, ...(body.event === 'leave-approved' || (body.event === 'leave-cancelled' && body.wasApproved !== false) ? [ACCOUNTS] : [])].filter((email) => !deliveryRecipient.split(',').includes(email)).join(',');\n  // During rollout, a shared send may already have succeeded while its DB\n  // acknowledgement failed. Its receipt covers both new copies; do not resend.\n  const legacy = body.legacyEventKey ? events[body.legacyEventKey] : undefined;\n  if (legacy?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false,\n    alreadySent: true, actualRecipient: confirmationRecipient, eventKey: body.eventKey } }];\n  if (legacy?.state === 'processing' && now - legacy.at < PROCESSING) return reject('delivery-in-flight');\n  const previous = events[body.eventKey];\n  if (previous?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true, actualRecipient: confirmationRecipient, eventKey: body.eventKey } }];\n  if (previous?.state === 'processing' && now - previous.at < PROCESSING) return reject('delivery-in-flight');\n  events[body.eventKey] = { state: 'processing', at: now };\n  const eventLabel = { 'leave-submitted': 'submitted', 'leave-approved': 'approved', 'leave-declined': 'declined', 'leave-cancelled': 'cancelled', 'leave-conditionally-approved': 'approved, subject to sufficient leave balance', 'leave-reminder': body.status === 'Approved – pending leave balance' ? 'approved, subject to sufficient leave balance — awaiting your review' : 'awaiting your review', 'team-birthday': 'team birthday reminder' }[body.event];\n  const employeeCopy = body.event === 'leave-conditionally-approved' ? 'Your ' + body.leaveType.toLowerCase() + ' request has been approved, subject to sufficient leave balance.' : body.event === 'leave-approved' ? 'Your leave request has been approved.' : body.event === 'leave-declined' ? 'Your leave request has been declined.' : 'This is a record of your leave request.';\n  const managerCopy = body.event === 'leave-reminder' ? (body.status === 'Approved – pending leave balance' ? 'This leave request is approved, subject to sufficient leave balance. Please review the balance and finalise approval.' : 'Please review this outstanding leave request.') : body.event === 'leave-submitted' ? 'A leave request is waiting for your review.' : 'This is a record of the leave request being ' + eventLabel + '.';\n  const employeeDeliveryLink = APP_URL + '/?view=leave&request=' + encodeURIComponent(body.requestId);\n  const managerDeliveryLink = APP_URL + '/?view=leave&section=approvals&request=' + encodeURIComponent(body.requestId);\n  const requestedHours = body.hours ?? (body.days === null ? null : body.days * (body.fullDayHours ?? 7.5));\n  const hoursLabel = (value) => new Intl.NumberFormat('en-AU', { maximumFractionDigits: 2 }).format(value) + ' hours';\n  const emailStatus = body.status === 'Approved – pending leave balance' ? 'Approved, subject to sufficient leave balance' : body.status;\n  const emailHtml = body.event === 'team-birthday' ? '<p>Team birthday reminder: <strong>' + escape(body.employeeName) + '</strong></p><p>Birthday: ' + escape(friendlyDate(body.startDate)) + '</p><p><a href=\"' + APP_URL + '\">People Hub</a></p>' : [\n    '<p>' + (employeeDelivery ? 'Hi ' + escape(body.employeeName) + ',' : 'MAM leave notification') + '</p>',\n    '<p>' + escape(body.event === 'leave-submitted' ? 'A leave request has been submitted and is awaiting review.' : employeeDelivery ? employeeCopy : managerCopy) + '</p>',\n    '<p><strong>Leave request details</strong></p>', '<ul>',\n    '<li><strong>Employee:</strong> ' + escape(body.employeeName) + '</li>',\n    '<li><strong>Company:</strong> ' + escape(body.company) + '</li>',\n    '<li><strong>Leave type:</strong> ' + escape(body.leaveType) + '</li>',\n    '<li><strong>Dates:</strong> ' + escape(friendlyDate(body.startDate)) + ' – ' + escape(friendlyDate(body.endDate)) + '</li>',\n    body.startTime ? '<li><strong>Start time:</strong> ' + escape(body.startTime) + '</li>' : '',\n    body.endTime ? '<li><strong>End time:</strong> ' + escape(body.endTime) + '</li>' : '',\n    body.days !== null ? '<li><strong>Business days:</strong> ' + escape(body.days) + '</li>' : '',\n    requestedHours !== null && body.event === 'leave-submitted' ? '<li><strong>Hours requested:</strong> ' + hoursLabel(requestedHours) + '</li>' : body.hours !== null ? '<li><strong>Hours:</strong> ' + escape(body.hours) + '</li>' : '',\n    '<li><strong>Status:</strong> ' + escape(emailStatus) + '</li>', '</ul>',\n    employeeDelivery && body.managerNote && !emailList([deliveryRecipient,ccRecipients].join(',')).includes(ACCOUNTS.toLowerCase()) ? '<p><strong>Manager note:</strong> ' + escape(body.managerNote) + '</p>' : '',\n    '<p><a href=\"' + (body.event === 'leave-submitted' && !split ? APP_URL : employeeDelivery ? employeeDeliveryLink : managerDeliveryLink) + '\" style=\"display:inline-block;padding:10px 16px;background:#ef6c24;color:#fff;text-decoration:none;border-radius:6px;font-weight:600\">People Hub</a></p>',\n  ].join('');\n  return [{ json: { outcome: 'send', mamDelivery: body.company === 'mam', deliveryRecipient, confirmationRecipient, ccRecipients, eventKey: body.eventKey,\n    emailSubject: body.event === 'team-birthday' ? `[MAM] Team birthday reminder: ${body.employeeName}` : employeeDelivery ? `[MAM] Leave ${eventLabel}: ${body.leaveType}` : `[MAM] Leave ${eventLabel}: ${body.employeeName} — ${body.leaveType}`,\n    emailHtml } }];\n} catch { return reject('exception'); }\n"
+      }
+    },
+    {
+      "id": "bda94530-1205-46c6-913a-d7ade0c6af54",
+      "name": "Send Leave Notification?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -400,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "leave-send-condition",
+              "leftValue": "={{ $json.outcome === 'send' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bc399319-8f82-4541-853e-69fc9f3370e5",
+      "name": "Send Leave Notification to HR",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        -150,
+        -120
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $json.deliveryRecipient }}",
+        "subject": "={{ $json.emailSubject }}",
+        "bodyContent": "={{ $json.emailHtml }}",
+        "additionalFields": {
+          "bodyContentType": "html",
+          "saveToSentItems": true,
+          "ccRecipients": "={{ ($json.ccRecipients || '').split(',').map(email => email.trim()).filter(Boolean) }}"
+        }
+      },
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "Ug5bTBjvF1vCSdhQ",
+          "name": "Microsoft Outlook - ai@mobilityaccess.com.au"
+        }
+      },
+      "webhookId": "3a5a44b4-6fac-45f8-acda-1457c1b792e9"
+    },
+    {
+      "id": "2e5c38c6-cc10-4374-bbe1-eda2639228ad",
+      "name": "Confirm Leave HR Delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        -120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const source = $('Validate and Reserve Leave Notification').all();\nconst sent = $input.all();\nif (sent.some(item=>{const r=item.json||{};const status=Number(r.statusCode||r.status);return r.error||r.success===false||r.ok===false||(Number.isFinite(status)&&status>=400);})) throw new Error('Email provider explicitly rejected delivery.');\n\nconst eventKey = String(source[0]?.json?.eventKey ?? '');\nif (source.length !== 1 || sent.length !== 1 || !(eventKey.startsWith('leave:') || eventKey.startsWith('payroll-balance:') || eventKey.startsWith('payroll-comparison:'))) throw new Error('MAM email delivery count mismatch.');\nconst state = $getWorkflowStaticData('global');\nif (!state.leaveNotificationEvents || typeof state.leaveNotificationEvents !== 'object') state.leaveNotificationEvents = {};\nstate.leaveNotificationEvents[eventKey] = { state: 'sent', at: Date.now() };\nreturn [{ json: {\n  ok: true, sent: true, alreadySent: false,\n  actualRecipient: String(source[0].json.deliveryRecipient ?? ''),\n  eventKey,\n} }];\n"
+      }
+    },
+    {
+      "id": "7f85b567-5ed2-466a-add2-d291930ae462",
+      "name": "Already Delivered?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -150,
+        150
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "leave-duplicate-condition",
+              "leftValue": "={{ $json.outcome === 'duplicate' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b7e53c40-9e9f-44ef-8424-84c3cff8baa5",
+      "name": "Return Leave HR Duplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        80
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { ok: true, sent: false, alreadySent: true, actualRecipient: String($json.actualRecipient ?? $json.confirmationRecipient ?? ''), eventKey: String($json.eventKey ?? '') } }];"
+      }
+    },
+    {
+      "id": "b6cd97cc-1532-49c9-bd87-0f44ec0bf878",
+      "name": "Return Leave HR Rejection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        220
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { ok: false, sent: false, alreadySent: false, actualRecipient: 'hr@mobilityaccess.com.au', error: 'Request rejected.', rejectionCode: String($json.rejectionCode ?? 'missing') } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Receive Leave Notification": {
+      "main": [
+        [
+          {
+            "node": "Validate and Reserve Leave Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Reserve Leave Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Leave Notification?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Leave Notification?": {
+      "main": [
+        [
+          {
+            "node": "Send Leave Notification to HR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Already Delivered?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Leave Notification to HR": {
+      "main": [
+        [
+          {
+            "node": "Confirm Leave HR Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Delivered?": {
+      "main": [
+        [
+          {
+            "node": "Return Leave HR Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Leave HR Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Australia/Melbourne",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveExecutionProgress": false,
+    "executionTimeout": 30,
+    "errorWorkflow": "UoQAe53Yu0fJ3ncq"
+  },
+  "active": false,
+  "activeVersionId": null,
+  "staticData": {
+    "global": {
+      "leaveNotificationEvents": {}
+    }
+  }
+}

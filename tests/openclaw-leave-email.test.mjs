@@ -1,3 +1,4 @@
+import {Receiver,canonical} from './notification-workflow-harness.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -101,11 +102,7 @@ test('failure to schedule notifications never reports an already committed leave
 function outbox({ failFirst = false, claimFails = false } = {}) {
   const warnings = [], claims = [], keys = [], deliveries = [];
   let delivered = false, networkFailure = failFirst;
-  const state = {};
-  const validate = new Function('$input', '$getWorkflowStaticData',
-    fs.readFileSync('workflows/leave-notification-validator.n8n.txt', 'utf8'));
-  const confirm = new Function('$', '$input', '$getWorkflowStaticData',
-    fs.readFileSync('workflows/leave-notification-confirmation.n8n.txt', 'utf8'));
+  const receiver = new Receiver();
   const row = { delivery_id: id, claim_token: id, payload: {
     version: 1, event: 'leave-submitted', requestId: id, employeeName: 'Synthetic Employee',
     company: 'mam', leaveType: 'Unpaid leave', startDate: '2026-10-01', endDate: '2026-10-01',
@@ -135,17 +132,17 @@ function outbox({ failFirst = false, claimFails = false } = {}) {
     assert.equal(body.leaveBalance, undefined);
     keys.push(body.eventKey);
     if (networkFailure) { networkFailure = false; throw new Error('synthetic timeout'); }
-    // Exercise the actual receiver's current routing contract, offline.
-    const output = validate({ first: () => ({ json: { headers: { 'content-type': 'application/json' }, body } }) }, () => state)[0].json;
-    assert(['send','duplicate'].includes(output.outcome));
+    // Execute the exact graph emitted by the deploy helper, with synthetic I/O.
+    const receipt = receiver.run(body);
     const expected = body.audience === 'employee' ? 'employee@example.test' : 'manager@example.test,hr@mobilityaccess.com.au';
-    assert.equal(output.deliveryRecipient ?? output.actualRecipient, expected);
-    if(output.outcome==='send') {
+    assert.equal(receipt.actualRecipient, canonical(expected));
+    assert.equal(receipt.ok,true);
+    if(receipt.sent) {
+      const output=receiver.sends.at(-1);
       assert.equal(output.ccRecipients, '');
       deliveries.push(output);
-      confirm(() => ({ all: () => [{ json: output }] }), { all: () => [{ json: { statusCode: 202 } }] }, () => state);
     }
-    return Response.json({ ok: true, sent:output.outcome==='send',alreadySent:output.outcome==='duplicate',eventKey: body.eventKey, actualRecipient: expected });
+    return Response.json(receipt);
   } });
   return { dispatch: dispatcher.dispatchLeaveNotificationsForRequest, warnings, claims, keys, deliveries,
     delivered: () => delivered };

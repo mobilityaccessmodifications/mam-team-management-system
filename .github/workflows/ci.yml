@@ -21,6 +21,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - name: Real notification receipt HTTP contract with isolated synthetic RPCs
+        run: node tests/run-notification-receipt-http.mjs
       - run: npm run build
       - run: npm run test:bundle
 

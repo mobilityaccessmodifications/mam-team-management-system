@@ -1,0 +1,35 @@
+const prepared = receiptSingle($('Validate and Reserve Leave Notification').all());
+const reply = receiptSingle($input.all());
+if (prepared.outcome !== 'reserve' || reply.eventKey !== prepared.eventKey) receiptFail();
+const recipient = receiptRecipients(prepared.deliveryRecipient);
+const cc = receiptRecipients(prepared.ccRecipients, false);
+if (reply.outcome === 'send') {
+  // A grant is valid only as the exact fresh-reservation response. Never derive
+  // one from inbound payloads, cached static data, duplicates, or HTTP errors.
+  if (!receiptKeys(reply, ['outcome', 'eventKey', 'deliveryToken']) || !receiptToken(reply.deliveryToken)) receiptFail();
+  return [{ json: { ...prepared, outcome: 'send', deliveryToken: reply.deliveryToken } }];
+}
+if (reply.outcome === 'duplicate') {
+  if (!receiptKeys(reply, ['outcome', 'ok', 'sent', 'alreadySent', 'eventKey', 'actualRecipient', 'actualCcRecipients', 'providerReceipt'])
+    || reply.ok !== true || reply.sent !== false || reply.alreadySent !== true) receiptFail();
+  const evidence = receiptEvidence(reply);
+  if (evidence.actualRecipient !== recipient || evidence.actualCcRecipients !== cc) receiptFail();
+  return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true, eventKey: reply.eventKey, ...evidence } }];
+}
+if (!receiptKeys(reply, ['outcome', 'ok', 'sent', 'alreadySent', 'eventKey', 'rejectionCode', 'reconciliationRequired'],
+  ['receiptEventKey', 'actualRecipient', 'actualCcRecipients', 'providerReceipt'])
+  || reply.outcome !== 'rejected' || reply.ok !== false || reply.sent !== false || reply.alreadySent !== false
+  || typeof reply.reconciliationRequired !== 'boolean' || typeof reply.rejectionCode !== 'string'
+  || !/^[a-z][a-z-]{0,80}$/.test(reply.rejectionCode)) receiptFail();
+if (reply.receiptEventKey !== undefined && reply.receiptEventKey !== prepared.eventKey
+  && reply.receiptEventKey !== prepared.legacyEventKey) receiptFail();
+const evidence = {};
+if (reply.actualRecipient !== undefined || reply.actualCcRecipients !== undefined) {
+  evidence.actualRecipient = receiptRecipients(reply.actualRecipient);
+  evidence.actualCcRecipients = receiptRecipients(reply.actualCcRecipients, false);
+}
+if (reply.providerReceipt !== undefined) evidence.providerReceipt = receiptProvider(reply.providerReceipt);
+// On mismatch retain only ORIGINAL store evidence. Unknown legacy has none.
+return [{ json: { outcome: 'rejected', ok: false, sent: false, alreadySent: false,
+  eventKey: reply.eventKey, rejectionCode: reply.rejectionCode, reconciliationRequired: reply.reconciliationRequired,
+  ...(reply.receiptEventKey !== undefined ? { receiptEventKey: reply.receiptEventKey } : {}), ...evidence } }];

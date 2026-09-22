@@ -17,6 +17,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--n8n-root', type=Path, required=True)
 parser.add_argument('operation', choices=['receiver', 'scheduler'])
 args = parser.parse_args()
+if args.operation == 'receiver':
+    raise SystemExit('Receiver requires durable topology and paused cutover; use deploy-notification-review.py')
 subprocess.run(['python3', 'scripts/verify.py'], cwd=args.n8n_root, check=True)
 spec = importlib.util.spec_from_file_location('mam_verify', args.n8n_root / 'scripts/verify.py')
 verify = importlib.util.module_from_spec(spec)
