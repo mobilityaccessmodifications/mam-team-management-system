@@ -4,32 +4,20 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 
 export const canonical = value => [...new Set(value.split(',').map(x=>x.trim().toLowerCase()).filter(Boolean))].sort().join(',');
 export const callback = 'https://mam-team-management-system-ten.vercel.app/api/internal/integrations/notifications/receipts';
-const edge = (...targets) => ({main:targets.map(node=>[{node,type:'main',index:0}])});
-const condition = (outcome,id) => ({conditions:{options:{caseSensitive:true,leftValue:'',typeValidation:'strict',version:2},conditions:[{id,leftValue:`={{ $json.outcome === '${outcome}' }}`,rightValue:'',operator:{type:'boolean',operation:'true',singleValue:true}}],combinator:'and'},options:{}});
 export function baselineFixture() {
-  const code = name => ({id:name,name,type:'n8n-nodes-base.code',typeVersion:2,position:[0,0],parameters:{jsCode:'// synthetic pinned old source'}});
-  return {id:'D6UG5ACZGILCpsOk',name:'MAM People System - Leave Email Delivery',versionId:'synthetic-reviewed-version',activeVersionId:null,active:false,
-    nodes:[
-      {id:'webhook',name:'Receive Leave Notification',type:'n8n-nodes-base.webhook',typeVersion:2.1,position:[0,0],parameters:{httpMethod:'POST',path:'mam-people-system-leave-hr-v1',authentication:'headerAuth',responseMode:'lastNode',options:{}},credentials:{httpHeaderAuth:{id:'synthetic-header',name:'Synthetic only'}}},
-      code('Validate and Reserve Leave Notification'),
-      {id:'send-if',name:'Send Leave Notification?',type:'n8n-nodes-base.if',typeVersion:2.2,position:[0,0],parameters:condition('send','leave-send-condition')},
-      {id:'sender',name:'Send Leave Notification to HR',type:'n8n-nodes-base.microsoftOutlook',typeVersion:2,position:[0,0],credentials:{microsoftOutlookOAuth2Api:{id:'synthetic-outlook',name:'Synthetic only'}},parameters:{resource:'message',operation:'send',toRecipients:'={{ $json.deliveryRecipient }}',subject:'={{ $json.emailSubject }}',bodyContent:'={{ $json.emailHtml }}',additionalFields:{bodyContentType:'html',saveToSentItems:true,ccRecipients:"={{ ($json.ccRecipients || '').split(',').map(email => email.trim()).filter(Boolean) }}"}}},
-      code('Confirm Leave HR Delivery'),
-      {id:'duplicate-if',name:'Already Delivered?',type:'n8n-nodes-base.if',typeVersion:2.2,position:[0,0],parameters:condition('duplicate','leave-duplicate-condition')},
-      code('Return Leave HR Duplicate'),code('Return Leave HR Rejection')],
-    connections:{'Receive Leave Notification':edge('Validate and Reserve Leave Notification'),'Validate and Reserve Leave Notification':edge('Send Leave Notification?'),
-      'Send Leave Notification?':edge('Send Leave Notification to HR','Already Delivered?'),'Send Leave Notification to HR':edge('Confirm Leave HR Delivery'),
-      'Already Delivered?':edge('Return Leave HR Duplicate','Return Leave HR Rejection')},
-    settings:{errorWorkflow:'UoQAe53Yu0fJ3ncq',executionOrder:'v1',executionTimeout:30,saveDataErrorExecution:'none',saveDataSuccessExecution:'none',saveExecutionProgress:false,timezone:'Australia/Melbourne'},
-    staticData:{global:{leaveNotificationEvents:{}}}};
+  // Hash-verified deployed definition, not an invented look-alike graph.
+  // All real static receipts/executions/pinned data/user metadata were excluded.
+  return JSON.parse(readFileSync(new URL('./fixtures/notification-receiver-reviewed.json',import.meta.url),'utf8'));
 }
 export const workflow = JSON.parse(execFileSync('python3',['-c',`import json,sys,runpy
 m=runpy.run_path('scripts/deploy-notification-review.py')
 w=json.load(sys.stdin)
-print(json.dumps(m['patch'](w,m['fingerprint'](w))))`],{input:JSON.stringify(baselineFixture()),encoding:'utf8'}));
+assert m['fingerprint'](w)==m['BASELINE']
+print(json.dumps(m['patch'](w)))`],{input:JSON.stringify(baselineFixture()),encoding:'utf8'}));
 
 export class ReceiptApiModel {
   constructor(legacy={}) { this.rows=new Map(Object.entries(structuredClone(legacy))); this.requests=[]; this.ready=true; }

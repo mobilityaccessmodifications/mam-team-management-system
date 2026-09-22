@@ -7,7 +7,8 @@ function python(code) {
   return execFileSync('python3',['-c',`import copy,json,sys,runpy,tempfile,os,hashlib,pathlib
 m=runpy.run_path('scripts/deploy-notification-review.py')
 w=json.load(sys.stdin)
-pins=m['fingerprint'](w)
+pins=m['BASELINE']
+assert m['fingerprint'](w)==pins
 def fails(fn):
  try:fn()
  except (ValueError,FileExistsError):return
@@ -27,6 +28,29 @@ test('exact deploy preserves original sender identity, HTML expressions, credent
   const credential=before.nodes[0].credentials.httpHeaderAuth;
   for(const node of workflow.nodes.filter(n=>n.type==='n8n-nodes-base.httpRequest'))assert.deepEqual(node.credentials,{httpHeaderAuth:credential});
   assert.equal(workflow.nodes.length,13);
+});
+
+test('exported baseline pins and native HTTP Request 4.2 parameters stay tied to the reviewed deployment',()=>{
+  const baseline=baselineFixture();
+  assert.equal(baseline.versionId,'07108502-d6a3-4396-b68d-5b9abe0a5d4e');
+  assert.deepEqual(baseline.staticData,{global:{leaveNotificationEvents:{}}});
+  assert.deepEqual(Object.keys(baseline).sort(),['id','name','versionId','nodes','connections','settings','active','activeVersionId','staticData'].sort());
+  for(const node of baseline.nodes)for(const reference of Object.values(node.credentials||{}))
+    assert.deepEqual(Object.keys(reference).sort(),['id','name']);
+  for(const node of workflow.nodes.filter(n=>n.type==='n8n-nodes-base.httpRequest')) {
+    assert.equal(node.typeVersion,4.2);
+    assert.equal(node.retryOnFail,false);assert.equal(node.onError,'stopWorkflow');
+    assert.deepEqual(node.parameters,{
+      method:'POST',url:'https://mam-team-management-system-ten.vercel.app/api/internal/integrations/notifications/receipts',
+      authentication:'genericCredentialType',genericAuthType:'httpHeaderAuth',
+      options:{redirect:{redirect:{followRedirects:false}},timeout:10000,
+        response:{response:{responseFormat:'json',neverError:false,fullResponse:false}}},
+      sendBody:true,contentType:'json',specifyBody:'json',
+      jsonBody:node.name==='Reserve Durable Leave Delivery'
+        ? "={{ { action: 'reserve', eventKey: $json.eventKey, recipient: $json.deliveryRecipient, cc: $json.ccRecipients, legacyEventKey: $json.legacyEventKey } }}"
+        : '={{ $json }}',
+    });
+  }
 });
 
 test('full-node, version, settings and topology pins reject every unreviewed baseline mutation',()=>{
