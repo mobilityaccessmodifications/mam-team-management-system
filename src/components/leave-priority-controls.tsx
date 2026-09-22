@@ -88,14 +88,17 @@ export function LeaveRequestBalance({ workspace, personId, requestedHours = null
   ));
   if (!person) return null;
 
+  const availableHours = loading ? null : projection === undefined ? person.annualAvailableHours : projection?.availableHours;
+  const summaryAmount = loading ? "Calculating…" : availableHours == null ? "Unavailable" : `${balanceHours(availableHours)} ${availableHours === 1 ? "hour" : "hours"}`;
+
   return <details key={personId} className={`${styles.requestBalance} ${styles.requestBalanceDisclosure}`}>
     <summary className={styles.requestBalanceSummary}>
       <span className={styles.balanceIcon}><Palmtree size={21} strokeWidth={1.7} aria-hidden="true" /></span>
-      <strong>Annual leave balance</strong>
+      <strong>Annual leave balance: <span data-negative={availableHours != null && availableHours < 0 || undefined}>{summaryAmount}</span></strong>
       <ChevronDown className={styles.requestBalanceChevron} size={18} aria-hidden="true" />
     </summary>
     <div className={styles.requestBalanceCalculator}>
-    <ApprovalBalanceCard label="Balance breakdown" currentHours={projection?.payrollHours ?? person.annualPayrollHours} approvedHours={projection?.approvedHours ?? person.annualApprovedHours} availableHours={projection === undefined ? person.annualAvailableHours : projection?.availableHours} asOf={projection?.payrollDate ?? person.annualPayrollDate} requestedHours={requestedHours} projection={projection} />
+    <ApprovalBalanceCard label="Balance breakdown" currentHours={projection?.payrollHours ?? person.annualPayrollHours} approvedHours={projection?.approvedHours ?? person.annualApprovedHours} availableHours={availableHours} asOf={projection?.payrollDate ?? person.annualPayrollDate} requestedHours={requestedHours} projection={projection} />
     {loading ? <p className={styles.leavePolicyNote} role="status">Calculating projected balance…</p>
       : projection?.status === "projected" ? <>
         <p className={styles.leavePolicyNote}>Projected to the start of {leaveDateLabel(projection.projectedDate)}. Accrual stops on {leaveDateLabel(projection.throughDate!)}. This is an estimate, not a confirmed Xero balance.</p>
