@@ -284,6 +284,7 @@ export function PeopleOperationsDemo({
   renderCheckInTasks,
   renderAccounts,
   renderAssetRegister,
+  initialSection,
   renderSubscriptionRegister,
   renderAnalyticsApiManagement,
   legacyCheckInFormsUrl,
@@ -312,6 +313,7 @@ export function PeopleOperationsDemo({
   renderAccounts?: ReactNode;
   /** System-admin asset register. The component rechecks its own server capability. */
   renderAssetRegister?: ReactNode;
+  initialSection?: "assets" | "accounts" | "subscriptions";
   /** System Admin-managed subscription register; managers receive its read-only projection. */
   renderSubscriptionRegister?: ReactNode;
   /** System Admin-only analytics key lifecycle and integration guide. */
@@ -340,7 +342,7 @@ export function PeopleOperationsDemo({
     ...(renderSubscriptionRegister ? ["subscriptions" as const] : []),
     ...(renderAnalyticsApiManagement ? ["analytics" as const] : []),
   ], [hasTasks, renderAccounts, renderAnalyticsApiManagement, renderAssetRegister, renderCheckInRegister, renderEmployeeDirectory, renderSubscriptionRegister, showOrganisation, showProfile]);
-  const [section, setSection] = useState<PeopleSection>(() => availableSections[0] ?? "profile");
+  const [section, setSection] = useState<PeopleSection>(() => initialSection ?? availableSections[0] ?? "profile");
   const [taskSection, setTaskSection] = useState<PeopleTaskSection>(
     renderCheckInRegister ? "onboarding" : "checkins",
   );

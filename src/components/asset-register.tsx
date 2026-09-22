@@ -1,5 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { AssetBulkEditor } from "@/components/asset-bulk-editor";
+import { ScanAssetButton } from "@/components/scan-asset-button";
+import { assetQrUrl } from "@/lib/asset-qr";
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 import { MobileRegisterTools } from "@/components/ui/mobile-register-tools";
 
@@ -155,26 +159,21 @@ function escapeHtml(value: string) {
   }[character] ?? character));
 }
 
-function barcodeOptions(value: string) {
+function qrOptions(value: string) {
   return {
-    bcid: "code128",
-    text: value,
-    scale: 3,
-    height: 14,
-    includetext: true,
-    textxalign: "center" as const,
-    textsize: 11,
-    paddingwidth: 8,
-    paddingheight: 6,
+    bcid: "qrcode",
+    text: assetQrUrl(value),
+    scale: 4,
+    eclevel: "M",
+    padding: 4,
     backgroundcolor: "FFFFFF",
-    barcolor: "1D2B29",
-    textcolor: "1D2B29",
+    barcolor: "000000",
   };
 }
 
 async function renderBarcode(value: string, canvas: HTMLCanvasElement) {
   const bwipjs = await import("@bwip-js/browser");
-  bwipjs.toCanvas(canvas, barcodeOptions(value));
+  bwipjs.toCanvas(canvas, qrOptions(value));
 }
 
 async function createBarcodeCanvas(value: string) {
@@ -184,11 +183,22 @@ async function createBarcodeCanvas(value: string) {
 }
 
 async function barcodePng(value: string) {
-  const canvas = await createBarcodeCanvas(value);
+  const qr = await createBarcodeCanvas(value);
+  const canvas = document.createElement("canvas");
+  canvas.width = 744; canvas.height = 456;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("The QR label could not be created.");
+  context.fillStyle = "#fff"; context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#1d2b29";
+  context.font = "bold 24px Arial"; context.fillText("People Hub", 32, 135);
+  context.font = "bold 27px monospace"; context.fillText(value, 32, 195, 305);
+  context.font = "20px Arial"; context.fillText("Scan to view device", 32, 240);
+  context.imageSmoothingEnabled = false;
+  context.drawImage(qr, 360, 54, 348, 348);
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
-      else reject(new Error("The barcode image could not be created."));
+      else reject(new Error("The QR code image could not be created."));
     }, "image/png");
   });
 }
@@ -207,7 +217,7 @@ function BarcodePreview({ value }: { value: string }) {
         if (!disposed) setError("");
       })
       .catch(() => {
-        if (!disposed) setError("The barcode preview could not be generated.");
+        if (!disposed) setError("The QR code preview could not be generated.");
       });
 
     return () => {
@@ -216,7 +226,7 @@ function BarcodePreview({ value }: { value: string }) {
   }, [value]);
 
   if (error) return <p className={styles.barcodeError} role="alert">{error}</p>;
-  return <canvas className={styles.barcodeCanvas} ref={canvasRef} role="img" aria-label={`Barcode ${value}`} />;
+  return <canvas className={styles.barcodeCanvas} ref={canvasRef} role="img" aria-label={`QR code for ${value}`} />;
 }
 
 function AssetLabelModal({
@@ -244,13 +254,13 @@ function AssetLabelModal({
       const href = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = href;
-      link.download = `${safeFileName(asset.assetCode)}-barcode.png`;
+      link.download = `${safeFileName(asset.assetCode)}-qr-label.png`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(href), 0);
     } catch {
-      setActionError("The barcode image could not be downloaded. Try again.");
+      setActionError("The QR code image could not be downloaded. Try again.");
     } finally {
       setBusyAction(null);
     }
@@ -280,14 +290,14 @@ function AssetLabelModal({
           @page { size: 62mm 38mm; margin: 0; }
           * { box-sizing: border-box; }
           html, body { margin: 0; padding: 0; background: #fff; color: #1d2b29; font-family: Arial, sans-serif; }
-          .label { width: 62mm; min-height: 38mm; padding: 4mm; border: .35mm solid #1d2b29; display: grid; align-content: center; gap: 1.6mm; }
+          .label { width: 62mm; height: 38mm; padding: 2mm; display: grid; grid-template-columns: 28mm 30mm; align-items: center; gap: 0; }
           .eyebrow { margin: 0; color: #bc4d19; font-size: 7pt; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-          h1 { margin: 0; font-family: monospace; font-size: 12pt; letter-spacing: .035em; }
+          h1 { margin: 0; font-family: monospace; font-size: 8pt; letter-spacing: .01em; }
           .type { margin: 0; color: #526260; font-size: 8pt; }
-          img { width: 100%; height: auto; display: block; image-rendering: crisp-edges; }
+          img { width: 30mm; height: 30mm; display: block; image-rendering: crisp-edges; }
         </style></head><body><main class="label">
-          <p class="eyebrow">MAM IT asset</p><h1>${assetCode}</h1><p class="type">${type}</p>
-          <img src="${image}" alt="Barcode ${assetCode}">
+          <div><p class="eyebrow">People Hub</p><h1>${assetCode}</h1><p class="type">${type}</p></div>
+          <img src="${image}" alt="QR code for ${assetCode}">
         </main><script>window.addEventListener('load', function () { window.setTimeout(function () { window.focus(); window.print(); }, 180); });</script></body></html>`);
       printWindow.document.close();
     } catch {
@@ -301,11 +311,11 @@ function AssetLabelModal({
   return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className={styles.labelModal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="asset-label-title" tabIndex={-1}>
       <header>
-        <div><h2 id="asset-label-title">{onAddAnother ? "Barcode ready" : "Barcode label"}</h2></div>
-        <button type="button" onClick={onClose} aria-label="Close barcode label"><X size={19} /></button>
+        <div><h2 id="asset-label-title">{onAddAnother ? "QR label ready" : "QR label"}</h2></div>
+        <button type="button" onClick={onClose} aria-label="Close QR label"><X size={19} /></button>
       </header>
       <div className={styles.labelPreview}>
-        <div><span>MAM IT asset</span><strong>{asset.assetCode}</strong><small>{assetTypeLabel(asset.assetType)} · {asset.assignedTo?.fullName ?? "Assignment required"}</small></div>
+        <div><span>MAM IT asset</span><strong>{asset.assetCode}</strong><small>{assetTypeLabel(asset.assetType)}</small></div>
         <BarcodePreview value={asset.barcodeValue} />
       </div>
       {actionError ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{actionError}</p> : null}
@@ -416,7 +426,7 @@ function AddDeviceModal({
           <button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>
           <button className={styles.primaryAction} type="submit" disabled={saving || !assignees.length}>
             {saving ? <LoaderCircle className={styles.spinner} size={16} /> : <PackagePlus size={16} />}
-            {saving ? "Creating barcode…" : "Create device"}
+            {saving ? "Creating device…" : "Create device"}
           </button>
         </footer>
       </form>
@@ -709,6 +719,10 @@ function AssetSheetHeader({
 
 export function AssetRegister() {
   const [assets, setAssets] = useState<ItAsset[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkTargets, setBulkTargets] = useState<ItAsset[] | null>(null);
+  const bulkButtonRef = useRef<HTMLButtonElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
   const [assignees, setAssignees] = useState<ItAssetAssignee[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -871,6 +885,7 @@ export function AssetRegister() {
   }
 
   function setAssetFilter(key: AssetFilterKey, value: string) {
+    setSelectedIds(new Set());
     setAssetFilters((current) => ({ ...current, [key]: value }));
     setActiveAssetFilter(null);
     window.requestAnimationFrame(() => {
@@ -882,6 +897,29 @@ export function AssetRegister() {
 
   function toggleAssetFilter(key: AssetFilterKey) {
     setActiveAssetFilter((current) => current === key ? null : key);
+  }
+
+  const selectedAssets = assets.filter(asset => selectedIds.has(asset.id));
+  const allVisibleSelected = visibleAssets.length > 0 && visibleAssets.every(asset => selectedIds.has(asset.id));
+  const someVisibleSelected = visibleAssets.some(asset => selectedIds.has(asset.id));
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someVisibleSelected && !allVisibleSelected;
+  }, [allVisibleSelected, someVisibleSelected]);
+  function toggleSelected(id: string) {
+    setSelectedIds(current => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function toggleAllVisible() {
+    setSelectedIds(current => {
+      const next = new Set(current);
+      for (const asset of visibleAssets) {
+        if (allVisibleSelected) next.delete(asset.id); else next.add(asset.id);
+      }
+      return next;
+    });
   }
 
   function assetCreated(asset: ItAsset) {
@@ -920,13 +958,13 @@ export function AssetRegister() {
       const href = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = href;
-      link.download = `${safeFileName(asset.assetCode)}-barcode.png`;
+      link.download = `${safeFileName(asset.assetCode)}-qr-label.png`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(href), 0);
     } catch {
-      setRowError("The barcode image could not be downloaded. Try again.");
+      setRowError("The QR code image could not be downloaded. Try again.");
     } finally {
       setBarcodeAction(null);
       setExpandedActionsId(null);
@@ -975,8 +1013,9 @@ export function AssetRegister() {
         <h2 id="asset-register-title">Devices</h2>
       </div>
       <div className={styles.headerActions}>
-        <a className={styles.secondaryAction} href="/assets/export?format=csv" aria-label="Download devices as CSV" title="Download CSV"><Download size={16} aria-hidden="true" /><span>CSV</span></a>
-        <a className={styles.secondaryAction} href="/assets/export?format=xlsx" aria-label="Download devices as Excel" title="Download Excel"><Download size={16} aria-hidden="true" /><span>Excel</span></a>
+        <ScanAssetButton className={styles.secondaryAction} />
+        <a className={styles.secondaryAction} href="/assets/export?format=csv" download="devices.csv" aria-label="Download devices as CSV" title="Download CSV"><Download size={16} aria-hidden="true" /><span>CSV</span></a>
+        <a className={styles.secondaryAction} href="/assets/export?format=xlsx" download="devices.xlsx" aria-label="Download devices as Excel" title="Download Excel"><Download size={16} aria-hidden="true" /><span>Excel</span></a>
         <button className={styles.primaryAction} type="button" onClick={() => setShowAddDevice(true)} ref={addDeviceButtonRef}><PackagePlus size={17} /> Add device</button>
       </div>
     </header>
@@ -987,14 +1026,19 @@ export function AssetRegister() {
       <label className={styles.searchField}>
         <Search size={17} aria-hidden="true" />
         <span className={styles.visuallyHidden}>Search assets</span>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search devices" />
+        <input value={query} onChange={(event) => { setQuery(event.target.value); setSelectedIds(new Set()); }} placeholder="Search devices" />
       </label>
       <div className={styles.toolSummary}>
-        {hasAssetFilters ? <button className={styles.clearFilters} type="button" onClick={() => setAssetFilters({ assetType: "", assignedTo: "", status: "" })}>Clear filters</button> : null}
+        {hasAssetFilters ? <button className={styles.clearFilters} type="button" onClick={() => { setAssetFilters({ assetType: "", assignedTo: "", status: "" }); setSelectedIds(new Set()); }}>Clear filters</button> : null}
         <span className={styles.assetCount}>{visibleAssets.length === assets.length ? `${assets.length} ${assets.length === 1 ? "device" : "devices"}` : `${visibleAssets.length} of ${assets.length} devices`}</span>
       </div>
     </div>
 
+    {!loading && !loadError && assets.length > 0 ? <div className={styles.bulkToolbar}>
+      <label className={styles.selectVisible}><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} disabled={!visibleAssets.length} aria-label="Select all visible devices" />Select visible</label>
+      <span role="status">{selectedAssets.length} selected</span>
+      {selectedAssets.length ? <><button type="button" className={styles.secondaryAction} onClick={() => setSelectedIds(new Set())}>Clear</button><button type="button" ref={bulkButtonRef} className={styles.primaryAction} disabled={selectedAssets.length > 100} onClick={() => setBulkTargets(selectedAssets)}><Pencil size={16} />Edit selected</button>{selectedAssets.length > 100 ? <span>Select up to 100 at a time.</span> : null}</> : null}
+    </div> : null}
     <MobileRegisterTools
       sort={assetSort}
       onSort={setAssetSort}
@@ -1016,6 +1060,7 @@ export function AssetRegister() {
     {!loading && !loadError && visibleAssets.length ? <div className={styles.sheetViewport}>
       <div className={styles.assetSheet} role="table" aria-label="IT assets">
         <div className={`${styles.assetSheetRow} ${styles.assetSheetHeader}`} role="row">
+          <div className={`${styles.sheetHeaderCell} ${styles.selectionCell}`} role="columnheader"><label><input ref={selectAllRef} type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Select all visible devices" /><span>Select</span></label></div>
           <AssetSheetHeader label="Device" sortKey="device" activeSort={assetSort} onSort={toggleAssetSort} filterKey="assetType" filterOptions={assetFilterOptions.assetType} filterValue={assetFilters.assetType} isFilterOpen={activeAssetFilter === "assetType"} onToggleFilter={toggleAssetFilter} onFilter={setAssetFilter} />
           <AssetSheetHeader label="Asset number" sortKey="assetCode" activeSort={assetSort} onSort={toggleAssetSort} />
           <AssetSheetHeader label="Serial number" sortKey="serialNumber" activeSort={assetSort} onSort={toggleAssetSort} />
@@ -1027,12 +1072,13 @@ export function AssetRegister() {
         {visibleAssets.map((asset) => {
           const activeAction = barcodeAction?.id === asset.id ? barcodeAction.action : null;
           const description = assetDescription(asset);
-          return <div className={styles.assetSheetRow} key={asset.id} role="row">
+          return <div className={styles.assetSheetRow} key={asset.id} role="row" data-selected={selectedIds.has(asset.id)}>
+            <div className={`${styles.sheetCell} ${styles.selectionCell}`} role="cell"><label><input type="checkbox" checked={selectedIds.has(asset.id)} onChange={() => toggleSelected(asset.id)} aria-label={`Select ${asset.assetCode}`} /><span className={styles.mobileSelectLabel}>Select</span></label></div>
             <div className={`${styles.sheetCell} ${styles.assetDeviceCell}`} role="cell" data-label="Device">
               <div className={styles.assetIcon}><Laptop size={18} /></div>
               <div className={styles.assetIdentity}><strong>{assetTypeLabel(asset.assetType)}</strong>{description ? <span title={description}>{description}</span> : null}</div>
             </div>
-            <div className={`${styles.sheetCell} ${styles.assetCode}`} role="cell" data-label="Asset number"><strong title={asset.assetCode}>{asset.assetCode}</strong></div>
+            <div className={`${styles.sheetCell} ${styles.assetCode}`} role="cell" data-label="Asset number"><Link className={styles.deviceLink} href={`/assets/${asset.assetCode}`} title={`View ${asset.assetCode}`}>{asset.assetCode}</Link></div>
             <div className={`${styles.sheetCell} ${styles.assetSerial}`} role="cell" data-label="Serial number"><strong title={asset.serialNumber || "No serial number"}>{asset.serialNumber || "—"}</strong></div>
             <div className={`${styles.sheetCell} ${styles.assetCustodian}`} role="cell" data-label="Assigned to" data-missing={!asset.assignedTo}><strong title={asset.assignedTo?.fullName || "Ready to assign"}>{asset.assignedTo?.fullName || "Ready to assign"}</strong></div>
             <div className={`${styles.sheetCell} ${styles.assetTiming}`} role="cell" data-label={asset.assignedTo ? "Assigned on" : "Last returned"}><strong>{assetTimingValue(asset) ? formatDate(assetTimingValue(asset)) : "—"}</strong></div>
@@ -1091,6 +1137,12 @@ export function AssetRegister() {
       </div>
     </div> : null}
 
+    {bulkTargets ? <AssetBulkEditor assets={bulkTargets} assignees={assignees} fallbackFocusRef={addDeviceButtonRef} onClose={() => { setBulkTargets(null); void loadAssets(); }} onSaved={result => {
+      const updated = new Map(result.updated.map(asset => [asset.id, asset]));
+      setAssets(current => current.map(asset => updated.get(asset.id) ?? asset));
+      setSelectedIds(new Set(result.failed.map(item => item.id)));
+      setNotice(`${result.updated.length} devices updated${result.failed.length ? ` · ${result.failed.length} not confirmed` : "."}`);
+    }} /> : null}
     {showAddDevice ? <AddDeviceModal assignees={assignees} fallbackFocusRef={addDeviceButtonRef} onClose={() => setShowAddDevice(false)} onCreated={assetCreated} /> : null}
     {labelTarget ? <AssetLabelModal asset={labelTarget.asset} fallbackFocusRef={dialogReturnFocusRef} onClose={() => setLabelTarget(null)} onAddAnother={labelTarget.isNew ? () => { setLabelTarget(null); setShowAddDevice(true); } : undefined} /> : null}
     {assignmentTarget ? <ChangeDeviceOwnerModal asset={assignmentTarget} assignees={assignees} fallbackFocusRef={dialogReturnFocusRef} onClose={() => setAssignmentTarget(null)} onSaved={assetOwnerChanged} /> : null}

@@ -148,3 +148,17 @@ Employees’ own annual leave balance and the existing authorised manager team-r
 - Non-ABN employees (including managers requesting for themselves) must give 14 calendar days’ notice for self-service Annual or Unpaid leave, measured from today in Melbourne. Exactly day 14 is allowed. The form remains editable; Send request opens a blocking manager-contact dialog for earlier starts. Authorised on-behalf submissions remain available to managers and System Admin. Sick/Carer’s leave and ABN unpaid leave are unchanged. The database rejects restricted inserts before requests, notifications or attachments are created.
 
 - Every Calendar user can filter the events already authorised for their account by event type, and leave by company/team. Team labels come from the HR directory; an absent label is shown as Unassigned. Filters affect Calendar and its search only, not the Leave register, approval queue or permissions. The default shows all authorised events; switching employee workspace resets the filters.
+
+## Device scanning and bulk register changes
+
+- QR labels link to an authenticated device page. Existing asset visibility is
+  unchanged: System Admin sees the inventory; employees see only devices
+  assigned to their own active linked account. Labels contain no credentials
+  or employee information. Camera frames are processed locally in the browser.
+- Register selection never adds permission. Assets can bulk change owners or
+  record returns using existing custody rules. Subscription managers can bulk
+  change company, responsible person and status without overwriting other
+  fields. Account administrators can bulk enable/disable linked accounts using
+  the existing protected account-status workflow; passwords remain individual.
+- Batch saves are per-record transactions with version checks. The UI reports
+  confirmed outcomes and retains unconfirmed records for refresh and review.

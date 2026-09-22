@@ -213,3 +213,10 @@ jobs:
             -f tests/automatic-leave-required-hours-bootstrap.sql \
             -f supabase/migrations/20260922180000_automatic_leave_balance_required_hours.sql \
             -f tests/automatic-leave-required-hours.sql
+
+      - name: Test subscription bulk patch permissions and field preservation
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres subscription_bulk_test
+          psql -h localhost -U postgres -d subscription_bulk_test -v ON_ERROR_STOP=1 -f tests/subscription-bulk.sql

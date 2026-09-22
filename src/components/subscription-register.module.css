@@ -274,6 +274,24 @@
   min-width: 1802px;
 }
 
+.selectableSheet { min-width: 1918px; }
+.selectableSheet .subscriptionSheetRow { grid-template-columns: 90px var(--subscription-sheet-columns); }
+.selectionCell { justify-content: center; }
+.selectionLabel { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; cursor: pointer; font-size: 12px; }
+.selectionLabel input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--subscription-accent-deep); cursor: pointer; }
+.selectionLabel input:focus-visible { outline: 3px solid var(--subscription-accent); outline-offset: 3px; }
+.mobileSelectionText, .mobileSelectAll { display: none; }
+.bulkToolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-height: 44px; }
+.bulkToolbar > span { margin-right: auto; color: var(--subscription-muted); font-size: 13px; }
+.bulkSummary { color: var(--subscription-muted); font-size: 13px; }
+.bulkSummary summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.bulkSummary ul { max-height: 160px; overflow: auto; margin-top: 0; }
+.bulkResult { display: grid; gap: 12px; }
+.bulkResult ul { margin: 0; padding-left: 20px; max-height: 250px; overflow: auto; }
+.bulkResult li { margin: 8px 0; }
+.bulkResult li span { display: block; margin-top: 3px; color: var(--subscription-muted); font-size: 13px; }
+.subscriptionSheetRow[data-selected="true"] { background: #fff1e7; }
+
 .subscriptionSheetRow {
   display: grid;
   grid-template-columns: var(--subscription-sheet-columns);
@@ -721,4 +739,14 @@
   .modalBackdrop {
     backdrop-filter: none;
   }
+}
+
+@media (max-width: 760px) {
+  .selectableSheet { min-width: 0; }
+  .selectableSheet .subscriptionSheetRow:not(.subscriptionSheetHeader) { grid-template-columns: minmax(0, 1fr) auto; }
+  .selectableSheet .selectionCell { grid-column: 1 / -1; justify-content: flex-start; }
+  .selectableSheet .selectionLabel { justify-content: flex-start; }
+  .mobileSelectionText { display: inline; }
+  .mobileSelectAll { display: flex; }
+  .bulkToolbar > span { flex: 1; }
 }

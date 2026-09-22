@@ -8952,3 +8952,9 @@
 .leaveNoticeDialog { width: min(440px, calc(100vw - 32px)); }
 .leaveNoticeDialog > p { margin: 0; padding: 20px; line-height: 1.6; }
 .leaveNoticeDialog > footer { display: flex; justify-content: flex-end; padding: 0 20px 20px; }
+
+.mobileScanButton { display: none; }
+@media (max-width: 760px) {
+  .mobileScanButton { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; color: var(--text-primary); border: 1px solid var(--surface-border); border-radius: 12px; background: var(--surface-raised); }
+  .mobileScanButton:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import { loadAssetQrModule } from './asset-qr-test-loader.mjs';
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
 function load(file, imports) {
@@ -128,6 +129,7 @@ test('route authorizes before database access, bounds reads and never leaks fail
 
 test('only exact integration path bypasses browser auth, even without Supabase config', async () => {
   const { proxy } = load('src/proxy.ts', {
+    '@/lib/asset-qr': loadAssetQrModule(),
     '@supabase/ssr': { createServerClient: () => { throw new Error('must not refresh cookies'); } },
     'next/server': { NextResponse: { next: () => ({ status: 200 }), redirect: () => ({ status: 307 }) } },
     '@/lib/supabase/config': { isSupabaseConfigured: () => false },

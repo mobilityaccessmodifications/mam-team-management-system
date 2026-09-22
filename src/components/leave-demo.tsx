@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { approvalBalanceCoverage, approvalRequestHours } from "@/lib/leave-priority";
 
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
@@ -18,6 +20,7 @@ import {
   Search,
   ShieldCheck,
   LogOut,
+  ScanQrCode,
   Upload,
   UsersRound,
   X,
@@ -230,6 +233,7 @@ type InitialNavigation = {
   view: AppView;
   section: LeaveSection;
   requestId?: string;
+  peopleSection?: "assets" | "accounts" | "subscriptions";
 };
 
 function businessDaysBetween(start: string, end: string) {
@@ -1904,6 +1908,7 @@ export function LeaveDemo({
                 {organisationState === "connecting" ? "Connecting" : "Directory issue"}
               </span>
             ) : null}
+            {directorySupabase && !isPreviewingEmployeeAccess ? <Link className={styles.mobileScanButton} href="/assets/scan" aria-label="Scan device QR code" title="Scan device QR code"><ScanQrCode size={19} aria-hidden="true" /></Link> : null}
             {directorySupabase ? <button className={styles.signOutButton} type="button" onClick={() => void handleSignOut()} disabled={isSigningOut} aria-label={isSigningOut ? "Signing out" : "Sign out"} title="Sign out"><LogOut size={17} aria-hidden="true" /></button> : null}
             {isPreviewingEmployeeAccess ? <button className={styles.mobileReturnButton} type="button" onClick={() => changeEmployeeAccessPreview("")} aria-label="Return to Super Admin" title="Return to Super Admin"><RotateCcw size={17} aria-hidden="true" /></button> : null}
             {canPreviewEmployeeAccess ? <button className={styles.mobileProfileTrigger} type="button" onClick={() => { setProfilePickerQuery(""); setProfilePickerOpen(true); }} aria-label={`Change profile. ${previewProfile ? `Viewing ${previewProfile.name}` : "Super Admin"}`} title="Change profile"><span>{previewProfile?.initials ?? "SA"}</span><ChevronDown size={14} aria-hidden="true" /></button> : null}
@@ -1961,6 +1966,7 @@ export function LeaveDemo({
           /> : null}
           <div hidden={activeView !== "people"}>
             <PeopleOperationsDemo
+              initialSection={initialNavigation?.peopleSection}
               key={`${activeProfile.accessRole}:${isPreviewingEmployeeAccess ? activeProfile.id : "signed-in"}`}
               activeProfile={activeProfile}
               organisationProfiles={organisationPeople}

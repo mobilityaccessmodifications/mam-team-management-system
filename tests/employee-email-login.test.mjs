@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
 import { loadPortalLoginModule } from "./portal-login-test-loader.mjs";
+import { loadAssetQrModule } from "./asset-qr-test-loader.mjs";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -52,6 +53,7 @@ function loadSignIn({ allowed=true, resolved="opaque@accounts.example", accountS
   const moduleUnderTest = {exports:{}};
   new Function("require","module","exports",source)((id) => {
     if (id==="@/lib/portal-login") return login;
+    if (id==="@/lib/asset-qr") return loadAssetQrModule();
     if (id==="next/headers") return {headers:async()=>new Headers({"x-real-ip":"192.0.2.1"})};
     if (id==="next/navigation") return {redirect:(url)=>{throw new Error("redirect:"+url);}};
     if (id==="@/lib/supabase/config") return {isSupabaseConfigured:()=>true};
@@ -59,10 +61,11 @@ function loadSignIn({ allowed=true, resolved="opaque@accounts.example", accountS
     if (id==="@/lib/supabase/server") return {createClient:async()=>client};
     return require(id);
   },moduleUnderTest,moduleUnderTest.exports);
-  const submit = async (username) => {
+  const submit = async (username, next = "") => {
     const form = new FormData();
     form.set("username",username);
     form.set("password","Synthetic-password-123!");
+    form.set("next",next);
     return moduleUnderTest.exports.signIn({status:"idle",message:""},form);
   };
   return {submit,calls};
@@ -80,6 +83,15 @@ test("administrator username retains the existing sign-in path", async () => {
   const {submit,calls}=loadSignIn();
   await assert.rejects(submit("admin"),/redirect:\//);
   assert.equal(calls.find(([name])=>name==="resolve_portal_login_auth_email")[1].p_login_name,"admin");
+});
+
+test("sign-in returns to the scanned device while rejecting external destinations", async () => {
+  for (const next of ["/assets/MAM-IT-000001", "/assets/scan"]) {
+    await assert.rejects(loadSignIn().submit("admin", next), new RegExp(`^Error: redirect:${next}$`));
+  }
+  for (const next of ["https://attacker.example", "//attacker.example", "/assets/scan?next=evil"]) {
+    await assert.rejects(loadSignIn().submit("admin", next), /^Error: redirect:\/$/);
+  }
 });
 
 test("unknown email and rate-limited account fail identically through dummy authentication", async () => {

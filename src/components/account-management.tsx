@@ -17,9 +17,10 @@ import {
   UserRoundX,
   X,
 } from "lucide-react";
-import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, Fragment, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import styles from "@/components/account-management.module.css";
+import { applyAccountStatusBatch, type AccountStatusFailure } from "@/components/account-status-batch";
 import { AnimatedStatusBadge } from "@/components/ui/animated-status-badge";
 
 export type AccountStatus = "unlinked" | "active" | "disabled";
@@ -182,7 +183,7 @@ function formatLastSignIn(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Sign-in recorded";
 
-  return `Last signed in ${new Intl.DateTimeFormat("en-AU", {
+  return `${new Intl.DateTimeFormat("en-AU", {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -262,6 +263,13 @@ export function AccountManagement({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkPlan, setBulkPlan] = useState<{ enabled: boolean; accounts: AccountDto[] } | null>(null);
+  const [bulkFailures, setBulkFailures] = useState<AccountStatusFailure[]>([]);
+  const bulkInFlight = useRef(false);
+  const bulkCancelRef = useRef<HTMLButtonElement>(null);
+  const bulkWasOpenRef = useRef(false);
+  const selectAllRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const editorPanelRef = useRef<HTMLDivElement>(null);
   const editorReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -352,6 +360,28 @@ export function AccountManagement({
     firstAccountIndex,
     firstAccountIndex + accountsPerPage,
   );
+  const selectedAccounts = records.filter((account) => selectedIds.includes(account.personId) && isLinked(account));
+  const selectableAccounts = paginatedAccounts.filter(isLinked);
+  const allVisibleSelected = selectableAccounts.length > 0 && selectableAccounts.every((account) => selectedIds.includes(account.personId));
+  const someVisibleSelected = selectableAccounts.some((account) => selectedIds.includes(account.personId));
+  const selectionLocked = saving || Boolean(editor) || Boolean(bulkPlan);
+
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someVisibleSelected && !allVisibleSelected;
+  }, [allVisibleSelected, someVisibleSelected]);
+
+  useEffect(() => {
+    if (bulkPlan) {
+      bulkWasOpenRef.current = true;
+      bulkCancelRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (!bulkWasOpenRef.current) return;
+    bulkWasOpenRef.current = false;
+    const frame = window.requestAnimationFrame(() => searchInputRef.current?.focus({ preventScroll: true }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [bulkPlan]);
+
   const visibleRange = sortedAccounts.length
     ? `Showing ${firstAccountIndex + 1}–${Math.min(
         firstAccountIndex + accountsPerPage,
@@ -362,6 +392,8 @@ export function AccountManagement({
   function updateQuery(value: string) {
     setQuery(value);
     setPage(1);
+    setSelectedIds([]);
+    setBulkFailures([]);
   }
 
   function clearSearch() {
@@ -372,10 +404,57 @@ export function AccountManagement({
   function updateSort(value: AccountSort) {
     setSort(value);
     setPage(1);
+    setSelectedIds([]);
+    setBulkFailures([]);
   }
 
   function goToPage(nextPage: number) {
     setPage(Math.max(1, Math.min(nextPage, pageCount)));
+    setSelectedIds([]);
+    setBulkFailures([]);
+  }
+
+  function selectAccount(personId: string, checked: boolean) {
+    setSelectedIds((current) => checked ? [...new Set([...current, personId])] : current.filter((id) => id !== personId));
+    setBulkFailures([]);
+  }
+
+  function selectVisible(checked: boolean) {
+    const visibleIds = new Set(selectableAccounts.map((account) => account.personId));
+    setSelectedIds((current) => checked ? [...new Set([...current, ...visibleIds])] : current.filter((id) => !visibleIds.has(id)));
+    setBulkFailures([]);
+  }
+
+  function prepareBulkStatus(enabled: boolean) {
+    if (selectionLocked) return;
+    const candidates = selectedAccounts.filter((account) => account.status === (enabled ? "disabled" : "active"));
+    if (!candidates.length) return;
+    setBulkPlan({ enabled, accounts: candidates });
+    setBulkFailures([]);
+    setNotice("");
+    setOpenActionMenuId(null);
+  }
+
+  function cancelBulkStatus() {
+    if (bulkInFlight.current) return;
+    setBulkPlan(null);
+  }
+
+  async function submitBulkStatus() {
+    if (!bulkPlan || bulkInFlight.current) return;
+    bulkInFlight.current = true;
+    setSaving(true);
+    try {
+      const result = await applyAccountStatusBatch(bulkPlan.accounts, bulkPlan.enabled, onToggleEnabled);
+      for (const account of result.confirmed) applyResult({ account });
+      setSelectedIds(result.failures.map((failure) => failure.personId));
+      setBulkFailures(result.failures);
+      setNotice(`${result.confirmed.length} login${result.confirmed.length === 1 ? "" : "s"} ${bulkPlan.enabled ? "enabled" : "disabled"}.${result.failures.length ? ` ${result.failures.length} not confirmed; still selected.` : ""}`);
+      setBulkPlan(null);
+    } finally {
+      setSaving(false);
+      bulkInFlight.current = false;
+    }
   }
 
   function clearEditor() {
@@ -397,6 +476,7 @@ export function AccountManagement({
     action: EditorAction,
     returnFocusTarget?: HTMLElement | null,
   ) {
+    if (saving || bulkPlan) return;
     editorReturnFocusRef.current =
       returnFocusTarget ??
       (document.activeElement instanceof HTMLElement
@@ -598,6 +678,7 @@ export function AccountManagement({
           <Search aria-hidden="true" size={17} />
           <span className={styles.srOnly}>Search accounts</span>
           <input
+            disabled={saving || Boolean(bulkPlan)}
             onChange={(event) => updateQuery(event.target.value)}
             placeholder="Search name, role or login"
             ref={searchInputRef}
@@ -610,6 +691,7 @@ export function AccountManagement({
           <span>Sort</span>
           <select
             aria-label="Sort accounts"
+            disabled={saving || Boolean(bulkPlan)}
             onChange={(event) => updateSort(event.target.value as AccountSort)}
             value={sort}
           >
@@ -635,7 +717,45 @@ export function AccountManagement({
         </div>
       ) : null}
 
-      <div className={styles.accountList}>
+      {selectedAccounts.length ? (
+        <div className={styles.bulkToolbar} aria-label="Selected accounts">
+          <strong>{selectedAccounts.length} selected</strong>
+          <div>
+            <button className={styles.secondaryButton} disabled={selectionLocked || !selectedAccounts.some((account) => account.status === "disabled")} onClick={() => prepareBulkStatus(true)} type="button">Enable logins</button>
+            <button className={styles.secondaryButton} disabled={selectionLocked || !selectedAccounts.some((account) => account.status === "active")} onClick={() => prepareBulkStatus(false)} type="button">Disable logins</button>
+            <button className={styles.textButton} disabled={selectionLocked} onClick={() => { setSelectedIds([]); setBulkFailures([]); }} type="button">Clear selection</button>
+          </div>
+        </div>
+      ) : null}
+
+      {bulkPlan ? (
+        <section className={styles.bulkConfirmation} aria-labelledby="bulk-account-title" aria-busy={saving}>
+          <div>
+            <h3 id="bulk-account-title">{bulkPlan.enabled ? "Enable" : "Disable"} {bulkPlan.accounts.length} login{bulkPlan.accounts.length === 1 ? "" : "s"}?</h3>
+            <p>{bulkPlan.enabled ? "These people will be able to sign in again." : "These people will be signed out and unable to sign in."}</p>
+            <ul>{bulkPlan.accounts.map((account) => <li key={account.personId}>{account.name}</li>)}</ul>
+          </div>
+          <div className={styles.bulkConfirmationActions}>
+            <button className={styles.secondaryButton} disabled={saving} onClick={cancelBulkStatus} ref={bulkCancelRef} type="button">Cancel</button>
+            <button className={bulkPlan.enabled ? styles.primaryButton : styles.dangerButton} disabled={saving} onClick={submitBulkStatus} type="button">{saving ? "Saving…" : `${bulkPlan.enabled ? "Enable" : "Disable"} ${bulkPlan.accounts.length} logins`}</button>
+          </div>
+        </section>
+      ) : null}
+
+      {bulkFailures.length ? (
+        <div className={styles.bulkErrors} role="alert">
+          <strong>Not confirmed</strong>
+          <ul>{bulkFailures.map((failure) => <li key={failure.personId}><strong>{failure.name}:</strong> {failure.message}</li>)}</ul>
+        </div>
+      ) : null}
+
+      <div className={styles.accountList} role="region" aria-label="Accounts register" tabIndex={0}>
+        <table className={styles.accountTable} aria-label="Login accounts">
+          <thead><tr>
+            <th scope="col" className={styles.selectCell}><label className={styles.selectionLabel}><input aria-label="Select all visible accounts" checked={allVisibleSelected} disabled={selectionLocked || !selectableAccounts.length} onChange={(event) => selectVisible(event.target.checked)} ref={selectAllRef} type="checkbox" /><span>Select</span></label></th>
+            <th scope="col">Employee</th><th scope="col">Company</th><th scope="col">Login email</th><th scope="col">Status</th><th scope="col">Last sign-in</th><th scope="col">Actions</th>
+          </tr></thead>
+          <tbody>
         {paginatedAccounts.map((account) => {
           const activeEditor =
             editor?.personId === account.personId ? editor : null;
@@ -646,12 +766,10 @@ export function AccountManagement({
               : null;
 
           return (
-            <article
-              className={styles.accountCard}
-              data-open={Boolean(activeEditor)}
-              key={account.personId}
-            >
-              <div className={styles.accountRow}>
+            <Fragment key={account.personId}>
+              <tr className={styles.accountTableRow} data-open={Boolean(activeEditor)} data-selected={selectedIds.includes(account.personId)}>
+                <td className={styles.selectCell}><label className={styles.selectionLabel}><input aria-label={`Select ${account.name}`} checked={selectedIds.includes(account.personId)} disabled={!linked || selectionLocked} onChange={(event) => selectAccount(account.personId, event.target.checked)} type="checkbox" /><span className={styles.srOnly}>{linked ? `Select ${account.name}` : "Create login before selecting"}</span></label></td>
+                <td><div className={styles.employeeCell}>
                 <div
                   className={styles.avatar}
                   data-company={account.company.toLocaleLowerCase()}
@@ -663,30 +781,22 @@ export function AccountManagement({
                 <div className={styles.personCopy}>
                   <div className={styles.nameLine}>
                     <strong>{account.name}</strong>
-                    <span
-                      className={styles.companyBadge}
-                      data-company={account.company.toLocaleLowerCase()}
-                    >
-                      {companyLabel(account.company)}
-                    </span>
                   </div>
                   <p>{account.position}</p>
                 </div>
 
-                <div className={styles.loginCopy}>
-                  <small>Login</small>
-                  <strong>{account.loginName || "Not created"}</strong>
-                  <span>{formatLastSignIn(account.lastSignInAt)}</span>
-                </div>
-
-                <AnimatedStatusBadge className={styles.status} tone={statusTones[account.status]}>
+                </div></td>
+                <td><span className={styles.companyBadge} data-company={account.company.toLocaleLowerCase()}>{companyLabel(account.company)}</span></td>
+                <td className={styles.loginCell}>{account.loginName || "Not created"}</td>
+                <td><AnimatedStatusBadge className={styles.status} tone={statusTones[account.status]}>
                   {statusLabels[account.status]}
-                </AnimatedStatusBadge>
-
-                <div className={styles.actions}>
+                </AnimatedStatusBadge></td>
+                <td className={styles.signInCell}>{formatLastSignIn(account.lastSignInAt)}</td>
+                <td><div className={styles.actions}>
                   {!linked ? (
                     <button
                       className={styles.primaryButton}
+                      disabled={saving || Boolean(bulkPlan)}
                       onClick={(event) =>
                         openEditor(account, "create", event.currentTarget)
                       }
@@ -711,7 +821,7 @@ export function AccountManagement({
                         event.currentTarget.querySelector<HTMLElement>("summary")?.focus();
                       }}
                     >
-                      <summary aria-label={`Manage ${account.name}'s login`} title="Manage login"><MoreHorizontal aria-hidden="true" size={18} /></summary>
+                      <summary aria-label={`Manage ${account.name}'s login`} aria-disabled={saving || Boolean(bulkPlan)} onClick={(event) => { if (saving || bulkPlan) event.preventDefault(); }} title="Manage login"><MoreHorizontal aria-hidden="true" size={18} /></summary>
                       <div className={styles.actionMenuPopover}>
                         <button className={styles.textButton} onClick={(event) => openActionEditor(event, account, "login")} type="button">Change login</button>
                         <button className={styles.textButton} onClick={(event) => openActionEditor(event, account, "password")} type="button">Reset password</button>
@@ -722,11 +832,11 @@ export function AccountManagement({
                       </div>
                     </details>
                   )}
-                </div>
-              </div>
+                </div></td>
+              </tr>
 
               {activeEditor ? (
-                <div
+                <tr><td colSpan={7} className={styles.editorCell}><div
                   aria-busy={saving}
                   className={styles.editor}
                   ref={editorPanelRef}
@@ -881,21 +991,23 @@ export function AccountManagement({
                       </div>
                     </div>
                   ) : null}
-                </div>
+                </div></td></tr>
               ) : null}
-            </article>
+            </Fragment>
           );
         })}
 
         {!sortedAccounts.length ? (
-          <div className={styles.emptyState}>
+          <tr><td colSpan={7}><div className={styles.emptyState}>
             <Search aria-hidden="true" size={20} />
             <strong>No accounts match this search.</strong>
             <button onClick={clearSearch} type="button">
               Clear search
             </button>
-          </div>
+          </div></td></tr>
         ) : null}
+          </tbody>
+        </table>
       </div>
 
       {sortedAccounts.length ? (
@@ -914,7 +1026,7 @@ export function AccountManagement({
           >
             <button
               aria-label="Previous page"
-              disabled={currentPage === 1}
+              disabled={saving || Boolean(bulkPlan) || currentPage === 1}
               onClick={() => goToPage(currentPage - 1)}
               type="button"
             >
@@ -925,7 +1037,7 @@ export function AccountManagement({
             </span>
             <button
               aria-label="Next page"
-              disabled={currentPage === pageCount}
+              disabled={saving || Boolean(bulkPlan) || currentPage === pageCount}
               onClick={() => goToPage(currentPage + 1)}
               type="button"
             >

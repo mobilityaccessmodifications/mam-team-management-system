@@ -95,6 +95,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const params = await searchParams;
   const view = firstValue(params.view);
   const section = firstValue(params.section);
+  const peopleSection = firstValue(params.tab);
   const requestId = firstValue(params.request);
   // Preserve previously shared About-me demo links by opening the merged People profile view.
   const requestedView = view === "about"
@@ -130,6 +131,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     view: resolvedView,
     section: section === "approvals" || section === "balance" ? section : "requests",
     requestId,
+    peopleSection: peopleSection === "assets" || peopleSection === "accounts" || peopleSection === "subscriptions" ? peopleSection : undefined,
   }}
   />;
 }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { loadAssetQrModule } from './asset-qr-test-loader.mjs';
 import test from 'node:test';
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
@@ -89,6 +90,7 @@ test('Outlook CC expression produces no invalid blank recipient',()=>{
 
 test('recovery reaches its bearer-authenticated handler without a browser session or Supabase cookie refresh',async()=>{
   const {proxy}=load('src/proxy.ts',{
+    '@/lib/asset-qr':loadAssetQrModule(),
     '@supabase/ssr':{createServerClient:()=>{throw new Error('Recovery must not depend on cookie refresh');}},
     'next/server':{NextResponse:{next:()=>({status:200}),redirect:()=>({status:307})}},
     '@/lib/supabase/config':{isSupabaseConfigured:()=>false,requireSupabaseConfig:()=>{throw new Error('Unexpected browser configuration');}},
