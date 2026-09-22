@@ -10,7 +10,7 @@ import { START_TIME_OPTIONS, END_TIME_OPTIONS } from "@/lib/leave-request-option
 import { sickEvidenceDeadline, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import { getVictorianPublicHolidays } from "@/lib/victorian-public-holidays";
 import { LEAVE_NOTICE_MESSAGE, requiresLeaveNotice } from "@/lib/leave-notice";
-import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, UNCONFIRMED_ACCRUAL_MESSAGE, requestedLeaveHours, type AnnualLeaveProjection } from "@/lib/leave-request-balance";
+import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, UNCONFIRMED_ACCRUAL_MESSAGE, requestedLeaveHours, annualLeaveLimitGuidance, type AnnualLeaveProjection } from "@/lib/leave-request-balance";
 import styles from "@/components/leave-demo.module.css";
 
 const VICTORIAN_PUBLIC_HOLIDAY_DATES = new Set(
@@ -30,7 +30,6 @@ export function LeaveRequestDialog({
   leavePriority,
   formLeaveType,
   availableLeaveTypes,
-  hasPaidLeaveEntitlement,
   employmentType,
   formStartDate,
   formEndDate,
@@ -84,6 +83,10 @@ export function LeaveRequestDialog({
   const [projectionState, setProjectionState] = useState<{ key: string; data: AnnualLeaveProjection | null } | null>(null);
   const projection = projectionState?.key === projectionKey ? projectionState.data : null;
   const projectionLoading = formLeaveType === "Annual leave" && projectionState?.key !== projectionKey;
+  const limitGuidance = formLeaveType === "Annual leave" && !projectionLoading && projection?.status !== "unavailable"
+    ? annualLeaveLimitGuidance(formStartDate, formEndDate, startTime, endTime,
+      balancePerson?.requestFullDayHours ?? (employmentType === "full_time" ? 7.6 : 7.5), projection?.availableHours)
+    : null;
   useEffect(() => {
     if (formLeaveType !== "Annual leave") return;
     let active = true;
@@ -125,7 +128,7 @@ export function LeaveRequestDialog({
             </label>
           ) : null}
         </div>
-        {formLeaveType === "Annual leave" ? <LeaveRequestBalance workspace={leavePriority} personId={personId} self={!requestForPersonId} requestedHours={requestedHours} projection={projection} loading={projectionLoading} /> : null}
+        {formLeaveType === "Annual leave" ? <LeaveRequestBalance workspace={leavePriority} personId={personId} self={!requestForPersonId} requestedHours={requestedHours} projection={projection} loading={projectionLoading} limitGuidance={limitGuidance} /> : null}
         <form className={styles.form} onSubmit={(event) => {
           if (requiresLeaveNotice({ employmentType, leaveType: formLeaveType, startDate: formStartDate, onBehalfOf: Boolean(requestForPersonId && requestForPersonId !== activeProfile.id) })) {
             event.preventDefault();
@@ -146,9 +149,6 @@ export function LeaveRequestDialog({
           submitRequest(event);
         }} onChange={() => setFormError("")}>
           <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" value={formLeaveType} onChange={(event) => setFormLeaveType(event.target.value)} required>{(requestedTeamMember ? (requestedTeamMember.paidLeave ? ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"] : ["Unpaid leave"]).map((value) => ({ value, label: value })) : availableLeaveTypes).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
-          {!requestForPersonId && !hasPaidLeaveEntitlement ? <p className={styles.leavePolicyNote} role="note">
-            {employmentType === "abn" ? "ABN" : employmentType === "casual" ? "Casual" : "Unclassified"} employees can record Unpaid leave only.
-          </p> : null}
           <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" value={formStartDate} onChange={(event) => { const nextDate = event.target.value; setFormStartDate(nextDate); setFormEndDate(nextDate); }} required /></label><label><span>End date</span><input name="endDate" type="date" min={formStartDate} value={formEndDate} onChange={(event) => setFormEndDate(event.target.value)} required /></label></div>
           {formLeaveType === "Sick leave" ? <SickEvidenceNotice dueDate={sickEvidenceDeadline(formEndDate, VICTORIAN_PUBLIC_HOLIDAY_DATES)} hasEvidence={false} /> : null}
           <details className={styles.timeRange}><summary>Part-day leave</summary><div className={styles.formRow}><label><span>Starts</span><select name="startTime" value={startTime} onChange={(event) => setStartTime(event.target.value)}><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>Ends</span><select name="endTime" value={endTime} onChange={(event) => setEndTime(event.target.value)}><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>First and last day only.</p></details>
@@ -168,20 +168,20 @@ export function LeaveRequestDialog({
         </form>
       </section>
     </ModalBackdrop>
-    {formError === LEAVE_NOTICE_MESSAGE || balanceError ? <LeaveNoticeDialog message={formError === INSUFFICIENT_BALANCE_MESSAGE ? `${formError} Projection date: ${formStartDate}. See the balance breakdown and calculation in your request form.` : formError} title={balanceError ? (formError === INSUFFICIENT_BALANCE_MESSAGE ? "Not enough balance" : "Balance unavailable") : "Speak to your manager"} returnFocusRef={sendButtonRef} onClose={() => setFormError("")} /> : null}
+    {formError === LEAVE_NOTICE_MESSAGE || balanceError ? <LeaveNoticeDialog limitGuidance={balanceError ? limitGuidance : null} message={formError === INSUFFICIENT_BALANCE_MESSAGE ? `${formError} Projection date: ${formStartDate}. See the balance breakdown and calculation in your request form.` : formError} title={balanceError ? (formError === INSUFFICIENT_BALANCE_MESSAGE ? "Not enough balance" : "Balance unavailable") : "Speak to your manager"} returnFocusRef={sendButtonRef} onClose={() => setFormError("")} /> : null}
     </>
   );
 }
 
 
-function LeaveNoticeDialog({ onClose, returnFocusRef, message, title }: { onClose: () => void; returnFocusRef: RefObject<HTMLButtonElement | null>; message: string; title: string }) {
+function LeaveNoticeDialog({ onClose, returnFocusRef, message, title, limitGuidance }: { onClose: () => void; returnFocusRef: RefObject<HTMLButtonElement | null>; message: string; title: string; limitGuidance?: string | null }) {
   const dialogRef = useRef<HTMLElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   useDialogFocus(true, dialogRef, buttonRef, onClose, returnFocusRef);
   return <ModalBackdrop className={styles.modalBackdrop} role="presentation">
     <section className={`${styles.modal} ${styles.leaveNoticeDialog}`} ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby="leave-notice-title" aria-describedby="leave-notice-message" tabIndex={-1}>
       <header><h2 id="leave-notice-title">{title}</h2></header>
-      <p id="leave-notice-message">{message}</p>
+      <p id="leave-notice-message">{message}{limitGuidance ? <strong className={styles.leaveLimitGuidance}>{limitGuidance}</strong> : null}</p>
       <footer><button ref={buttonRef} type="button" className={styles.primaryButton} onClick={onClose}>Back to request</button></footer>
     </section>
   </ModalBackdrop>;

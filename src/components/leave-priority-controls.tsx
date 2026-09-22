@@ -73,13 +73,14 @@ function ApprovalBalanceCard({
   </article>;
 }
 
-export function LeaveRequestBalance({ workspace, personId, requestedHours = null, projection, loading = false }: {
+export function LeaveRequestBalance({ workspace, personId, requestedHours = null, projection, loading = false, limitGuidance }: {
   workspace?: LeavePriorityWorkspace;
   personId: string;
   self?: boolean;
   requestedHours?: number | null;
   projection?: AnnualLeaveProjection | null;
   loading?: boolean;
+  limitGuidance?: string | null;
 }) {
   const person = workspace?.people.find((candidate) => (
     candidate.personId === personId
@@ -102,6 +103,7 @@ export function LeaveRequestBalance({ workspace, personId, requestedHours = null
     {loading ? <p className={styles.leavePolicyNote} role="status">Calculating projected balance…</p>
       : projection?.status === "projected" ? <>
         <p className={styles.leavePolicyNote}>Projected to the start of {leaveDateLabel(projection.projectedDate)}. Accrual stops on {leaveDateLabel(projection.throughDate!)}. This is an estimate, not a confirmed Xero balance.</p>
+        {limitGuidance ? <p className={styles.leaveLimitGuidance}><strong>{limitGuidance}</strong></p> : null}
         <div className={styles.projectionExplanation}>
           <strong>How this is calculated</strong>
           <p>Payroll balance + estimated accrual − approved People Hub leave after the payroll date − other confirmed usage. All approved commitments remain reserved, including later bookings. Pending requests are not reserved.</p>
@@ -111,6 +113,7 @@ export function LeaveRequestBalance({ workspace, personId, requestedHours = null
           <p>Uses saved, effective-dated work policies. Approved unpaid hours are excluded unless payroll has confirmed different eligible hours; paid leave/public holidays continue scheduled accrual. Employment start/end dates and paused policies are respected. Future changes may alter the estimate. Only completed days before the leave start count.</p>
         </div>
       </> : <p className={styles.leavePolicyNote}>{projection?.status === "banked_only" ? "Future accrual could not be confirmed for this date. Only the displayed banked balance is available; contact payroll to check the snapshot and accrual policy." : "Projection unavailable. Contact payroll or reopen the form to retry."}</p>}
+    {!loading && projection?.status === "banked_only" && limitGuidance ? <p className={styles.leaveLimitGuidance}><strong>{limitGuidance}</strong></p> : null}
     </div>
   </details>;
 }
