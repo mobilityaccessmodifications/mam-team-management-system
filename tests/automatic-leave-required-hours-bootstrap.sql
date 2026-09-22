@@ -85,8 +85,8 @@ create table private.test_approved_commitments (
   hours numeric not null
 );
 
-create function private.is_active_portal_account()
-returns boolean language sql stable as $$ select auth.uid() is not null; $$;
+create function private.is_active_portal_account(p_user_id uuid default null)
+returns boolean language sql stable as $$ select coalesce(p_user_id, auth.uid()) is not null; $$;
 
 create function private.can_review_leave_request(uuid)
 returns boolean language sql stable as $$

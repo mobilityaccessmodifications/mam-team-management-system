@@ -12,7 +12,7 @@ begin
     or to_regclass('private.employee_annual_leave_balances') is null
     or to_regprocedure('private.approved_leave_hours_after(uuid,text[],date)') is null
     or to_regprocedure('private.calculate_employee_leave_accrual(uuid,date)') is null
-    or to_regprocedure('private.is_active_portal_account()') is null
+    or to_regprocedure('private.is_active_portal_account(uuid)') is null
     or to_regprocedure('private.can_review_leave_request(uuid)') is null
     or to_regprocedure('public.decide_my_managed_leave_request(uuid,text,text)') is null then
     raise exception 'Automatic leave balance hours prerequisites are missing.' using errcode = '55000';
