@@ -1,7 +1,7 @@
 "use server";
 
 import { LEAVE_NOTICE_MESSAGE } from "@/lib/leave-notice";
-import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE } from "@/lib/leave-request-balance";
+import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, UNCONFIRMED_ACCRUAL_MESSAGE, type AnnualLeaveProjection } from "@/lib/leave-request-balance";
 import { dispatchLeaveNotificationsForRequest } from "@/lib/leave-notification-outbox";
 
 import { revalidatePath } from "next/cache";
@@ -693,6 +693,7 @@ function userFacingSubmitError(error: unknown) {
     message === LEAVE_NOTICE_MESSAGE
     || message === INSUFFICIENT_BALANCE_MESSAGE
     || message === UNAVAILABLE_BALANCE_MESSAGE
+    || message === UNCONFIRMED_ACCRUAL_MESSAGE
     || message === "Choose a valid leave type."
     || message === "End date must be on or after start date."
     || message === "Choose at least one weekday for this request."
@@ -1106,6 +1107,17 @@ export async function saveLeaveAccrualDay(personId: string, input: {
   if (error) return { ok: false, message: "Hours could not be saved. Check administrator access and the completed date." };
   revalidatePath("/");
   return { ok: true };
+}
+
+export async function previewAnnualLeaveBalance(personId: string, startDate: string, previewPersonId?: string): Promise<AnnualLeaveProjection | null> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return null;
+  const supabase = await requireLeaveSession();
+  const { data, error } = await supabase.rpc("preview_annual_leave_balance", {
+    p_person_id: selectedPersonId(personId), p_start_date: startDate,
+    p_preview_person_id: previewPersonId ? selectedPersonId(previewPersonId) : null,
+  });
+  if (error || !data || !["projected", "banked_only", "unavailable"].includes(data.status)) return null;
+  return data as AnnualLeaveProjection;
 }
 
 export async function submitLeaveRequest(input: SubmitLeaveInput) {

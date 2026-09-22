@@ -188,7 +188,8 @@ test("chart controls keep zoom limits, read-only permissions and action wiring",
 test("extracted request dialog keeps dates aligned, team choices scoped and form feedback live", () => {
   const calls = [];
   const { LeaveRequestDialog } = load("src/components/leave-request-dialog.tsx", {
-    react: { useRef: value => ({ current: value }), useState: value => [value, () => {}] },
+    react: { useRef: value => ({ current: value }), useState: value => [value, () => {}], useEffect() {} },
+    "@/app/leave/actions": { previewAnnualLeaveBalance: async () => null },
     "@/components/leave-priority-controls": { LeaveRequestBalance: "balance", SickEvidenceNotice: "evidence" },
     "@/components/ui/modal-backdrop": { ModalBackdrop: "backdrop" },
     "@/components/ui/use-dialog-focus": { useDialogFocus: (...args) => calls.push(["focus", ...args]) },

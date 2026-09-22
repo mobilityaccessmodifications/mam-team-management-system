@@ -5,6 +5,7 @@ import { HeartPulse, Palmtree } from "lucide-react";
 import { LeaveAccrualControls, LeaveAccrualNotice } from "@/components/leave-accrual-controls";
 import { saveAnnualLeaveBalance, saveSickLeaveBalance, saveLeaveBalanceRequiredHours } from "@/app/leave/actions";
 import { approvalBalanceCoverage, leaveDateLabel, melbourneToday, type LeavePriorityWorkspace } from "@/lib/leave-priority";
+import type { AnnualLeaveProjection } from "@/lib/leave-request-balance";
 import styles from "@/components/leave-demo.module.css";
 
 // Presentation only: balances and approval calculations retain full precision.
@@ -35,6 +36,7 @@ function ApprovalBalanceCard({
   asOf,
   sick = false,
   requestedHours,
+  projection,
 }: {
   label: string;
   currentHours?: number | null;
@@ -43,6 +45,7 @@ function ApprovalBalanceCard({
   asOf?: string | null;
   sick?: boolean;
   requestedHours?: number | null;
+  projection?: AnnualLeaveProjection | null;
 }) {
   const Icon = sick ? HeartPulse : Palmtree;
   const amount = (hours?: number | null, negative = false) => hours == null
@@ -57,7 +60,11 @@ function ApprovalBalanceCard({
     <dl className={styles.balanceBreakdown}>
       <div><dt>Current Xero balance</dt><dd>{amount(currentHours)}</dd></div>
       <div><dt>Approved leave in People Hub</dt><dd>{amount(approvedHours, true)}</dd></div>
-      <div className={styles.balanceAvailable}><dt>Available after approved leave</dt><dd>{amount(availableHours)}</dd></div>
+      {projection ? <>
+        <div><dt>Estimated accrual before leave starts</dt><dd>{amount(projection.accruedHours)}</dd></div>
+        {Boolean(projection.otherTakenHours) ? <div><dt>Other confirmed leave taken</dt><dd>{amount(projection.otherTakenHours, true)}</dd></div> : null}
+      </> : null}
+      <div className={styles.balanceAvailable}><dt>{projection?.status === "projected" ? `Projected available on ${leaveDateLabel(projection.projectedDate)}` : "Available after approved leave"}</dt><dd>{amount(availableHours)}</dd></div>
       {requestedHours !== undefined ? <>
         <div><dt>This request uses</dt><dd>{amount(requestedHours, true)}</dd></div>
         <div className={styles.balanceAvailable}><dt>Remaining after this request</dt><dd>{amount(availableHours == null || requestedHours == null ? null : availableHours - requestedHours)}</dd></div>
@@ -66,11 +73,13 @@ function ApprovalBalanceCard({
   </article>;
 }
 
-export function LeaveRequestBalance({ workspace, personId, self = false, requestedHours = null }: {
+export function LeaveRequestBalance({ workspace, personId, self = false, requestedHours = null, projection, loading = false }: {
   workspace?: LeavePriorityWorkspace;
   personId: string;
   self?: boolean;
   requestedHours?: number | null;
+  projection?: AnnualLeaveProjection | null;
+  loading?: boolean;
 }) {
   const person = workspace?.people.find((candidate) => (
     candidate.personId === personId
@@ -80,8 +89,19 @@ export function LeaveRequestBalance({ workspace, personId, self = false, request
   if (!person) return null;
 
   return <div className={styles.requestBalance}>
-    <ApprovalBalanceCard label={self ? "My annual leave" : "Annual leave balance"} currentHours={person.annualPayrollHours} approvedHours={person.annualApprovedHours} availableHours={person.annualAvailableHours} asOf={person.annualPayrollDate} requestedHours={requestedHours} />
-    <p className={styles.leavePolicyNote}>Banked hours only. Future accrual is not included.</p>
+    <ApprovalBalanceCard label={self ? "My annual leave" : "Annual leave balance"} currentHours={projection?.payrollHours ?? person.annualPayrollHours} approvedHours={projection?.approvedHours ?? person.annualApprovedHours} availableHours={projection === undefined ? person.annualAvailableHours : projection?.availableHours} asOf={projection?.payrollDate ?? person.annualPayrollDate} requestedHours={requestedHours} projection={projection} />
+    {loading ? <p className={styles.leavePolicyNote} role="status">Calculating projected balance…</p>
+      : projection?.status === "projected" ? <>
+        <p className={styles.leavePolicyNote}>Projected to the start of {leaveDateLabel(projection.projectedDate)}. Accrual stops on {leaveDateLabel(projection.throughDate!)}. This is an estimate, not a confirmed Xero balance.</p>
+        <details className={styles.projectionExplanation}>
+          <summary>How this is calculated</summary>
+          <p>Payroll balance + estimated accrual − approved People Hub leave after the payroll date − other confirmed usage. All approved commitments remain reserved, including later bookings. Pending requests are not reserved.</p>
+          {(projection.terms ?? []).map((term) => <p key={term.fromDate}>
+            {leaveDateLabel(term.fromDate)}–{leaveDateLabel(term.throughDate)}: {balanceHours(term.weeklyHours)} ordinary hours/week across {term.weekdays.length} scheduled days. {balanceHours(term.eligibleHours)} eligible hours × {balanceHours(term.annualWeeks)} annual-leave weeks ÷ 52 = {balanceHours(term.accruedHours)} hours.
+          </p>)}
+          <p>Uses saved, effective-dated work policies. Approved unpaid hours are excluded unless payroll has confirmed different eligible hours; paid leave/public holidays continue scheduled accrual. Employment start/end dates and paused policies are respected. Future changes may alter the estimate. Only completed days before the leave start count.</p>
+        </details>
+      </> : <p className={styles.leavePolicyNote}>{projection?.status === "banked_only" ? "Future accrual could not be confirmed for this date. Only the displayed banked balance is available; contact payroll to check the snapshot and accrual policy." : "Projection unavailable. Contact payroll or reopen the form to retry."}</p>}
   </div>;
 }
 
