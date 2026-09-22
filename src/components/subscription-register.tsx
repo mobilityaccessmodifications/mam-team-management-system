@@ -8,6 +8,7 @@ import {
   ArrowDownUp,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   CreditCard,
   Filter,
   KeyRound,
@@ -51,6 +52,7 @@ import {
   SUBSCRIPTION_COMPANIES,
   subscriptionCompanyLabel,
   subscriptionCountLabel,
+  matchesSubscriptionCategory,
   type SubscriptionCompany,
   compareSubscriptionMonthlyCost,
   subscriptionMonthlyEquivalentCents,
@@ -69,7 +71,13 @@ type RegisterState =
 
 type SortDirection = "ascending" | "descending";
 type SubscriptionSortKey = "service" | "monthly" | "seats" | "nextBilling" | "lastReviewed" | "nextReview" | "responsible" | "status" | "members";
-type SubscriptionFilterKey = "billing" | "nextReview" | "responsible" | "status";
+type SubscriptionFilterKey = "pricing" | "company" | "billing" | "nextReview" | "responsible" | "status";
+const emptySubscriptionFilters: Record<SubscriptionFilterKey, string> = { pricing: "", company: "", billing: "", nextReview: "", responsible: "", status: "" };
+const subscriptionFilterFields: { key: SubscriptionFilterKey; label: string }[] = [
+  { key: "pricing", label: "Pricing" }, { key: "company", label: "Company" },
+  { key: "billing", label: "Billing cycle" }, { key: "status", label: "Status" },
+  { key: "responsible", label: "Responsible person" }, { key: "nextReview", label: "Next review" },
+];
 
 type SubscriptionSort = {
   key: SubscriptionSortKey;
@@ -260,12 +268,10 @@ export function SubscriptionRegister({
   const [query, setQuery] = useState("");
   const [subscriptionSort, setSubscriptionSort] = useState<SubscriptionSort | null>(null);
   const [activeSubscriptionFilter, setActiveSubscriptionFilter] = useState<SubscriptionFilterKey | null>(null);
-  const [subscriptionFilters, setSubscriptionFilters] = useState<Record<SubscriptionFilterKey, string>>({
-    billing: "",
-    nextReview: "",
-    responsible: "",
-    status: "",
-  });
+  const [subscriptionFilters, setSubscriptionFilters] = useState<Record<SubscriptionFilterKey, string>>(emptySubscriptionFilters);
+  const [showFilters, setShowFilters] = useState(false);
+  const filterPanelId = useId();
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [editTarget, setEditTarget] = useState<Subscription | null>(null);
   const [credentialTarget, setCredentialTarget] = useState<Subscription | null>(null);
@@ -336,6 +342,13 @@ export function SubscriptionRegister({
   const subscriptionFilterOptions = useMemo<Record<SubscriptionFilterKey, FilterOption[]>>(() => {
     const subscriptions = registerState.state === "ready" ? registerState.subscriptions : [];
     return {
+      pricing: [{ value: "paid", label: "Paid" }, { value: "free", label: "Free" }],
+      company: [
+        { value: "mam", label: "MAM (including Both)" },
+        { value: "equipsy", label: "Equipsy (including Both)" },
+        { value: "both", label: "Both companies only" },
+        { value: "unset", label: "Not set" },
+      ],
       billing: [
         { value: "free", label: "Free" },
         ...SUBSCRIPTION_BILLING_CYCLES.filter((cycle) => subscriptions.some((subscription) => billingFilterValue(subscription) === cycle)).map((value) => ({ value, label: billingCycleLabels[value] })),
@@ -358,6 +371,7 @@ export function SubscriptionRegister({
     const term = query.trim().toLocaleLowerCase();
     const nextSubscriptions = registerState.subscriptions.filter((subscription) => {
       if (term && !subscriptionSearchText(subscription).includes(term)) return false;
+      if (!matchesSubscriptionCategory(subscription, subscriptionFilters.pricing, subscriptionFilters.company)) return false;
       if (subscriptionFilters.billing && billingFilterValue(subscription) !== subscriptionFilters.billing) return false;
       if (subscriptionFilters.nextReview && reviewFilterValue(subscription) !== subscriptionFilters.nextReview) return false;
       if (subscriptionFilters.responsible && subscription.responsible.personId !== subscriptionFilters.responsible) return false;
@@ -411,7 +425,9 @@ export function SubscriptionRegister({
 
   function setSubscriptionFilter(key: SubscriptionFilterKey, value: string) {
     setSubscriptionFilters((current) => ({ ...current, [key]: value }));
+    const restoreColumnFocus = activeSubscriptionFilter === key;
     setActiveSubscriptionFilter(null);
+    if (!restoreColumnFocus) return;
     window.requestAnimationFrame(() => {
       const trigger = document.querySelector<HTMLButtonElement>(`[data-subscription-filter-trigger="${key}"]`);
       // The phone picker owns focus while the desktop header is hidden.
@@ -473,10 +489,22 @@ export function SubscriptionRegister({
     <div className={styles.tools}>
       <label className={styles.searchField}><Search size={17} aria-hidden="true" /><span className={styles.visuallyHidden}>Search subscriptions</span><input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search service, owner or employee" /></label>
       {registerState.state === "ready" ? <div className={styles.toolSummary}>
-        {hasSubscriptionFilters ? <button className={styles.clearFilters} type="button" onClick={() => setSubscriptionFilters({ billing: "", nextReview: "", responsible: "", status: "" })}>Clear</button> : null}
-        <span className={styles.count} aria-live="polite">{subscriptionCountLabel(filteredSubscriptions, registerState.subscriptions.length)}</span>
+        {hasSubscriptionFilters ? <button className={styles.clearFilters} type="button" onClick={() => setSubscriptionFilters(emptySubscriptionFilters)}>Clear filters</button> : null}
+        <button className={styles.filterSummaryButton} type="button" ref={filterButtonRef} aria-expanded={showFilters} aria-controls={filterPanelId} onClick={() => setShowFilters((open) => !open)}>
+          <Filter size={16} aria-hidden="true" /><span><strong>Filters{hasSubscriptionFilters ? ` · ${Object.values(subscriptionFilters).filter(Boolean).length}` : ""}</strong><span className={styles.count} aria-live="polite">{subscriptionCountLabel(filteredSubscriptions, registerState.subscriptions.length)}</span></span><ChevronDown size={16} aria-hidden="true" />
+        </button>
       </div> : null}
     </div>
+
+    {registerState.state === "ready" ? <section id={filterPanelId} className={styles.filterPanel} aria-label="Subscription filters" hidden={!showFilters} onKeyDown={(event) => {
+      if (event.key === "Escape" && event.target instanceof HTMLElement && event.target.tagName !== "SELECT") {
+        setShowFilters(false);
+        filterButtonRef.current?.focus();
+      }
+    }}>
+      <div className={styles.filterGrid}>{subscriptionFilterFields.map(({ key, label }) => <label key={key}><span>{label}</span><select value={subscriptionFilters[key]} onChange={(event) => setSubscriptionFilter(key, event.target.value)}><option value="">All</option>{subscriptionFilterOptions[key].map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>)}</div>
+      <div className={styles.filterPanelFooter}><span>Filters combine and apply immediately.</span><button className={styles.secondaryAction} type="button" onClick={() => { setShowFilters(false); filterButtonRef.current?.focus(); }}>Done</button></div>
+    </section> : null}
 
     {registerState.state === "loading" ? <div className={styles.loadingState}><LoaderCircle className={styles.spinner} size={22} aria-hidden="true" /><span>Loading subscriptions…</span></div> : null}
     {registerState.state === "error" ? <div className={styles.errorState} role="alert"><AlertCircle size={19} aria-hidden="true" /><div><strong>Subscriptions could not be loaded</strong><span>{registerState.message}</span></div><button className={styles.secondaryAction} type="button" onClick={() => void load()}><RefreshCw size={15} /> Retry</button></div> : null}

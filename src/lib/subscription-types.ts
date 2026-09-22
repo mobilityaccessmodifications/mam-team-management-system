@@ -1,6 +1,12 @@
 export const SUBSCRIPTION_STATUSES = ["active", "paused", "cancelled"] as const;
 export const SUBSCRIPTION_COMPANIES = ["mam", "equipsy", "both"] as const;
 export type SubscriptionCompany = typeof SUBSCRIPTION_COMPANIES[number];
+export function matchesSubscriptionCategory(subscription: Pick<Subscription, "pricingModel" | "company">, pricing: string, company: string) {
+  if (pricing && subscription.pricingModel !== pricing) return false;
+  if (!company) return true;
+  if (company === "unset") return subscription.company === null;
+  return subscription.company === company || (company !== "both" && subscription.company === "both");
+}
 export function subscriptionCompanyLabel(company: SubscriptionCompany | null) {
   return company === "mam" ? "MAM" : company === "equipsy" ? "Equipsy" : company === "both" ? "Both" : "Not set";
 }

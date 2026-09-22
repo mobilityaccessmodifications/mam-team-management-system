@@ -162,6 +162,25 @@
 .searchField:focus-within,
 .memberSearch:focus-within { border-color: var(--surface-border-strong, #cbd7d2); box-shadow: none; }
 .count { color: var(--subscription-muted); font-size: 12px; font-weight: 650; line-height: 1.5; white-space: normal; text-align: right; }
+.filterSummaryButton { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 12px; border: 1px solid var(--subscription-line); border-radius: 10px; color: var(--subscription-ink); background: var(--surface-raised, #fff); font: inherit; cursor: pointer; text-align: left; }
+.filterSummaryButton > span { display: grid; gap: 2px; }
+.filterSummaryButton strong { font-size: 13px; }
+.filterSummaryButton .count { text-align: left; }
+.filterSummaryButton > svg { flex-shrink: 0; }
+.filterSummaryButton[aria-expanded="true"] { background: #fff3e9; border-color: #e5b995; }
+.filterSummaryButton[aria-expanded="true"] > svg:last-child { transform: rotate(180deg); }
+.filterSummaryButton:focus-visible, .filterGrid select:focus-visible { outline: 2px solid var(--subscription-accent-deep); outline-offset: 3px; }
+.filterPanel { border: 1px solid var(--subscription-line); border-radius: 12px; padding: 16px; background: var(--surface-raised, #fff); }
+.filterPanel[hidden] { display: none; }
+.filterGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 16px; }
+.filterGrid label { display: grid; gap: 7px; min-width: 0; color: var(--subscription-ink); font-size: 13px; font-weight: 650; }
+.filterGrid select { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--subscription-line); border-radius: 8px; padding: 8px 10px; background: var(--surface-raised, #fff); color: var(--subscription-ink); font: inherit; }
+.filterPanelFooter { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; color: var(--subscription-muted); font-size: 12px; }
+@media (max-width: 760px) {
+  .filterSummaryButton { width: 100%; }
+  .filterSummaryButton > svg:last-child { margin-left: auto; }
+  .filterGrid select { min-height: 48px; font-size: 16px; }
+}
 .serviceCell .subscriptionIdentity .companyBadge { justify-self: start; width: fit-content; padding: 2px 8px; border: 1px solid #cedbd5; border-radius: 6px; color: #31564a; background: #eef5f1; font-size: 11px; font-weight: 650; white-space: normal; }
 .serviceCell .subscriptionIdentity .companyBadge[data-company="equipsy"] { color: #295c7a; background: #edf5fa; border-color: #ccdee9; }
 .serviceCell .subscriptionIdentity .companyBadge[data-company="both"] { color: #74441d; background: #fff2e8; border-color: #efd5bf; }
