@@ -50,6 +50,12 @@ jobs:
         run: |
           createdb -h localhost -U postgres banked_leave_request_test
           psql -h localhost -U postgres -d banked_leave_request_test -v ON_ERROR_STOP=1 -f tests/banked-leave-request.sql
+      - name: Test projected annual leave booking limit and privacy
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres projected_leave_request_test
+          psql -h localhost -U postgres -d projected_leave_request_test -v ON_ERROR_STOP=1 -f tests/projected-leave-request.sql
       - name: Test employee email login and unchanged administrator credentials
         env:
           PGPASSWORD: synthetic-ci-only

@@ -1,5 +1,6 @@
 import { ChevronDown, UsersRound, X } from "lucide-react";
-import { type FormEvent, type RefObject, useRef, useState } from "react";
+import { type FormEvent, type RefObject, useEffect, useRef, useState } from "react";
+import { previewAnnualLeaveBalance } from "@/app/leave/actions";
 import type { LeaveWorkspaceData } from "@/app/leave/actions";
 import { LeaveRequestBalance, SickEvidenceNotice } from "@/components/leave-priority-controls";
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
@@ -9,7 +10,7 @@ import { START_TIME_OPTIONS, END_TIME_OPTIONS } from "@/lib/leave-request-option
 import { sickEvidenceDeadline, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import { getVictorianPublicHolidays } from "@/lib/victorian-public-holidays";
 import { LEAVE_NOTICE_MESSAGE, requiresLeaveNotice } from "@/lib/leave-notice";
-import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, requestedLeaveHours } from "@/lib/leave-request-balance";
+import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, UNCONFIRMED_ACCRUAL_MESSAGE, requestedLeaveHours, type AnnualLeaveProjection } from "@/lib/leave-request-balance";
 import styles from "@/components/leave-demo.module.css";
 
 const VICTORIAN_PUBLIC_HOLIDAY_DATES = new Set(
@@ -34,6 +35,7 @@ export function LeaveRequestDialog({
   formStartDate,
   formEndDate,
   formError,
+  previewPersonId,
   closeLeaveRequestForm,
   changeLeaveRequestPerson,
   submitRequest,
@@ -57,6 +59,7 @@ export function LeaveRequestDialog({
   formStartDate: string;
   formEndDate: string;
   formError: string;
+  previewPersonId?: string;
   closeLeaveRequestForm: () => void;
   changeLeaveRequestPerson: (value: string) => void;
   submitRequest: (event: FormEvent<HTMLFormElement>) => void;
@@ -75,7 +78,22 @@ export function LeaveRequestDialog({
   const balancePerson = leavePriority?.people.find((person) => person.personId === (requestForPersonId || activeProfile.id));
   const requestedHours = requestedLeaveHours(formStartDate, formEndDate, startTime, endTime,
     balancePerson?.requestFullDayHours ?? (employmentType === "full_time" ? 7.6 : 7.5));
-  const balanceError = formError === INSUFFICIENT_BALANCE_MESSAGE || formError === UNAVAILABLE_BALANCE_MESSAGE;
+  const balanceError = [INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, UNCONFIRMED_ACCRUAL_MESSAGE].includes(formError);
+  const personId = requestForPersonId || activeProfile.id;
+  const projectionKey = JSON.stringify([personId, formStartDate, previewPersonId]);
+  const [projectionState, setProjectionState] = useState<{ key: string; data: AnnualLeaveProjection | null } | null>(null);
+  const projection = projectionState?.key === projectionKey ? projectionState.data : null;
+  const projectionLoading = formLeaveType === "Annual leave" && projectionState?.key !== projectionKey;
+  useEffect(() => {
+    if (formLeaveType !== "Annual leave") return;
+    let active = true;
+    const timer = setTimeout(() => {
+      void previewAnnualLeaveBalance(personId, formStartDate, previewPersonId)
+        .then((data) => { if (active) setProjectionState({ key: projectionKey, data }); })
+        .catch(() => { if (active) setProjectionState({ key: projectionKey, data: null }); });
+    }, 200);
+    return () => { active = false; clearTimeout(timer); };
+  }, [personId, formStartDate, previewPersonId, projectionKey, formLeaveType]);
   return (
     <>
     <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeLeaveRequestForm()}>
@@ -107,17 +125,22 @@ export function LeaveRequestDialog({
             </label>
           ) : null}
         </div>
-        {formLeaveType === "Annual leave" ? <LeaveRequestBalance workspace={leavePriority} personId={requestForPersonId || activeProfile.id} self={!requestForPersonId} requestedHours={requestedHours} /> : null}
+        {formLeaveType === "Annual leave" ? <LeaveRequestBalance workspace={leavePriority} personId={personId} self={!requestForPersonId} requestedHours={requestedHours} projection={projection} loading={projectionLoading} /> : null}
         <form className={styles.form} onSubmit={(event) => {
           if (requiresLeaveNotice({ employmentType, leaveType: formLeaveType, startDate: formStartDate, onBehalfOf: Boolean(requestForPersonId && requestForPersonId !== activeProfile.id) })) {
             event.preventDefault();
             setFormError(LEAVE_NOTICE_MESSAGE);
             return;
           }
-          const available = balancePerson?.annualAvailableHours;
+          if (formLeaveType === "Annual leave" && (projectionLoading || !projection || projection.status === "unavailable")) {
+            event.preventDefault();
+            setFormError(UNAVAILABLE_BALANCE_MESSAGE);
+            return;
+          }
+          const available = projection?.availableHours;
           if (formLeaveType === "Annual leave" && requestedHours != null && available != null && requestedHours > available) {
             event.preventDefault();
-            setFormError(INSUFFICIENT_BALANCE_MESSAGE);
+            setFormError(projection?.status === "banked_only" ? UNCONFIRMED_ACCRUAL_MESSAGE : INSUFFICIENT_BALANCE_MESSAGE);
             return;
           }
           submitRequest(event);
@@ -141,11 +164,11 @@ export function LeaveRequestDialog({
           </div>
           </details>
           {formError && formError !== LEAVE_NOTICE_MESSAGE ? <p className={styles.formError} role="alert">{formError}</p> : null}
-          <footer><button className={styles.secondaryButton} type="button" onClick={closeLeaveRequestForm} disabled={isMutating}>Cancel</button><button ref={sendButtonRef} className={styles.primaryButton} type="submit" disabled={isMutating}>{isMutating ? "Saving…" : "Send request"}</button></footer>
+          <footer><button className={styles.secondaryButton} type="button" onClick={closeLeaveRequestForm} disabled={isMutating}>Cancel</button><button ref={sendButtonRef} className={styles.primaryButton} type="submit" disabled={isMutating || projectionLoading}>{isMutating ? "Saving…" : projectionLoading ? "Calculating…" : "Send request"}</button></footer>
         </form>
       </section>
     </ModalBackdrop>
-    {formError === LEAVE_NOTICE_MESSAGE || balanceError ? <LeaveNoticeDialog message={formError} title={balanceError ? (formError === INSUFFICIENT_BALANCE_MESSAGE ? "Not enough balance" : "Balance unavailable") : "Speak to your manager"} returnFocusRef={sendButtonRef} onClose={() => setFormError("")} /> : null}
+    {formError === LEAVE_NOTICE_MESSAGE || balanceError ? <LeaveNoticeDialog message={formError === INSUFFICIENT_BALANCE_MESSAGE ? `${formError} Projection date: ${formStartDate}. See the balance breakdown and calculation in your request form.` : formError} title={balanceError ? (formError === INSUFFICIENT_BALANCE_MESSAGE ? "Not enough balance" : "Balance unavailable") : "Speak to your manager"} returnFocusRef={sendButtonRef} onClose={() => setFormError("")} /> : null}
     </>
   );
 }

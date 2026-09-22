@@ -2084,6 +2084,7 @@ export function LeaveDemo({
         formStartDate={formStartDate}
         formEndDate={formEndDate}
         formError={formError}
+        previewPersonId={isPreviewingEmployeeAccess ? previewProfile?.id : undefined}
         closeLeaveRequestForm={closeLeaveRequestForm}
         changeLeaveRequestPerson={changeLeaveRequestPerson}
         submitRequest={submitRequest}
