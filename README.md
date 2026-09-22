@@ -265,3 +265,13 @@ monthly file-upload reminders; resolving differences remains a separate review.
 Deploy `20260922150000_payroll_comparison_alerts.sql` with the target-checked
 `scripts/deploy-payroll-comparison.py`, configure the verified Gerard grant, and
 publish the reviewed n8n receiver before releasing the application.
+
+### Leave email routing verification
+
+Submission/cancellation email routing must use current authorised reviewers,
+not the first person in the organisation tree. Manager-owned requests retain
+the configured global reviewer group. To check for production function drift,
+run `scripts/deploy-leave-email-route.py inspect` through the MAM Supabase
+credential helper. Release `20260922170000` with `apply <reviewed-sha256>`;
+it reasserts the resolver, verifies its exact body and service-only access,
+and does not resend mail or alter approved requests or immutable retry payloads.
