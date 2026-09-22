@@ -6,7 +6,8 @@ const confirm = new Function('$', '$input', '$getWorkflowStaticData', fs.readFil
 const id = '10000000-0000-4000-8000-000000000001';
 const base = { version:1,requestId:id,employeeName:'Test Employee',employeeEmail:'employee@example.test',company:'mam',leaveType:'Annual leave',startDate:'2026-09-14',endDate:'2026-09-15',startTime:null,endTime:null,days:2,hours:null,fullDayHours:7.6,status:'Pending',employeeNote:null,managerNote:null,managerEmail:'manager@example.test' };
 function run(event, extra={}, state={}) {
-  const body={...base,event,eventKey:`leave:${id}:${event}:${'a'.repeat(24)}`,...extra};
+  const body={...base,event,eventKey:`leave:${id}:${event}:${'a'.repeat(24)}`,
+    ...(event==='leave-submitted'?{audience:'reviewers'}:{}),...extra};
   return validate({first:()=>({json:{headers:{'content-type':'application/json'},body}})},()=>state)[0].json;
 }
 function runPayroll(extra={}, state={}) {
@@ -17,14 +18,14 @@ function runPayroll(extra={}, state={}) {
   }
   return validate({first:()=>({json:{headers:{'content-type':'application/json'},body}})},()=>state)[0].json;
 }
-test('submission goes to manager and employee with HR copied',()=>{
+test('submission reviewer copy excludes employee addresses and includes HR',()=>{
   const out=run('leave-submitted');
-  assert.equal(out.outcome,'send'); assert.equal(out.deliveryRecipient,'manager@example.test,employee@example.test');
-  assert.equal(out.ccRecipients,'hr@mobilityaccess.com.au');
+  assert.equal(out.outcome,'send'); assert.equal(out.deliveryRecipient,'manager@example.test,hr@mobilityaccess.com.au');
+  assert.equal(out.ccRecipients,'');
 });
 test('missing employee email never blocks the manager submission notice',()=>{
   const out=run('leave-submitted',{employeeEmail:null,employeeEmails:[]});
-  assert.equal(out.outcome,'send');assert.equal(out.deliveryRecipient,'manager@example.test');
+  assert.equal(out.outcome,'send');assert.equal(out.deliveryRecipient,'manager@example.test,hr@mobilityaccess.com.au');
 });
 test('multiline textarea notes are accepted and HTML remains escaped',()=>{
   const out=run('leave-declined',{status:'Declined',employeeNote:'First line\nSecond line',managerNote:'Approved\r\n<unsafe>\ttext'});
@@ -52,7 +53,7 @@ for(const event of ['leave-reminder','team-birthday']) test(event,()=>{
 test('deduplicates sent event and fails closed without a manager',()=>{
   const key=`leave:${id}:leave-submitted:${'a'.repeat(24)}`;
   const out=run('leave-submitted',{}, {leaveNotificationEvents:{[key]:{state:'sent',at:Date.now()}}});
-  assert.equal(out.outcome,'duplicate'); assert.equal(out.actualRecipient,'manager@example.test');
+  assert.equal(out.outcome,'duplicate'); assert.equal(out.actualRecipient,'manager@example.test,hr@mobilityaccess.com.au');
   assert.equal(run('leave-submitted',{managerEmail:null}).outcome,'rejected');
 });
 test('conditional approval reminder asks the manager to finalise without naming a balance',()=>{
@@ -85,7 +86,7 @@ test('manager requests notify every group reviewer and do not duplicate HR in CC
   const out=run('leave-submitted',{managerEmail:group});
   assert.equal(out.outcome,'send');
   assert.equal(out.confirmationRecipient,group);
-  assert.equal(out.deliveryRecipient,group+',employee@example.test');
+  assert.equal(out.deliveryRecipient,group);
   assert.equal(out.ccRecipients,'');
   assert.equal(run('leave-reminder',{managerEmail:group}).deliveryRecipient,group);
   assert.equal(run('leave-cancelled',{managerEmail:group,wasApproved:true}).ccRecipients,'accounts@mobilityaccess.com.au');
@@ -199,7 +200,7 @@ function confirmDelivery(source, sent=[{json:{}}], state={}) {
 test('confirmation records both payroll and leave event families after one provider result',()=>{
   for(const eventKey of [`payroll-balance:${id}:2026-10`,`leave:${id}:leave-approved:${'a'.repeat(24)}`]) {
     const state={};
-    const out=confirmDelivery({mamDelivery:true,eventKey,confirmationRecipient:'recipient@example.test'},[{json:{statusCode:202}}],state);
+    const out=confirmDelivery({mamDelivery:true,eventKey,deliveryRecipient:'recipient@example.test'},[{json:{statusCode:202}}],state);
     assert.equal(out.ok,true);
     assert.equal(out.sent,true);
     assert.equal(out.actualRecipient,'recipient@example.test');
@@ -212,4 +213,44 @@ test('confirmation rejects unknown keys, count mismatches and explicit provider 
   assert.throws(()=>confirmDelivery({mamDelivery:true,eventKey:'other:event',confirmationRecipient:'recipient@example.test'}),/count mismatch/);
   assert.throws(()=>confirmDelivery({mamDelivery:true,eventKey:`payroll-balance:${id}:2026-10`,confirmationRecipient:'recipient@example.test'},[]),/count mismatch/);
   assert.throws(()=>confirmDelivery({mamDelivery:true,eventKey:`payroll-balance:${id}:2026-10`,confirmationRecipient:'recipient@example.test'},[{json:{statusCode:500}}]),/provider explicitly rejected/);
+});
+
+test('all submission categories isolate the applicant work/personal addresses from reviewers',()=>{
+  for(const leaveType of ['Annual leave','Sick leave',"Carer's leave",'Unpaid leave']) {
+    const employeeEmails=['employee@example.test','personal@example.test'];
+    const reviewer=run('leave-submitted',{leaveType,employeeEmails,managerEmail:'manager@example.test,personal@example.test'});
+    assert.equal(reviewer.deliveryRecipient,'manager@example.test,hr@mobilityaccess.com.au');
+    const employee=run('leave-submitted',{leaveType,employeeEmails,audience:'employee'});
+    assert.equal(employee.deliveryRecipient,employeeEmails.join(','));
+    assert.equal(employee.ccRecipients,'');
+    for(const out of [reviewer,employee]) {
+      assert.equal(confirmDelivery(out).actualRecipient,out.deliveryRecipient);
+    }
+  }
+  assert.equal(run('leave-submitted',{audience:undefined}).rejectionCode,'audience-required');
+});
+
+test('rollout does not resend either copy of an already-delivered legacy shared event',()=>{
+  const legacyEventKey=`leave:${id}:leave-submitted:${'b'.repeat(24)}`;
+  for(const audience of ['reviewers','employee']) {
+    const state={leaveNotificationEvents:{[legacyEventKey]:{state:'sent',at:Date.now()}}};
+    assert.equal(run('leave-submitted',{audience,legacyEventKey},state).outcome,'duplicate');
+    state.leaveNotificationEvents[legacyEventKey].state='processing';
+    assert.equal(run('leave-submitted',{audience,legacyEventKey},state).rejectionCode,'delivery-in-flight');
+    state.leaveNotificationEvents[legacyEventKey].at=Date.now()-21*60*1000;
+    assert.equal(run('leave-submitted',{audience,legacyEventKey},state).outcome,'send');
+  }
+  assert.equal(run('leave-submitted',{legacyEventKey:'invalid'}).rejectionCode,'legacy-event-key');
+});
+
+test('Accounts note minimisation and provider rejection apply equally to Equipsy',()=>{
+  for(const company of ['mam','equipsy']) {
+    const out=run('leave-approved',{company,status:'Approved',managerNote:'Private manager comment'});
+    assert(!out.emailHtml.includes('Private manager comment'));
+    for(const result of [{error:'denied'},{success:false},{ok:false},{statusCode:403}]) {
+      const state={};
+      assert.throws(()=>confirmDelivery(out,[{json:result}],state),/provider explicitly rejected/);
+      assert.equal(state.leaveNotificationEvents,undefined);
+    }
+  }
 });

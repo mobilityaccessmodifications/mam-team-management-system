@@ -1,6 +1,6 @@
 const source = $('Validate and Reserve Leave Notification').all();
 const sent = $input.all();
-if ($('Validate and Reserve Leave Notification').first().json.mamDelivery === true && sent.some(item=>{const r=item.json||{};const status=Number(r.statusCode||r.status);return r.error||r.success===false||r.ok===false||(Number.isFinite(status)&&status>=400);})) throw new Error('Email provider explicitly rejected delivery.');
+if (sent.some(item=>{const r=item.json||{};const status=Number(r.statusCode||r.status);return r.error||r.success===false||r.ok===false||(Number.isFinite(status)&&status>=400);})) throw new Error('Email provider explicitly rejected delivery.');
 
 const eventKey = String(source[0]?.json?.eventKey ?? '');
 if (source.length !== 1 || sent.length !== 1 || !(eventKey.startsWith('leave:') || eventKey.startsWith('payroll-balance:'))) throw new Error('MAM email delivery count mismatch.');
@@ -9,6 +9,6 @@ if (!state.leaveNotificationEvents || typeof state.leaveNotificationEvents !== '
 state.leaveNotificationEvents[eventKey] = { state: 'sent', at: Date.now() };
 return [{ json: {
   ok: true, sent: true, alreadySent: false,
-  actualRecipient: String(source[0].json.confirmationRecipient ?? source[0].json.deliveryRecipient ?? ''),
+  actualRecipient: String(source[0].json.deliveryRecipient ?? ''),
   eventKey,
 } }];

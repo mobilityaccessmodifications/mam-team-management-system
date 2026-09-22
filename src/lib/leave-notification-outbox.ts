@@ -38,9 +38,12 @@ export async function dispatchLeaveNotificationOutbox(requestId: string | null =
     await Promise.all(claimed.data.slice(offset, offset + 5).map(async (row) => {
       if (!row.payload || !row.claim_token) { failed++; return; }
       const payload = row.payload;
-      // New sick/personal submissions use independently deduplicated copies.
-      // Legacy snapshots keep their original delivery key and recipient contract.
-      const split = payload.event === "leave-submitted" && payload.leaveBalance?.kind === "sick";
+      // Separate the applicant from reviewers for every submission, without
+      // depending on balance data (which must never enter email payloads).
+      const split = payload.event === "leave-submitted";
+      const legacySplit = split && payload.leaveBalance?.kind === "sick";
+      const legacyEventKey = `leave:${payload.requestId}:${payload.event}:${createHash("sha256")
+        .update(row.delivery_id).digest("hex").slice(0, 24)}`;
       const employees = emailList(payload.employeeEmails ?? payload.employeeEmail);
       const managers = emailList(payload.managerEmail);
       const copies = split ? ["reviewers", ...(employees.length ? ["employee"] : [])] : ["shared"];
@@ -66,6 +69,7 @@ export async function dispatchLeaveNotificationOutbox(requestId: string | null =
             method: "POST", redirect: "error", cache: "no-store", signal: AbortSignal.timeout(15_000),
             headers: { "Content-Type": "application/json", "X-MAM-Notification-Secret": target.secret },
             body: JSON.stringify({ ...outboundPayload, ...(split ? { audience } : {}),
+              ...(split && !legacySplit ? { legacyEventKey } : {}),
               eventKey, employeeNote: bodyNote(payload.employeeNote), managerNote: bodyNote(payload.managerNote) }),
           });
           const receipt = await response.json();

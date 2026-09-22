@@ -218,7 +218,8 @@ async function dispatchLeavePriorityReminders(
             employeeNote: null,
             managerNote: null,
             managerEmail: reminder.manager_email,
-            ccEmails: reminder.event === "leave-reminder" ? [] : ["hr@mobilityaccess.com.au"],
+            // Birthday privacy is manager-only, just like routine reminders.
+            ccEmails: [],
             wasApproved: false,
           }),
         });
