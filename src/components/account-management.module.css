@@ -1332,3 +1332,226 @@
   .accountList { border-radius: 16px; }
   .editor { margin: 0 8px 8px; }
 }
+
+/* Accounts use the same compact register layout as devices and subscriptions. */
+.accountList {
+  min-width: 0;
+  overflow-x: auto;
+  border-radius: 16px;
+}
+
+.accountTable {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.accountTable th {
+  height: 50px;
+  border-bottom: 1px solid var(--surface-border-strong);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.accountTable th,
+.accountTable td {
+  padding: 10px 14px;
+  vertical-align: middle;
+}
+
+.accountTable td {
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.accountTable th + th,
+.accountTable td + td {
+  border-left: 1px solid var(--surface-border);
+}
+
+.accountTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.accountTableRow {
+  background: var(--surface-raised, #fff);
+}
+
+.accountTableRow:hover,
+.accountTableRow[data-selected="true"],
+.accountTableRow[data-open="true"] {
+  background: var(--surface-warm);
+}
+
+.accountTable .selectCell {
+  width: 88px;
+  padding: 6px 10px;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: inherit;
+}
+
+.accountTable thead .selectCell {
+  background: var(--surface-muted);
+}
+
+.selectionLabel {
+  display: flex;
+  min-height: 44px;
+  min-width: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.selectionLabel:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.selectionLabel input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--account-accent-deep);
+  cursor: inherit;
+}
+
+.selectionLabel input:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--account-accent) 28%, transparent);
+  outline-offset: 3px;
+}
+
+.employeeCell {
+  display: flex;
+  min-width: 195px;
+  align-items: center;
+  gap: 10px;
+}
+
+.employeeCell .avatar {
+  flex: 0 0 auto;
+}
+
+.loginCell {
+  min-width: 200px;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+.signInCell {
+  min-width: 125px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.accountTable .actions {
+  justify-content: flex-end;
+  margin: 0;
+}
+
+/* Inline menus stay inside the scrollable register instead of being clipped. */
+.accountTable .actionMenuPopover {
+  position: static;
+  margin-top: 6px;
+  max-width: none;
+}
+
+.accountTable .editorCell {
+  padding: 0;
+  border-left: 0;
+}
+
+.accountTable .editor {
+  margin: 12px;
+  padding: 16px;
+}
+
+.bulkToolbar,
+.bulkConfirmation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: 14px;
+  padding: 12px 16px;
+  background: var(--surface-raised, #fff);
+}
+
+.bulkToolbar {
+  background: var(--surface-warm);
+}
+
+.bulkToolbar > strong,
+.bulkConfirmation h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.bulkToolbar > div,
+.bulkConfirmationActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bulkConfirmation p,
+.bulkConfirmation ul,
+.bulkErrors {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.bulkConfirmation p {
+  margin: 6px 0;
+  color: var(--text-secondary);
+}
+
+.bulkConfirmation ul {
+  max-height: 160px;
+  overflow-y: auto;
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.bulkErrors {
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--surface-border));
+  border-radius: 12px;
+  background: var(--surface-raised, #fff);
+  color: var(--danger);
+  padding: 12px 16px;
+}
+
+.bulkErrors ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+@media (max-width: 720px) {
+  .accountTable .editor {
+    position: sticky;
+    left: 8px;
+    max-width: calc(100vw - 64px);
+    padding: 14px;
+  }
+
+  .bulkToolbar,
+  .bulkConfirmation {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 12px;
+  }
+}
