@@ -274,7 +274,7 @@ export function PayrollBalanceImporter({
         <summary>Recent imports · {workspace.recentBatches.length}</summary>
         <div>
           {workspace.recentBatches.map((item) => <article key={item.batchId}>
-            <span className={styles.batchStatus} data-status={item.status}>{item.status === "committed" ? "Applied" : "Preview only"}</span>
+            <span className={styles.batchStatus} data-status={item.status}>{item.status === "committed" ? "Applied" : "Saved"}</span>
             <strong>{item.files.map((file) => file.name).join(", ")}</strong>
             <small>{item.rowCount} people · {dateTimeLabel(item.committedAt ?? item.createdAt)}</small>
             <button type="button" className={styles.secondaryButton} onClick={() => {
@@ -309,7 +309,7 @@ export function PayrollBalanceImporter({
             {batch.files.map((file) => <span key={file.name}><FileSpreadsheet size={15} aria-hidden="true" /><strong>{file.name}</strong><small>{file.employeeRows} rows · {fileSizeLabel(file.sizeBytes)}</small></span>)}
           </div>
           {batch.comparisonOnly ? <div className={styles.previewTable} role="table" aria-label="Payroll comparison">
-            <div className={styles.previewHeader} role="row"><span>Employee</span><span>Leave</span><span>Uploaded</span><span>System</span><span>Result</span></div>
+            <div className={styles.previewHeader} role="row"><span role="columnheader">Employee</span><span role="columnheader">Leave</span><span role="columnheader">Uploaded</span><span role="columnheader">System</span><span role="columnheader">Result</span></div>
             {batch.comparisonRows.map((row) => <div className={styles.previewRow} role="row" key={`${row.rowId}:${row.kind}`}>
               <span role="cell" data-label="Employee"><strong>{row.employeeName}</strong><small>{row.company.toUpperCase()}</small></span>
               <span role="cell" data-label="Leave">{row.kind === "annual" ? "Annual" : "Sick"}</span>

@@ -104,7 +104,7 @@ try {
       '<p>Hi ' + escape(body.recipientName) + ',</p>',
       '<p>The ' + escape(monthLabel) + ' banked leave balance update is due.</p>',
       '<p><strong>Still required:</strong> ' + escape(companyLabels.join(' and ')) + '</p>',
-      '<p>Upload the latest CSV or Excel leave-balance files in People Hub, review the employee matches, then apply the update. The importer matches rows within the supplied company and holds ambiguous rows for review.</p>',
+      '<p>Upload the latest CSV or Excel leave-balance files in People Hub.</p>',
       '<p><a href="' + APP_URL + '/?view=leave" style="display:inline-block;padding:10px 16px;background:#ef6c24;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Open payroll balance upload</a></p>',
     ].join('');
     return [{ json: { outcome: 'send', mamDelivery: true, deliveryRecipient: body.recipientEmail,

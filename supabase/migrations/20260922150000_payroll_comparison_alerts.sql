@@ -80,7 +80,7 @@ language plpgsql security definer set search_path='' as $$
 begin
  if auth.uid() is null or not private.has_payroll_balance_import_access() then raise exception 'Not authorised' using errcode='42501'; end if;
  perform 1 from private.payroll_balance_import_batches where id=p_batch_id for update;
- if private.payroll_comparison_only(auth.uid()) or exists(select 1 from private.payroll_balance_import_batches where id=p_batch_id and comparison_only) then
+ if private.payroll_comparison_only(auth.uid()) or exists(select 1 from private.payroll_balance_import_batches where id=p_batch_id and (comparison_only or private.payroll_comparison_only(uploaded_by))) then
   raise exception 'This upload is comparison only. Existing balances have not changed.' using errcode='42501';
  end if;
  return public.commit_payroll_balance_import_before_comparison(p_batch_id,p_expected_version);
