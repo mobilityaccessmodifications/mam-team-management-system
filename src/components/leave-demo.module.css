@@ -7091,6 +7091,16 @@
 .balanceReviewNotice { display: block; margin-top: 10px; color: #8b5514; font-size: 12px; }
 .requestBalance { margin: 12px 20px 0; }
 .requestBalance .balanceCard { padding: 14px 16px; }
+.requestBalanceDisclosure { border: 1px solid #dce9e2; border-radius: 10px; background: #f1f7f4; }
+.requestBalanceSummary { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px 16px; cursor: pointer; list-style: none; border-radius: 10px; color: #20312b; }
+.requestBalanceSummary::-webkit-details-marker { display: none; }
+.requestBalanceSummary:focus-visible { outline: 2px solid #28755a; outline-offset: 3px; }
+.requestBalanceSummary .balanceIcon { flex-basis: 36px; height: 36px; }
+.requestBalanceSummary strong { flex: 1; min-width: 0; font-size: 14px; }
+.requestBalanceChevron { flex-shrink: 0; }
+.requestBalanceDisclosure[open] > .requestBalanceSummary .requestBalanceChevron { transform: rotate(180deg); }
+.requestBalanceCalculator { padding: 0 16px 16px; }
+.requestBalanceCalculator .balanceCard { border: 0; border-radius: 0; padding: 14px 0; border-top: 1px solid #dce9e2; }
 .projectionExplanation { margin-top: 8px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
 .projectionExplanation summary { cursor: pointer; padding: 10px 0; font-weight: 650; }
 .projectionExplanation p { margin: 8px 0; }
