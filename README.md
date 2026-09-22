@@ -289,3 +289,27 @@ Run `scripts/deploy-automatic-leave-required-hours.py inspect`, then
 `apply <reviewed-sha256>` through the MAM Supabase credential helper before
 merging the UI. The script checks the target, predecessor, function bodies,
 private insert guard and backfill. It neither approves requests nor replays mail.
+
+### Device QR labels and register bulk editing
+
+Asset labels now encode the fixed production `/assets/MAM-IT-…` URL as a QR
+code, with the readable asset number retained in downloads and printed labels.
+The Assets toolbar and signed-in phone header open a camera scanner with manual
+asset-number fallback. Camera images stay in the browser; leaving the scanner
+stops the camera. Device links require an active account: System Admin receives
+the existing inventory view, employees receive only their own assigned-device
+projection. A scanned code never grants access or opens a third-party URL.
+
+Assets, Subscriptions and Accounts have leading selection controls. Assets
+reuse audited ownership/return operations; Accounts reuse the existing
+enable/disable workflow and keep login/password editing individual. Subscription
+bulk editing changes only chosen company, status and responsible-person fields;
+it preserves all other billing, membership and credential data. Each save
+checks the record version, and unconfirmed rows remain selected after a batch.
+
+Before merging this release, apply migration
+`20260922200000_subscription_bulk_edit` using the MAM credential wrapper and
+`scripts/deploy-subscription-bulk-edit.py apply <reviewed-sha256>`. Run its
+`inspect` and `advisors` commands, merge the reviewed GitHub PR into `main`, and
+verify the resulting Vercel production deployment. `tests/subscription-bulk.sql`
+uses only a disposable database and synthetic records.

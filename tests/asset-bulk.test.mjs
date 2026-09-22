@@ -4,9 +4,9 @@ import { createRequire } from "node:module";
 import test from "node:test";
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
-const module = { exports: {} };
-new Function("require", "module", "exports", ts.transpileModule(readFileSync("src/lib/asset-bulk.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(require, module, module.exports);
-const { runAssetBulkEdit } = module.exports;
+const loaded = { exports: {} };
+new Function("require", "module", "exports", ts.transpileModule(readFileSync("src/lib/asset-bulk.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(require, loaded, loaded.exports);
+const { runAssetBulkEdit } = loaded.exports;
 const assets = [1, 2, 3].map(i => ({ id: `device-${i}`, assetCode: `MAM-IT-00000${i}`, version: i, assignedTo: { personId: "old" } }));
 test("bulk asset assignment preserves versions, is sequential and reports individual failures", async () => {
   let running = 0; const calls = []; const progress = [];
