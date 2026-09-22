@@ -108,6 +108,19 @@ test('approval keeps sick balances private and does not round tiny debt to zero'
 });
 
 const { approvalRequestHours, approvalBalanceCoverage } = resolveImport('@/lib/leave-priority');
+test('request balance is collapsed by default with the calculator inside one native disclosure', () => {
+  const html = renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance, {
+    workspace: workspace([person]), personId: 'employee', self: true, requestedHours: 7.6,
+  }));
+  assert.match(html, /^<details[^>]*><summary[^>]*>/);
+  assert.doesNotMatch(html, /<details[^>]*\bopen|Banked hours only|Future accrual is not included/);
+  const summary = html.match(/<summary[^>]*>(.*?)<\/summary>/s)[1];
+  assert.match(summary, /Annual leave balance/);
+  assert.doesNotMatch(summary, /Current Xero|This request uses|Remaining after/);
+  assert.ok(html.indexOf('Current Xero balance') > html.indexOf('</summary>'));
+  assert.match(html, /This request uses/);
+});
+
 test('projected request card explains cutoff, formula and signed remaining amount', () => {
   const html=renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance, {
     workspace:workspace([person]),personId:'employee',requestedHours:15.2,
@@ -161,7 +174,7 @@ test('duration pill reports the requested balance, including sick leave', () => 
 test('annual balance appears in the request context for the authorised target only', () => {
   const props = {workspace:{...workspace([{...person,annualPayrollHours:60,annualApprovedHours:7.6,annualAvailableHours:52.4,accrualStatus:'needs_review'}]),canManageBalances:true},personId:'employee'};
   const html=renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance,{workspace:props.workspace,personId:'employee',self:true}));
-  assert.match(html,/My annual leave/);
+  assert.match(html,/Annual leave balance/);
   assert.match(html,/<strong>60 <span>hours<\/span><\/strong>/);
   assert.match(html,/Projection unavailable/);
   assert.doesNotMatch(html,/Balance needs checking/);
@@ -175,7 +188,7 @@ test('annual request context names an unavailable balance instead of hiding or i
     personId: 'employee',
     self: true,
   }));
-  assert.match(html, /My annual leave/);
+  assert.match(html, /Annual leave balance/);
   assert.match(html, /Unavailable/);
   assert.match(html, /Projection unavailable/);
   assert.doesNotMatch(html, /<strong>0<\/strong>/);
