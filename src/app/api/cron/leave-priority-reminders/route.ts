@@ -152,6 +152,15 @@ function providerFailureCode(providerResponse: Response) {
   return "network_error";
 }
 
+function reminderRecipientSet(value: unknown): string | null {
+  if (typeof value !== "string" || !value || value.length > 2550 || /[\u0000-\u001f\u007f]/.test(value)) return null;
+  const addresses = value.split(",");
+  if (addresses.length > 10 || addresses.some((email) => email.length > 254 || !EMAIL_PATTERN.test(email))) return null;
+  // Reviewer priority order and durable receipt order differ. Compare whole
+  // validated sets; never discard a malformed, missing or additional address.
+  return [...new Set(addresses.map((email) => email.toLowerCase()))].sort().join(",");
+}
+
 async function markPayrollReminderFailed(
   admin: AdminClient,
   reminderId: string,
@@ -179,12 +188,8 @@ async function dispatchLeavePriorityReminders(
   // Bounded groups avoid overloading the provider while keeping the daily run short.
   for (let offset = 0; offset < data.length; offset += 10) {
     await Promise.all(data.slice(offset, offset + 10).map(async (reminder) => {
-      if (
-        typeof reminder.manager_email !== "string"
-        || !reminder.manager_email
-        || reminder.manager_email.split(",").length > 10
-        || !reminder.manager_email.split(",").every((email: string) => email.length <= 254 && EMAIL_PATTERN.test(email))
-      ) {
+      const expectedRecipients = reminderRecipientSet(reminder.manager_email);
+      if (expectedRecipients === null) {
         failed += 1;
         return;
       }
@@ -229,7 +234,8 @@ async function dispatchLeavePriorityReminders(
           || receipt?.ok !== true
           || !(receipt.sent === true || receipt.alreadySent === true)
           || receipt.eventKey !== eventKey
-          || String(receipt.actualRecipient).toLowerCase() !== reminder.manager_email.toLowerCase()
+          || reminderRecipientSet(receipt.actualRecipient) !== expectedRecipients
+          || receipt.actualCcRecipients !== ""
         ) {
           failed += 1;
           return;
