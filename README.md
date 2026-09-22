@@ -148,7 +148,9 @@ See `docs/environment-management.md` for the complete environment model.
 ### Leave request email privacy
 
 Leave request emails include dates, business days, requested hours and status,
-but no annual, sick/personal, Xero or projected balances. The dispatcher strips
+but no annual, sick/personal, Xero or projected balance amounts. Conditional
+approval emails explicitly say “approved, subject to sufficient leave balance”
+in the subject, message and status; this wording also applies to their reminders. The dispatcher strips
 legacy balance fields before the n8n webhook. Full-time full-day requests use
 7.6 hours per business day; explicit hourly requests keep their recorded hours.
 
