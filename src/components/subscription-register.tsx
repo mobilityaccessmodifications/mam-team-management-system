@@ -48,6 +48,10 @@ import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import styles from "@/components/subscription-register.module.css";
 import {
   SUBSCRIPTION_BILLING_CYCLES,
+  SUBSCRIPTION_COMPANIES,
+  subscriptionCompanyLabel,
+  subscriptionCountLabel,
+  type SubscriptionCompany,
   compareSubscriptionMonthlyCost,
   subscriptionMonthlyEquivalentCents,
   type CreateSubscriptionInput,
@@ -156,6 +160,7 @@ function subscriptionSearchText(subscription: Subscription) {
     subscription.serviceName,
     subscription.planName,
     subscription.subscriptionCode,
+    subscriptionCompanyLabel(subscription.company),
     subscription.responsible.fullName,
     subscription.creditCardHolder,
     ...subscription.memberNames,
@@ -469,7 +474,7 @@ export function SubscriptionRegister({
       <label className={styles.searchField}><Search size={17} aria-hidden="true" /><span className={styles.visuallyHidden}>Search subscriptions</span><input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search service, owner or employee" /></label>
       {registerState.state === "ready" ? <div className={styles.toolSummary}>
         {hasSubscriptionFilters ? <button className={styles.clearFilters} type="button" onClick={() => setSubscriptionFilters({ billing: "", nextReview: "", responsible: "", status: "" })}>Clear</button> : null}
-        <span className={styles.count}>{filteredSubscriptions.length === registerState.subscriptions.length ? `${registerState.subscriptions.length} ${registerState.subscriptions.length === 1 ? "subscription" : "subscriptions"}` : `${filteredSubscriptions.length} of ${registerState.subscriptions.length} subscriptions`}</span>
+        <span className={styles.count} aria-live="polite">{subscriptionCountLabel(filteredSubscriptions, registerState.subscriptions.length)}</span>
       </div> : null}
     </div>
 
@@ -508,7 +513,7 @@ export function SubscriptionRegister({
         {filteredSubscriptions.map((subscription) => <div className={styles.subscriptionSheetRow} key={subscription.id} role="row">
           <div className={`${styles.sheetCell} ${styles.serviceCell}`} role="cell" data-label="Service">
             <div className={styles.subscriptionIcon}><CreditCard size={18} aria-hidden="true" /></div>
-            <div className={styles.subscriptionIdentity}><strong>{subscription.serviceName}</strong>{subscription.planName ? <span title={subscription.planName}>{subscription.planName}</span> : null}</div>
+            <div className={styles.subscriptionIdentity}><strong>{subscription.serviceName}</strong><span className={styles.companyBadge} data-company={subscription.company ?? "unset"} aria-label={`Company: ${subscriptionCompanyLabel(subscription.company)}`}>{subscriptionCompanyLabel(subscription.company)}</span>{subscription.planName ? <span title={subscription.planName}>{subscription.planName}</span> : null}</div>
           </div>
           <div className={`${styles.sheetCell} ${styles.monthlyCell}`} role="cell" data-label="Monthly"><strong>{monthlyCostLabel(subscription)}</strong></div>
           <div className={`${styles.sheetCell} ${styles.detailCell} ${styles.seatCell}`} role="cell" data-label="Seats / licences"><strong>{subscription.pricingModel === "paid" ? subscription.seatCount ?? "Not recorded" : "—"}</strong></div>
@@ -589,6 +594,7 @@ function SubscriptionModal({
       return;
     }
     const baseInput: CreateSubscriptionInput = {
+      company: String(form.get("company") ?? "") as SubscriptionCompany,
       serviceName: String(form.get("serviceName") ?? ""),
       planName: String(form.get("planName") ?? ""),
       pricingModel,
@@ -639,6 +645,7 @@ function SubscriptionModal({
         <div className={styles.formGrid}>
           <label><span>Service name <b aria-hidden="true">*</b></span><input name="serviceName" ref={initialFocusRef} required maxLength={160} defaultValue={subscription?.serviceName ?? ""} placeholder="Microsoft 365, Adobe Creative Cloud…" /></label>
           <label><span>Plan <small>Optional</small></span><input name="planName" maxLength={160} defaultValue={subscription?.planName ?? ""} placeholder="Business Standard, Teams…" /></label>
+          <label><span>Company <b aria-hidden="true">*</b></span><select name="company" required defaultValue={subscription?.company ?? ""}><option value="" disabled>Select company</option>{SUBSCRIPTION_COMPANIES.map((company) => <option value={company} key={company}>{subscriptionCompanyLabel(company)}</option>)}</select></label>
         </div>
         {isEditing ? <label><span>Status <b aria-hidden="true">*</b></span><select name="status" defaultValue={subscription?.status ?? "active"}><option value="active">Active</option><option value="paused">Paused</option><option value="cancelled">Cancelled</option></select></label> : null}
         <fieldset className={styles.pricingFieldset}>
