@@ -1,0 +1,30 @@
+.page { width: min(100% - 32px, 640px); margin: 0 auto; padding: 24px 0; color: #1c2c27; }
+.navigation { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
+.back, .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; text-decoration: none; font-weight: 600; }
+.back { color: #475d54; }
+.button { border: 1px solid #cbd6d1; border-radius: 10px; padding: 10px 14px; background: white; color: #263d32; cursor: pointer; }
+.button:disabled { opacity: .65; cursor: wait; }
+.button:focus-visible, .back:focus-visible, .input:focus-visible { outline: 3px solid #c54712; outline-offset: 3px; }
+.primary { background: #bc450f; border-color: #bc450f; color: white; }
+.card { border: 1px solid #d8e0dc; border-radius: 16px; padding: 24px; background: white; }
+.card h1 { font-size: 24px; line-height: 1.2; margin: 0 0 20px; }
+.card p { line-height: 1.5; }
+.card > .back { margin-left: 16px; }
+.heading { display: flex; align-items: center; gap: 12px; }
+.heading h1 { margin: 0; }
+.heading { margin-bottom: 24px; }
+.details { margin: 0; }
+.details > div { display: grid; grid-template-columns: minmax(100px, .8fr) minmax(0, 1.2fr); gap: 16px; padding: 15px 0; border-top: 1px solid #e3e9e6; }
+.details dt { color: #607269; font-size: 14px; }
+.details dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.scanner { display: grid; gap: 16px; }
+.camera { position: relative; aspect-ratio: 1; max-height: 420px; background: #17261f; border-radius: 12px; overflow: hidden; }
+.camera video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.camera::after { content: ""; position: absolute; inset: 20%; border: 2px solid white; border-radius: 16px; pointer-events: none; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.message { margin: 0; color: #53655c; font-size: 14px; }
+.manual { display: grid; gap: 10px; border-top: 1px solid #e3e9e6; padding-top: 20px; }
+.manual label { font-weight: 600; font-size: 14px; }
+.manual > div { display: flex; gap: 8px; }
+.input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid #bfcfc6; border-radius: 10px; padding: 10px 12px; font: inherit; }
+@media (max-width: 480px) { .card { padding: 18px; } .page { padding-top: 14px; } .card > .back { display: flex; margin: 12px 0 0; } }

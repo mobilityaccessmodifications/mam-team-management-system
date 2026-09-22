@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { assetLoginReturnPath } from "@/lib/asset-qr";
 
 import { isValidPortalLogin, normalisePortalLogin } from "@/lib/portal-login";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
@@ -114,7 +115,7 @@ export async function signIn(
     p_source_hash: sourceHash,
   });
 
-  redirect("/");
+  redirect(assetLoginReturnPath(formData.get("next")) ?? "/");
 }
 
 export async function signOut() {

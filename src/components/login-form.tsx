@@ -7,7 +7,7 @@ import { signIn, type LoginState } from "@/app/login/actions";
 
 const initialState: LoginState = { status: "idle", message: "" };
 
-export function LoginForm({ initialMessage = "" }: { initialMessage?: string }) {
+export function LoginForm({ initialMessage = "", returnTo = "" }: { initialMessage?: string; returnTo?: string }) {
   const [state, action, pending] = useActionState(signIn, initialState);
   const [messageDismissed, setMessageDismissed] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -20,6 +20,7 @@ export function LoginForm({ initialMessage = "" }: { initialMessage?: string }) 
       action={action}
       onSubmit={() => setMessageDismissed(false)}
     >
+      <input type="hidden" name="next" value={returnTo} />
       <label htmlFor="username">Email or admin username</label>
       <input
         id="username"
