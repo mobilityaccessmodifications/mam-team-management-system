@@ -96,3 +96,32 @@ export async function dispatchLeaveNotificationsForRequest(requestId: string) {
     if (!result.ok) console.warn("Leave notification remains queued.", { code: result.code });
   } catch { console.warn("Leave notification remains queued."); }
 }
+
+/** Durable, server-owned comparison alerts; amounts never enter the email. */
+export async function dispatchPayrollComparisonAlerts() {
+  const target = receiver();
+  const admin = createAdminClient();
+  const claimed = await admin.rpc("claim_payroll_comparison_alerts");
+  if (claimed.error || !Array.isArray(claimed.data)) return { ok: false, claimed: 0, sent: 0 };
+  let sent = 0;
+  for (const row of claimed.data) {
+    let delivered = false;
+    const eventKey = `payroll-comparison:${row.batch_id}`;
+    try {
+      const response = await fetch(target.url, {
+        method: "POST", redirect: "error", cache: "no-store", signal: AbortSignal.timeout(15_000),
+        headers: { "Content-Type": "application/json", "X-MAM-Notification-Secret": target.secret },
+        body: JSON.stringify({ version: 1, event: "payroll-comparison-alert", eventKey,
+          batchId: row.batch_id, differenceCount: row.difference_count }),
+      });
+      const receipt = await response.json();
+      delivered = response.ok && receipt.ok === true && (receipt.sent === true || receipt.alreadySent === true)
+        && receipt.eventKey === eventKey && receipt.actualRecipient === "marketing@mobilityaccess.com.au";
+    } catch { /* Retain the durable claim for retry without exposing payroll data. */ }
+    const result = await admin.rpc("finish_payroll_comparison_alert", {
+      p_batch_id: row.batch_id, p_claim_token: row.claim_token, p_delivered: delivered,
+    });
+    if (delivered && !result.error && result.data === true) sent++;
+  }
+  return { ok: sent === claimed.data.length, claimed: claimed.data.length, sent };
+}

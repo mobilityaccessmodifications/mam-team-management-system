@@ -124,6 +124,14 @@ function mapBatch(value: unknown): PayrollImportBatch {
     throw new Error(LOAD_ERROR);
   }
   return {
+    comparisonOnly: row.comparisonOnly === true,
+    differenceCount: positiveInteger(row.differenceCount ?? 0, true),
+    comparisonRows: Array.isArray(row.comparisonRows) ? row.comparisonRows.map((item) => {
+      const value = record(item);
+      return { rowId: positiveInteger(value.rowId), employeeName: text(value.employeeName), company: text(value.company),
+        kind: text(value.kind), uploadedHours: nullableNumber(value.uploadedHours) ?? 0, systemHours: nullableNumber(value.systemHours),
+        fileAsOf: date(value.fileAsOf), systemAsOf: date(value.systemAsOf, true), different: boolean(value.different) };
+    }) : [],
     batchId,
     version: positiveInteger(row.version),
     status,
@@ -300,4 +308,12 @@ export async function replacePayrollBalanceImportGrants(personIds: string[]): Pr
   } catch (reason) {
     return { ok: false, message: reason instanceof Error ? reason.message : "Payroll import access could not be saved." };
   }
+}
+
+export async function getPayrollBalanceImportBatch(batchId: string): Promise<PayrollImportBatch> {
+  const { supabase } = await requireImporter();
+  if (!UUID_PATTERN.test(batchId)) throw new Error(LOAD_ERROR);
+  const { data, error } = await supabase.rpc("get_payroll_balance_import_batch", { p_batch_id: batchId });
+  if (error || !data) throw new Error(LOAD_ERROR);
+  return mapBatch(data);
 }

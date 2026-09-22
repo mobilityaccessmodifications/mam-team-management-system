@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { dispatchLeaveNotificationOutbox } from "@/lib/leave-notification-outbox";
+import { dispatchLeaveNotificationOutbox, dispatchPayrollComparisonAlerts } from "@/lib/leave-notification-outbox";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,6 +13,7 @@ export async function GET(request: Request) {
   if (!secret || expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return reply({ ok: false }, 401);
   try {
     const result = await dispatchLeaveNotificationOutbox();
-    return reply(result, result.ok ? 200 : 503);
+    const comparisons = await dispatchPayrollComparisonAlerts();
+    return reply({ ...result, comparisons }, result.ok && comparisons.ok ? 200 : 503);
   } catch { return reply({ ok: false, code: "dispatch_failed" }, 503); }
 }

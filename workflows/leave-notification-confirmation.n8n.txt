@@ -3,7 +3,7 @@ const sent = $input.all();
 if (sent.some(item=>{const r=item.json||{};const status=Number(r.statusCode||r.status);return r.error||r.success===false||r.ok===false||(Number.isFinite(status)&&status>=400);})) throw new Error('Email provider explicitly rejected delivery.');
 
 const eventKey = String(source[0]?.json?.eventKey ?? '');
-if (source.length !== 1 || sent.length !== 1 || !(eventKey.startsWith('leave:') || eventKey.startsWith('payroll-balance:'))) throw new Error('MAM email delivery count mismatch.');
+if (source.length !== 1 || sent.length !== 1 || !(eventKey.startsWith('leave:') || eventKey.startsWith('payroll-balance:') || eventKey.startsWith('payroll-comparison:'))) throw new Error('MAM email delivery count mismatch.');
 const state = $getWorkflowStaticData('global');
 if (!state.leaveNotificationEvents || typeof state.leaveNotificationEvents !== 'object') state.leaveNotificationEvents = {};
 state.leaveNotificationEvents[eventKey] = { state: 'sent', at: Date.now() };

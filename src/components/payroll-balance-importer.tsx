@@ -16,6 +16,7 @@ import {
   commitPayrollBalanceImport,
   getPayrollBalanceImportAccessWorkspace,
   getPayrollBalanceImportWorkspace,
+  getPayrollBalanceImportBatch,
   replacePayrollBalanceImportGrants,
   stagePayrollBalanceFiles,
 } from "@/app/payroll-balances/actions";
@@ -137,6 +138,7 @@ export function PayrollBalanceImporter({
         return;
       }
       setBatch(result.batch);
+      await loadWorkspace();
     } catch {
       setError("The files could not be uploaded. Check your connection and try again.");
     } finally {
@@ -235,7 +237,7 @@ export function PayrollBalanceImporter({
         <span className={styles.headingIcon}><FileSpreadsheet size={21} aria-hidden="true" /></span>
         <div>
           <span className={styles.eyebrow}>Monthly payroll update</span>
-          <h2>Import leave balances</h2>
+          <h2>Leave balance upload</h2>
         </div>
         <div className={styles.actions}>
           {workspace.canManageAccess && !hideManagementControls ? <button className={styles.secondaryButton} type="button" onClick={() => void openAccess()} disabled={Boolean(busy)}>
@@ -260,7 +262,7 @@ export function PayrollBalanceImporter({
       <div className={styles.reminder} data-complete={reminder.complete || undefined}>
         {reminder.complete ? <CheckCircle2 size={20} aria-hidden="true" /> : <AlertTriangle size={20} aria-hidden="true" />}
         <div>
-          <strong>{reminder.complete ? "This month is up to date" : `Update due ${dateLabel(reminder.dueOn)}`}</strong>
+          <strong>{reminder.complete ? "This month’s files received" : `Update due ${dateLabel(reminder.dueOn)}`}</strong>
         </div>
         <div className={styles.companyStates}>
           <span data-complete={reminder.mamComplete || undefined}><Check size={13} aria-hidden="true" />MAM · {dateLabel(reminder.mamAsOf)}</span>
@@ -272,9 +274,12 @@ export function PayrollBalanceImporter({
         <summary>Recent imports · {workspace.recentBatches.length}</summary>
         <div>
           {workspace.recentBatches.map((item) => <article key={item.batchId}>
-            <span className={styles.batchStatus} data-status={item.status}>{item.status === "committed" ? "Applied" : "Preview only"}</span>
+            <span className={styles.batchStatus} data-status={item.status}>{item.status === "committed" ? "Applied" : "Saved"}</span>
             <strong>{item.files.map((file) => file.name).join(", ")}</strong>
             <small>{item.rowCount} people · {dateTimeLabel(item.committedAt ?? item.createdAt)}</small>
+            <button type="button" className={styles.secondaryButton} onClick={() => {
+              void getPayrollBalanceImportBatch(item.batchId).then(setBatch).catch(() => setError("The comparison could not be loaded."));
+            }}>View</button>
           </article>)}
         </div>
       </details> : null}
@@ -286,23 +291,33 @@ export function PayrollBalanceImporter({
       <section className={styles.previewModal} role="dialog" aria-modal="true" aria-labelledby="payroll-import-title" ref={previewDialogRef} onClick={(event) => event.stopPropagation()}>
         <header>
           <div>
-            <span className={styles.eyebrow}>{batch.status === "committed" ? "Import complete" : "Review before applying"}</span>
+            <span className={styles.eyebrow}>{batch.comparisonOnly ? "Comparison saved" : batch.status === "committed" ? "Import complete" : "Review before applying"}</span>
             <h2 id="payroll-import-title">Payroll balance preview</h2>
             <p>{batch.files.length} {batch.files.length === 1 ? "file" : "files"} · {batch.rows.length} people</p>
           </div>
           <button ref={previewInitialFocusRef} className={styles.iconButton} type="button" aria-label="Close payroll balance preview" onClick={closePreview} disabled={busy === "committing"}><X size={18} /></button>
         </header>
         <div className={styles.previewBody}>
-          <div className={styles.summaryGrid}>
+          {batch.comparisonOnly ? <p role="status">{batch.differenceCount ? `${batch.differenceCount} differences — alert queued for marketing@mobilityaccess.com.au.` : "No differences found."} Balances unchanged.</p> : null}
+          {!batch.comparisonOnly ? <div className={styles.summaryGrid}>
             <span><strong>{batchSummary.matched}</strong>Matched people</span>
             <span><strong>{batchSummary.annual}</strong>Annual updates</span>
             <span><strong>{batchSummary.sick}</strong>Sick updates</span>
             <span data-warning={batchSummary.held > 0 || undefined}><strong>{batchSummary.held}</strong>Held rows</span>
-          </div>
+          </div> : null}
           <div className={styles.fileList}>
             {batch.files.map((file) => <span key={file.name}><FileSpreadsheet size={15} aria-hidden="true" /><strong>{file.name}</strong><small>{file.employeeRows} rows · {fileSizeLabel(file.sizeBytes)}</small></span>)}
           </div>
-          <div className={styles.previewTable} role="table" aria-label="Payroll balance matches">
+          {batch.comparisonOnly ? <div className={styles.previewTable} role="table" aria-label="Payroll comparison">
+            <div className={styles.previewHeader} role="row"><span role="columnheader">Employee</span><span role="columnheader">Leave</span><span role="columnheader">Uploaded</span><span role="columnheader">System</span><span role="columnheader">Result</span></div>
+            {batch.comparisonRows.map((row) => <div className={styles.previewRow} role="row" key={`${row.rowId}:${row.kind}`}>
+              <span role="cell" data-label="Employee"><strong>{row.employeeName}</strong><small>{row.company.toUpperCase()}</small></span>
+              <span role="cell" data-label="Leave">{row.kind === "annual" ? "Annual" : "Sick"}</span>
+              <span role="cell" data-label="Uploaded">{hoursLabel(row.uploadedHours)}<small>{dateLabel(row.fileAsOf)}</small></span>
+              <span role="cell" data-label="System">{hoursLabel(row.systemHours)}<small>After approved leave · baseline {dateLabel(row.systemAsOf)}</small></span>
+              <span role="cell" data-label="Result">{row.different ? "Review difference" : "Matches"}</span>
+            </div>)}
+          </div> : <div className={styles.previewTable} role="table" aria-label="Payroll balance matches">
             <div className={styles.previewHeader} role="row">
               <span role="columnheader">Employee</span><span role="columnheader">Company</span><span role="columnheader">Annual</span><span role="columnheader">Sick</span><span role="columnheader">Match</span>
             </div>
@@ -313,13 +328,13 @@ export function PayrollBalanceImporter({
               <span role="cell" data-label="Sick" data-apply={row.willApplySick || undefined}>{hoursLabel(row.sickHours)}{row.willApplySick ? <small>Will update</small> : null}</span>
               <span role="cell" data-label="Match"><span className={styles.matchStatus} data-status={row.status}>{statusCopy[row.status].label}</span><small>{row.linkedName ?? statusCopy[row.status].detail}</small></span>
             </div>)}
-          </div>
+          </div>}
           {error ? <p className={styles.error} role="alert">{error}</p> : null}
           {notice ? <p className={styles.notice} role="status">{notice}</p> : null}
         </div>
         <footer>
           <button className={styles.secondaryButton} type="button" onClick={closePreview} disabled={busy === "committing"}>{batch.status === "committed" ? "Done" : "Cancel"}</button>
-          {batch.status === "staged" ? <button className={styles.primaryButton} type="button" onClick={() => void commitBatch()} disabled={Boolean(busy)}>
+          {batch.status === "staged" && !batch.comparisonOnly ? <button className={styles.primaryButton} type="button" onClick={() => void commitBatch()} disabled={Boolean(busy)}>
             {busy === "committing" ? <LoaderCircle className={styles.spinner} size={16} aria-hidden="true" /> : <CheckCircle2 size={16} aria-hidden="true" />}
             {busy === "committing" ? "Applying…" : "Apply matched balances"}
           </button> : null}

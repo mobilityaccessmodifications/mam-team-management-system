@@ -16,8 +16,8 @@ N8N = Path('/Volumes/UG/MAM/opencode/n8n')
 WORKFLOW = 'D6UG5ACZGILCpsOk'
 ALERT = 'UoQAe53Yu0fJ3ncq'
 FILES = {
-    'Validate and Reserve Leave Notification': ('leave-notification-validator.n8n.txt', '25348d370bde04516dcc9843d83b0a4e991bf5fb064aa6db6f3fb4f76d9ceaa5'),
-    'Confirm Leave HR Delivery': ('leave-notification-confirmation.n8n.txt', 'ec9705dc8c93087bdd41c1d0c9926f1d8fff5e513e74df2be2029ac355a0fed7'),
+    'Validate and Reserve Leave Notification': ('leave-notification-validator.n8n.txt', '361fe9b9d0235cff45ea6db0f12d8eb75722f92132230825c64353e38e7d4ae9'),
+    'Confirm Leave HR Delivery': ('leave-notification-confirmation.n8n.txt', 'b8c536c8188ffaee49822c49a69532ad8dd872a56bf58c5e2666642ef638ed2e'),
 }
 
 
