@@ -19,6 +19,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   let canViewOrganisation = false;
   let canChangeEmployeeView = false;
   let canViewSubscriptions = false;
+  let canManageSubscriptions = false;
   let canManageSubscriptionCredentials = false;
   let canManageSubscriptionCredentialGrants = false;
   let canManageAnalyticsApi = false;
@@ -41,6 +42,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       { data: subscriptionCredentialCapability, error: subscriptionCredentialCapabilityError },
       { data: subscriptionCredentialGrantCapability, error: subscriptionCredentialGrantCapabilityError },
       { data: analyticsApiCapability, error: analyticsApiCapabilityError },
+      { data: subscriptionManagementCapability, error: subscriptionManagementCapabilityError },
     ] = await Promise.all([
       supabase.rpc("get_portal_workspace_capabilities"),
       supabase.rpc("can_view_subscription_review_calendar"),
@@ -53,6 +55,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       // capability. If its forward migration is unavailable, keep the tab
       // hidden without disrupting an otherwise valid portal session.
       supabase.rpc("can_manage_analytics_api"),
+      supabase.rpc("can_manage_subscriptions"),
     ]);
     const current = Array.isArray(capabilities) ? capabilities[0] : null;
     isAdmin = current?.can_manage_accounts === true;
@@ -64,6 +67,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     checkInResources = canViewCheckIns ? getCheckInResourceLinks() : undefined;
     canChangeEmployeeView = current?.can_change_employee_view === true;
     canViewSubscriptions = current?.can_view_subscription_register === true;
+    canManageSubscriptions = !subscriptionManagementCapabilityError && subscriptionManagementCapability === true;
     canManageSubscriptionCredentials = !subscriptionCredentialCapabilityError
       && subscriptionCredentialCapability === true;
     canManageSubscriptionCredentialGrants = !subscriptionCredentialGrantCapabilityError
@@ -113,6 +117,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     canViewOrganisation={canViewOrganisation}
     canChangeEmployeeView={canChangeEmployeeView}
     canViewSubscriptions={canViewSubscriptions}
+    canManageSubscriptions={canManageSubscriptions}
     canManageSubscriptionCredentials={canManageSubscriptionCredentials}
     canManageSubscriptionCredentialGrants={canManageSubscriptionCredentialGrants}
     canManageAnalyticsApi={canManageAnalyticsApi}

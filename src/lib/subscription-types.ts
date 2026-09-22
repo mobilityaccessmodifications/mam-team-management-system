@@ -1,4 +1,15 @@
 export const SUBSCRIPTION_STATUSES = ["active", "paused", "cancelled"] as const;
+export const SUBSCRIPTION_COMPANIES = ["mam", "equipsy", "both"] as const;
+export type SubscriptionCompany = typeof SUBSCRIPTION_COMPANIES[number];
+export function subscriptionCompanyLabel(company: SubscriptionCompany | null) {
+  return company === "mam" ? "MAM" : company === "equipsy" ? "Equipsy" : company === "both" ? "Both" : "Not set";
+}
+export function subscriptionCountLabel(subscriptions: Pick<Subscription, "pricingModel">[], total = subscriptions.length) {
+  const free = subscriptions.filter((subscription) => subscription.pricingModel === "free").length;
+  const paid = subscriptions.length - free;
+  const prefix = subscriptions.length === total ? `${total} ${total === 1 ? "subscription" : "subscriptions"}` : `${subscriptions.length} of ${total} subscriptions`;
+  return `${prefix} (${free} Free, ${paid} Paid)`;
+}
 export const SUBSCRIPTION_PRICING_MODELS = ["free", "paid"] as const;
 export const SUBSCRIPTION_BILLING_CYCLES = ["monthly", "quarterly", "annual", "other"] as const;
 
@@ -17,6 +28,7 @@ export type SubscriptionPerson = {
 
 /** Credential-free management projection for System Admins and managers. */
 export type Subscription = {
+  company: SubscriptionCompany | null;
   id: string;
   subscriptionCode: string;
   serviceName: string;
@@ -54,6 +66,7 @@ export type EmployeeSubscription = {
 };
 
 export type CreateSubscriptionInput = {
+  company: SubscriptionCompany;
   serviceName: string;
   planName?: string;
   pricingModel: SubscriptionPricingModel;

@@ -1,0 +1,32 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import test from "node:test";
+const require = createRequire(import.meta.url);
+const ts = require("typescript");
+const loaded = { exports: {} };
+new Function("module", "exports", ts.transpileModule(readFileSync("src/lib/subscription-types.ts", "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText)(loaded, loaded.exports);
+const { subscriptionCountLabel, subscriptionCompanyLabel } = loaded.exports;
+test("subscription totals distinguish pricing model, not zero cost", () => {
+  assert.equal(subscriptionCountLabel([{ pricingModel: "free" }, { pricingModel: "paid", amountCents: 0 }]), "2 subscriptions (1 Free, 1 Paid)");
+  assert.equal(subscriptionCountLabel([]), "0 subscriptions (0 Free, 0 Paid)");
+  assert.equal(subscriptionCountLabel([{ pricingModel: "paid" }], 75), "1 of 75 subscriptions (0 Free, 1 Paid)");
+  assert.equal(subscriptionCountLabel([{ pricingModel: "free" }]), "1 subscription (1 Free, 0 Paid)");
+});
+test("company flags preserve unclassified legacy subscriptions", () => {
+  assert.deepEqual(["mam", "equipsy", "both", null].map(subscriptionCompanyLabel), ["MAM", "Equipsy", "Both", "Not set"]);
+});
+test("subscription actions use company-aware RPCs and validate enum", () => {
+  const source = readFileSync("src/app/subscriptions/actions.ts", "utf8");
+  assert.match(source, /SUBSCRIPTION_COMPANIES.includes\(company as SubscriptionCompany\)/);
+  assert.match(source, /p_company_scope: company/);
+  assert.match(source, /rpc\("create_subscription_v4"/);
+  assert.match(source, /rpc\("update_subscription_v4"/);
+});
+test("management UI uses a separate capability and makes preview read-only", () => {
+  const source = readFileSync("src/components/leave-demo.tsx", "utf8");
+  assert.match(source, /readOnly=\{!canManageSubscriptions \|\| isPreviewingEmployeeAccess\}/);
+  assert.match(readFileSync("src/app/page.tsx", "utf8"), /rpc\("can_manage_subscriptions"\)/);
+});

@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
   SUBSCRIPTION_BILLING_CYCLES,
+  SUBSCRIPTION_COMPANIES,
+  type SubscriptionCompany,
   SUBSCRIPTION_PRICING_MODELS,
   SUBSCRIPTION_STATUSES,
   type CreateSubscriptionInput,
@@ -27,6 +29,7 @@ const GENERIC_LOAD_ERROR = "Subscriptions could not be loaded. Refresh and try a
 const GENERIC_SAVE_ERROR = "The subscription could not be saved. Refresh and try again.";
 
 type SubscriptionRpcRow = {
+  company_scope: string | null;
   subscription_id: string;
   subscription_code: string;
   service_name: string;
@@ -155,6 +158,8 @@ function validateSubscriptionInput(input: unknown, includeStatus: boolean) {
   const serviceName = optionalText(value.serviceName, "Service name", 160);
   if (!serviceName) throw new Error("Enter the service name.");
   const pricingModel = text(value.pricingModel);
+  const company = text(value.company);
+  if (!SUBSCRIPTION_COMPANIES.includes(company as SubscriptionCompany)) throw new Error("Choose MAM, Equipsy or Both.");
   if (!VALID_PRICING_MODELS.has(pricingModel)) throw new Error("Choose whether this subscription is free or paid.");
   const billingCycle = pricingModel === "paid" ? text(value.billingCycle) : null;
   const amountCents = pricingModel === "paid" ? optionalAmountCents(value.amountCents) : null;
@@ -178,6 +183,7 @@ function validateSubscriptionInput(input: unknown, includeStatus: boolean) {
 
   return {
     p_service_name: serviceName,
+    p_company_scope: company,
     p_plan_name: optionalText(value.planName, "Plan name", 160),
     ...(includeStatus ? { p_subscription_status: validStatus(value.status) } : {}),
     p_pricing_model: pricingModel as SubscriptionPricingModel,
@@ -236,6 +242,7 @@ function mapSubscription(row: unknown): Subscription {
   const pricingModel = text(value?.pricing_model);
   const billingCycle = nullableText(value?.billing_cycle);
   const currency = text(value?.currency_code);
+  const company = nullableText(value?.company_scope);
   const responsiblePersonId = text(value?.responsible_person_id);
   const responsiblePersonName = text(value?.responsible_person_name);
   const responsiblePersonTitle = text(value?.responsible_person_title);
@@ -265,6 +272,7 @@ function mapSubscription(row: unknown): Subscription {
     || (pricingModel === "free" && (billingCycle !== null || amountCents !== null))
     || (pricingModel === "paid" && (amountCents === null || !billingCycle || !Number.isSafeInteger(amountCents) || amountCents < 0))
     || currency !== "AUD"
+    || (company !== null && !SUBSCRIPTION_COMPANIES.includes(company as SubscriptionCompany))
     || (renewalDate !== null && !ISO_DATE_PATTERN.test(renewalDate))
     || (seatCount !== null && (!Number.isSafeInteger(seatCount) || seatCount < 1 || seatCount > 100_000))
     || (creditCardUsed !== null && typeof creditCardUsed !== "boolean")
@@ -289,6 +297,7 @@ function mapSubscription(row: unknown): Subscription {
 
   return {
     id,
+    company: company as SubscriptionCompany | null,
     subscriptionCode,
     serviceName,
     planName: text(value?.plan_name),
@@ -361,7 +370,7 @@ export async function listSubscriptionPeople(): Promise<SubscriptionPerson[]> {
 export async function createSubscription(input: CreateSubscriptionInput): Promise<Subscription> {
   const supabase = await requireSubscriptionAdministrator();
   const values = validateSubscriptionInput(input, false);
-  const { data, error } = await supabase.rpc("create_subscription_v3", values);
+  const { data, error } = await supabase.rpc("create_subscription_v4", values);
   if (error || !data || Array.isArray(data)) throw mutationError(error, "The subscription could not be added. Refresh and try again.");
   const subscription = mapSubscription(data);
   revalidatePath("/");
@@ -371,7 +380,7 @@ export async function createSubscription(input: CreateSubscriptionInput): Promis
 export async function updateSubscription(input: UpdateSubscriptionInput): Promise<Subscription> {
   const supabase = await requireSubscriptionAdministrator();
   const values = validateSubscriptionInput(input, true);
-  const { data, error } = await supabase.rpc("update_subscription_v3", {
+  const { data, error } = await supabase.rpc("update_subscription_v4", {
     p_subscription_id: requiredUuid(input.subscriptionId, "The subscription record is invalid."),
     p_expected_version: requiredVersion(input.version),
     ...values,

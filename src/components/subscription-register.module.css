@@ -161,7 +161,11 @@
 .memberSearch input { width: 100%; min-width: 0; height: 38px; border: 0; outline: 0; background: transparent; color: var(--subscription-ink); font: inherit; font-size: 13px; }
 .searchField:focus-within,
 .memberSearch:focus-within { border-color: var(--surface-border-strong, #cbd7d2); box-shadow: none; }
-.count { color: var(--subscription-muted); font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.count { color: var(--subscription-muted); font-size: 12px; font-weight: 650; line-height: 1.5; white-space: normal; text-align: right; }
+.serviceCell .subscriptionIdentity .companyBadge { justify-self: start; width: fit-content; padding: 2px 8px; border: 1px solid #cedbd5; border-radius: 6px; color: #31564a; background: #eef5f1; font-size: 11px; font-weight: 650; white-space: normal; }
+.serviceCell .subscriptionIdentity .companyBadge[data-company="equipsy"] { color: #295c7a; background: #edf5fa; border-color: #ccdee9; }
+.serviceCell .subscriptionIdentity .companyBadge[data-company="both"] { color: #74441d; background: #fff2e8; border-color: #efd5bf; }
+.serviceCell .subscriptionIdentity .companyBadge[data-company="unset"] { color: var(--subscription-muted); background: var(--surface-muted, #f4f7f5); }
 
 .loadingState,
 .errorState,
@@ -605,9 +609,9 @@
   .headerActionGroup { width: 100%; justify-content: flex-end; }
   .headerActionGroup > button { min-width: 48px; min-height: 48px; }
   .searchField input { min-height: 48px; font-size: 16px; }
-  .tools { align-items: center; flex-direction: row; }
-  .count { display: none; }
-  .toolSummary { width: auto; }
+  .tools { align-items: stretch; flex-direction: column; }
+  .count { display: block; text-align: left; }
+  .toolSummary { width: 100%; }
   .subscriptionSheetRow:not(.subscriptionSheetHeader) { border-radius: 12px; box-shadow: none; }
   .subscriptionActions { justify-content: flex-end; }
   .modalBackdrop { align-items: end; padding: 0; }

@@ -464,6 +464,7 @@ export function LeaveDemo({
   canViewOrganisation = false,
   canChangeEmployeeView = false,
   canViewSubscriptions = false,
+  canManageSubscriptions = false,
   canManageSubscriptionCredentials = false,
   canManageSubscriptionCredentialGrants = false,
   canManageAnalyticsApi = false,
@@ -489,6 +490,7 @@ export function LeaveDemo({
   canChangeEmployeeView?: boolean;
   /** System-derived manager/HR/System Admin access to the credential-free subscription register. */
   canViewSubscriptions?: boolean;
+  canManageSubscriptions?: boolean;
   /** Server-issued access to the encrypted subscription-service credential vault. */
   canManageSubscriptionCredentials?: boolean;
   /** System Admin-only capability to select named credential delegates. */
@@ -2051,7 +2053,7 @@ export function LeaveDemo({
               renderSubscriptionRegister={showSubscriptionRegister
                 ? canViewSubscriptions
                   ? <SubscriptionRegister
-                      readOnly={!isAdmin}
+                      readOnly={!canManageSubscriptions || isPreviewingEmployeeAccess}
                       canManageCredentials={canManageSubscriptionCredentials}
                       canManageCredentialGrants={canManageSubscriptionCredentialGrants}
                       onRecordsChanged={() => void refreshLeaveWorkspace()}
