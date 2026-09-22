@@ -39,6 +39,8 @@ import {
   markSubscriptionReviewed,
   updateSubscription,
 } from "@/app/subscriptions/actions";
+import { patchSubscription } from "@/app/subscriptions/bulk-actions";
+import { runSubscriptionBulkEdit, type SubscriptionBulkPatch, type SubscriptionBulkResult } from "@/lib/subscription-bulk";
 import { listSubscriptionCredentialCatalogue } from "@/app/subscription-credentials/actions";
 import { EmployeePicker } from "@/components/employee-picker";
 import {
@@ -279,6 +281,10 @@ export function SubscriptionRegister({
   const [showCredentialAccess, setShowCredentialAccess] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const bulkEditButtonRef = useRef<HTMLButtonElement>(null);
+  const selectionFocusRef = useRef<HTMLDivElement>(null);
   const addSubscriptionButtonRef = useRef<HTMLButtonElement>(null);
   const subscriptionDialogReturnFocusRef = useRef<HTMLElement | null>(null);
 
@@ -293,6 +299,7 @@ export function SubscriptionRegister({
           : Promise.resolve([]),
       ]);
       setRegisterState({ state: "ready", subscriptions });
+      setSelectedIds((current) => new Set([...current].filter((id) => subscriptions.some((item) => item.id === id))));
       setPeople(activePeople);
       setCredentialStates(Object.fromEntries(credentialCatalogue.map((item) => [item.subscriptionId, item.credentialsSaved])));
     } catch (error) {
@@ -416,6 +423,41 @@ export function SubscriptionRegister({
   }, [query, registerState, subscriptionFilters, subscriptionSort]);
 
   const hasSubscriptionFilters = Object.values(subscriptionFilters).some(Boolean);
+  const selectedSubscriptions = registerState.state === "ready"
+    ? registerState.subscriptions.filter((subscription) => selectedIds.has(subscription.id)) : [];
+  const allShownSelected = filteredSubscriptions.length > 0 && filteredSubscriptions.every((subscription) => selectedIds.has(subscription.id));
+  const someShownSelected = filteredSubscriptions.some((subscription) => selectedIds.has(subscription.id));
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleShown() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const subscription of filteredSubscriptions) {
+        if (allShownSelected) next.delete(subscription.id); else next.add(subscription.id);
+      }
+      return next;
+    });
+  }
+
+  async function bulkEditCompleted(result: SubscriptionBulkResult) {
+    setSelectedIds(new Set(result.failures.map((failure) => failure.id)));
+    if (result.updatedIds.length) onRecordsChanged?.();
+    // Refresh optimistic versions, including uncertain network outcomes, before
+    // a failed item can be retried. Preserve the results if refresh itself fails.
+    try {
+      const subscriptions = await listSubscriptions();
+      setRegisterState({ state: "ready", subscriptions });
+    } catch {
+      setNotice("Refresh the register before retrying any remaining subscriptions.");
+    }
+  }
 
   function toggleSubscriptionSort(key: SubscriptionSortKey) {
     setSubscriptionSort((current) => current?.key === key
@@ -523,10 +565,16 @@ export function SubscriptionRegister({
       ] as const).map(filter => ({ ...filter, value: subscriptionFilters[filter.key], options: subscriptionFilterOptions[filter.key] }))}
       onFilter={setSubscriptionFilter}
     /> : null}
+    {registerState.state === "ready" && !readOnly ? <div className={styles.bulkToolbar} ref={selectionFocusRef} tabIndex={-1} aria-label="Subscription selection">
+      <label className={`${styles.selectionLabel} ${styles.mobileSelectAll}`}><input type="checkbox" checked={allShownSelected} disabled={!filteredSubscriptions.length} ref={(node) => { if (node) node.indeterminate = someShownSelected && !allShownSelected; }} onChange={toggleShown} />Select all shown</label>
+      <span aria-live="polite">{selectedSubscriptions.length ? `${selectedSubscriptions.length} selected` : "Select subscriptions to edit together"}</span>
+      {selectedSubscriptions.length ? <><button className={styles.secondaryAction} type="button" onClick={() => setSelectedIds(new Set())}>Clear selection</button><button ref={bulkEditButtonRef} className={styles.primaryAction} type="button" onClick={() => setShowBulkEdit(true)}><Pencil size={15} aria-hidden="true" />Edit selected</button></> : null}
+    </div> : null}
     {registerState.state === "ready" && !filteredSubscriptions.length ? <div className={styles.emptyState}><CreditCard size={25} aria-hidden="true" /><strong>{query || hasSubscriptionFilters ? "No subscriptions match those filters" : "No subscriptions have been added"}</strong><span>{readOnly ? "Subscription records will appear here when they are created by a System Admin." : "Start with the systems your staff use, then assign their owner and access."}</span>{!readOnly && !query && !hasSubscriptionFilters ? <button className={styles.secondaryAction} type="button" onClick={() => { subscriptionDialogReturnFocusRef.current = addSubscriptionButtonRef.current; setShowAdd(true); }}><Plus size={15} /> Add subscription</button> : null}</div> : null}
     {registerState.state === "ready" && filteredSubscriptions.length ? <div className={styles.sheetViewport}>
-      <div className={styles.subscriptionSheet} role="table" aria-label="Subscriptions">
+      <div className={`${styles.subscriptionSheet} ${!readOnly ? styles.selectableSheet : ""}`} role="table" aria-label="Subscriptions">
         <div className={`${styles.subscriptionSheetRow} ${styles.subscriptionSheetHeader}`} role="row">
+          {!readOnly ? <div className={`${styles.sheetHeaderCell} ${styles.selectionCell}`} role="columnheader"><label className={styles.selectionLabel}><input type="checkbox" checked={allShownSelected} ref={(node) => { if (node) node.indeterminate = someShownSelected && !allShownSelected; }} onChange={toggleShown} aria-label="Select all shown subscriptions" /><span>Select</span></label></div> : null}
           <SubscriptionSheetHeader label="Service" sortKey="service" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
           <SubscriptionSheetHeader label="Monthly" sortKey="monthly" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="billing" filterOptions={subscriptionFilterOptions.billing} filterValue={subscriptionFilters.billing} isFilterOpen={activeSubscriptionFilter === "billing"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
           <SubscriptionSheetHeader label="Seats / licences" sortKey="seats" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
@@ -538,7 +586,8 @@ export function SubscriptionRegister({
           <SubscriptionSheetHeader label="Access" sortKey="members" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
           <div className={styles.sheetHeaderCell} role="columnheader"><span>Actions</span></div>
         </div>
-        {filteredSubscriptions.map((subscription) => <div className={styles.subscriptionSheetRow} key={subscription.id} role="row">
+        {filteredSubscriptions.map((subscription) => <div className={styles.subscriptionSheetRow} key={subscription.id} role="row" data-selected={selectedIds.has(subscription.id) || undefined}>
+          {!readOnly ? <div className={`${styles.sheetCell} ${styles.selectionCell}`} role="cell"><label className={styles.selectionLabel}><input type="checkbox" checked={selectedIds.has(subscription.id)} onChange={() => toggleSelected(subscription.id)} aria-label={`Select ${subscription.serviceName}`} /><span className={styles.mobileSelectionText}>Select</span></label></div> : null}
           <div className={`${styles.sheetCell} ${styles.serviceCell}`} role="cell" data-label="Service">
             <div className={styles.subscriptionIcon}><CreditCard size={18} aria-hidden="true" /></div>
             <div className={styles.subscriptionIdentity}><strong>{subscription.serviceName}</strong><span className={styles.companyBadge} data-company={subscription.company ?? "unset"} aria-label={`Company: ${subscriptionCompanyLabel(subscription.company)}`}>{subscriptionCompanyLabel(subscription.company)}</span>{subscription.planName ? <span title={subscription.planName}>{subscription.planName}</span> : null}</div>
@@ -563,6 +612,7 @@ export function SubscriptionRegister({
       </div>
     </div> : null}
 
+    {showBulkEdit && !readOnly ? <SubscriptionBulkModal subscriptions={selectedSubscriptions} people={people} fallbackFocusRef={selectionFocusRef} onClose={() => setShowBulkEdit(false)} onCompleted={bulkEditCompleted} /> : null}
     {showAdd ? <SubscriptionModal people={people} fallbackFocusRef={subscriptionDialogReturnFocusRef} onClose={() => setShowAdd(false)} onCreated={subscriptionCreated} /> : null}
     {editTarget ? <SubscriptionModal people={people} subscription={editTarget} fallbackFocusRef={subscriptionDialogReturnFocusRef} onClose={() => setEditTarget(null)} onUpdated={(next) => { replaceSubscription(next, `${next.serviceName} has been updated.`); setEditTarget(null); }} onReview={() => recordReview(editTarget)} /> : null}
     {credentialTarget ? <SubscriptionCredentialEditor
@@ -576,6 +626,69 @@ export function SubscriptionRegister({
     /> : null}
     {showCredentialAccess ? <SubscriptionCredentialAccessDialog onClose={() => setShowCredentialAccess(false)} /> : null}
   </section>;
+}
+
+function SubscriptionBulkModal({ subscriptions, people, fallbackFocusRef, onClose, onCompleted }: {
+  subscriptions: Subscription[];
+  people: SubscriptionPerson[];
+  fallbackFocusRef: RefObject<HTMLElement | null>;
+  onClose: () => void;
+  onCompleted: (result: SubscriptionBulkResult) => Promise<void>;
+}) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const [company, setCompany] = useState<"" | SubscriptionCompany>("");
+  const [status, setStatus] = useState<"" | Subscription["status"]>("");
+  const [responsiblePersonId, setResponsiblePersonId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [completed, setCompleted] = useState(0);
+  const [result, setResult] = useState<SubscriptionBulkResult | null>(null);
+  const [error, setError] = useState("");
+  const closeWhenReady = useCallback(() => { if (!saving) onClose(); }, [onClose, saving]);
+  useDialogFocus(true, dialogRef, null, closeWhenReady, fallbackFocusRef);
+  const hasChanges = Boolean(company || status || responsiblePersonId);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving || !hasChanges) return;
+    setError("");
+    setSaving(true);
+    setCompleted(0);
+    const patch: SubscriptionBulkPatch = {
+      ...(company ? { company } : {}),
+      ...(status ? { status } : {}),
+      ...(responsiblePersonId ? { responsiblePersonId } : {}),
+    };
+    try {
+      const outcome = await runSubscriptionBulkEdit(subscriptions, patch,
+        (target, selectedPatch) => patchSubscription({ id: target.id, version: target.version, patch: selectedPatch }), setCompleted);
+      setResult(outcome);
+      await onCompleted(outcome);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Subscriptions could not be updated.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <ModalBackdrop className={styles.modalBackdrop} onPointerDown={(event) => { if (event.target === event.currentTarget) closeWhenReady(); }}>
+    <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="subscription-bulk-title" ref={dialogRef} aria-busy={saving}>
+      <header><div><h2 id="subscription-bulk-title">Edit subscriptions</h2></div><button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close bulk edit"><X size={20} /></button></header>
+      <form onSubmit={submit}>
+        {result ? <div className={styles.bulkResult} role="status"><strong>{result.updatedIds.length} updated{result.failures.length ? ` · ${result.failures.length} need attention` : ""}</strong>
+          {result.failures.length ? <ul>{result.failures.map((failure) => <li key={failure.id}><strong>{failure.serviceName}</strong><span>{failure.message}</span></li>)}</ul> : null}
+        </div> : <>
+          <details className={styles.bulkSummary}><summary>{subscriptions.length} selected</summary><ul>{subscriptions.map((subscription) => <li key={subscription.id}>{subscription.serviceName}</li>)}</ul></details>
+          <div className={styles.formGrid}>
+            <label><span>Company</span><select value={company} disabled={saving} onChange={(event) => setCompany(event.target.value as "" | SubscriptionCompany)}><option value="">Keep current</option>{SUBSCRIPTION_COMPANIES.map((value) => <option key={value} value={value}>{subscriptionCompanyLabel(value)}</option>)}</select></label>
+            <label><span>Status</span><select value={status} disabled={saving} onChange={(event) => setStatus(event.target.value as "" | Subscription["status"])}><option value="">Keep current</option><option value="active">Active</option><option value="paused">Paused</option><option value="cancelled">Cancelled</option></select></label>
+            <label><span>Responsible person</span><select value={responsiblePersonId} disabled={saving} onChange={(event) => setResponsiblePersonId(event.target.value)}><option value="">Keep current</option>{people.map((person) => <option key={person.personId} value={person.personId}>{person.fullName}</option>)}</select></label>
+          </div>
+        </>}
+        {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={16} />{error}</p> : null}
+        <footer>{result ? <button type="button" className={styles.primaryAction} onClick={closeWhenReady} disabled={saving}>Done</button> : <><button type="button" className={styles.secondaryAction} onClick={closeWhenReady} disabled={saving}>Cancel</button><button type="submit" className={styles.primaryAction} disabled={saving || !hasChanges}>{saving ? `Saving ${completed} / ${subscriptions.length}…` : `Save ${subscriptions.length} subscriptions`}</button></>}</footer>
+      </form>
+    </section>
+  </ModalBackdrop>;
 }
 
 function SubscriptionModal({
