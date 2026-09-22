@@ -46,7 +46,7 @@ test('approval panel shows Xero, approved and post-deduction balances', () => {
     workspace: workspace([{ ...person,
       annualPayrollHours: 60, annualPayrollDate: '2026-09-10', annualApprovedHours: 15.2, annualAvailableHours: 44.8,
       canViewSickBalance: true, sickPayrollHours: 25.1234, sickPayrollDate: '2026-09-10', sickApprovedHours: 7.6, sickAvailableHours: 17.5234,
-    }], [{ id: 'request', pendingBalance: true, requiredHours: null }]),
+    }], [{ id: 'request', pendingBalance: true, requiredHours: 7.6 }]),
     personId: 'employee', requestId: 'request', busy: false, async onSaved() {},
   }));
   assert.match(html, /Annual leave/);
@@ -62,8 +62,8 @@ test('approval panel shows Xero, approved and post-deduction balances', () => {
   assert.match(html, /<svg/);
   assert.match(html, /Xero as at 10 Sept 2026/);
   assert.doesNotMatch(html, /25.1234/);
-  assert.match(html, /Waiting for enough leave/);
-  assert.match(html, /Confirm the paid hours/);
+  assert.match(html, /Waiting for enough leave to cover 7\.6 hours/);
+  assert.doesNotMatch(html, /Paid hours required|Save required hours|Confirm the paid hours/);
 });
 
 test('missing sick snapshot is not displayed as a zero balance', () => {
@@ -74,6 +74,19 @@ test('missing sick snapshot is not displayed as a zero balance', () => {
   assert.match(html, /Sick leave/);
   assert.match(html, /Unavailable/);
   assert.doesNotMatch(html, /<strong>0<\/strong>/);
+});
+
+test('waiting and ready conditional approvals never ask reviewers to re-enter hours', () => {
+  for (const requiredHours of [7.6, 3.25, null]) {
+    for (const balanceSufficient of [true, false]) {
+      const html = renderToStaticMarkup(createElement(loaded.exports.ApprovalLeaveBalances, {
+        workspace: workspace([person], [{ id: 'request', pendingBalance: true, requiredHours, balanceSufficient }]),
+        personId: 'employee', requestId: 'request', busy: false, async onSaved() {},
+      }));
+      assert.doesNotMatch(html, /<form|<input|Save required hours|Paid hours required/);
+      assert.match(html, balanceSufficient ? /Balance sufficient — ready for review/ : /Waiting for enough leave/);
+    }
+  }
 });
 
 test('administrator can review payroll rows that have no employee match', () => {

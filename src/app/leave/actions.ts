@@ -1057,15 +1057,6 @@ export async function saveSickLeaveBalance(personId: string, hours: number, asOf
   return { ok: true };
 }
 
-export async function saveLeaveBalanceRequiredHours(requestId: string, hours: number) {
-  const supabase = await requireLeaveSession();
-  if (!UUID_PATTERN.test(requestId) || !Number.isFinite(hours) || hours <= 0 || hours > 100000) return { ok: false, message: "Enter valid paid hours for this request." };
-  const { error } = await supabase.rpc("set_leave_balance_required_hours", { p_request_id: requestId, p_hours: hours });
-  if (error) return { ok: false, message: "Required hours could not be saved. Refresh and check your review access." };
-  revalidatePath("/");
-  return { ok: true };
-}
-
 export async function saveLeaveAccrualPolicy(personId: string, input: {
   weeklyHours: number; annualWeeks: number; personalWeeks: number;
   shiftworker: boolean; enabled: boolean; note: string;
