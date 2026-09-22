@@ -514,6 +514,11 @@
 .modal input:not([type="radio"]),
 .modal select { width: 100%; min-height: 40px; box-sizing: border-box; border: 1px solid var(--surface-border-strong, #cbd7d2); border-radius: 9px; outline: 0; background: var(--surface-raised, #fff); color: var(--subscription-ink); font: inherit; font-size: 13px; padding: 8px 10px; }
 .formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.editorFields { display: grid; gap: 14px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.unavailableMembers { display: grid; gap: 8px; }
+.unavailableMembers p { margin: 0; color: var(--subscription-muted); font-size: 12px; line-height: 1.45; }
+.unavailableMember { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; }
+.unavailableMember button { flex-shrink: 0; }
 .pricingFieldset,
 .membersFieldset { display: grid; gap: 11px; min-width: 0; margin: 0; padding: 14px; border: 1px solid #dfe7e3; border-radius: 12px; background: #fbfcfb; }
 .pricingFieldset legend,

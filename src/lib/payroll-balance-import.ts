@@ -315,7 +315,14 @@ function parseSheet(sheet: Sheet, fileName: string, fileSha256: string): Observa
       continue;
     }
 
-    const kind = (header.leaveType === null ? null : parseLeaveKind(row[header.leaveType])) ?? sheetKind;
+    const kind = header.leaveType === null
+      ? sheetKind
+      : rowValueOrFallback(
+        row[header.leaveType],
+        parseLeaveKind,
+        sheetKind,
+        `${fileName} · ${sheet.name} · row ${rowIndex + 1}: leave type is not recognised.`,
+      );
     const hours = header.units === null ? null : parseHours(row[header.units]);
     if (!kind) throw new Error(`${fileName} · ${sheet.name} · row ${rowIndex + 1}: leave type is not recognised.`);
     if (hours === null) throw new Error(`${fileName} · ${sheet.name} · row ${rowIndex + 1}: leave balance is invalid.`);

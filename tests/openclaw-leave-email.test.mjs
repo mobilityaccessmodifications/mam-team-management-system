@@ -104,6 +104,8 @@ function outbox({ failFirst = false, claimFails = false } = {}) {
   const state = {};
   const validate = new Function('$input', '$getWorkflowStaticData',
     fs.readFileSync('workflows/leave-notification-validator.n8n.txt', 'utf8'));
+  const confirm = new Function('$', '$input', '$getWorkflowStaticData',
+    fs.readFileSync('workflows/leave-notification-confirmation.n8n.txt', 'utf8'));
   const row = { delivery_id: id, claim_token: id, payload: {
     version: 1, event: 'leave-submitted', requestId: id, employeeName: 'Synthetic Employee',
     company: 'mam', leaveType: 'Unpaid leave', startDate: '2026-10-01', endDate: '2026-10-01',
@@ -141,7 +143,7 @@ function outbox({ failFirst = false, claimFails = false } = {}) {
     if(output.outcome==='send') {
       assert.equal(output.ccRecipients, '');
       deliveries.push(output);
-      state.leaveNotificationEvents[body.eventKey] = {state:'sent',at:Date.now()};
+      confirm(() => ({ all: () => [{ json: output }] }), { all: () => [{ json: { statusCode: 202 } }] }, () => state);
     }
     return Response.json({ ok: true, sent:output.outcome==='send',alreadySent:output.outcome==='duplicate',eventKey: body.eventKey, actualRecipient: expected });
   } });

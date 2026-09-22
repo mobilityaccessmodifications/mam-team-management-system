@@ -1,6 +1,7 @@
 "use server";
 
 import { LEAVE_NOTICE_MESSAGE } from "@/lib/leave-notice";
+import { leaveDateRangeError, MAX_LEAVE_SPAN_DAYS } from "@/lib/leave-date-range";
 import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, UNCONFIRMED_ACCRUAL_MESSAGE, type AnnualLeaveProjection } from "@/lib/leave-request-balance";
 import { dispatchLeaveNotificationsForRequest } from "@/lib/leave-notification-outbox";
 
@@ -576,7 +577,8 @@ function normaliseLeaveInput(input: SubmitLeaveInput) {
   if (!LEAVE_TYPES.has(leaveType)) throw new Error("Choose a valid leave type.");
   const startDate = requiredDate(input.startDate, "Choose a valid start date.");
   const endDate = requiredDate(input.endDate, "Choose a valid end date.");
-  if (endDate < startDate) throw new Error("End date must be on or after start date.");
+  const rangeError = leaveDateRangeError(startDate, endDate);
+  if (rangeError) throw new Error(rangeError);
 
   const startTime = optionalTime(input.startTime, "Choose start and end times in 15-minute intervals.");
   const endTime = optionalTime(input.endTime, "Choose start and end times in 15-minute intervals.");
@@ -696,6 +698,7 @@ function userFacingSubmitError(error: unknown) {
     || message === UNCONFIRMED_ACCRUAL_MESSAGE
     || message === "Choose a valid leave type."
     || message === "End date must be on or after start date."
+    || message === `A leave request cannot span more than ${MAX_LEAVE_SPAN_DAYS} days.`
     || message === "Choose at least one weekday for this request."
     || message === "Timed leave must start and end on weekdays."
     || message === "Times must use 15-minute intervals within 06:00 to 18:00."

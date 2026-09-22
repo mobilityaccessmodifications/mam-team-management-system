@@ -1423,6 +1423,12 @@
   border-right: 1px solid var(--line);
 }
 
+.recordsList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .tableHead,
 .tableRow {
   display: grid;
@@ -1458,7 +1464,7 @@
   text-align: left;
 }
 
-.tableRow:last-child {
+.recordsList > li:last-child .tableRow {
   border-bottom: 0;
 }
 

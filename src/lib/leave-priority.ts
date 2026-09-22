@@ -82,10 +82,18 @@ export function approvalRequestHours(request: { days: number; hours?: number; fu
   return Number.isFinite(hours) && hours > 0 ? hours : null;
 }
 
-export function approvalBalanceCoverage(person: LeaveBalancePerson | undefined, leaveType: string, requiredHours: number | null) {
+export function approvalBalanceCoverage(person: LeaveBalancePerson | undefined, leaveType: string, requiredHours: number | null, request?: Pick<LeavePriorityWorkspace["requests"][number], "pendingBalance" | "balanceSufficient">) {
   const sick = leaveType === "Sick leave" || leaveType === "Carer's leave";
   if (leaveType !== "Annual leave" && !sick) return null;
   if (!person || !(sick ? person.canViewSickBalance : person.canViewBalance)) return null;
+  // Conditional approvals use the same request-specific result as the server's
+  // final decision gate: fresh accrual less other approved commitments, with
+  // review holds and example balances excluded. Do not reconstruct it from the
+  // payroll-only breakdown, which intentionally does not include accrual.
+  if (leaveType === "Annual leave" && request?.pendingBalance) {
+    if (typeof request.balanceSufficient !== "boolean") return "Check balance";
+    return request.balanceSufficient ? "Enough balance" : "Not enough balance";
+  }
   const availableField = sick ? "sickAvailableHours" : "annualAvailableHours";
   // The payroll snapshot minus approved leave is authoritative for approval.
   // Accrual reconciliation only blocks legacy estimated balances, not this value.

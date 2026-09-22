@@ -1,6 +1,6 @@
 """Publish only the reviewed leave receiver and its existing sanitized alert link.
 
-Run inspect first; apply takes the SHA256 of this script plus both code files.
+Run inspect first; apply takes the SHA256 of this script plus all code files.
 Never execute a mail webhook, export payloads, or replace static delivery receipts.
 """
 import copy
@@ -16,8 +16,12 @@ N8N = Path('/Volumes/UG/MAM/opencode/n8n')
 WORKFLOW = 'D6UG5ACZGILCpsOk'
 ALERT = 'UoQAe53Yu0fJ3ncq'
 FILES = {
-    'Validate and Reserve Leave Notification': ('leave-notification-validator.n8n.txt', '361fe9b9d0235cff45ea6db0f12d8eb75722f92132230825c64353e38e7d4ae9'),
-    'Confirm Leave HR Delivery': ('leave-notification-confirmation.n8n.txt', 'b8c536c8188ffaee49822c49a69532ad8dd872a56bf58c5e2666642ef638ed2e'),
+    # Reviewed source at e88b366; these hashes do not assert the live version.
+    'Validate and Reserve Leave Notification': ('leave-notification-validator.n8n.txt', '1e8b3c10b5d2d551afd7182b7377d3adbbd90df6a14f0580325743c1107bcba6'),
+    'Confirm Leave HR Delivery': ('leave-notification-confirmation.n8n.txt', '30e7ede456338c7a77fa523dc5247af42b952048183378e458b473313ebd0e25'),
+    'Return Leave HR Duplicate': ('leave-notification-duplicate.n8n.txt', '2595e27010658f0226ebc52da8f135c87f0d35cfb2ae6734fc80399a0217d782'),
+    # Historical source snapshot only; inspect must verify the current node.
+    'Return Leave HR Rejection': ('leave-notification-rejection.n8n.txt', 'ae148385b92e9c9b023e856f0a030962b365f15e49d0cd507523cbe410a72757'),
 }
 
 

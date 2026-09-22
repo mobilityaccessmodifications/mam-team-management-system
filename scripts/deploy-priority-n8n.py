@@ -67,7 +67,10 @@ if args.operation == 'receiver':
     assert "state.leaveNotificationEvents" in confirmation['parameters']['jsCode']
     confirmation['parameters']['jsCode'] = (root / 'workflows/leave-notification-confirmation.n8n.txt').read_text()
     duplicate = next(n for n in workflow['nodes'] if n['name'] == 'Return Leave HR Duplicate')
-    duplicate['parameters']['jsCode'] = "return [{ json: { ok: true, sent: false, alreadySent: true, actualRecipient: String($json.actualRecipient ?? $json.confirmationRecipient ?? ''), eventKey: String($json.eventKey ?? '') } }];"
+    duplicate['parameters']['jsCode'] = (root / 'workflows/leave-notification-duplicate.n8n.txt').read_text()
+    rejection = next(n for n in workflow['nodes'] if n['name'] == 'Return Leave HR Rejection')
+    assert rejection['type'] == 'n8n-nodes-base.code'
+    rejection['parameters']['jsCode'] = (root / 'workflows/leave-notification-rejection.n8n.txt').read_text()
     payload = {key: workflow[key] for key in ['name', 'nodes', 'connections', 'settings']}
     api('workflows/' + workflow['id'], 'PUT', payload)
     api('workflows/' + workflow['id'] + '/activate', 'POST', {})
@@ -75,6 +78,8 @@ if args.operation == 'receiver':
     assert updated['active']
     assert next(n for n in updated['nodes'] if n['name'] == validator['name'])['parameters']['jsCode'] == validator['parameters']['jsCode']
     assert next(n for n in updated['nodes'] if n['name'] == confirmation['name'])['parameters']['jsCode'] == confirmation['parameters']['jsCode']
+    assert next(n for n in updated['nodes'] if n['name'] == duplicate['name'])['parameters']['jsCode'] == duplicate['parameters']['jsCode']
+    assert next(n for n in updated['nodes'] if n['name'] == rejection['name'])['parameters']['jsCode'] == rejection['parameters']['jsCode']
     print('Verified active leave receiver:', updated['id'])
 else:
     # A separate schedule prevents check-in failures from blocking this job.

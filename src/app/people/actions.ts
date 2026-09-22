@@ -9,6 +9,7 @@ import {
 } from "@/lib/employee-directory";
 import { getOrganisationPersonWorkEmailForMember } from "@/lib/organisation-directory";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { preparePortalAccountStatusChange, finalisePortalAccountStatusChange, recoverPortalAccountStatusChange } from "@/lib/portal-account-status";
 import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryCompany,
@@ -44,6 +45,7 @@ type MutationRpcRow = {
 
 type ArchivePersonRow = {
   auth_user_id: string | null;
+  is_active: boolean;
 };
 
 type ArchiveProfileRow = {
@@ -51,26 +53,9 @@ type ArchiveProfileRow = {
   account_version: number;
 };
 
-type AccountStatusClaimRow = {
-  account_status: "active" | "disabled";
-  account_version: number;
-  change_token: string;
-};
-
-type AccountStatusInspectionRow = {
-  account_status: "active" | "disabled";
-  claim_status: "pending" | "finalised" | "cancelled";
-};
-
 type ArchiveCommitPersonRow = {
   is_active: boolean;
 };
-
-function authUserIsBanned(user: { banned_until?: string | null } | null | undefined) {
-  if (!user?.banned_until) return false;
-  const bannedUntil = Date.parse(user.banned_until);
-  return Number.isFinite(bannedUntil) && bannedUntil > Date.now();
-}
 
 function textValue(value: unknown, label: string) {
   if (typeof value !== "string") throw new Error(`${label} is invalid.`);
@@ -406,9 +391,8 @@ export async function archiveEmployeeDirectoryRecord(input: {
   let admin: ReturnType<typeof createAdminClient> | null = null;
   let targetAuthUserId: string | null = null;
   let databaseArchived = false;
-  let authBanMayHaveChanged = false;
+  let statusChangeAttempted = false;
   let statusChangeToken: string | null = null;
-  let cancelStatusClaim: (() => Promise<boolean>) | null = null;
 
   async function inspectArchiveCommitOutcome(personId: string) {
     if (!admin) return "unknown" as const;
@@ -422,8 +406,8 @@ export async function archiveEmployeeDirectoryRecord(input: {
       if (personError || !person) return "unknown" as const;
 
       // Without a status claim, the employee row is the entire transaction
-      // outcome we need to identify. With a claim, confirm both rows because
-      // Auth must not be restored after a committed archive.
+      // outcome we need to identify. With a claim, confirm both rows before
+      // attempting database-only finalisation; never restore Auth here.
       if (!statusChangeToken || !targetAuthUserId) {
         return person.is_active ? "rolled_back" as const : "committed" as const;
       }
@@ -442,28 +426,6 @@ export async function archiveEmployeeDirectoryRecord(input: {
     }
   }
 
-  async function rollbackAuthBan() {
-    if (admin && targetAuthUserId && cancelStatusClaim && authBanMayHaveChanged) {
-      let restored = false;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          const result = await admin.auth.admin.updateUserById(targetAuthUserId, { ban_duration: "none" });
-          if (!result.error) {
-            restored = true;
-            break;
-          }
-        } catch {
-          // Retry the same idempotent restoration after an ambiguous outcome.
-        }
-      }
-      if (!restored) return false;
-    }
-    try {
-      return cancelStatusClaim ? await cancelStatusClaim() : true;
-    } catch {
-      return false;
-    }
-  }
 
   try {
     const inputValue = inputObject(input);
@@ -480,14 +442,13 @@ export async function archiveEmployeeDirectoryRecord(input: {
     admin = createAdminClient();
 
     // The database RPC owns the transactional archive and profile-status
-    // update. Auth is a separate provider, so disable it first and roll that
-    // provider change back if the database transaction is rejected.
+    // update. Auth is a separate provider: its exclusive executor must confirm
+    // success first. Keep the claim on domain failure; never undo/retry Auth.
     const { data: person, error: personError } = await admin
       .from("internal_org_people")
-      .select("auth_user_id")
+      .select("auth_user_id,is_active")
       .eq("id", inputValue.personId)
       .eq("node_kind", "person")
-      .eq("is_active", true)
       .maybeSingle<ArchivePersonRow>();
     if (personError || !person) {
       return { ok: false, message: "The employee record could not be found. Refresh and try again." };
@@ -508,70 +469,34 @@ export async function archiveEmployeeDirectoryRecord(input: {
         return { ok: false, message: "The portal account could not be checked. No changes were made." };
       }
 
-      if (profile?.account_status === "active") {
-        const { data: authData, error: authLookupError } = await admin.auth.admin.getUserById(targetAuthUserId);
-        if (authLookupError || !authData.user) {
-          return { ok: false, message: "The portal account could not be checked. No changes were made." };
+      if (!person.is_active) {
+        if (profile?.account_status === "disabled" && await recoverPortalAccountStatusChange(supabase, {
+          personId: inputValue.personId,
+          userId: targetAuthUserId,
+          enabled: false,
+          accountVersion: profile.account_version,
+        })) {
+          const record = await findEmployeeDirectoryRecord(supabase, inputValue.personId);
+          revalidatePath("/");
+          return { ok: true, record };
         }
-
-        const { data: claimData, error: claimError } = await supabase.rpc(
-          "begin_portal_account_status_change",
-          {
-            p_person_id: inputValue.personId,
-            p_auth_user_id: targetAuthUserId,
-            p_enabled: false,
-            p_expected_account_version: profile.account_version,
-          },
-        );
-        const claimRows = Array.isArray(claimData) ? claimData : [];
-        const claim = claimRows[0] as AccountStatusClaimRow | undefined;
-        if (claimError || !claim || !UUID_PATTERN.test(claim.change_token)) {
-          return { ok: false, message: "The portal account changed or another account update is in progress. Refresh and try again." };
-        }
-        statusChangeToken = claim.change_token;
-
-        cancelStatusClaim = async () => {
-          try {
-            const { data: cancelled, error: cancelError } = await supabase.rpc(
-              "cancel_portal_account_status_change",
-              {
-                p_auth_user_id: targetAuthUserId,
-                p_change_token: claim.change_token,
-              },
-            );
-            return !cancelError && cancelled === true;
-          } catch {
-            return false;
-          }
-        };
-
-        if (!authUserIsBanned(authData.user)) {
-          authBanMayHaveChanged = true;
-          let authBanSucceeded = false;
-          for (let attempt = 0; attempt < 2; attempt += 1) {
-            try {
-              const authBan = await admin.auth.admin.updateUserById(targetAuthUserId, {
-                ban_duration: "876000h",
-              });
-              if (!authBan.error) {
-                authBanSucceeded = true;
-                break;
-              }
-            } catch {
-              // Retry the same idempotent provider state after an ambiguous outcome.
-            }
-          }
-          if (!authBanSucceeded) {
-            const rollbackSucceeded = await rollbackAuthBan();
-            return {
-              ok: false,
-              message: rollbackSucceeded
-                ? "The portal account could not be disabled. No changes were made."
-                : "The portal account needs reconciliation before employment can be ended.",
-            };
-          }
-        }
+        return { ok: false, message: "Employment has already ended. Refresh the archived record; any unresolved account claim needs administrator reconciliation." };
       }
+
+      if (profile?.account_status === "active") {
+        statusChangeAttempted = true;
+        const claim = await preparePortalAccountStatusChange(supabase, admin, {
+          personId: inputValue.personId,
+          userId: targetAuthUserId,
+          enabled: false,
+          accountVersion: profile.account_version,
+        });
+        statusChangeToken = claim.changeToken;
+      }
+    }
+
+    if (!person.is_active) {
+      return { ok: false, message: "Employment has already ended. Refresh the archived record." };
     }
 
     let archiveResult;
@@ -585,8 +510,8 @@ export async function archiveEmployeeDirectoryRecord(input: {
       });
     } catch {
       // A transport failure does not reveal whether Postgres committed. Read
-      // the authoritative rows before deciding whether it is safe to restore
-      // Auth and cancel the claim.
+      // the authoritative rows before completing the database claim. A live or
+      // ambiguous provider operation is never compensated or sent again.
       const outcome = await inspectArchiveCommitOutcome(inputValue.personId);
       if (outcome === "committed") {
         databaseArchived = true;
@@ -595,96 +520,60 @@ export async function archiveEmployeeDirectoryRecord(input: {
           error: null,
         };
       } else if (outcome === "rolled_back") {
-        const rollbackSucceeded = await rollbackAuthBan();
         return {
           ok: false,
-          message: rollbackSucceeded
-            ? "The employee profile could not be archived. Refresh and try again."
-            : "The profile could not be archived. Its portal account is disabled; refresh and contact an administrator.",
+          message: statusChangeToken
+            ? "The employee profile could not be archived. Its portal account remains disabled with a pending claim; refresh and retry the archive."
+            : "The employee profile could not be archived. Refresh and try again.",
         };
       } else {
         return {
           ok: false,
-          message: "The archive result could not be confirmed. The portal account remains disabled for safe reconciliation.",
+          message: statusChangeToken
+            ? "The archive result could not be confirmed. The portal account remains disabled for safe reconciliation."
+            : "The archive result could not be confirmed. Refresh before trying again.",
         };
       }
     }
     const { data, error } = archiveResult;
     if (error) {
-      const rollbackSucceeded = await rollbackAuthBan();
-      if (!rollbackSucceeded) {
-        return {
-          ok: false,
-          message: "The profile could not be archived. Its portal account is disabled; refresh and contact an administrator.",
-        };
-      }
+      const withAccountNotice = (message: string) => statusChangeToken
+        ? `${message} The portal account remains disabled with a pending claim; retry the archive after resolving this issue.`
+        : message;
       const message = error.message?.toLocaleLowerCase() ?? "";
       if (message.includes("return of this employee") || message.includes("active it devices")) {
-        return { ok: false, message: "Record the employee’s hardware return date in Registered devices before ending employment." };
+        return { ok: false, message: withAccountNotice("Record the employee’s hardware return date in Registered devices before ending employment.") };
       }
       if (message.includes("disable the portal account before archiving")) {
-        return { ok: false, message: "The combined archive and account-disable setup is not available yet. Refresh after the next release." };
+        return { ok: false, message: withAccountNotice("The combined archive and account-disable setup is not available yet. Refresh after the next release.") };
       }
       if (message.includes("reporting") || message.includes("account") || message.includes("manager") || message.includes("end date")) {
-        return { ok: false, message: error.message };
+        return { ok: false, message: withAccountNotice(error.message) };
       }
       if (message.includes("changed") || message.includes("version")) {
-        return { ok: false, message: "This record has changed. Refresh it, then try again." };
+        return { ok: false, message: withAccountNotice("This record has changed. Refresh it, then try again.") };
       }
       if (message.includes("could not find the function") || message.includes("schema cache") || message.includes("archive_employee_directory_record")) {
-        return { ok: false, message: "Profile archiving is not available until the profile lifecycle setup is applied. Ask an administrator to refresh the system setup." };
+        return { ok: false, message: withAccountNotice("Profile archiving is not available until the profile lifecycle setup is applied. Ask an administrator to refresh the system setup.") };
       }
-      return { ok: false, message: "The employee profile could not be archived. Refresh and try again." };
+      return { ok: false, message: withAccountNotice("The employee profile could not be archived. Refresh and try again.") };
     }
 
     databaseArchived = true;
 
-    if (targetAuthUserId && statusChangeToken && cancelStatusClaim) {
-      let finalisedData: unknown | null = null;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          const finalised = await supabase.rpc("finalise_portal_account_status_change", {
-            p_person_id: inputValue.personId,
-            p_auth_user_id: targetAuthUserId,
-            p_change_token: statusChangeToken,
-          });
-          if (!finalised.error) {
-            finalisedData = finalised.data;
-            break;
-          }
-        } catch {
-          // The claim token makes finalisation safe to retry.
-        }
+    if (targetAuthUserId && statusChangeToken) {
+      try {
+        await finalisePortalAccountStatusChange(supabase, {
+          personId: inputValue.personId,
+          userId: targetAuthUserId,
+          changeToken: statusChangeToken,
+        });
+      } catch {
+        return {
+          ok: false,
+          message: "Employment ended and the portal account was disabled, but its account claim needs reconciliation.",
+        };
       }
-
-      if (finalisedData === null) {
-        let inspection: AccountStatusInspectionRow | undefined;
-        try {
-          const inspected = await supabase.rpc("inspect_portal_account_status_change", {
-            p_auth_user_id: targetAuthUserId,
-            p_change_token: statusChangeToken,
-          });
-          const inspectionRows = Array.isArray(inspected.data) ? inspected.data : [];
-          inspection = inspected.error
-            ? undefined
-            : inspectionRows[0] as AccountStatusInspectionRow | undefined;
-        } catch {
-          inspection = undefined;
-        }
-        if (
-          !inspection
-          || (inspection.claim_status !== "finalised"
-            && !(inspection.claim_status === "pending"
-              && inspection.account_status === "disabled"
-              && await cancelStatusClaim()))
-        ) {
-          return {
-            ok: false,
-            message: "Employment ended and the portal account was disabled, but its account claim needs reconciliation.",
-          };
-        }
-      }
-      cancelStatusClaim = null;
     }
 
     const returned = Array.isArray(data) ? data[0] : data;
@@ -699,11 +588,15 @@ export async function archiveEmployeeDirectoryRecord(input: {
     revalidatePath("/");
     return { ok: true, record };
   } catch {
-    if (!databaseArchived) await rollbackAuthBan();
     if (databaseArchived) {
       return { ok: false, message: "Employment ended and the portal account was disabled, but the archived record needs refreshing." };
     }
-    return { ok: false, message: "The employee profile could not be archived. Refresh and try again." };
+    return {
+      ok: false,
+      message: statusChangeAttempted
+        ? "The account change is pending or needs provider reconciliation. Refresh before retrying the archive."
+        : "The employee profile could not be archived. Refresh and try again.",
+    };
   }
 }
 

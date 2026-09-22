@@ -43,6 +43,8 @@ import { patchSubscription } from "@/app/subscriptions/bulk-actions";
 import { runSubscriptionBulkEdit, type SubscriptionBulkPatch, type SubscriptionBulkResult } from "@/lib/subscription-bulk";
 import { listSubscriptionCredentialCatalogue } from "@/app/subscription-credentials/actions";
 import { EmployeePicker } from "@/components/employee-picker";
+import { subscriptionReviewWindow } from "@/lib/subscription-review-date";
+import { subscriptionEditorSnapshot, unavailableSubscriptionMemberIds } from "@/lib/subscription-editor-state";
 import {
   SubscriptionCredentialAccessDialog,
   SubscriptionCredentialEditor,
@@ -155,10 +157,7 @@ function passwordReviewInstruction(subscription?: Subscription) {
 
 function reviewFilterValue(subscription: Subscription) {
   if (!hasQuarterlyReview(subscription)) return "notScheduled";
-  if (isReviewDue(subscription)) return "due";
-  const inThirtyDays = new Date();
-  inThirtyDays.setDate(inThirtyDays.getDate() + 30);
-  return subscription.nextReviewOn <= inThirtyDays.toISOString().slice(0, 10) ? "next30" : "later";
+  return subscriptionReviewWindow(subscription.nextReviewOn);
 }
 
 function reviewSortValue(subscription: Subscription) {
@@ -178,7 +177,7 @@ function subscriptionSearchText(subscription: Subscription) {
 }
 
 function isReviewDue(subscription: Subscription) {
-  return hasQuarterlyReview(subscription) && subscription.nextReviewOn <= new Date().toISOString().slice(0, 10);
+  return hasQuarterlyReview(subscription) && subscriptionReviewWindow(subscription.nextReviewOn) === "due";
 }
 
 function amountToCents(value: string) {
@@ -710,6 +709,8 @@ function SubscriptionModal({
 }) {
   const isEditing = Boolean(subscription);
   const dialogRef = useRef<HTMLElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const initialSnapshotRef = useRef<string | null>(null);
   const initialFocusRef = useRef<HTMLInputElement>(null);
   const [pricingModel, setPricingModel] = useState<SubscriptionPricingModel>(subscription?.pricingModel ?? "free");
   const [creditCardUsed, setCreditCardUsed] = useState(subscription?.creditCardUsed === true ? "yes" : subscription?.creditCardUsed === false ? "no" : "");
@@ -718,11 +719,22 @@ function SubscriptionModal({
   const [error, setError] = useState("");
   const closeWhenReady = useCallback(() => { if (!saving) onClose(); }, [onClose, saving]);
   const passwordReminder = passwordReviewInstruction(subscription);
+  const unavailableMemberIds = unavailableSubscriptionMemberIds(people, memberPersonIds);
   useDialogFocus(true, dialogRef, initialFocusRef, closeWhenReady, fallbackFocusRef);
+
+  useEffect(() => {
+    if (formRef.current) {
+      initialSnapshotRef.current = subscriptionEditorSnapshot(new FormData(formRef.current), subscription?.memberPersonIds ?? []);
+    }
+  }, [subscription]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
+    if (unavailableMemberIds.length) {
+      setError("Remove inactive or unavailable members under Employee access before saving.");
+      return;
+    }
     const form = new FormData(event.currentTarget);
     const amountText = String(form.get("amount") ?? "");
     const amountCents = pricingModel === "paid" ? amountToCents(amountText) : null;
@@ -767,6 +779,10 @@ function SubscriptionModal({
 
   async function reviewNow() {
     if (!onReview || saving) return;
+    if (!formRef.current || initialSnapshotRef.current !== subscriptionEditorSnapshot(new FormData(formRef.current), memberPersonIds)) {
+      setError("Save your changes before marking this review complete. Your edits are still here.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -782,7 +798,8 @@ function SubscriptionModal({
   return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="subscription-dialog-title" tabIndex={-1}>
       <header><div><h2 id="subscription-dialog-title">{isEditing ? "Edit subscription" : "Add subscription"}</h2>{isEditing && subscription ? <p>{subscription.subscriptionCode}</p> : null}</div><button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close subscription form"><X size={19} /></button></header>
-      <form onSubmit={submit}>
+      <form ref={formRef} onSubmit={submit}>
+        <fieldset className={styles.editorFields} disabled={saving}>
         <div className={styles.formGrid}>
           <label><span>Service name <b aria-hidden="true">*</b></span><input name="serviceName" ref={initialFocusRef} required maxLength={160} defaultValue={subscription?.serviceName ?? ""} placeholder="Microsoft 365, Adobe Creative Cloud…" /></label>
           <label><span>Plan <small>Optional</small></span><input name="planName" maxLength={160} defaultValue={subscription?.planName ?? ""} placeholder="Business Standard, Teams…" /></label>
@@ -811,9 +828,11 @@ function SubscriptionModal({
           <label><span>Renewal date <small>Optional</small></span><input name="renewalDate" type="date" defaultValue={subscription?.renewalDate ?? ""} /></label>
           <label><span>Responsible person <b aria-hidden="true">*</b></span><EmployeePicker assignees={people} defaultValue={subscription?.responsible.personId ?? ""} name="responsiblePersonId" disabled={!people.length} /></label>
         </div>
+        {unavailableMemberIds.length ? <p className={styles.inlineError} role="status">{unavailableMemberIds.length} selected {unavailableMemberIds.length === 1 ? "member is" : "members are"} inactive or unavailable. Open Employee access to remove them before saving.</p> : null}
         <details className={styles.accessDetails}><summary>Employee access{memberPersonIds.length ? ` · ${memberPersonIds.length}` : ""}</summary><SubscriptionMemberPicker people={people} selectedIds={memberPersonIds} onChange={setMemberPersonIds} /></details>
 
         {isEditing && passwordReminder ? <p className={styles.formHelp}><KeyRound size={15} /> {passwordReminder} </p> : null}
+        </fieldset>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>{isEditing && onReview && subscription && hasQuarterlyReview(subscription) ? <button className={styles.secondaryAction} type="button" onClick={() => void reviewNow()} disabled={saving}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CalendarClock size={16} />}{saving ? "Saving…" : "Mark review complete"}</button> : null}<button className={styles.primaryAction} type="submit" disabled={saving || !people.length}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CreditCard size={16} />}{saving ? "Saving…" : isEditing ? "Save changes" : "Add subscription"}</button></footer>
       </form>
@@ -833,14 +852,24 @@ function SubscriptionMemberPicker({
   const [query, setQuery] = useState("");
   const listId = useId();
   const selected = new Set(selectedIds);
+  const unavailableMemberIds = unavailableSubscriptionMemberIds(people, selectedIds);
   const filteredPeople = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
     return people.filter((person) => !term || [person.fullName, person.positionTitle, person.teamName, person.company].join(" ").toLocaleLowerCase().includes(term));
   }, [people, query]);
 
   function toggle(personId: string) {
-    onChange(selected.has(personId) ? selectedIds.filter((id) => id !== personId) : [...selectedIds, personId]);
+    if (selected.has(personId)) onChange(selectedIds.filter((id) => id !== personId));
+    else if (people.some((person) => person.personId === personId)) onChange([...selectedIds, personId]);
   }
 
-  return <fieldset className={styles.membersFieldset}><legend>Who can view this subscription</legend><label className={styles.memberSearch}><Search size={15} aria-hidden="true" /><span className={styles.visuallyHidden}>Search employees for subscription access</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search employees" type="search" /></label><div className={styles.memberSummary}>{selectedIds.length} selected</div><div className={styles.memberList} id={listId}>{filteredPeople.length ? filteredPeople.map((person) => <label className={styles.memberOption} key={person.personId}><input checked={selected.has(person.personId)} onChange={() => toggle(person.personId)} type="checkbox" /><span><strong>{person.fullName}</strong><small>{[person.positionTitle, person.teamName].filter(Boolean).join(" · ")}</small></span></label>) : <p className={styles.memberEmpty}>No employees match that search.</p>}</div></fieldset>;
+  return <fieldset className={styles.membersFieldset}><legend>Who can view this subscription</legend>
+    {unavailableMemberIds.length ? <div className={styles.unavailableMembers}>
+      <p>These selected members are no longer available for assignment. Remove them before saving.</p>
+      {unavailableMemberIds.map((personId, index) => <div className={styles.unavailableMember} key={personId}>
+        <span>Inactive or unavailable member {index + 1}</span>
+        <button type="button" className={styles.secondaryAction} onClick={() => toggle(personId)} aria-label={`Remove inactive or unavailable member ${index + 1}`}>Remove</button>
+      </div>)}
+    </div> : null}
+    <label className={styles.memberSearch}><Search size={15} aria-hidden="true" /><span className={styles.visuallyHidden}>Search employees for subscription access</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search employees" type="search" /></label><div className={styles.memberSummary}>{selectedIds.length} selected</div><div className={styles.memberList} id={listId}>{filteredPeople.length ? filteredPeople.map((person) => <label className={styles.memberOption} key={person.personId}><input checked={selected.has(person.personId)} onChange={() => toggle(person.personId)} type="checkbox" /><span><strong>{person.fullName}</strong><small>{[person.positionTitle, person.teamName].filter(Boolean).join(" · ")}</small></span></label>) : <p className={styles.memberEmpty}>No employees match that search.</p>}</div></fieldset>;
 }

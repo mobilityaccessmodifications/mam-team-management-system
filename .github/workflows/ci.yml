@@ -22,6 +22,40 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run test:bundle
+
+  browser-behavior:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install pinned Chromium in the checkout's own cache
+        run: npx playwright install --with-deps chromium --only-shell
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: node_modules/.cache/ms-playwright
+      - name: Real UI behavior with isolated synthetic action fixtures
+        run: npm run test:browser
+
+  full-migration-replay-and-openclaw:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '17']
+    container: postgres:${{ matrix.postgres }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Full ordered replay, effective ACLs, real concurrency and rollback
+        # initdb refuses root. This creates a new UNIX-socket-only cluster as
+        # the container's unprivileged postgres user. No service URL/secrets.
+        run: runuser -u postgres -- node scripts/test-sql.mjs
 
   security-sql:
     runs-on: ubuntu-latest
@@ -38,6 +72,9 @@ jobs:
           --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Test service-only OpenClaw allowlist snapshot with synthetic data
         env:
           PGPASSWORD: synthetic-ci-only
@@ -104,6 +141,15 @@ jobs:
             -f tests/portal-account-status-claim-bootstrap.sql \
             -f supabase/migrations/20260916120000_serialise_portal_account_status_changes.sql \
             -f tests/portal-account-status-claim.sql
+
+      - name: Test exclusive account executor and cleanup reservation races
+        env:
+          PGPASSWORD: synthetic-ci-only
+          ACCOUNT_TEST_PASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres portal_account_executor_test
+          psql -X -h localhost -U postgres -d portal_account_executor_test -v ON_ERROR_STOP=1 -f tests/portal-account-executor.sql
+          node tests/run-account-executor-concurrency.mjs --host localhost --port 5432 --user postgres --database portal_account_executor_test
 
       - name: Test personal Calendar scope and explicit approved-leave viewers
         env:

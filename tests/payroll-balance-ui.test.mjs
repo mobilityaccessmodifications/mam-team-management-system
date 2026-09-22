@@ -46,7 +46,7 @@ test('approval panel shows Xero, approved and post-deduction balances', () => {
     workspace: workspace([{ ...person,
       annualPayrollHours: 60, annualPayrollDate: '2026-09-10', annualApprovedHours: 15.2, annualAvailableHours: 44.8,
       canViewSickBalance: true, sickPayrollHours: 25.1234, sickPayrollDate: '2026-09-10', sickApprovedHours: 7.6, sickAvailableHours: 17.5234,
-    }], [{ id: 'request', pendingBalance: true, requiredHours: 7.6 }]),
+    }], [{ id: 'request', pendingBalance: true, requiredHours: 7.6, balanceSufficient: false }]),
     personId: 'employee', requestId: 'request', busy: false, async onSaved() {},
   }));
   assert.match(html, /Annual leave/);

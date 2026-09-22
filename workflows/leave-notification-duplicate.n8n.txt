@@ -1,0 +1,12 @@
+// Forward original delivery evidence only. A retry's requested recipients are
+// not proof of a send; reconciliation/rejection must never become success here.
+if ($json.outcome !== 'duplicate' || $json.ok !== true || $json.alreadySent !== true
+  || typeof $json.actualRecipient !== 'string' || !$json.actualRecipient
+  || typeof $json.actualCcRecipients !== 'string' || $json.providerReceipt?.accepted !== true) {
+  throw new Error('MAM duplicate receipt evidence unavailable; reconciliation required.');
+}
+return [{ json: {
+  ok: true, sent: false, alreadySent: true, eventKey: $json.eventKey,
+  actualRecipient: $json.actualRecipient, actualCcRecipients: $json.actualCcRecipients,
+  providerReceipt: $json.providerReceipt,
+} }];

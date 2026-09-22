@@ -10,6 +10,8 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const TTL = 90 * 24 * 60 * 60 * 1000;
 const PROCESSING = 20 * 60 * 1000;
+const CAPACITY = 5000;
+const CAPACITY_ERROR = 'MAM notification receipt capacity reached; reconciliation required.';
 const reject = (code) => [{ json: { outcome: 'rejected', ok: false, sent: false, alreadySent: false, rejectionCode: code } }];
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value, max) => typeof value === 'string' && value.length > 0 && value.length <= max
@@ -41,6 +43,64 @@ const emailList = (value) => {
   const emails = raw.map((email) => String(email).trim().toLowerCase()).filter((email) => EMAIL.test(email));
   return [...new Set(emails)];
 };
+// One reservation policy for every event family. Receipt keys are never evicted:
+// expiry removes recipient/provider evidence, not the fact a send took place.
+const reserve = (eventKey, recipient, cc, legacyEventKey) => {
+  const now = Date.now();
+  const state = $getWorkflowStaticData('global');
+  if (state.leaveNotificationEvents === undefined) state.leaveNotificationEvents = {};
+  if (!object(state.leaveNotificationEvents)) return reject('receipt-store-invalid');
+  const events = state.leaveNotificationEvents;
+  for (const [key, receipt] of Object.entries(events)) {
+    if (key !== eventKey && key !== legacyEventKey && object(receipt)
+      && receipt.state === 'sent' && Number.isFinite(receipt.at) && now - receipt.at > TTL) {
+      events[key] = { state: 'sent', at: receipt.at, evidenceExpired: true };
+    }
+  }
+  const own = (key) => key && Object.prototype.hasOwnProperty.call(events, key);
+  const knownRecipients = (receipt) => {
+    const valid = (value, required) => typeof value === 'string' && (!required || value.length > 0)
+      && (value === '' || value.split(',').every((email) => email.length <= 254 && EMAIL.test(email)))
+      && emailList(value).join(',') === value;
+    return valid(receipt?.actualRecipient, true) && valid(receipt?.actualCcRecipients, false);
+  };
+  const evidence = (receipt) => ({
+    ...(receipt?.state === 'sent' && knownRecipients(receipt)
+      ? { actualRecipient: receipt.actualRecipient, actualCcRecipients: receipt.actualCcRecipients } : {}),
+    ...(receipt?.state === 'sent' && object(receipt.providerReceipt) && receipt.providerReceipt.accepted === true
+      ? { providerReceipt: receipt.providerReceipt } : {}),
+  });
+  const reconcile = (code, receipt, receiptEventKey) => [{ json: {
+    outcome: 'rejected', ok: false, sent: false, alreadySent: false,
+    reconciliationRequired: true, rejectionCode: code, eventKey, receiptEventKey, ...evidence(receipt),
+  } }];
+  const replay = (receipt, receiptEventKey) => {
+    if (receipt?.state === 'processing' && Number.isFinite(receipt.at) && now - receipt.at < PROCESSING) {
+      return reject('delivery-in-flight');
+    }
+    if (receipt?.state !== 'sent') return reconcile('receipt-delivery-unknown', receipt, receiptEventKey);
+    if (!knownRecipients(receipt) || !object(receipt.providerReceipt) || receipt.providerReceipt.accepted !== true) {
+      return reconcile('receipt-evidence-unavailable', receipt, receiptEventKey);
+    }
+    if (receiptEventKey !== eventKey) return reconcile('legacy-receipt-reconciliation', receipt, receiptEventKey);
+    const same = (left, right) => JSON.stringify(emailList(left).sort()) === JSON.stringify(emailList(right).sort());
+    if (!same(receipt.actualRecipient, recipient) || !same(receipt.actualCcRecipients, cc)) {
+      return reconcile('receipt-recipient-mismatch', receipt, receiptEventKey);
+    }
+    return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true,
+      eventKey, ...evidence(receipt) } }];
+  };
+  if (own(eventKey)) return replay(events[eventKey], eventKey);
+  if (own(legacyEventKey)) return replay(events[legacyEventKey], legacyEventKey);
+  // Includes tombstones, unknown legacy entries and every in-flight reservation.
+  // Fail visibly through the existing sanitized error workflow; never discard a
+  // successful receipt to make room for another send (including a pre-existing
+  // 5001-entry cache from the old validator).
+  if (Object.keys(events).length >= CAPACITY) throw new Error(CAPACITY_ERROR);
+  events[eventKey] = { state: 'processing', at: now,
+    deliveryRecipient: emailList(recipient).join(','), ccRecipients: emailList(cc).join(',') };
+  return null;
+};
 try {
   const input = $input.first().json ?? {};
   const headers = object(input.headers) ? input.headers : {};
@@ -54,12 +114,8 @@ try {
       || body.eventKey !== `payroll-comparison:${body.batchId}`
       || !Number.isInteger(body.differenceCount) || body.differenceCount < 1 || body.differenceCount > 2000) return reject('comparison-shape');
     const recipient = 'marketing@mobilityaccess.com.au';
-    const state = $getWorkflowStaticData('global');
-    if (!object(state.leaveNotificationEvents)) state.leaveNotificationEvents = {};
-    const previous = state.leaveNotificationEvents[body.eventKey];
-    if (previous?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true, actualRecipient: recipient, eventKey: body.eventKey } }];
-    if (previous?.state === 'processing' && Date.now() - previous.at < PROCESSING) return reject('delivery-in-flight');
-    state.leaveNotificationEvents[body.eventKey] = {state:'processing',at:Date.now()};
+    const reservation = reserve(body.eventKey, recipient, '');
+    if (reservation) return reservation;
     return [{json:{outcome:'send',mamDelivery:true,deliveryRecipient:recipient,confirmationRecipient:recipient,ccRecipients:'',eventKey:body.eventKey,
       emailSubject:'[People Hub] Leave balance differences require review',
       emailHtml:'<p>A payroll upload has ' + body.differenceCount + ' leave balance differences or unmatched entries.</p><p>Existing balances have not been changed.</p><p>Open Leave → Balance → Recent imports to review uploaded and system balances.</p><p>Reference: ' + escape(body.batchId) + '</p><p><a href="' + APP_URL + '/?view=leave">People Hub</a></p>'}}];
@@ -82,21 +138,8 @@ try {
       || new Set(body.missingCompanies).size !== body.missingCompanies.length
       || body.missingCompanies.some((company) => !['mam', 'equipsy'].includes(company))) return reject('payroll-companies');
 
-    const now = Date.now();
-    const state = $getWorkflowStaticData('global');
-    const raw = object(state.leaveNotificationEvents) ? state.leaveNotificationEvents : {};
-    const events = {};
-    for (const [key, value] of Object.entries(raw)) {
-      if (object(value) && Number.isFinite(value.at) && now - value.at <= TTL && Object.keys(events).length < 5000) {
-        events[key] = { state: value.state === 'sent' ? 'sent' : 'processing', at: value.at };
-      }
-    }
-    state.leaveNotificationEvents = events;
-    const previous = events[body.eventKey];
-    if (previous?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true,
-      actualRecipient: body.recipientEmail, eventKey: body.eventKey } }];
-    if (previous?.state === 'processing' && now - previous.at < PROCESSING) return reject('delivery-in-flight');
-    events[body.eventKey] = { state: 'processing', at: now };
+    const reservation = reserve(body.eventKey, body.recipientEmail, '');
+    if (reservation) return reservation;
 
     const companyLabels = body.missingCompanies.map((company) => company === 'mam' ? 'MAM' : 'Equipsy');
     const monthLabel = friendlyMonth(body.reminderMonth);
@@ -147,32 +190,14 @@ try {
   const managerDelivery = ['leave-submitted', 'leave-cancelled', 'leave-reminder', 'team-birthday'].includes(body.event);
   if (employeeDelivery && employeeEmails.length === 0) return reject('employee-email');
   if (managerDelivery && managers.length === 0) return reject('manager-email');
-  const now = Date.now();
-  const state = $getWorkflowStaticData('global');
-  const raw = object(state.leaveNotificationEvents) ? state.leaveNotificationEvents : {};
-  const events = {};
-  for (const [key, value] of Object.entries(raw)) {
-    if (object(value) && Number.isFinite(value.at) && now - value.at <= TTL && Object.keys(events).length < 5000) {
-      events[key] = { state: value.state === 'sent' ? 'sent' : 'processing', at: value.at };
-    }
-  }
-  state.leaveNotificationEvents = events;
   const reviewers = [...new Set([...managers, HR])].filter((email) => !employeeEmails.includes(email));
   const confirmationRecipient = split ? (body.audience === 'employee' ? employeeEmails : reviewers).join(',')
     : managerDelivery ? managers.join(',') : employeeEmails.join(',');
   if (!confirmationRecipient) return reject('recipient');
   const deliveryRecipient = confirmationRecipient;
   const ccRecipients = split || body.event === 'leave-reminder' || body.event === 'team-birthday' ? '' : [HR, ...(body.event === 'leave-approved' || (body.event === 'leave-cancelled' && body.wasApproved !== false) ? [ACCOUNTS] : [])].filter((email) => !deliveryRecipient.split(',').includes(email)).join(',');
-  // During rollout, a shared send may already have succeeded while its DB
-  // acknowledgement failed. Its receipt covers both new copies; do not resend.
-  const legacy = body.legacyEventKey ? events[body.legacyEventKey] : undefined;
-  if (legacy?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false,
-    alreadySent: true, actualRecipient: confirmationRecipient, eventKey: body.eventKey } }];
-  if (legacy?.state === 'processing' && now - legacy.at < PROCESSING) return reject('delivery-in-flight');
-  const previous = events[body.eventKey];
-  if (previous?.state === 'sent') return [{ json: { outcome: 'duplicate', ok: true, sent: false, alreadySent: true, actualRecipient: confirmationRecipient, eventKey: body.eventKey } }];
-  if (previous?.state === 'processing' && now - previous.at < PROCESSING) return reject('delivery-in-flight');
-  events[body.eventKey] = { state: 'processing', at: now };
+  const reservation = reserve(body.eventKey, deliveryRecipient, ccRecipients, body.legacyEventKey);
+  if (reservation) return reservation;
   const eventLabel = { 'leave-submitted': 'submitted', 'leave-approved': 'approved', 'leave-declined': 'declined', 'leave-cancelled': 'cancelled', 'leave-conditionally-approved': 'approved, subject to sufficient leave balance', 'leave-reminder': body.status === 'Approved – pending leave balance' ? 'approved, subject to sufficient leave balance — awaiting your review' : 'awaiting your review', 'team-birthday': 'team birthday reminder' }[body.event];
   const employeeCopy = body.event === 'leave-conditionally-approved' ? 'Your ' + body.leaveType.toLowerCase() + ' request has been approved, subject to sufficient leave balance.' : body.event === 'leave-approved' ? 'Your leave request has been approved.' : body.event === 'leave-declined' ? 'Your leave request has been declined.' : 'This is a record of your leave request.';
   const managerCopy = body.event === 'leave-reminder' ? (body.status === 'Approved – pending leave balance' ? 'This leave request is approved, subject to sufficient leave balance. Please review the balance and finalise approval.' : 'Please review this outstanding leave request.') : body.event === 'leave-submitted' ? 'A leave request is waiting for your review.' : 'This is a record of the leave request being ' + eventLabel + '.';
@@ -200,4 +225,7 @@ try {
   return [{ json: { outcome: 'send', mamDelivery: body.company === 'mam', deliveryRecipient, confirmationRecipient, ccRecipients, eventKey: body.eventKey,
     emailSubject: body.event === 'team-birthday' ? `[MAM] Team birthday reminder: ${body.employeeName}` : employeeDelivery ? `[MAM] Leave ${eventLabel}: ${body.leaveType}` : `[MAM] Leave ${eventLabel}: ${body.employeeName} — ${body.leaveType}`,
     emailHtml } }];
-} catch { return reject('exception'); }
+} catch (error) {
+  if (error instanceof Error && error.message === CAPACITY_ERROR) throw error;
+  return reject('exception');
+}

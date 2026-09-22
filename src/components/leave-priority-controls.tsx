@@ -177,6 +177,7 @@ export function ApprovalLeaveBalances({ workspace, personId, requestId }: {
 }) {
   const person = workspace?.people.find((p) => p.personId === personId);
   const request = workspace?.requests.find((r) => r.id === requestId);
+  const coverage = approvalBalanceCoverage(person, "Annual leave", request?.requiredHours ?? null, request);
   const annualBreakdown = person && Object.hasOwn(person, "annualApprovedHours") && Object.hasOwn(person, "annualAvailableHours");
   const sickBreakdown = person && Object.hasOwn(person, "sickApprovedHours") && Object.hasOwn(person, "sickAvailableHours");
   return <section className={styles.approvalBalances} aria-label="Employee leave balances">
@@ -190,9 +191,11 @@ export function ApprovalLeaveBalances({ workspace, personId, requestId }: {
         : <BalanceCard label="Sick leave" hours={person.sickHours} sick /> : null}
     </div>
     {person && !annualBreakdown && !sickBreakdown ? <LeaveAccrualNotice person={person} /> : null}
-    {request?.pendingBalance ? <p>{request.balanceSufficient
+    {request?.pendingBalance ? <p>{coverage === "Enough balance"
       ? "Balance sufficient — ready for review."
+      : coverage !== "Not enough balance" ? "Check balance — refresh the request to confirm current coverage."
       : `Waiting for enough leave${request.requiredHours == null ? "" : ` to cover ${balanceHours(request.requiredHours)} hours`}. You’ll be notified when the balance is sufficient.`}</p> : null}
+    {request?.pendingBalance ? <p>Conditional approval checks the current balance, including eligible accrued leave, after other approved commitments. The Xero breakdown above shows the payroll snapshot.</p> : null}
   </section>;
 }
 
@@ -200,14 +203,15 @@ export function SickEvidenceNotice({ dueDate, hasEvidence }: { dueDate?: string;
   if (!dueDate || hasEvidence) return null;
   const overdue = melbourneToday() > dueDate;
   return <p className={overdue ? styles.formError : styles.leavePolicyNote} role="note">
-    {overdue ? `Medical certificate overdue since ${leaveDateLabel(dueDate)}. Review as Unpaid leave.` : `Upload your medical certificate by Monday ${leaveDateLabel(dueDate)}. If not provided, this leave will need review as Unpaid leave.`}
+    {overdue ? `Medical certificate overdue since ${leaveDateLabel(dueDate)}. Review as Unpaid leave.` : `Upload your medical certificate by ${leaveDateLabel(dueDate)}. If not provided, this leave will need review as Unpaid leave.`}
   </p>;
 }
 
-export function ApprovalBalancePill({ workspace, personId, leaveType, requiredHours }: {
-  workspace?: LeavePriorityWorkspace; personId?: string; leaveType: string; requiredHours: number | null;
+export function ApprovalBalancePill({ workspace, personId, requestId, leaveType, requiredHours, pendingBalance = false }: {
+  workspace?: LeavePriorityWorkspace; personId?: string; requestId?: string; leaveType: string; requiredHours: number | null; pendingBalance?: boolean;
 }) {
   const person = workspace?.people.find((p) => p.personId === personId);
-  const coverage = approvalBalanceCoverage(person, leaveType, requiredHours);
+  const request = workspace?.requests.find((candidate) => candidate.id === requestId);
+  const coverage = approvalBalanceCoverage(person, leaveType, requiredHours, pendingBalance ? { ...request, pendingBalance: true } : request);
   return coverage ? <span className={styles.balanceCoverage} data-sufficient={coverage === "Enough balance"}>{coverage}</span> : null;
 }

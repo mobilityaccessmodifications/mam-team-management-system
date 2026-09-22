@@ -13,6 +13,7 @@ import type {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isPortalLoginEmail, normalisePortalLogin } from "@/lib/portal-login";
+import { finalisePortalAccountStatusChange, preparePortalAccountStatusChange } from "@/lib/portal-account-status";
 
 type DirectoryRow = {
   id: string;
@@ -42,14 +43,6 @@ type AccountRpcRow = {
 
 type PasswordResetClaimRpcRow = AccountRpcRow & {
   reset_token: string;
-};
-
-type AccountStatusClaimRpcRow = AccountRpcRow & {
-  change_token: string;
-};
-
-type AccountStatusInspectionRpcRow = AccountRpcRow & {
-  claim_status: "pending" | "finalised" | "cancelled";
 };
 
 const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,128}$/;
@@ -140,22 +133,6 @@ function mapPasswordResetClaim(data: unknown) {
   return row;
 }
 
-function mapAccountStatusClaim(data: unknown) {
-  const rows = Array.isArray(data) ? data : [];
-  const row = rows[0] as AccountStatusClaimRpcRow | undefined;
-  if (!row || !/^[0-9a-f-]{36}$/i.test(row.change_token)) throw new Error(GENERIC_ERROR);
-  return row;
-}
-
-function mapAccountStatusInspection(data: unknown) {
-  const rows = Array.isArray(data) ? data : [];
-  const row = rows[0] as AccountStatusInspectionRpcRow | undefined;
-  if (!row || !["pending", "finalised", "cancelled"].includes(row.claim_status)) {
-    throw new Error(GENERIC_ERROR);
-  }
-  return row;
-}
-
 // A new login is deliberately unprivileged. Reporting-line position and
 // direct-report count describe the organisation tree; neither is authority to
 // approve leave, see HR records, or administer the portal. Any later role
@@ -179,74 +156,32 @@ async function requireLinkedAccount(
 }
 
 type AccountAdminClient = ReturnType<typeof createAdminClient>;
-type AccountServerClient = Awaited<ReturnType<typeof createClient>>;
 
-async function setPortalAuthEnabled(admin: AccountAdminClient, userId: string, enabled: boolean) {
-  const update = () => admin.auth.admin.updateUserById(userId, {
-    ban_duration: enabled ? "none" : "876000h",
-  });
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const result = await update();
-      if (!result.error) return true;
-    } catch {
-      // A rejected provider request has an unknown outcome. Retry the same
-      // idempotent state before deciding whether recovery is required.
-    }
-  }
-  return false;
-}
-
-async function cancelAccountStatusClaim(
-  supabase: AccountServerClient,
-  userId: string,
-  changeToken: string,
-) {
-  try {
-    const { data, error } = await supabase.rpc("cancel_portal_account_status_change", {
-      p_auth_user_id: userId,
-      p_change_token: changeToken,
-    });
-    return !error && data === true;
-  } catch {
-    return false;
-  }
-}
-
-async function finaliseAccountStatusClaim(
-  supabase: AccountServerClient,
+async function inspectCreatedAccount(
+  admin: AccountAdminClient,
   personId: string,
   userId: string,
-  changeToken: string,
-) {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const { data, error } = await supabase.rpc("finalise_portal_account_status_change", {
-        p_person_id: personId,
-        p_auth_user_id: userId,
-        p_change_token: changeToken,
-      });
-      if (!error) return data;
-    } catch {
-      // The token makes an ambiguous finalisation safe to retry.
-    }
-  }
-  return null;
-}
-
-async function inspectAccountStatusClaim(
-  supabase: AccountServerClient,
-  userId: string,
-  changeToken: string,
-) {
+  opaqueAddress: string,
+  loginName: string,
+): Promise<"committed" | "unlinked" | "unknown"> {
   try {
-    const { data, error } = await supabase.rpc("inspect_portal_account_status_change", {
-      p_auth_user_id: userId,
-      p_change_token: changeToken,
-    });
-    return error ? null : mapAccountStatusInspection(data);
+    const [auth, person, owner, profile] = await Promise.all([
+      admin.auth.admin.getUserById(userId),
+      admin.from("internal_org_people").select("id,auth_user_id").eq("id", personId).single(),
+      admin.from("internal_org_people").select("id").eq("auth_user_id", userId).maybeSingle(),
+      admin.from("profiles").select("id,login_name").eq("id", userId).maybeSingle(),
+    ]);
+    if (auth.error || person.error || owner.error || profile.error
+      || auth.data.user?.id !== userId || auth.data.user.email !== opaqueAddress || !person.data) return "unknown";
+    if (person.data.auth_user_id === userId && owner.data?.id === personId
+      && profile.data?.id === userId && profile.data.login_name === loginName) return "committed";
+    // A link to ANY person or an already configured profile protects the user,
+    // even if it is not the expected person/login. Never infer an orphan merely
+    // from a failed lookup or from the target person linking a different user.
+    if (person.data.auth_user_id !== userId && !owner.data && !profile.data?.login_name) return "unlinked";
+    return "unknown";
   } catch {
-    return null;
+    return "unknown";
   }
 }
 
@@ -324,20 +259,60 @@ export async function createPortalAccount(input: CreateAccountInput): Promise<Ac
   });
   if (createError || !created.user) throw new Error("The login could not be created.");
 
-  const { data: saved, error: saveError } = await supabase.rpc("create_portal_account", {
-    p_person_id: input.personId,
-    p_auth_user_id: created.user.id,
-    p_login_name: loginName,
-    p_app_role: NEW_ACCOUNT_ROLE,
-    p_expected_person_version: input.accountVersion,
-  });
-
-  if (saveError) {
-    await admin.auth.admin.deleteUser(created.user.id);
-    throw new Error(saveError.message.includes("login_name") ? "That login name is already in use." : GENERIC_ERROR);
+  let saved: unknown;
+  let saveError: { code?: string; message: string } | null = null;
+  try {
+    const result = await supabase.rpc("create_portal_account", {
+      p_person_id: input.personId,
+      p_auth_user_id: created.user.id,
+      p_login_name: loginName,
+      p_app_role: NEW_ACCOUNT_ROLE,
+      p_expected_person_version: input.accountVersion,
+    });
+    saved = result.data;
+    saveError = result.error;
+    if (!saveError) {
+      const row = mapRpcAccount(saved);
+      if (row.person_id !== input.personId || row.auth_user_id !== created.user.id || row.login_name !== loginName) {
+        saveError = { message: GENERIC_ERROR };
+      }
+    }
+  } catch {
+    saveError = { message: GENERIC_ERROR };
   }
 
-  mapRpcAccount(saved);
+  if (saveError) {
+    const outcome = await inspectCreatedAccount(admin, input.personId, created.user.id, opaqueAddress, loginName);
+    if (outcome !== "committed") {
+      // Only a server SQL rejection proves that this create transaction ended.
+      // A network/5xx/malformed response can leave a transaction still running,
+      // even when an immediate read currently shows no link.
+      const definitelyRejected = ["22004", "22023", "23503", "23505", "40001", "42501"].includes(saveError.code ?? "");
+      if (definitelyRejected && outcome === "unlinked") {
+        let deleted = false;
+        let deletionAttempted = false;
+        try {
+          // Lock and recheck the exact orphan, then fence future linkage until
+          // deletion completes. This closes the read-back/delete race.
+          const { data: reserved, error: reserveError } = await admin.rpc("reserve_portal_account_creation_cleanup", {
+            p_auth_user_id: created.user.id,
+            p_auth_email: opaqueAddress,
+          });
+          if (!reserveError && reserved === true) {
+            deletionAttempted = true;
+            const { error: deleteError } = await admin.auth.admin.deleteUser(created.user.id);
+            deleted = !deleteError;
+          }
+        } catch {
+          // An ambiguous cleanup result also needs reconciliation; never retry
+          // deletion or report the account as definitely absent.
+        }
+        if (deleted) throw new Error(saveError.message.includes("login_name") ? "That login name is already in use." : GENERIC_ERROR);
+        if (deletionAttempted) throw new Error("The unlinked login cleanup result could not be confirmed. Administrator reconciliation is required; refresh before trying again.");
+      }
+      throw new Error("The account creation result could not be confirmed. The login was preserved for administrator reconciliation; refresh before trying again.");
+    }
+  }
   revalidatePath("/");
   return { account: await loadAccountByPerson(input.personId), oneTimePassword: input.newPassword };
 }
@@ -410,73 +385,8 @@ export async function togglePortalAccount(input: ToggleAccountInput): Promise<Ac
   if (!input.enabled && input.userId === actorUserId) throw new Error("You cannot disable your own login.");
   const admin = createAdminClient();
 
-  let claimResult;
-  try {
-    claimResult = await supabase.rpc("begin_portal_account_status_change", {
-      p_person_id: input.personId,
-      p_auth_user_id: input.userId,
-      p_enabled: input.enabled,
-      p_expected_account_version: input.accountVersion,
-    });
-  } catch {
-    throw new Error(GENERIC_ERROR);
-  }
-  const { data: claimed, error: claimError } = claimResult;
-  if (claimError) {
-    throw new Error(claimError.message.includes("own account")
-      ? "You cannot disable your own login."
-      : GENERIC_ERROR);
-  }
-  const claim = mapAccountStatusClaim(claimed);
-
-  // The database claim remains pending across the external provider call. No
-  // later account-status mutation can begin until this request either commits
-  // the matching database status or restores Auth and cancels the claim.
-  if (!(await setPortalAuthEnabled(admin, input.userId, input.enabled))) {
-    const restored = await setPortalAuthEnabled(
-      admin,
-      input.userId,
-      claim.account_status === "active",
-    );
-    const cancelled = restored && await cancelAccountStatusClaim(
-      supabase,
-      input.userId,
-      claim.change_token,
-    );
-    if (!cancelled) {
-      throw new Error("The login provider needs reconciliation before another account change.");
-    }
-    throw new Error(input.enabled ? "The login could not be enabled." : "The login could not be disabled.");
-  }
-
-  const finalised = await finaliseAccountStatusClaim(
-    supabase,
-    input.personId,
-    input.userId,
-    claim.change_token,
-  );
-
-  if (finalised === null) {
-    const state = await inspectAccountStatusClaim(supabase, input.userId, claim.change_token);
-    if (!state) {
-      throw new Error("The account change is unresolved. Refresh before trying again.");
-    }
-    if (state.claim_status !== "finalised") {
-      const restored = state.claim_status === "pending"
-        && await setPortalAuthEnabled(admin, input.userId, state.account_status === "active");
-      const cancelled = restored && await cancelAccountStatusClaim(
-        supabase,
-        input.userId,
-        claim.change_token,
-      );
-      if (!cancelled) {
-        throw new Error("The login provider needs reconciliation before another account change.");
-      }
-      throw new Error(GENERIC_ERROR);
-    }
-  } else {
-    mapRpcAccount(finalised);
-  }
+  const { changeToken } = await preparePortalAccountStatusChange(supabase, admin, input);
+  await finalisePortalAccountStatusChange(supabase, { personId: input.personId, userId: input.userId, changeToken });
 
   revalidatePath("/");
   return { account: await loadAccountByPerson(input.personId) };

@@ -72,8 +72,8 @@ export function allowlistSnapshot(data: unknown, generatedAt: string) {
     const phone = normalizeAllowlistPhone(raw.phone, raw.country);
     if (phone) counts.set(phone, (counts.get(phone) ?? 0) + 1);
   }
-  // A shared phone has ambiguous employee ownership: exclude it, don't dedupe it
-  // into an authorization. Correct the source records to restore access.
+  // Defense in depth: SQL now returns only unique, independently enrolled
+  // identities. Never dedupe an ambiguous response into an authorization.
   const phones = [...counts].filter(([, count]) => count === 1).map(([phone]) => phone).sort();
   const schemaVersion = 1;
   const digest = createHash("sha256").update(JSON.stringify({ schemaVersion, phones })).digest("hex");

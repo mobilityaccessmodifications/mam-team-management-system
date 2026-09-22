@@ -60,8 +60,9 @@ for(const event of ['leave-reminder','team-birthday']) test(event,()=>{
   if (event === 'team-birthday') assert.equal(out.emailSubject, '[MAM] Team birthday reminder: Test Employee');
 });
 test('deduplicates sent event and fails closed without a manager',()=>{
-  const key=`leave:${id}:leave-submitted:${'a'.repeat(24)}`;
-  const out=run('leave-submitted',{}, {leaveNotificationEvents:{[key]:{state:'sent',at:Date.now()}}});
+  const state={};
+  confirmDelivery(run('leave-submitted',{},state),[{json:{statusCode:202}}],state);
+  const out=run('leave-submitted',{},state);
   assert.equal(out.outcome,'duplicate'); assert.equal(out.actualRecipient,'manager@example.test,hr@mobilityaccess.com.au');
   assert.equal(run('leave-submitted',{managerEmail:null}).outcome,'rejected');
 });
@@ -193,7 +194,9 @@ test('monthly payroll reminder rejects recipient injection and malformed server 
 
 test('monthly payroll reminder deduplicates its stable workday-row event key',()=>{
   const eventKey=`payroll-balance:${id}:2026-10`;
-  const out=runPayroll({}, {leaveNotificationEvents:{[eventKey]:{state:'sent',at:Date.now()}}});
+  const state={};
+  confirmDelivery(runPayroll({},state),[{json:{statusCode:202}}],state);
+  const out=runPayroll({},state);
   assert.equal(out.outcome,'duplicate');
   assert.equal(out.alreadySent,true);
   assert.equal(out.actualRecipient,'gerard@example.test');
@@ -206,14 +209,15 @@ function confirmDelivery(source, sent=[{json:{}}], state={}) {
 }
 
 test('confirmation records both payroll and leave event families after one provider result',()=>{
-  for(const eventKey of [`payroll-balance:${id}:2026-10`,`leave:${id}:leave-approved:${'a'.repeat(24)}`]) {
+  for(const family of ['payroll','leave']) {
     const state={};
-    const out=confirmDelivery({mamDelivery:true,eventKey,deliveryRecipient:'recipient@example.test'},[{json:{statusCode:202}}],state);
+    const send=family==='payroll'?runPayroll({},state):run('leave-approved',{},state);
+    const out=confirmDelivery(send,[{json:{statusCode:202}}],state);
     assert.equal(out.ok,true);
     assert.equal(out.sent,true);
-    assert.equal(out.actualRecipient,'recipient@example.test');
-    assert.equal(out.eventKey,eventKey);
-    assert.equal(state.leaveNotificationEvents[eventKey].state,'sent');
+    assert.equal(out.actualRecipient,send.deliveryRecipient);
+    assert.equal(out.eventKey,send.eventKey);
+    assert.equal(state.leaveNotificationEvents[send.eventKey].state,'sent');
   }
 });
 
@@ -226,13 +230,14 @@ test('confirmation rejects unknown keys, count mismatches and explicit provider 
 test('all submission categories isolate the applicant work/personal addresses from reviewers',()=>{
   for(const leaveType of ['Annual leave','Sick leave',"Carer's leave",'Unpaid leave']) {
     const employeeEmails=['employee@example.test','personal@example.test'];
-    const reviewer=run('leave-submitted',{leaveType,employeeEmails,managerEmail:'manager@example.test,personal@example.test'});
+    const reviewerState={},employeeState={};
+    const reviewer=run('leave-submitted',{leaveType,employeeEmails,managerEmail:'manager@example.test,personal@example.test'},reviewerState);
     assert.equal(reviewer.deliveryRecipient,'manager@example.test,hr@mobilityaccess.com.au');
-    const employee=run('leave-submitted',{leaveType,employeeEmails,audience:'employee'});
+    const employee=run('leave-submitted',{leaveType,employeeEmails,audience:'employee'},employeeState);
     assert.equal(employee.deliveryRecipient,employeeEmails.join(','));
     assert.equal(employee.ccRecipients,'');
-    for(const out of [reviewer,employee]) {
-      assert.equal(confirmDelivery(out).actualRecipient,out.deliveryRecipient);
+    for(const [out,state] of [[reviewer,reviewerState],[employee,employeeState]]) {
+      assert.equal(confirmDelivery(out,[{json:{statusCode:202}}],state).actualRecipient,out.deliveryRecipient);
     }
   }
   assert.equal(run('leave-submitted',{audience:undefined}).rejectionCode,'audience-required');
@@ -242,11 +247,13 @@ test('rollout does not resend either copy of an already-delivered legacy shared 
   const legacyEventKey=`leave:${id}:leave-submitted:${'b'.repeat(24)}`;
   for(const audience of ['reviewers','employee']) {
     const state={leaveNotificationEvents:{[legacyEventKey]:{state:'sent',at:Date.now()}}};
-    assert.equal(run('leave-submitted',{audience,legacyEventKey},state).outcome,'duplicate');
+    const replay=run('leave-submitted',{audience,legacyEventKey},state);
+    assert.equal(replay.rejectionCode,'receipt-evidence-unavailable');
+    assert.equal(replay.actualRecipient,undefined);
     state.leaveNotificationEvents[legacyEventKey].state='processing';
     assert.equal(run('leave-submitted',{audience,legacyEventKey},state).rejectionCode,'delivery-in-flight');
     state.leaveNotificationEvents[legacyEventKey].at=Date.now()-21*60*1000;
-    assert.equal(run('leave-submitted',{audience,legacyEventKey},state).outcome,'send');
+    assert.equal(run('leave-submitted',{audience,legacyEventKey},state).rejectionCode,'receipt-delivery-unknown');
   }
   assert.equal(run('leave-submitted',{legacyEventKey:'invalid'}).rejectionCode,'legacy-event-key');
 });

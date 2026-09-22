@@ -100,7 +100,9 @@ guard.
 npm run check
 ```
 
-This runs lint, type-checking and the production build.
+This runs lint, type-checking, unit tests and the production build. Run the
+separate SQL, browser and bundle gates described in [local verification](docs/local-verification.md)
+before releasing changes to those boundaries.
 
 ## Environment variables
 
