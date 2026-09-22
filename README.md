@@ -275,3 +275,17 @@ run `scripts/deploy-leave-email-route.py inspect` through the MAM Supabase
 credential helper. Release `20260922170000` with `apply <reviewed-sha256>`;
 it reasserts the resolver, verifies its exact body and service-only access,
 and does not resend mail or alter approved requests or immutable retry payloads.
+
+### Automatic conditional-approval hours
+
+Migration `20260922180000` fills missing conditional-approval hours from the
+request (explicit hours first; otherwise 7.6 per full-time day or 7.5 per other
+day). New approvals save those hours atomically, including inserts from an
+older page during rollout. The approval page no longer asks reviewers to
+re-enter them. Balance-ready reminders reserve other approved leave before
+checking the threshold and still require a final reviewer decision.
+
+Run `scripts/deploy-automatic-leave-required-hours.py inspect`, then
+`apply <reviewed-sha256>` through the MAM Supabase credential helper before
+merging the UI. The script checks the target, predecessor, function bodies,
+private insert guard and backfill. It neither approves requests nor replays mail.

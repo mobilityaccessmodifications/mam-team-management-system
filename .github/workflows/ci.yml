@@ -203,3 +203,13 @@ jobs:
         run: |
           createdb -h localhost -U postgres leave_email_route_test
           psql -h localhost -U postgres -d leave_email_route_test -v ON_ERROR_STOP=1 -f tests/leave-email-route.sql
+
+      - name: Test automatic conditional-approval hours and committed balance reservations
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres automatic_leave_hours_test
+          psql -h localhost -U postgres -d automatic_leave_hours_test -v ON_ERROR_STOP=1 \
+            -f tests/automatic-leave-required-hours-bootstrap.sql \
+            -f supabase/migrations/20260922180000_automatic_leave_balance_required_hours.sql \
+            -f tests/automatic-leave-required-hours.sql

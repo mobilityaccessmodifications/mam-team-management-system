@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, HeartPulse, Palmtree } from "lucide-react";
 import { LeaveAccrualControls, LeaveAccrualNotice } from "@/components/leave-accrual-controls";
-import { saveAnnualLeaveBalance, saveSickLeaveBalance, saveLeaveBalanceRequiredHours } from "@/app/leave/actions";
+import { saveAnnualLeaveBalance, saveSickLeaveBalance } from "@/app/leave/actions";
 import { approvalBalanceCoverage, leaveDateLabel, melbourneToday, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import type { AnnualLeaveProjection } from "@/lib/leave-request-balance";
 import styles from "@/components/leave-demo.module.css";
@@ -172,11 +172,9 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved, pre
   </details>;
 }
 
-export function ApprovalLeaveBalances({ workspace, personId, requestId, busy, onSaved }: {
+export function ApprovalLeaveBalances({ workspace, personId, requestId }: {
   workspace?: LeavePriorityWorkspace; personId?: string; requestId: string; busy: boolean; onSaved: () => Promise<void>;
 }) {
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const person = workspace?.people.find((p) => p.personId === personId);
   const request = workspace?.requests.find((r) => r.id === requestId);
   const annualBreakdown = person && Object.hasOwn(person, "annualApprovedHours") && Object.hasOwn(person, "annualAvailableHours");
@@ -192,25 +190,9 @@ export function ApprovalLeaveBalances({ workspace, personId, requestId, busy, on
         : <BalanceCard label="Sick leave" hours={person.sickHours} sick /> : null}
     </div>
     {person && !annualBreakdown && !sickBreakdown ? <LeaveAccrualNotice person={person} /> : null}
-    {request?.pendingBalance ? <>
-      <p>{request.balanceSufficient ? "Balance sufficient — ready for review." : "Waiting for enough leave. You’ll be notified when the balance is sufficient."}</p>
-      <form className={styles.leaveBalanceEditor} onSubmit={async (event) => {
-        event.preventDefault(); if (saving || busy) return;
-        const hours = Number(new FormData(event.currentTarget).get("requiredHours"));
-        setSaving(true); setError("");
-        try {
-          const result = await saveLeaveBalanceRequiredHours(requestId, hours);
-          if (!result.ok) { setError(result.message ?? "Required hours could not be saved."); return; }
-          await onSaved();
-        } catch { setError("Required hours could not be saved. Please try again."); }
-        finally { setSaving(false); }
-      }}>
-        <label>Paid hours required<input name="requiredHours" type="number" min="0.0001" max="100000" step="0.0001" defaultValue={request.requiredHours ?? ""} required disabled={busy || saving} /></label>
-        <button className={styles.secondaryButton} type="submit" disabled={busy || saving}>{saving ? "Saving…" : "Save required hours"}</button>
-        {request.requiredHours == null ? <p>Confirm the paid hours for this request to enable the balance reminder.</p> : null}
-        {error ? <p role="alert" className={styles.formError}>{error}</p> : null}
-      </form>
-    </> : null}
+    {request?.pendingBalance ? <p>{request.balanceSufficient
+      ? "Balance sufficient — ready for review."
+      : `Waiting for enough leave${request.requiredHours == null ? "" : ` to cover ${balanceHours(request.requiredHours)} hours`}. You’ll be notified when the balance is sufficient.`}</p> : null}
   </section>;
 }
 
