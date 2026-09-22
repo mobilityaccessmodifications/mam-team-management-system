@@ -121,6 +121,24 @@ test('request balance is collapsed by default with the calculator inside one nat
   assert.match(html, /This request uses/);
 });
 
+test('collapsed balance shows available hours and safe loading/unavailable states', () => {
+  for (const [projection, loading, expected] of [
+    [{status:'banked_only', availableHours:46.69}, false, '46.69 hours'],
+    [{status:'banked_only', availableHours:1}, false, '1 hour'],
+    [{status:'banked_only', availableHours:0}, false, '0 hours'],
+    [{status:'banked_only', availableHours:-2.5}, false, '-2.5 hours'],
+    [null, false, 'Unavailable'],
+    [{status:'banked_only', availableHours:99}, true, 'Calculating…'],
+  ]) {
+    const html = renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance, {
+      workspace:workspace([{...person, annualAvailableHours:100}]),personId:'employee',projection,loading,
+    }));
+    const summary = html.match(/<summary[^>]*>(.*?)<\/summary>/s)[1];
+    assert.ok(summary.includes(`Annual leave balance: <span${expected.startsWith('-') ? ' data-negative="true"' : ''}>${expected}</span>`));
+    assert.doesNotMatch(summary, /100 hours|99 hours/);
+  }
+});
+
 test('projected request card explains cutoff, formula and signed remaining amount', () => {
   const html=renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance, {
     workspace:workspace([person]),personId:'employee',requestedHours:15.2,
@@ -130,6 +148,7 @@ test('projected request card explains cutoff, formula and signed remaining amoun
   }));
   for (const text of ['Projected available on 12 Oct 2026','Accrual stops on 11 Oct 2026','How this is calculated','38 eligible hours × 4 annual-leave weeks ÷ 52','This request uses','Remaining after this request']) assert.ok(html.includes(text),text);
   assert.match(html,/data-negative="true">-7.28 /);
+  assert.match(html.match(/<summary[^>]*>(.*?)<\/summary>/s)[1], /Annual leave balance: <span>7.92 hours<\/span>/);
   assert.doesNotMatch(html,/Sick leave/);
 });
 
