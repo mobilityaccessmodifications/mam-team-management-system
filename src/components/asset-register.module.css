@@ -416,7 +416,7 @@
 }
 
 .assetSheet {
-  --asset-sheet-columns: minmax(214px, 1.32fr) minmax(128px, .78fr) minmax(134px, .82fr) minmax(164px, 1fr) minmax(126px, .74fr) minmax(108px, .6fr) 96px;
+  --asset-sheet-columns: 76px minmax(214px, 1.32fr) minmax(128px, .78fr) minmax(134px, .82fr) minmax(164px, 1fr) minmax(126px, .74fr) minmax(108px, .6fr) 96px;
   min-width: 1080px;
 }
 
@@ -1101,4 +1101,27 @@
   .tools { border-radius: 14px; }
   .sheetViewport, .assetList { border-radius: 16px; }
   .modal, .labelModal { border-radius: 24px 24px 0 0; }
+}
+
+/* Selection stays at the leading edge of the register. */
+.selectionCell { position: sticky; left: 0; z-index: 1; justify-content: center; background: inherit; }
+.selectionCell label, .selectVisible { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; cursor: pointer; }
+.selectionCell label { flex-direction: column; font-size: 10px; }
+.selectionCell input, .selectVisible input { width: 18px; height: 18px; accent-color: var(--asset-accent-deep); cursor: pointer; }
+.assetSheetRow[data-selected="true"] { background: var(--surface-warm); }
+.bulkToolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; min-height: 44px; }
+.bulkToolbar > span { font-size: 13px; color: var(--asset-muted); }
+.selectVisible { font-size: 13px; }
+.mobileSelectLabel { display: none; }
+.deviceLink { color: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.bulkAssetList { display: flex; flex-wrap: wrap; gap: 6px; max-height: 120px; overflow: auto; }
+.bulkAssetList span { padding: 4px 8px; border-radius: 5px; background: var(--surface-muted); font: 12px var(--font-mono, monospace); }
+.bulkFailures { max-height: 200px; overflow: auto; padding-left: 20px; font-size: 13px; }
+.bulkFailures li { margin: 10px 0; }
+.barcodeCanvas { width: min(100%, 220px); aspect-ratio: 1; object-fit: contain; }
+@media (min-width: 761px) { .selectVisible { display: none; } }
+@media (max-width: 760px) {
+  .assetSheetRow .selectionCell { position: static; grid-column: 1 / -1; justify-content: flex-start; }
+  .selectionCell label { flex-direction: row; gap: 10px; }
+  .mobileSelectLabel { display: inline; font-size: 13px; }
 }

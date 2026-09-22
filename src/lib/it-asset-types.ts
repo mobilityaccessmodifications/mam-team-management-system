@@ -33,7 +33,7 @@ export type ItAssetCustodian = Omit<ItAssetAssignee, "company">;
 export type ItAsset = {
   id: string;
   assetCode: string;
-  /** The exact non-secret value encoded in the Code 128 label. */
+  /** Stable non-secret asset code; QR labels link to its authenticated device page. */
   barcodeValue: string;
   assetType: ItAssetType;
   manufacturer: string;
