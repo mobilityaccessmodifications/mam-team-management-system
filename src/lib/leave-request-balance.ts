@@ -1,5 +1,20 @@
-export const INSUFFICIENT_BALANCE_MESSAGE = "Not enough balance. Request only the annual leave you have banked, or submit a separate unpaid leave request.";
-export const UNAVAILABLE_BALANCE_MESSAGE = "Your banked annual leave balance is unavailable. Please contact payroll before requesting annual leave.";
+export const INSUFFICIENT_BALANCE_MESSAGE = "Not enough balance. Your projected annual leave balance at the start of this leave is insufficient. Request fewer paid hours or submit a separate unpaid leave request.";
+export const UNAVAILABLE_BALANCE_MESSAGE = "Your annual leave projection is unavailable. Please contact payroll before requesting annual leave.";
+export const UNCONFIRMED_ACCRUAL_MESSAGE = "Future accrual could not be confirmed and your banked balance is insufficient. Please contact payroll.";
+
+export type AnnualLeaveProjection = {
+  status: "projected" | "banked_only" | "unavailable";
+  projectedDate: string;
+  fromDate?: string;
+  throughDate?: string;
+  payrollDate?: string;
+  payrollHours?: number;
+  approvedHours?: number;
+  accruedHours?: number;
+  otherTakenHours?: number;
+  availableHours?: number;
+  terms?: Array<{ fromDate: string; throughDate: string; weeklyHours: number; weekdays: number[]; annualWeeks: number; eligibleHours: number; accruedHours: number }>;
+};
 
 // Mirrors the existing database duration rules; no projected accrual is used.
 export function requestedLeaveHours(start: string, end: string, startTime: string, endTime: string, fullDayHours: number): number | null {

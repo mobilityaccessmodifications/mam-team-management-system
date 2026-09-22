@@ -7091,6 +7091,10 @@
 .balanceReviewNotice { display: block; margin-top: 10px; color: #8b5514; font-size: 12px; }
 .requestBalance { margin: 12px 20px 0; }
 .requestBalance .balanceCard { padding: 14px 16px; }
+.projectionExplanation { margin-top: 8px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.projectionExplanation summary { cursor: pointer; padding: 10px 0; font-weight: 650; }
+.projectionExplanation p { margin: 8px 0; }
+.balanceBreakdown .balanceAvailable dd > strong[data-negative="true"] { color: #a63828; }
 @media (max-width: 520px) {
   .balanceCards { grid-template-columns: 1fr; gap: 8px; }
   .balanceCard { padding: 14px; }

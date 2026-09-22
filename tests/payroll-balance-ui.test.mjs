@@ -108,6 +108,26 @@ test('approval keeps sick balances private and does not round tiny debt to zero'
 });
 
 const { approvalRequestHours, approvalBalanceCoverage } = resolveImport('@/lib/leave-priority');
+test('projected request card explains cutoff, formula and signed remaining amount', () => {
+  const html=renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance, {
+    workspace:workspace([person]),personId:'employee',requestedHours:15.2,
+    projection:{status:'projected',projectedDate:'2026-10-12',fromDate:'2026-10-03',throughDate:'2026-10-11',
+      payrollDate:'2026-10-02',payrollHours:5,approvedHours:0,accruedHours:38*4/52,otherTakenHours:0,availableHours:5+38*4/52,
+      terms:[{fromDate:'2026-10-03',throughDate:'2026-10-11',weeklyHours:38,weekdays:[1,2,3,4,5],annualWeeks:4,eligibleHours:38,accruedHours:38*4/52}]},
+  }));
+  for (const text of ['Projected available on 12 Oct 2026','Accrual stops on 11 Oct 2026','How this is calculated','38 eligible hours × 4 annual-leave weeks ÷ 52','This request uses','Remaining after this request']) assert.ok(html.includes(text),text);
+  assert.match(html,/data-negative="true">-7.28 /);
+  assert.doesNotMatch(html,/Sick leave/);
+});
+
+test('loading and unavailable projections never reuse the previous banked amount as a forecast', () => {
+  const html=renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance, {
+    workspace:workspace([{...person,annualAvailableHours:99}]),personId:'employee',requestedHours:7.6,projection:null,loading:true,
+  }));
+  assert.ok(html.includes('Calculating projected balance'));
+  assert.ok(html.includes('Unavailable'));
+  assert.doesNotMatch(html,/>99 /);
+});
 test('approval hours use the full-time 7.6-hour snapshot and retain recorded hourly requests', () => {
   assert.equal(approvalRequestHours({ days: 2, fullDayHours: 7.6 }), 15.2);
   assert.equal(approvalRequestHours({ days: 2, fullDayHours: 7.6, hours: 3.25 }), 3.25);
@@ -143,7 +163,7 @@ test('annual balance appears in the request context for the authorised target on
   const html=renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance,{workspace:props.workspace,personId:'employee',self:true}));
   assert.match(html,/My annual leave/);
   assert.match(html,/<strong>60 <span>hours<\/span><\/strong>/);
-  assert.match(html,/Banked hours only/);
+  assert.match(html,/Projection unavailable/);
   assert.doesNotMatch(html,/Balance needs checking/);
   assert.doesNotMatch(html,/Edit annual|Edit sick|Accrual settings/);
   assert.equal(renderToStaticMarkup(createElement(loaded.exports.LeaveRequestBalance,{workspace:props.workspace,personId:'different',self:true})), '');
@@ -157,7 +177,7 @@ test('annual request context names an unavailable balance instead of hiding or i
   }));
   assert.match(html, /My annual leave/);
   assert.match(html, /Unavailable/);
-  assert.match(html, /Banked hours only/);
+  assert.match(html, /Projection unavailable/);
   assert.doesNotMatch(html, /<strong>0<\/strong>/);
 });
 

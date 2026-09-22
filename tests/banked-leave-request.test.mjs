@@ -21,7 +21,7 @@ test('signed card values are not made absolute and form shows request impact', (
   assert.ok(code.includes('availableHours - requestedHours'));
 });
 test('database and server action share safe balance messages', () => {
-  const sql=readFileSync('supabase/migrations/20260922120000_banked_annual_leave_request_limit.sql','utf8');
+  const sql=readFileSync('supabase/migrations/20260922140000_projected_annual_leave_request_limit.sql','utf8');
   for (const message of [mod.INSUFFICIENT_BALANCE_MESSAGE, mod.UNAVAILABLE_BALANCE_MESSAGE]) assert.ok(sql.includes(message));
   const actions=readFileSync('src/app/leave/actions.ts','utf8');
   assert.equal((actions.match(/if \(error\) return \{ error: userFacingSubmitError\(error\) \};/g) || []).length,2);

@@ -1,5 +1,5 @@
 \set ON_ERROR_STOP on
-do $$begin assert current_database() = 'banked_leave_request_test', 'Disposable database only'; end$$;
+do $$begin assert current_database() in ('banked_leave_request_test','projected_leave_request_test'), 'Disposable database only'; end$$;
 create schema private;
 do $$begin
   if not exists(select 1 from pg_roles where rolname='anon') then create role anon; end if;
