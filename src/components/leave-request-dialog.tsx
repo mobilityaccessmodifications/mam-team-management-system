@@ -10,7 +10,7 @@ import { START_TIME_OPTIONS, END_TIME_OPTIONS } from "@/lib/leave-request-option
 import { sickEvidenceDeadline, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import { getVictorianPublicHolidays } from "@/lib/victorian-public-holidays";
 import { LEAVE_NOTICE_MESSAGE, requiresLeaveNotice } from "@/lib/leave-notice";
-import { MAX_LEAVE_SPAN_DAYS, leaveDateRangeError } from "@/lib/leave-date-range";
+import { leaveDateRangeError } from "@/lib/leave-date-range";
 import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, UNCONFIRMED_ACCRUAL_MESSAGE, requestedLeaveHours, annualLeaveLimitGuidance, type AnnualLeaveProjection } from "@/lib/leave-request-balance";
 import styles from "@/components/leave-demo.module.css";
 
@@ -159,7 +159,6 @@ export function LeaveRequestDialog({
         }} onChange={() => setFormError("")}>
           <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" value={formLeaveType} onChange={(event) => setFormLeaveType(event.target.value)} required>{(requestedTeamMember ? (requestedTeamMember.paidLeave ? ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"] : ["Unpaid leave"]).map((value) => ({ value, label: value })) : availableLeaveTypes).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
           <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" value={formStartDate} onChange={(event) => { const nextDate = event.target.value; setFormStartDate(nextDate); setFormEndDate(nextDate); }} required /></label><label><span>End date</span><input name="endDate" type="date" min={formStartDate} value={formEndDate} onChange={(event) => setFormEndDate(event.target.value)} required /></label></div>
-          <p className={styles.leavePolicyNote}>Each request can span up to {MAX_LEAVE_SPAN_DAYS} calendar days, including the start and end dates.</p>
           {formLeaveType === "Sick leave" ? <SickEvidenceNotice dueDate={sickEvidenceDeadline(formEndDate, VICTORIAN_PUBLIC_HOLIDAY_DATES)} hasEvidence={false} /> : null}
           <details className={styles.timeRange}><summary>Part-day leave</summary><div className={styles.formRow}><label><span>Starts</span><select name="startTime" value={startTime} onChange={(event) => setStartTime(event.target.value)}><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>Ends</span><select name="endTime" value={endTime} onChange={(event) => setEndTime(event.target.value)}><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>First and last day only.</p></details>
           <details className={styles.requestExtras}><summary>Note & files</summary>

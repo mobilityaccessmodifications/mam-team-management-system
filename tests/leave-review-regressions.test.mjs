@@ -227,7 +227,7 @@ test("S02 form wiring: shared span validation runs before notice or submission, 
   for (const onBehalfOf of [false, true]) {
     const { calls, tree } = submitForm({ onBehalfOf, dateError: error });
     assert.deepEqual(calls, [["2026-09-22", "2026-09-22"], "prevented", error]);
-    assert.match(content(tree), /up to 366 calendar days, including the start and end dates/);
+    assert.doesNotMatch(content(tree), /Each request can span up to/);
   }
 });
 
