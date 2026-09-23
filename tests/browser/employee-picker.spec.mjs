@@ -4,7 +4,9 @@ test("required manager uses a selected identity, supports search and controlled 
   await page.goto("/?fixture=employee-picker");
   const input = page.getByRole("combobox", { name: "Reports to" });
   await input.fill("not a real person");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // Submit by keyboard while the open dropdown covers the compact fixture footer.
+  await input.press("Tab");
+  await page.keyboard.press("Enter");
   await expect(page.getByLabel("Saved manager")).toHaveText("");
   expect(await input.evaluate((element) => element.checkValidity())).toBe(false);
   await input.fill("minor");
