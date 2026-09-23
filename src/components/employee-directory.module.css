@@ -792,6 +792,13 @@
   grid-column: 1 / -1;
 }
 
+.fieldNote {
+  margin: -2px 0 2px;
+  color: var(--directory-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .editor input:not([type="checkbox"]),
 .editor select,
 .editor textarea {

@@ -304,6 +304,13 @@ export async function createEmployeeDirectoryRecord(
 ): Promise<EmployeeDirectoryMutationResult> {
   const { supabase } = await requireEmployeeDirectoryManager();
   const values = validateDraft(input);
+  if (values.p_is_active) {
+    if (!values.p_started_date) throw new Error("A start date is required for a new active employee.");
+    if (!values.p_manager_id) throw new Error("A direct manager is required for a new active employee.");
+    if (!values.p_work_email && !values.p_personal_email) {
+      throw new Error("Enter at least one work or personal email for the new employee.");
+    }
+  }
   let { data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule_times", {
     ...values,
     p_sort_order: 0,

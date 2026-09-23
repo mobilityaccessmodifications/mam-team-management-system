@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { GET as leaveNotifications } from "../leave-notifications/route";
 import { GET as checkInReminders } from "../check-in-reminders/route";
+import { GET as newStarterDayOne } from "../new-starter-day-one/route";
 import { GET as priorityReminders } from "../leave-priority-reminders/route";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ export const maxDuration = 300;
 const jobs: Record<string, (request: Request) => Promise<Response>> = {
   "leave-notifications": leaveNotifications,
   "check-in-reminders": checkInReminders,
+  "new-starter-day-one": newStarterDayOne,
   "leave-priority-reminders": priorityReminders,
 };
 export async function GET(request: Request) {

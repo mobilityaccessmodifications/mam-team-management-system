@@ -4,7 +4,7 @@ const origin = 'https://mam-team-management-system-ten.vercel.app';
 const secret = process.env.MAM_PEOPLE_HUB_CRON_SECRET?.trim();
 if (!secret) throw new Error('MAM recovery credential is not configured.');
 const paths = [
-  'leave-notifications', 'check-in-reminders', 'leave-priority-reminders',
+  'leave-notifications', 'check-in-reminders', 'new-starter-day-one', 'leave-priority-reminders',
 ];
 let failed = false;
 for (const job of paths) {
