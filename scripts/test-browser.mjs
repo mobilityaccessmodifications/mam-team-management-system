@@ -19,7 +19,7 @@ try {
   await build({
     entryPoints: ["tests/browser/fixture.jsx"], bundle: true, outdir: scratch,
     platform: "browser", jsx: "automatic", sourcemap: false, minify: false,
-    alias: { "@": path.join(sourceRoot, "src"), react: path.resolve("node_modules/react"), "react-dom": path.resolve("node_modules/react-dom") },
+    alias: { "@/app/people/team-directory-actions": path.join(sourceRoot, "tests/browser/team-directory-actions.jsx"), "@": path.join(sourceRoot, "src"), react: path.resolve("node_modules/react"), "react-dom": path.resolve("node_modules/react-dom") },
     define: { "process.env.NODE_ENV": '"production"' },
     plugins: [{ name: "test-presentation-exports", setup(builder) {
       // Test-only exports of existing local presentation functions; no copied UI.

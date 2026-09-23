@@ -1,3 +1,4 @@
+import { TeamDirectoryFixture } from "./team-directory-fixture";
 import { EmployeePickerFixture } from "./employee-picker-fixture";
 import { createRoot } from "react-dom/client";
 import { fixtureBuildEvents, FixtureEventDetail } from "@/components/team-calendar";
@@ -10,5 +11,5 @@ const events = fixtureBuildEvents([], [], [{
   days: partial ? 1 : 3, hours: partial ? 3 : 22.8, status: "Approved",
 }], [], [], [2026]);
 createRoot(document.getElementById("root")).render(
-  new URLSearchParams(location.search).get("fixture") === "employee-picker" ? <EmployeePickerFixture /> : <FixtureEventDetail event={events.find((event) => event.id === "leave:synthetic")} onClose={() => {}} />,
+  new URLSearchParams(location.search).get("fixture") === "team-directory" ? <TeamDirectoryFixture /> : new URLSearchParams(location.search).get("fixture") === "employee-picker" ? <EmployeePickerFixture /> : <FixtureEventDetail event={events.find((event) => event.id === "leave:synthetic")} onClose={() => {}} />,
 );
