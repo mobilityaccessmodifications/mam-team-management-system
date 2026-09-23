@@ -1,4 +1,4 @@
-import { SlidersHorizontal } from "lucide-react";
+import { ChevronDown, Filter } from "lucide-react";
 import styles from "@/components/team-calendar.module.css";
 
 export function CalendarFilters({ kinds, teams, hiddenKinds, hiddenTeams, onKind, onTeam, onReset }: {
@@ -12,8 +12,8 @@ export function CalendarFilters({ kinds, teams, hiddenKinds, hiddenTeams, onKind
 }) {
   const hiddenCount = kinds.filter((kind) => hiddenKinds.includes(kind.id)).length
     + teams.filter((team) => hiddenTeams.includes(team)).length;
-  return <details className={styles.filters}>
-    <summary><SlidersHorizontal size={16} aria-hidden="true" />Filters{hiddenCount ? <span>{hiddenCount} hidden</span> : null}</summary>
+  return <details className={styles.filters} onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}>
+    <summary><Filter size={16} aria-hidden="true" />Filters{hiddenCount ? <span>{hiddenCount} hidden</span> : null}<ChevronDown size={16} aria-hidden="true" /></summary>
     <div className={styles.filterPanel}>
       <div className={styles.filterHeading}><strong>Show on calendar</strong><button type="button" onClick={onReset} disabled={!hiddenCount}>Show all</button></div>
       <div className={styles.filterGroups}>

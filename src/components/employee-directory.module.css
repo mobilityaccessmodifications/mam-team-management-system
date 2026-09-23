@@ -1214,3 +1214,14 @@
   .directoryDesk { border-radius: 16px; }
   .modal, .editor { border-radius: 24px 24px 0 0; }
 }
+
+/* Keep directory controls with the page actions instead of in the list. */
+.header { flex-wrap: wrap; }
+.header .listTools { flex: 1 1 600px; display: flex; flex-wrap: wrap; padding: 0; border: 0; background: transparent; }
+.header .searchField { flex: 1 1 220px; width: auto; }
+.header .sortField { flex: 0 1 auto; }
+.header .headerActions { width: auto; margin-left: auto; }
+@media (max-width: 760px) {
+  .header .listTools { flex-basis: 100%; }
+  .header .searchField { flex-basis: 100%; }
+}

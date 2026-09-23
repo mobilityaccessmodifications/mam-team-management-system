@@ -755,3 +755,14 @@
   .mobileSelectAll { display: flex; }
   .bulkToolbar > span { flex: 1; }
 }
+
+.header { flex-wrap: wrap; }
+.header > .tools { flex: 1 1 380px; flex-direction: row; min-height: 44px; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.header .searchField { flex: 1; width: auto; }
+.header .headerActionGroup { width: auto; margin-left: auto; }
+.emptySelection { display: none; }
+@media (max-width: 760px) {
+  .header > .tools { flex-basis: 100%; flex-wrap: wrap; }
+  .emptySelection { display: flex; padding-block: 0; border: 0; background: transparent; }
+  .emptySelection > span { display: none; }
+}

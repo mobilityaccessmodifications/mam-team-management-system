@@ -518,7 +518,16 @@ export function SubscriptionRegister({
   }
 
   return <section className={styles.workspace} aria-label="Subscription management">
-    <header className={`${styles.header} ${styles.headerActionsOnly}`}>
+    <header className={styles.header}>
+      <div className={styles.tools} ref={selectionFocusRef} tabIndex={-1} aria-label="Subscription tools">
+        <label className={styles.searchField}><Search size={17} aria-hidden="true" /><span className={styles.visuallyHidden}>Search subscriptions</span><input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search service, owner or employee" /></label>
+        {registerState.state === "ready" ? <div className={styles.toolSummary}>
+          {hasSubscriptionFilters ? <button className={styles.clearFilters} type="button" onClick={() => setSubscriptionFilters(emptySubscriptionFilters)}>Clear filters</button> : null}
+          <button className={styles.filterSummaryButton} type="button" ref={filterButtonRef} aria-expanded={showFilters} aria-controls={filterPanelId} onClick={() => setShowFilters((open) => !open)}>
+            <Filter size={16} aria-hidden="true" /><span><strong>Filters{hasSubscriptionFilters ? ` · ${Object.values(subscriptionFilters).filter(Boolean).length}` : ""}</strong></span><ChevronDown size={16} aria-hidden="true" />
+          </button>
+        </div> : null}
+      </div>
       <div className={styles.headerActionGroup}>
         {canManageCredentialGrants ? <button className={styles.secondaryAction} type="button" onClick={() => setShowCredentialAccess(true)} aria-label="Manage credential access" title="Credential access"><UsersRound size={16} aria-hidden="true" /></button> : null}
         {!readOnly ? <button className={styles.primaryAction} type="button" onClick={() => { subscriptionDialogReturnFocusRef.current = addSubscriptionButtonRef.current; setShowAdd(true); }} ref={addSubscriptionButtonRef}><Plus size={16} /> Add</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Read only</div>}
@@ -526,16 +535,6 @@ export function SubscriptionRegister({
     </header>
 
     {notice ? <div className={styles.notice} role="status"><CheckCircle2 size={16} aria-hidden="true" /><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={15} /></button></div> : null}
-
-    <div className={styles.tools}>
-      <label className={styles.searchField}><Search size={17} aria-hidden="true" /><span className={styles.visuallyHidden}>Search subscriptions</span><input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search service, owner or employee" /></label>
-      {registerState.state === "ready" ? <div className={styles.toolSummary}>
-        {hasSubscriptionFilters ? <button className={styles.clearFilters} type="button" onClick={() => setSubscriptionFilters(emptySubscriptionFilters)}>Clear filters</button> : null}
-        <button className={styles.filterSummaryButton} type="button" ref={filterButtonRef} aria-expanded={showFilters} aria-controls={filterPanelId} onClick={() => setShowFilters((open) => !open)}>
-          <Filter size={16} aria-hidden="true" /><span><strong>Filters{hasSubscriptionFilters ? ` · ${Object.values(subscriptionFilters).filter(Boolean).length}` : ""}</strong></span><ChevronDown size={16} aria-hidden="true" />
-        </button>
-      </div> : null}
-    </div>
 
     {registerState.state === "ready" ? <section id={filterPanelId} className={styles.filterPanel} aria-label="Subscription filters" hidden={!showFilters} onKeyDown={(event) => {
       if (event.key === "Escape" && event.target instanceof HTMLElement && event.target.tagName !== "SELECT") {
@@ -564,9 +563,9 @@ export function SubscriptionRegister({
       ] as const).map(filter => ({ ...filter, value: subscriptionFilters[filter.key], options: subscriptionFilterOptions[filter.key] }))}
       onFilter={setSubscriptionFilter}
     /> : null}
-    {registerState.state === "ready" && !readOnly ? <div className={styles.bulkToolbar} ref={selectionFocusRef} tabIndex={-1} aria-label="Subscription selection">
+    {registerState.state === "ready" && !readOnly ? <div className={`${styles.bulkToolbar} ${!selectedSubscriptions.length ? styles.emptySelection : ""}`} aria-label="Subscription selection">
       <label className={`${styles.selectionLabel} ${styles.mobileSelectAll}`}><input type="checkbox" checked={allShownSelected} disabled={!filteredSubscriptions.length} ref={(node) => { if (node) node.indeterminate = someShownSelected && !allShownSelected; }} onChange={toggleShown} />Select all shown</label>
-      <span aria-live="polite">{selectedSubscriptions.length ? `${selectedSubscriptions.length} selected` : "Select subscriptions to edit together"}</span>
+      <span aria-live="polite">{selectedSubscriptions.length ? `${selectedSubscriptions.length} selected` : ""}</span>
       {selectedSubscriptions.length ? <><button className={styles.secondaryAction} type="button" onClick={() => setSelectedIds(new Set())}>Clear selection</button><button ref={bulkEditButtonRef} className={styles.primaryAction} type="button" onClick={() => setShowBulkEdit(true)}><Pencil size={15} aria-hidden="true" />Edit selected</button></> : null}
     </div> : null}
     {registerState.state === "ready" && !filteredSubscriptions.length ? <div className={styles.emptyState}><CreditCard size={25} aria-hidden="true" /><strong>{query || hasSubscriptionFilters ? "No subscriptions match those filters" : "No subscriptions have been added"}</strong><span>{readOnly ? "Subscription records will appear here when they are created by a System Admin." : "Start with the systems your staff use, then assign their owner and access."}</span>{!readOnly && !query && !hasSubscriptionFilters ? <button className={styles.secondaryAction} type="button" onClick={() => { subscriptionDialogReturnFocusRef.current = addSubscriptionButtonRef.current; setShowAdd(true); }}><Plus size={15} /> Add subscription</button> : null}</div> : null}

@@ -21,6 +21,7 @@ import {
   type MobileEventProps,
 } from "@dayflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { Temporal } from "temporal-polyfill";
 
 import type { BirthdayCalendarEntry, CheckInCalendarEntry, PayrollBalanceReminderCalendarEntry, SubscriptionReviewCalendarEntry } from "@/app/leave/actions";
@@ -52,6 +53,7 @@ type CalendarLeaveRequest = {
   employee: string;
   initials: string;
   team: string;
+  position?: string;
   leaveType: string;
   startDate: string;
   endDate: string;
@@ -63,7 +65,7 @@ type CalendarLeaveRequest = {
 };
 
 type EventKind = "approved" | "pending" | "balance-pending" | "birthday" | "check-in" | "subscription" | "payroll-balance" | "public-holiday";
-type MAMEventMeta = { kind: EventKind; subject: string; detail: string; dateLabel: string; priority: number; team?: string; duration?: { days: number; hours?: number } };
+type MAMEventMeta = { kind: EventKind; subject: string; detail: string; identity?: string; leaveType?: string; dateLabel: string; priority: number; team?: string; duration?: { days: number; hours?: number } };
 
 type TeamCalendarProps = {
   birthdays: BirthdayCalendarEntry[];
@@ -177,7 +179,7 @@ function buildEvents(
       startTime: request.startTime,
       endTime: request.endTime,
       calendarId: kind,
-      meta: { kind, team: request.team, subject: request.employee, detail: `${request.status} · ${request.leaveType}${request.team ? ` · ${request.team}` : ""}`, dateLabel: `${formatDateRange(request.startDate, request.endDate)}${times}`, duration: { days: request.days, hours: request.hours }, priority: kind === "pending" ? 4 : 5 },
+      meta: { kind, team: request.team, subject: request.employee, detail: `${request.status} · ${request.leaveType}${request.team ? ` · ${request.team}` : ""}`, identity: Array.from(new Set([request.position, ...request.team.split(" · ").reverse()].filter(Boolean))).join(" · "), leaveType: request.leaveType, dateLabel: `${formatDateRange(request.startDate, request.endDate)}${times}`, duration: { days: request.days, hours: request.hours }, priority: kind === "pending" ? 4 : 5 },
     });
   });
 
@@ -230,9 +232,10 @@ function EventDetail({ event, onClose }: EventDetailContentProps) {
     <div className={styles.eventDetail}>
       <div className={styles.eventDetailHeader}>
         <span className={styles.eventDetailIcon} data-kind={meta.kind}>{icon}</span>
-        <div><span>{meta.detail}</span><h3>{meta.subject}</h3></div>
+        <div><span>{meta.identity ?? meta.detail}</span><h3>{meta.subject}</h3></div>
         <button type="button" onClick={onClose} aria-label="Close event details"><X size={18} /></button>
       </div>
+      {meta.leaveType ? <div className={styles.eventDetailDate}><CalendarDays size={16} /><span>{meta.leaveType}</span></div> : null}
       <div className={styles.eventDetailDate}><Clock3 size={16} /><span>{meta.dateLabel}</span></div>
       {meta.duration ? <div className={styles.eventDetailDate}><Clock3 size={16} aria-hidden="true" /><span>Duration: {formatLeaveDuration(meta.duration)}</span></div> : null}
     </div>
@@ -269,6 +272,7 @@ function MobileEventDetail({ draftEvent, isOpen, onClose }: MobileEventProps) {
 }
 
 function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, showSubscriptionReviews, showPayrollBalanceReminders, reviewOnly, loading }: TeamCalendarProps) {
+  const [filterHost, setFilterHost] = useState<HTMLElement | null>(null);
   const [hiddenKinds, setHiddenKinds] = useState<string[]>([]);
   const [hiddenTeams, setHiddenTeams] = useState<string[]>([]);
   const teams = useMemo(() => calendarTeamOptions(requests), [requests]);
@@ -335,6 +339,7 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
     const frame = calendarFrameRef.current;
     if (!frame) return;
     const refreshCalendarSemantics = () => {
+      setFilterHost(frame.querySelector<HTMLElement>(".df-header-right"));
       makeDayFlowEventsAccessible(frame);
       makeDayFlowNavigationAccessible(frame);
       makeDayFlowSearchAccessible(document);
@@ -392,10 +397,10 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
 
   return (
     <section className={styles.calendarSection} aria-label={reviewOnly ? "Personal operations reminders" : "Team calendar"}>
-      <CalendarFilters kinds={visibleCalendars} teams={teams} hiddenKinds={hiddenKinds} hiddenTeams={hiddenTeams}
+      {filterHost ? createPortal(<CalendarFilters kinds={visibleCalendars} teams={teams} hiddenKinds={hiddenKinds} hiddenTeams={hiddenTeams}
         onKind={(id) => setHiddenKinds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])}
         onTeam={(team) => setHiddenTeams((current) => current.includes(team) ? current.filter((item) => item !== team) : [...current, team])}
-        onReset={() => { setHiddenKinds([]); setHiddenTeams([]); }} />
+        onReset={() => { setHiddenKinds([]); setHiddenTeams([]); }} />, filterHost) : null}
       <div
         className={styles.calendarFrame}
         aria-busy={loading}
