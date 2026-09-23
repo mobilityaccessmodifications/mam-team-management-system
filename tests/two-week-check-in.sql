@@ -46,6 +46,19 @@ select pg_temp.assert(
   '2-Week Check-In is scheduled three Victorian business days before the due date'
 );
 
+select pg_temp.assert(
+  exists (
+    select 1 from private.employee_check_in_reminders reminder
+    where reminder.person_id = '73000000-0000-4000-8000-000000000002'
+      and reminder.milestone = '1_month'
+      and reminder.reminder_sequence = 'initial'
+      and reminder.due_date = date '2026-11-04'
+      and reminder.notify_date = date '2026-10-29'
+      and reminder.delivery_status = 'scheduled'
+  ),
+  '1-Month Check-In is scheduled three Victorian business days before the due date'
+);
+
 set role authenticated;
 select set_config('request.jwt.claim.sub', '72000000-0000-4000-8000-000000000002', false);
 select set_config(
@@ -61,6 +74,15 @@ select pg_temp.assert(
       and due_date = date '2026-10-19'
   ),
   'employee Calendar shows the employee own 2-Week Check-In'
+);
+select pg_temp.assert(
+  exists (
+    select 1 from public.list_employee_check_in_calendar_entries()
+    where person_id = '73000000-0000-4000-8000-000000000002'
+      and milestone = '1_month'
+      and due_date = date '2026-11-04'
+  ),
+  'employee Calendar shows the employee own 1-Month Check-In'
 );
 reset role;
 
@@ -82,6 +104,16 @@ select pg_temp.assert(
   'direct manager Tasks shows the employee 2-Week Check-In'
 );
 select pg_temp.assert(
+  exists (
+    select 1 from public.list_my_employee_check_in_tasks() task
+    cross join lateral jsonb_array_elements(task.reminders) reminder
+    where task.person_id = '73000000-0000-4000-8000-000000000002'
+      and reminder ->> 'milestone' = '1_month'
+      and reminder ->> 'dueDate' = '2026-11-04'
+  ),
+  'direct manager Tasks shows the employee 1-Month Check-In'
+);
+select pg_temp.assert(
   not exists (
     select 1 from public.list_employee_check_in_calendar_entries()
     where person_id = '73000000-0000-4000-8000-000000000002'
@@ -90,4 +122,4 @@ select pg_temp.assert(
 );
 reset role;
 
-select '2-Week Check-In Calendar and Tasks scope passed' as result;
+select '2-Week and 1-Month Check-In Calendar and Tasks scope passed' as result;
