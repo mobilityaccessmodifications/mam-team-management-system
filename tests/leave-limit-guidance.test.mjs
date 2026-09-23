@@ -52,5 +52,5 @@ test('both balance surfaces render bold guidance and subscription count lives in
   assert.match(controls, /<strong>\{limitGuidance\}<\/strong>/);
   assert.doesNotMatch(dialog, /employees can record Unpaid leave only/);
   assert.match(subscriptions, /filterPanelFooter\}><span aria-live="polite">\{subscriptionCountLabel/);
-  assert.doesNotMatch(subscriptions.split('filterSummaryButton')[1].split('</button>')[0], /subscriptionCountLabel/);
+  assert.doesNotMatch(subscriptions.split('ref={filterButtonRef}')[1].split('</button>')[0], /subscriptionCountLabel/);
 });

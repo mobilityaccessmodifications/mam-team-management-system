@@ -37,6 +37,7 @@ import {
   updateEmployeeDirectoryRecord,
 } from "@/app/people/actions";
 import { EmployeeDeviceAssignments } from "@/components/employee-device-assignments";
+import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/employee-directory.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
@@ -634,9 +635,9 @@ export function EmployeeDirectory({
 
   return (
     <section className={styles.workspace} aria-label="Employee directory">
-      <header className={styles.header} aria-label="Directory actions">
-        <div className={styles.listTools}>
-          <label className={styles.searchField}>
+      <header className={toolbar.toolbar} aria-label="Directory actions">
+        <div className={toolbar.controls}>
+          <label className={toolbar.search}>
             <Search size={17} aria-hidden="true" />
             <span className={styles.visuallyHidden}>Search employee records</span>
             <input
@@ -656,7 +657,7 @@ export function EmployeeDirectory({
               type="search"
             />
           </label>
-          <label className={styles.sortField}>
+          <label className={toolbar.select}>
             <span>Sort</span>
             <select
               value={sort}
@@ -669,7 +670,7 @@ export function EmployeeDirectory({
               <option value="company">Company</option>
             </select>
           </label>
-          <label className={styles.sortField}>
+          <label className={toolbar.select}>
             <span>View</span>
             <select value={directoryFilter} onChange={(event) => setDirectoryFilter(event.target.value as "active" | "archived")}>
               <option value="active">Active</option>
@@ -677,12 +678,12 @@ export function EmployeeDirectory({
             </select>
           </label>
         </div>
-        <div className={styles.headerActions}>
-          <a className={styles.secondaryAction} href="/people/export" aria-label="Export employees" title="Export employees">
+        <div className={toolbar.actions}>
+          <a className={toolbar.button} href="/people/export" aria-label="Export employees" title="Export employees">
             <Download size={16} aria-hidden="true" />
             <span className={styles.visuallyHidden}>Export employees</span>
           </a>
-          <button className={styles.primaryAction} type="button" onClick={openCreate}>
+          <button className={toolbar.primary} type="button" onClick={openCreate}>
             <UserPlus size={16} /> Add employee
           </button>
         </div>

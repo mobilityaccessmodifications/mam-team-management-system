@@ -169,6 +169,7 @@ test("shared owner workflow releases the busy lock after errors and can retry", 
 test("chart controls keep zoom limits, read-only permissions and action wiring", () => {
   const { OrganisationChartControls } = load("src/components/organisation-controls.tsx", {
     react: {}, "@/components/organisation-tree.module.css": { default: {} },
+    "@/components/people-toolbar.module.css": { default: {} },
   });
   const elements = node => !node || typeof node !== "object" ? [] : Array.isArray(node)
     ? node.flatMap(elements) : [node, ...elements(node.props?.children)];

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   completeCheckInReminder,
 } from "@/app/check-ins/actions";
+import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/check-in-register.module.css";
 import { AnimatedStatusBadge } from "@/components/ui/animated-status-badge";
 import { MotionLoader } from "@/components/ui/motion-loader";
@@ -245,9 +246,9 @@ export function CheckInRegister({
 
   return <section className={styles.workspace} aria-label="Employee check-in register">
     <h2 className={styles.srOnly}>Employee check-ins</h2>
-    <header className={styles.toolbar}>
-      <div className={styles.listToolbar}>
-        <label htmlFor="check-in-register-sort">Sort
+    <header className={toolbar.toolbar}>
+      <div className={toolbar.controls}>
+        <label className={toolbar.select} htmlFor="check-in-register-sort">Sort
           <select id="check-in-register-sort" value={sort} onChange={(event) => changeSort(event.target.value as EmployeeSort)}>
             <option value="due">Next due date</option>
             <option value="start">Start date (newest)</option>
@@ -256,7 +257,7 @@ export function CheckInRegister({
         </label>
       </div>
 
-      <button className={styles.secondaryAction} type="button" onClick={() => void load()} disabled={loading || Boolean(pendingAction)} aria-label="Refresh check-ins" title="Refresh">
+      <button className={toolbar.iconButton} type="button" onClick={() => void load()} disabled={loading || Boolean(pendingAction)} aria-label="Refresh check-ins" title="Refresh">
         <RefreshCw size={16} aria-hidden="true" />
       </button>
     </header>

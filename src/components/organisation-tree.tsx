@@ -33,6 +33,7 @@ import {
 
 import { defaultBranchLayout, defaultDisplayChildren, isMinorModsLeader, minorRoleGroup, type OrganisationLayout } from "@/lib/organisation-layout";
 
+import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/organisation-tree.module.css";
 import { OrganisationChartControls, OrganisationFilterMenu, type OrganisationFilter } from "@/components/organisation-controls";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
@@ -2279,9 +2280,9 @@ export function OrganisationTree({
     <section aria-labelledby={titleId} className={rootClassName} ref={rootRef}>
       <h2 className={styles.srOnly} id={titleId}>Organisation</h2>
 
-      <div className={styles.toolbar}>
-        <div className={styles.searchWrap}>
-          <label className={styles.search}>
+      <div className={toolbar.toolbar}>
+        <div className={toolbar.searchWrap}>
+          <label className={toolbar.search}>
             <Search aria-hidden="true" size={16} />
             <span className={styles.srOnly}>Search the organisation</span>
             <input
@@ -2366,22 +2367,22 @@ export function OrganisationTree({
           ) : null}
         </div>
 
-        <div className={styles.toolbarActions}>
-          <div className={styles.headerActions}>
+        <div className={toolbar.actions}>
+          <div className={toolbar.actions}>
             <button
               aria-label="Export organisation as PDF"
-              className={`${styles.secondaryAction} ${styles.iconAction}`}
+              className={`${toolbar.button} ${toolbar.iconButton}`}
               onClick={exportPdf}
               title="Export PDF"
               type="button"
             >
               <Download aria-hidden="true" size={16} />
-              <span>Export PDF</span>
+              <span className={styles.srOnly}>Export PDF</span>
             </button>
             {canArrange ? (
               <button
                 aria-pressed={arrangeMode}
-                className={styles.arrangeAction}
+                className={toolbar.button}
                 data-active={arrangeMode}
                 disabled={Boolean(linkGuide)}
                 onClick={toggleArrangeMode}
@@ -2394,7 +2395,7 @@ export function OrganisationTree({
             ) : null}
             {canUseLegacyTreeEditor ? (
               <button
-                className={styles.primaryAction}
+                className={toolbar.primary}
                 disabled={!onCreate}
                 onClick={() => openCreate()}
                 type="button"
@@ -2405,7 +2406,7 @@ export function OrganisationTree({
             ) : null}
           </div>
 
-          <label className={styles.layoutSelect}>
+          <label className={toolbar.select}>
             <span className={styles.srOnly}>Organisation layout</span>
             <select aria-label="Organisation layout" value={chartLayout} onChange={(event) => {
               setChartLayout(event.target.value as OrganisationLayout);

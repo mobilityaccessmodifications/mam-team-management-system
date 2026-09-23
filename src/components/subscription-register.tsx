@@ -50,6 +50,7 @@ import {
   SubscriptionCredentialEditor,
 } from "@/components/subscription-credential-vault";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
+import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/subscription-register.module.css";
 import {
   SUBSCRIPTION_BILLING_CYCLES,
@@ -518,19 +519,19 @@ export function SubscriptionRegister({
   }
 
   return <section className={styles.workspace} aria-label="Subscription management">
-    <header className={styles.header}>
-      <div className={styles.tools} ref={selectionFocusRef} tabIndex={-1} aria-label="Subscription tools">
-        <label className={styles.searchField}><Search size={17} aria-hidden="true" /><span className={styles.visuallyHidden}>Search subscriptions</span><input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search service, owner or employee" /></label>
-        {registerState.state === "ready" ? <div className={styles.toolSummary}>
-          {hasSubscriptionFilters ? <button className={styles.clearFilters} type="button" onClick={() => setSubscriptionFilters(emptySubscriptionFilters)}>Clear filters</button> : null}
-          <button className={styles.filterSummaryButton} type="button" ref={filterButtonRef} aria-expanded={showFilters} aria-controls={filterPanelId} onClick={() => setShowFilters((open) => !open)}>
+    <header className={toolbar.toolbar}>
+      <div className={toolbar.controls} ref={selectionFocusRef} tabIndex={-1} aria-label="Subscription tools">
+        <label className={toolbar.search}><Search size={17} aria-hidden="true" /><span className={styles.visuallyHidden}>Search subscriptions</span><input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search service, owner or employee" /></label>
+        {registerState.state === "ready" ? <div className={toolbar.summary}>
+          {hasSubscriptionFilters ? <button className={toolbar.button} type="button" onClick={() => setSubscriptionFilters(emptySubscriptionFilters)}>Clear filters</button> : null}
+          <button className={toolbar.button} type="button" ref={filterButtonRef} aria-expanded={showFilters} aria-controls={filterPanelId} onClick={() => setShowFilters((open) => !open)}>
             <Filter size={16} aria-hidden="true" /><span><strong>Filters{hasSubscriptionFilters ? ` · ${Object.values(subscriptionFilters).filter(Boolean).length}` : ""}</strong></span><ChevronDown size={16} aria-hidden="true" />
           </button>
         </div> : null}
       </div>
-      <div className={styles.headerActionGroup}>
-        {canManageCredentialGrants ? <button className={styles.secondaryAction} type="button" onClick={() => setShowCredentialAccess(true)} aria-label="Manage credential access" title="Credential access"><UsersRound size={16} aria-hidden="true" /></button> : null}
-        {!readOnly ? <button className={styles.primaryAction} type="button" onClick={() => { subscriptionDialogReturnFocusRef.current = addSubscriptionButtonRef.current; setShowAdd(true); }} ref={addSubscriptionButtonRef}><Plus size={16} /> Add</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Read only</div>}
+      <div className={toolbar.actions}>
+        {canManageCredentialGrants ? <button className={toolbar.button} type="button" onClick={() => setShowCredentialAccess(true)} aria-label="Manage credential access" title="Credential access"><UsersRound size={16} aria-hidden="true" /></button> : null}
+        {!readOnly ? <button className={toolbar.primary} type="button" onClick={() => { subscriptionDialogReturnFocusRef.current = addSubscriptionButtonRef.current; setShowAdd(true); }} ref={addSubscriptionButtonRef}><Plus size={16} /> Add</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Read only</div>}
       </div>
     </header>
 

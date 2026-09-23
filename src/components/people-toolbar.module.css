@@ -1,0 +1,162 @@
+/* Shared People workspace controls. Keep dropdown contents and dialogs outside
+   this styling boundary so their own layouts remain independent. */
+.toolbar {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 60px;
+  padding: 8px;
+  border: 1px solid var(--surface-border, #dce3de);
+  border-radius: 16px;
+  background: var(--surface-raised, #fff);
+  color: var(--text-primary, #1d2926);
+  box-shadow: var(--shadow-xs);
+}
+
+.controls,
+.actions,
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.controls { flex: 1 1 280px; }
+.actions { margin-left: auto; }
+.summary { flex: 0 0 auto; }
+.menu { position: relative; flex: 0 0 auto; }
+.menuPanel { isolation: isolate; }
+
+.search,
+.searchWrap {
+  flex: 1 1 220px;
+  min-width: 160px;
+  max-width: 100%;
+}
+
+.searchWrap { position: relative; }
+.searchWrap > .search { width: 100%; }
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--surface-border, #dce3de);
+  border-radius: 10px;
+  background: var(--surface-muted, #f5f7f6);
+  color: var(--text-secondary, #53625e);
+}
+
+.search input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary, #1d2926);
+  font: inherit;
+  font-size: 14px;
+}
+
+.search input::placeholder { color: var(--text-tertiary, #6c7b76); }
+
+.select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-secondary, #53625e);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.select select,
+.button,
+.primary,
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0 12px;
+  border: 1px solid var(--surface-border-strong, #c9d3cd);
+  border-radius: 10px;
+  background: var(--surface-raised, #fff);
+  color: var(--text-primary, #1d2926);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.select select { min-width: 0; height: 44px; padding-right: 8px; }
+.iconButton { width: 44px; padding: 0; flex-shrink: 0; }
+.primary { background: var(--mam-orange-dark, #bf480e); border-color: transparent; color: #fff; }
+.count { color: var(--text-secondary, #53625e); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.search > svg,
+.button > svg,
+.primary > svg,
+.iconButton > svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+.search:focus-within,
+.select select:focus-visible,
+.button:focus-visible,
+.primary:focus-visible,
+.iconButton:focus-visible {
+  outline: 2px solid var(--mam-orange, #ef6a24);
+  outline-offset: 2px;
+}
+
+.button:disabled,
+.primary:disabled,
+.iconButton:disabled,
+.select select:disabled,
+.search:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+
+.button[aria-pressed="true"],
+.button[aria-expanded="true"] { border-color: var(--mam-orange, #ef6a24); background: var(--surface-warm, #fff4ec); }
+
+@media (hover: hover) and (pointer: fine) {
+  .button:hover:not(:disabled),
+  .iconButton:hover:not(:disabled),
+  .select select:hover:not(:disabled) { background: var(--surface-muted, #f5f7f6); border-color: var(--text-tertiary, #6c7b76); }
+  .primary:hover:not(:disabled) { background: #a83f0d; }
+}
+
+@media (max-width: 760px) {
+  .controls { flex-basis: 100%; }
+  .menu { position: static; }
+  .toolbar .menuPanel { left: 8px; right: 8px; width: auto; }
+  .toolbar > .search,
+  .toolbar > .searchWrap,
+  .controls > .search { flex-basis: 100%; }
+  .controls:not(:has(.search)) { flex: 1 1 auto; }
+  .select select { max-width: 164px; }
+  .actions { width: 100%; margin-left: 0; }
+  .actions > .actions { width: auto; }
+  .search input,
+  .select select { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button, .primary, .iconButton, .select select { transition: none; }
+}
