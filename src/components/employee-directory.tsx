@@ -25,6 +25,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useId,
   useRef,
   useState,
 } from "react";
@@ -37,6 +38,7 @@ import {
   updateEmployeeDirectoryRecord,
 } from "@/app/people/actions";
 import { EmployeeDeviceAssignments } from "@/components/employee-device-assignments";
+import { EmployeePicker } from "@/components/employee-picker";
 import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/employee-directory.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
@@ -869,6 +871,11 @@ function EmployeeEditor({
   archiveDisabled?: boolean;
   onRequestDelete?: () => void;
 }) {
+  const managerInputId = useId();
+  const teamOptions = [...new Set([
+    ...records.filter((record) => record.isActive).map((record) => record.teamName.trim()),
+    editor.draft.teamName,
+  ].filter(Boolean))].sort((first, second) => first.localeCompare(second));
   const managerOptions = records
     .filter((record) => record.isActive && record.personId !== currentRecord?.personId)
     .sort((first, second) => first.fullName.localeCompare(second.fullName));
@@ -900,14 +907,25 @@ function EmployeeEditor({
             <input value={editor.draft.positionTitle} onChange={(event) => onChange("positionTitle", event.target.value)} required maxLength={120} />
           </Field>
           <Field label="Team" required>
-            <input value={editor.draft.teamName} onChange={(event) => onChange("teamName", event.target.value)} required maxLength={120} />
-          </Field>
-          <Field label="Reports to" required={isCreate && editor.draft.isActive}>
-            <select value={editor.draft.managerId ?? ""} onChange={(event) => onChange("managerId", event.target.value || null)} required={isCreate && editor.draft.isActive}>
-              <option value="">No manager assigned</option>
-              {managerOptions.map((manager) => <option key={manager.personId} value={manager.personId}>{manager.fullName} · {manager.positionTitle}</option>)}
+            <select value={editor.draft.teamName} onChange={(event) => onChange("teamName", event.target.value)} required>
+              <option value="" disabled>Select a team</option>
+              {teamOptions.map((team) => <option key={team} value={team}>{team}</option>)}
             </select>
           </Field>
+          <div className={styles.pickerField}>
+            <label htmlFor={managerInputId}>Reports to{isCreate && editor.draft.isActive ? <b aria-hidden="true"> *</b> : null}</label>
+            <EmployeePicker
+              id={managerInputId}
+              ariaLabel="Reports to"
+              name="managerId"
+              assignees={managerOptions}
+              value={editor.draft.managerId ?? ""}
+              onValueChange={(personId) => onChange("managerId", personId || null)}
+              placeholder="No manager assigned"
+              required={isCreate && editor.draft.isActive}
+              disabled={saving}
+            />
+          </div>
           <Field label="Company">
             <select value={editor.draft.company} onChange={(event) => onChange("company", event.target.value)}>
               <option value="mam">MAM</option>
