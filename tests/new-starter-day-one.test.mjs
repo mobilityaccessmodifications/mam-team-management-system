@@ -77,7 +77,7 @@ test('live workflow includes both employee addresses once and the direct manager
   assert.equal(both.json.actualRecipient,'manager@example.test,personal@example.test,same@example.test');
 });
 
-test('Day 1 dispatcher stays inert until explicitly placed in live mode', async () => {
+test('Day 1 dispatcher stays inert for unsupported or disabled modes', async () => {
   const previous = { ...process.env };
   process.env.CRON_SECRET = 'synthetic-cron';
   process.env.NEW_STARTER_DAY_ONE_EMAIL_MODE = 'test';
@@ -92,12 +92,12 @@ test('Day 1 dispatcher stays inert until explicitly placed in live mode', async 
   }
 });
 
-test('live dispatcher sends the latest two employee emails plus manager context and finalises only an acknowledged delivery', async () => {
+test('dispatcher uses separate Marketing-test and live delivery contracts', async () => {
   const previousEnv = { ...process.env };
   const previousFetch = globalThis.fetch;
   const PreviousDate = globalThis.Date;
   Object.assign(process.env,{
-    CRON_SECRET: 'synthetic-cron', NEW_STARTER_DAY_ONE_EMAIL_MODE: 'live',
+    CRON_SECRET: 'synthetic-cron',
     N8N_NEW_STARTER_WEBHOOK_ORIGIN: 'https://n8n.example.test',
     N8N_NEW_STARTER_WEBHOOK_URL: 'https://n8n.example.test/webhook/day-one',
     N8N_CHECKIN_REMINDER_WEBHOOK_SECRET: 'x'.repeat(40),
@@ -115,18 +115,24 @@ test('live dispatcher sends the latest two employee emails plus manager context 
     if (name === 'complete_new_starter_day_one_delivery') return { data: true, error: null };
     throw new Error(`unexpected RPC ${name}`);
   } };
-  let body;
-  globalThis.fetch = async (_url,options) => {
-    body = JSON.parse(options.body);
-    return Response.json({ ok: true, sent: true, alreadySent: false, deliveryId: `new-starter:${reminderId}:day-one:live` });
-  };
   try {
-    const response = await loadRoute(admin).GET(request());
-    assert.equal(response.status,200);
-    assert.equal((await response.json()).sent,1);
-    assert.equal(body.employee.workEmail,'work@example.test');
-    assert.equal(body.employee.personalEmail,'personal@example.test');
-    assert.equal(body.manager.email,'manager@example.test');
+    for (const [configuredMode,contractMode] of [['marketing-test','test'],['live','live']]) {
+      process.env.NEW_STARTER_DAY_ONE_EMAIL_MODE = configuredMode;
+      let body;
+      globalThis.fetch = async (_url,options) => {
+        body = JSON.parse(options.body);
+        return Response.json({ ok: true, sent: true, alreadySent: false,
+          deliveryId: `new-starter:${reminderId}:day-one:${contractMode}` });
+      };
+      const response = await loadRoute(admin).GET(request());
+      assert.equal(response.status,200);
+      assert.equal((await response.json()).sent,1);
+      assert.equal(body.mode,contractMode);
+      assert.equal(body.deliveryId,`new-starter:${reminderId}:day-one:${contractMode}`);
+      assert.equal(body.employee.workEmail,'work@example.test');
+      assert.equal(body.employee.personalEmail,'personal@example.test');
+      assert.equal(body.manager.email,'manager@example.test');
+    }
     assert.ok(calls.some((call) => call.name === 'complete_new_starter_day_one_delivery'));
     assert.ok(!calls.some((call) => call.name === 'fail_new_starter_day_one_delivery'));
   } finally {

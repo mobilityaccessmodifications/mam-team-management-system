@@ -11,6 +11,7 @@ const EMAIL_PATTERN = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 const DELIVERY_BATCH_LIMIT = 10;
 
 type ClaimedReminder = { reminder_id: string; claim_token: string };
+type DeliveryMode = "test" | "live";
 type PreparedReminder = {
   reminder_id: string;
   employee_first_name: string;
@@ -23,7 +24,7 @@ type PreparedReminder = {
   commencement_date: string;
   notify_date: string;
 };
-type DeliveryConfiguration = { webhookUrl: URL; webhookSecret: string };
+type DeliveryConfiguration = { webhookUrl: URL; webhookSecret: string; mode: DeliveryMode };
 type DeliveryAck = { ok: true; sent: boolean; alreadySent: boolean; deliveryId: string };
 
 function safeExactOrigin(value: string | undefined) {
@@ -47,13 +48,19 @@ function safeWebhookUrl(value: string | undefined, allowedOrigin: string | null)
   } catch { return null; }
 }
 
-function deliveryConfiguration(): DeliveryConfiguration | null {
-  if (process.env.NEW_STARTER_DAY_ONE_EMAIL_MODE?.trim().toLowerCase() !== "live") return null;
+function configuredDeliveryMode(): DeliveryMode | null {
+  const configured = process.env.NEW_STARTER_DAY_ONE_EMAIL_MODE?.trim().toLowerCase();
+  if (configured === "marketing-test") return "test";
+  if (configured === "live") return "live";
+  return null;
+}
+
+function deliveryConfiguration(mode: DeliveryMode): DeliveryConfiguration | null {
   const webhookSecret = process.env.N8N_CHECKIN_REMINDER_WEBHOOK_SECRET?.trim();
   const origin = safeExactOrigin(process.env.N8N_NEW_STARTER_WEBHOOK_ORIGIN);
   const webhookUrl = safeWebhookUrl(process.env.N8N_NEW_STARTER_WEBHOOK_URL, origin);
   if (!webhookSecret || webhookSecret.length < 32 || !webhookUrl) return null;
-  return { webhookUrl, webhookSecret };
+  return { webhookUrl, webhookSecret, mode };
 }
 
 function hasValidCronSecret(request: Request, secret: string) {
@@ -145,13 +152,14 @@ export async function GET(request: Request) {
   if (!cronSecret || !hasValidCronSecret(request, cronSecret)) {
     return Response.json({ ok: false, code: "unauthorized" }, { status: 401, headers });
   }
-  if (process.env.NEW_STARTER_DAY_ONE_EMAIL_MODE?.trim().toLowerCase() !== "live") {
+  const deliveryMode = configuredDeliveryMode();
+  if (!deliveryMode) {
     return Response.json({ ok: true, code: "delivery_disabled", claimed: 0, sent: 0, failed: 0 }, { headers });
   }
   if (!isWithinMelbourneDeliveryWindow()) {
     return Response.json({ ok: true, code: "outside_delivery_window", claimed: 0, sent: 0, failed: 0 }, { headers });
   }
-  const configuration = deliveryConfiguration();
+  const configuration = deliveryConfiguration(deliveryMode);
   if (!configuration) return Response.json({ ok: false, code: "not_configured" }, { status: 503, headers });
 
   const supabase = createAdminClient();
@@ -175,14 +183,14 @@ export async function GET(request: Request) {
       return;
     }
 
-    const deliveryId = `new-starter:${prepared.reminder_id}:day-one:live`;
+    const deliveryId = `new-starter:${prepared.reminder_id}:day-one:${configuration.mode}`;
     let response: Response;
     try {
       response = await fetch(configuration.webhookUrl, {
         method: "POST",
         headers: { "content-type": "application/json", "x-mam-check-in-webhook-secret": configuration.webhookSecret },
         body: JSON.stringify({
-          version: 1, event: "new-starter-day-one", mode: "live", deliveryId,
+          version: 1, event: "new-starter-day-one", mode: configuration.mode, deliveryId,
           employee: {
             firstName: prepared.employee_first_name, role: prepared.role, company: prepared.company_key,
             workEmail: prepared.employee_work_email, personalEmail: prepared.employee_personal_email,

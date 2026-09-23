@@ -16,7 +16,7 @@ These recipient rules apply only to this first Day 1 message. Existing Check-In 
 
 The generated test workflow accepts only `mode: test` payloads and hard-routes the final Outlook recipient to `marketing@mobilityaccess.com.au`. It does not use employee or manager addresses. Test and live deliveries have distinct durable receipt keys.
 
-The application worker is disabled unless `NEW_STARTER_DAY_ONE_EMAIL_MODE=live`. This prevents the test workflow or incomplete environment configuration from claiming real employee reminders. Promoting the workflow requires a reviewed live workflow, the `N8N_NEW_STARTER_WEBHOOK_ORIGIN` and `N8N_NEW_STARTER_WEBHOOK_URL` Production values, the existing Check-In webhook secret, and a separate change of the mode variable to `live`.
+The application worker is disabled unless `NEW_STARTER_DAY_ONE_EMAIL_MODE` is an explicit enabled value. `marketing-test` sends the `test` contract to the hard-routed Marketing workflow, while `live` sends the real-recipient contract to the reviewed live workflow. Test and live deliveries use separate durable receipt keys. Promoting the workflow requires a reviewed live workflow, the `N8N_NEW_STARTER_WEBHOOK_ORIGIN` and `N8N_NEW_STARTER_WEBHOOK_URL` Production values, the existing Check-In webhook secret, and a separate change of the mode variable from `marketing-test` to `live`.
 
 ## Reliability
 
