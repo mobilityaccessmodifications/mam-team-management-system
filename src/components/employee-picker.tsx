@@ -33,12 +33,24 @@ function assigneeSearchText(assignee: ItAssetAssignee) {
 export function EmployeePicker({
   assignees,
   defaultValue = "",
+  value,
+  onValueChange,
+  id,
+  required = true,
+  ariaLabel = "Search employees",
+  placeholder = "Search by name, role or team",
   disabled = false,
   inputRef,
   name = "assignedPersonId",
 }: {
   assignees: ItAssetAssignee[];
   defaultValue?: string;
+  value?: string;
+  onValueChange?: (personId: string) => void;
+  id?: string;
+  required?: boolean;
+  ariaLabel?: string;
+  placeholder?: string;
   disabled?: boolean;
   inputRef?: RefObject<HTMLInputElement | null>;
   name?: string;
@@ -47,7 +59,12 @@ export function EmployeePicker({
   const ownInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = inputRef ?? ownInputRef;
   const listboxId = useId();
-  const [selectedId, setSelectedId] = useState(defaultValue);
+  const [internalSelectedId, setInternalSelectedId] = useState(defaultValue);
+  const selectedId = value ?? internalSelectedId;
+  function setSelectedId(personId: string) {
+    if (value === undefined) setInternalSelectedId(personId);
+    onValueChange?.(personId);
+  }
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -58,6 +75,10 @@ export function EmployeePicker({
     if (!query) return assignees;
     return assignees.filter((assignee) => assigneeSearchText(assignee).includes(query));
   }, [assignees, search]);
+
+  useEffect(() => {
+    searchInputRef.current?.setCustomValidity(required && !selectedId ? "Choose an employee from the results." : "");
+  }, [required, selectedId, searchInputRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -142,8 +163,10 @@ export function EmployeePicker({
         aria-describedby={open ? `${listboxId}-selection ${listboxId}-results` : undefined}
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-label="Search employees"
-        aria-required="true"
+        aria-label={ariaLabel}
+        aria-required={required}
+        required={required && !selectedId}
+        id={id}
         autoComplete="off"
         className={styles.input}
         disabled={disabled}
@@ -151,7 +174,7 @@ export function EmployeePicker({
         onClick={() => { if (!open) openPicker(); }}
         onFocus={openPicker}
         onKeyDown={handleKeyDown}
-        placeholder="Search by name, role or team"
+        placeholder={placeholder}
         ref={searchInputRef}
         role="combobox"
         type="text"
@@ -160,6 +183,7 @@ export function EmployeePicker({
       {selected && open ? <button
         aria-label="Clear employee selection"
         className={styles.clearButton}
+        disabled={disabled}
         onClick={() => setSelectedId("")}
         type="button"
       ><X size={15} /></button> : null}
