@@ -5,7 +5,6 @@ import {
   CalendarCheck2,
   CheckCircle2,
   CircleAlert,
-  RefreshCw,
   UsersRound,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
@@ -187,22 +186,7 @@ export function CheckInTasks({
   }
 
   return <section className={styles.workspace} aria-label={showCheckInTasks ? "Check-in tasks" : "Work schedule"}>
-    {showCheckInTasks ? <header className={styles.header}>
-      <h2 className={styles.srOnly}>Check-in tasks</h2>
-      <div className={styles.headerActions}>
-        {toolbarAction}
-        <button
-          className={styles.refresh}
-          type="button"
-          onClick={() => void load()}
-          disabled={loading || Boolean(pendingReminderId)}
-          aria-label="Refresh check-in tasks"
-          title="Refresh"
-        >
-          <RefreshCw size={16} aria-hidden="true" />
-        </button>
-      </div>
-    </header> : null}
+    {toolbarAction ? <div className={styles.headerActions}>{toolbarAction}</div> : null}
 
     {scheduleContent}
 

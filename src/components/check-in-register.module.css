@@ -404,3 +404,7 @@
   .desk { border-radius: 16px; }
   .detail { padding: 16px; }
 }
+
+.toolbar .listToolbar { padding: 0; border: 0; background: transparent; }
+.toolbar { flex-direction: row; align-items: center; }
+.toolbar .listToolbar label { flex-direction: row; align-items: center; }

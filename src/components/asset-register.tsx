@@ -1009,8 +1009,17 @@ export function AssetRegister() {
 
   return <section className={styles.workspace} aria-labelledby="asset-register-title">
     <header className={styles.header}>
-      <div>
-        <h2 id="asset-register-title">Devices</h2>
+      <h2 id="asset-register-title" className={styles.visuallyHidden}>Devices</h2>
+      <div className={styles.tools}>
+        <label className={styles.searchField}>
+          <Search size={17} aria-hidden="true" />
+          <span className={styles.visuallyHidden}>Search assets</span>
+          <input value={query} onChange={(event) => { setQuery(event.target.value); setSelectedIds(new Set()); }} placeholder="Search devices" />
+        </label>
+        <div className={styles.toolSummary}>
+          {hasAssetFilters ? <button className={styles.clearFilters} type="button" onClick={() => { setAssetFilters({ assetType: "", assignedTo: "", status: "" }); setSelectedIds(new Set()); }}>Clear filters</button> : null}
+          <span className={styles.assetCount}>{visibleAssets.length === assets.length ? `${assets.length} ${assets.length === 1 ? "device" : "devices"}` : `${visibleAssets.length} of ${assets.length} devices`}</span>
+        </div>
       </div>
       <div className={styles.headerActions}>
         <ScanAssetButton className={styles.secondaryAction} />
@@ -1022,17 +1031,6 @@ export function AssetRegister() {
 
     {notice ? <div className={styles.notice} role="status"><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={15} /></button></div> : null}
 
-    <div className={styles.tools}>
-      <label className={styles.searchField}>
-        <Search size={17} aria-hidden="true" />
-        <span className={styles.visuallyHidden}>Search assets</span>
-        <input value={query} onChange={(event) => { setQuery(event.target.value); setSelectedIds(new Set()); }} placeholder="Search devices" />
-      </label>
-      <div className={styles.toolSummary}>
-        {hasAssetFilters ? <button className={styles.clearFilters} type="button" onClick={() => { setAssetFilters({ assetType: "", assignedTo: "", status: "" }); setSelectedIds(new Set()); }}>Clear filters</button> : null}
-        <span className={styles.assetCount}>{visibleAssets.length === assets.length ? `${assets.length} ${assets.length === 1 ? "device" : "devices"}` : `${visibleAssets.length} of ${assets.length} devices`}</span>
-      </div>
-    </div>
 
     {!loading && !loadError && assets.length > 0 ? <div className={styles.bulkToolbar}>
       <label className={styles.selectVisible}><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} disabled={!visibleAssets.length} aria-label="Select all visible devices" />Select visible</label>

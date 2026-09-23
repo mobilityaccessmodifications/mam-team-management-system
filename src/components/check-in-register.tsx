@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
-  ExternalLink,
   RefreshCw,
   UserRound,
   UsersRound,
@@ -247,7 +246,16 @@ export function CheckInRegister({
   return <section className={styles.workspace} aria-label="Employee check-in register">
     <h2 className={styles.srOnly}>Employee check-ins</h2>
     <header className={styles.toolbar}>
-      {data ? <ResourceLinks data={data} /> : <span />}
+            <div className={styles.listToolbar}>
+        <label htmlFor="check-in-register-sort">Sort
+          <select id="check-in-register-sort" value={sort} onChange={(event) => changeSort(event.target.value as EmployeeSort)}>
+            <option value="due">Next due date</option>
+            <option value="start">Start date (newest)</option>
+            <option value="name">Employee A–Z</option>
+          </select>
+        </label>
+      </div>
+
       <button className={styles.secondaryAction} type="button" onClick={() => void load()} disabled={loading || Boolean(pendingAction)} aria-label="Refresh check-ins" title="Refresh">
         <RefreshCw size={16} aria-hidden="true" />
       </button>
@@ -261,15 +269,6 @@ export function CheckInRegister({
 
     {!loading && selected && data ? <div className={styles.desk}>
       <aside className={styles.employeeList} aria-label="Employees in check-in register">
-        <div className={styles.listToolbar}>
-          <label htmlFor="check-in-register-sort">Sort
-            <select id="check-in-register-sort" value={sort} onChange={(event) => changeSort(event.target.value as EmployeeSort)}>
-              <option value="due">Next due date</option>
-              <option value="start">Start date (newest)</option>
-              <option value="name">Employee A–Z</option>
-            </select>
-          </label>
-        </div>
         <div className={styles.employeeRows}>
           {visibleRecords.map((record) => {
             const attention = record.reminders.some((reminder) => reminder.status === "needs_review");
@@ -329,18 +328,6 @@ export function CheckInRegister({
         </section>
       </article>
     </div> : null}
-  </section>;
-}
-
-function ResourceLinks({ data }: { data: CheckInRegisterData }) {
-  const { resources } = data;
-  if (!resources.managerGuideUrl && !resources.checkInFormUrl && !resources.probationTemplatesUrl) return null;
-  return <section className={styles.resources}>
-    <nav aria-label="Check-in resources">
-      {resources.managerGuideUrl ? <a href={resources.managerGuideUrl} target="_blank" rel="noreferrer">Manager guide <ExternalLink size={14} /></a> : null}
-      {resources.checkInFormUrl ? <a href={resources.checkInFormUrl} target="_blank" rel="noreferrer">Check-in form <ExternalLink size={14} /></a> : null}
-      {resources.probationTemplatesUrl ? <a href={resources.probationTemplatesUrl} target="_blank" rel="noreferrer">Probation templates <ExternalLink size={14} /></a> : null}
-    </nav>
   </section>;
 }
 

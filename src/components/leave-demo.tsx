@@ -1964,7 +1964,7 @@ export function LeaveDemo({
             key={isPreviewingEmployeeAccess ? activeProfile.id : "signed-in"}
             birthdays={calendarHidesTeamEvents ? [] : calendarBirthdays}
             checkIns={calendarHidesTeamEvents ? [] : calendarCheckIns}
-            requests={calendarHidesTeamEvents ? [] : calendarRequests}
+            requests={calendarHidesTeamEvents ? [] : calendarRequests.map((request) => ({ ...request, position: organisationRows.find((person) => person.id === request.personId)?.position_title }))}
             subscriptionReviews={calendarSubscriptionReviews}
             payrollBalanceReminders={calendarPayrollBalanceReminders}
             showSubscriptionReviews={canViewSubscriptionReviewCalendarForProfile}
@@ -2335,7 +2335,6 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
         <span className={styles.avatarOrange}>{request.initials}</span>
         <span><h2 id={detailTitleId}>{request.employee}</h2></span>
       </header>
-      <StatusPill status={request.status} />
     </> : null}
     {!showEmployee ? <div className={styles.mobileDetailHeading}><span><h2 id={detailTitleId}>{request.leaveType}</h2></span><StatusPill status={request.status} /></div> : null}
     <dl>

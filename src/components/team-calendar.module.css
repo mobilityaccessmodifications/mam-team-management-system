@@ -410,3 +410,17 @@
   .filterOptions label { min-height: 44px; }
   .filterHeading button { min-height: 44px; }
 }
+
+/* Place the existing filters beside the calendar header controls. */
+.filters { order: -1; position: relative; border: 0; background: transparent; }
+.filters > summary { min-height: 44px; padding: 10px 14px; border: 1px solid var(--surface-border, #d8dfdc); border-radius: 11px; background: var(--surface-raised, #fff); box-shadow: var(--shadow-xs); white-space: nowrap; }
+.filters > summary::after { content: none; }
+.filters[open] > summary::after { content: none; }
+.filters[open] > summary > svg:last-child { transform: rotate(180deg); }
+.filterPanel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 100; width: min(560px, calc(100vw - 32px)); padding: 16px; border: 1px solid var(--surface-border, #d8dfdc); border-radius: 14px; background: var(--surface-raised, #fff); box-shadow: var(--shadow-md); }
+.calendarFrame { overflow: visible; }
+.calendarFrame :global(.df-header-right) { gap: 10px; }
+@media (max-width: 760px) {
+  .filters > summary { padding: 8px; gap: 5px; }
+  .filterPanel { position: fixed; top: 150px; right: 16px; }
+}

@@ -635,6 +635,48 @@ export function EmployeeDirectory({
   return (
     <section className={styles.workspace} aria-label="Employee directory">
       <header className={styles.header} aria-label="Directory actions">
+        <div className={styles.listTools}>
+          <label className={styles.searchField}>
+            <Search size={17} aria-hidden="true" />
+            <span className={styles.visuallyHidden}>Search employee records</span>
+            <input
+              ref={directorySearchRef}
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+              }}
+              onInput={(event) => {
+                // Browsers dispatch `input` (and sometimes only `search`)
+                // when the native clear affordance on type="search" is used.
+                // Keep the controlled filter in sync with that cleared DOM
+                // value so the full directory is restored immediately.
+                setQuery(event.currentTarget.value);
+              }}
+              placeholder="Search employees"
+              type="search"
+            />
+          </label>
+          <label className={styles.sortField}>
+            <span>Sort</span>
+            <select
+              value={sort}
+              onChange={(event) => {
+                setSort(event.target.value as DirectorySort);
+              }}
+            >
+              <option value="name">Name A–Z</option>
+              <option value="startedDate">Start date — newest</option>
+              <option value="company">Company</option>
+            </select>
+          </label>
+          <label className={styles.sortField}>
+            <span>View</span>
+            <select value={directoryFilter} onChange={(event) => setDirectoryFilter(event.target.value as "active" | "archived")}>
+              <option value="active">Active</option>
+              <option value="archived">Archived</option>
+            </select>
+          </label>
+        </div>
         <div className={styles.headerActions}>
           <a className={styles.secondaryAction} href="/people/export" aria-label="Export employees" title="Export employees">
             <Download size={16} aria-hidden="true" />
@@ -651,48 +693,6 @@ export function EmployeeDirectory({
 
       <div className={styles.directoryDesk}>
         <aside className={styles.directoryList} aria-label="Employee records">
-          <div className={styles.listTools}>
-            <label className={styles.searchField}>
-              <Search size={17} aria-hidden="true" />
-              <span className={styles.visuallyHidden}>Search employee records</span>
-              <input
-                ref={directorySearchRef}
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                }}
-                onInput={(event) => {
-                  // Browsers dispatch `input` (and sometimes only `search`)
-                  // when the native clear affordance on type="search" is used.
-                  // Keep the controlled filter in sync with that cleared DOM
-                  // value so the full directory is restored immediately.
-                  setQuery(event.currentTarget.value);
-                }}
-                placeholder="Search employees"
-                type="search"
-              />
-            </label>
-            <label className={styles.sortField}>
-              <span>Sort</span>
-              <select
-                value={sort}
-                onChange={(event) => {
-                  setSort(event.target.value as DirectorySort);
-                }}
-              >
-                <option value="name">Name A–Z</option>
-                <option value="startedDate">Start date — newest</option>
-                <option value="company">Company</option>
-              </select>
-            </label>
-            <label className={styles.sortField}>
-              <span>View</span>
-              <select value={directoryFilter} onChange={(event) => setDirectoryFilter(event.target.value as "active" | "archived")}>
-                <option value="active">Active</option>
-                <option value="archived">Archived</option>
-              </select>
-            </label>
-          </div>
 
           {loading ? <div className={styles.listState}><MotionLoader label="Loading employee records" /></div> : null}
           {!loading && loadError ? <div className={styles.listState} data-error="true"><AlertCircle size={17} /><span>{loadError}</span><button type="button" onClick={() => setLoadAttempt((current) => current + 1)}>Retry</button></div> : null}
