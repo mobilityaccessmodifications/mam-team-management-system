@@ -163,3 +163,5 @@ Employees’ own annual leave balance and the existing authorised manager team-r
   the existing protected account-status workflow; passwords remain individual.
 - Batch saves are per-record transactions with version checks. The UI reports
   confirmed outcomes and retains unconfirmed records for refresh and review.
+
+- Directory Team has five choices: MAM admin, Major, Minor, Warehouse and Equipsy. It is a display/filter classification, not an account role or approval grant. Legacy Major/Minor office and trade labels are combined; Metal, Packing, Rubber and Timber belong to Warehouse; Finance and Projects belong to MAM admin. Team leaders use their own operational team. Company, Reports to, role, leave rules and balances remain independent. Unknown archived team values stay blank until HR confirms them.

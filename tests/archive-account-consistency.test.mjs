@@ -5,6 +5,9 @@ import test from "node:test";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
+const teamModule = { exports: {} };
+new Function('exports', ts.transpileModule(readFileSync('src/lib/employee-teams.ts','utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText)(teamModule.exports);
+
 const personId = "10000000-0000-4000-8000-000000000001";
 const userId = "10000000-0000-4000-8000-000000000002";
 const actorId = "10000000-0000-4000-8000-000000000003";
@@ -131,6 +134,7 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
     (id) => {
       if (id === "next/cache") return { revalidatePath() {} };
       if (id === "@/lib/supabase/admin") return { createAdminClient: () => admin };
+      if (id === "@/lib/employee-teams") return teamModule.exports;
       if (id === "@/lib/portal-account-status") return helper.exports;
       if (id === "@/lib/employee-directory") {
         return {

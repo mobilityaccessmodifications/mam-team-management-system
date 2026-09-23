@@ -315,3 +315,14 @@ Before merging this release, apply migration
 `inspect` and `advisors` commands, merge the reviewed GitHub PR into `main`, and
 verify the resulting Vercel production deployment. `tests/subscription-bulk.sql`
 uses only a disposable database and synthetic records.
+
+### Five directory teams
+
+Team choices are MAM admin, Major, Minor, Warehouse and Equipsy. Apply the
+reviewed label migration using the MAM Supabase credential wrapper with
+`scripts/deploy-five-employee-teams.py inspect` then `apply <reviewed-sha256>`
+before merging the UI release. Unknown non-empty legacy categories abort the
+transaction for review; unknown archived teams remain null. The label backfill
+audit records changed field names only. Check-in rescheduling is suppressed only
+inside the backfill transaction and restored before commit. It does not change
+Company, Reports to, roles, approvals, leave balances or calendar permissions.

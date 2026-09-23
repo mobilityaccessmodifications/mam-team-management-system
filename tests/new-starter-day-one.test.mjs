@@ -11,6 +11,8 @@ import {
 } from '../scripts/build-new-starter-day-one-workflow.mjs';
 
 const require = createRequire(import.meta.url);
+const teamModule = { exports: {} };
+new Function('exports', ts.transpileModule(readFileSync('src/lib/employee-teams.ts','utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText)(teamModule.exports);
 const reminderId = '10000000-0000-4000-8000-000000000001';
 const claimToken = '20000000-0000-4000-8000-000000000001';
 
@@ -176,6 +178,7 @@ test('new active employee creation fails before mutation without start date, dir
   const supabase = { rpc: async () => { rpcCalls += 1; throw new Error('must not mutate'); } };
   const mod = { exports: {} };
   new Function('require','module','exports',source)((id) => ({
+    '@/lib/employee-teams': teamModule.exports,
     'next/cache': { revalidatePath: () => {} },
     '@/lib/employee-directory': {
       requireEmployeeDirectoryManager: async () => ({ supabase }),
@@ -190,7 +193,7 @@ test('new active employee creation fails before mutation without start date, dir
   })[id] ?? require(id),mod,mod.exports);
   const valid = {
     firstName:'Taylor',lastName:'Starter',workEmail:'work@example.test',personalEmail:'home@example.test',phone:'',
-    positionTitle:'Coordinator',teamName:'Operations',managerId:reminderId,country:'',address:'',dateOfBirth:'',
+    positionTitle:'Coordinator',teamName:'MAM admin',managerId:reminderId,country:'',address:'',dateOfBirth:'',
     startedDate:'2026-10-05',scheduledEmploymentEndDate:'',workingWeekdays:null,workingDayTimes:[],archiveReason:'',
     employmentType:'full_time',laptopSupplied:'',laptopId:'',mouseId:'',keyboardId:'',assetTags:[],company:'mam',isActive:true,
   };
