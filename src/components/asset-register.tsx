@@ -1031,7 +1031,6 @@ export function AssetRegister() {
 
     {notice ? <div className={styles.notice} role="status"><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={15} /></button></div> : null}
 
-
     {!loading && !loadError && assets.length > 0 ? <div className={styles.bulkToolbar}>
       <label className={styles.selectVisible}><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} disabled={!visibleAssets.length} aria-label="Select all visible devices" />Select visible</label>
       <span role="status">{selectedAssets.length} selected</span>

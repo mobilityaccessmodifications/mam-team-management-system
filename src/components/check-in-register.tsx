@@ -246,7 +246,7 @@ export function CheckInRegister({
   return <section className={styles.workspace} aria-label="Employee check-in register">
     <h2 className={styles.srOnly}>Employee check-ins</h2>
     <header className={styles.toolbar}>
-            <div className={styles.listToolbar}>
+      <div className={styles.listToolbar}>
         <label htmlFor="check-in-register-sort">Sort
           <select id="check-in-register-sort" value={sort} onChange={(event) => changeSort(event.target.value as EmployeeSort)}>
             <option value="due">Next due date</option>

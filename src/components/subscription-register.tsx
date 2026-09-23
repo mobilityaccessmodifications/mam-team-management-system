@@ -536,7 +536,6 @@ export function SubscriptionRegister({
 
     {notice ? <div className={styles.notice} role="status"><CheckCircle2 size={16} aria-hidden="true" /><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={15} /></button></div> : null}
 
-
     {registerState.state === "ready" ? <section id={filterPanelId} className={styles.filterPanel} aria-label="Subscription filters" hidden={!showFilters} onKeyDown={(event) => {
       if (event.key === "Escape" && event.target instanceof HTMLElement && event.target.tagName !== "SELECT") {
         setShowFilters(false);
