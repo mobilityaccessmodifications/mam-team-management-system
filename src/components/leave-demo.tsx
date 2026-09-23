@@ -2013,7 +2013,7 @@ export function LeaveDemo({
                 refreshKey={employeeDirectoryRefreshKey}
               /> : activeProfile.accessRole === "employee" ? <EmployeeTeamDirectory
                 key={activeProfile.id}
-                people={organisationPeople}
+                previewPersonId={isPreviewingEmployeeAccess ? activeProfile.id : undefined}
                 currentPersonId={activeProfile.id}
                 onRequestWorkEmail={getOrganisationPersonWorkEmail}
                 onLoadMyDevices={employeeDirectoryDeviceLoader}
