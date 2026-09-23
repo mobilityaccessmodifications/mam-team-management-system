@@ -34,7 +34,10 @@ function connection(name, script, keepOpen = false) {
   child.stderr.on("data", (chunk) => { stderr += chunk; });
   const done = new Promise((resolve, reject) => {
     child.on("error", reject);
-    child.on("exit", (code) => { workers.delete(child); resolve({ code, stdout, stderr }); });
+    // `exit` can fire before the stdout/stderr pipes have drained. PostgreSQL
+    // 16 exposed that race by occasionally resolving with only psql's startup
+    // warning and dropping the database error that this test must assert.
+    child.on("close", (code) => { workers.delete(child); resolve({ code, stdout, stderr }); });
   });
   child.stdin.write("set statement_timeout = '5s';\n" + script + "\n");
   if (!keepOpen) child.stdin.end();
