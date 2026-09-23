@@ -39,16 +39,16 @@ test('archive cleanup does not treat permission errors or an existing file as su
 test('check-in network failures and failed acknowledgements surface as retryable HTTP failures',async()=>{
   const oldDate=globalThis.Date,oldFetch=globalThis.fetch,oldEnv={...process.env};
   globalThis.Date=class extends oldDate{constructor(...args){super(...(args.length?args:['2026-09-21T00:00:00Z']));}};
-  Object.assign(process.env,{CRON_SECRET:'synthetic-only',N8N_CHECKIN_REMINDER_WEBHOOK_SECRET:'synthetic',N8N_CHECKIN_REMINDER_WEBHOOK_ORIGIN:'https://synthetic.example',N8N_CHECKIN_REMINDER_WEBHOOK_URL:'https://synthetic.example/hook'});
+  Object.assign(process.env,{CRON_SECRET:'synthetic-only',CHECK_IN_EMAIL_MODE:'marketing-test',N8N_CHECKIN_REMINDER_WEBHOOK_SECRET:'synthetic',N8N_CHECKIN_REMINDER_WEBHOOK_ORIGIN:'https://synthetic.example',N8N_CHECKIN_REMINDER_WEBHOOK_URL:'https://synthetic.example/hook'});
   try{
     for(const scenario of ['network','completion','retry-write']){
       const calls=[];
       const admin={rpc:async(name)=>{calls.push(name);
         if(name==='claim_due_employee_check_in_reminders')return {data:[{reminder_id:id,claim_token:id}],error:null};
-        if(name==='prepare_employee_check_in_reminder_delivery')return {data:[{reminder_id:id,employee_first_name:'Test',employee_last_name:'Person',role:'Test',department:'Test',manager_name:'Test Manager',manager_email:'manager@example.test',milestone:'2_week',reminder_sequence:'initial',due_date:'2026-09-28',notify_date:'2026-09-21'}],error:null};
+        if(name==='prepare_employee_check_in_reminder_delivery')return {data:[{reminder_id:id,employee_first_name:'Test',employee_last_name:'Person',employee_work_email:'test@example.test',employee_personal_email:'home@example.test',role:'Test',department:'Test',manager_name:'Test Manager',manager_email:'manager@example.test',milestone:'2_week',reminder_sequence:'initial',due_date:'2026-09-28',notify_date:'2026-09-21'}],error:null};
         return {data:false,error:scenario==='retry-write'?{message:'offline'}:null};
       }};
-      globalThis.fetch=async()=>{if(scenario!=='completion')throw new Error('offline');return Response.json({ok:true,sent:true,deliveryId:`checkin:${id}:2-week:initial`});};
+      globalThis.fetch=async(_url,options)=>{if(scenario!=='completion')throw new Error('offline');const payload=JSON.parse(options.body);assert.equal(payload.mode,'test');assert.equal(payload.employee.workEmail,'test@example.test');return Response.json({ok:true,sent:true,deliveryId:`checkin:${id}:2-week:initial:test`});};
       const {GET}=load('src/app/api/cron/check-in-reminders/route.ts',{'@/lib/supabase/admin':{createAdminClient:()=>admin},'@/lib/check-in-register':{getCheckInResourceLinks:()=>({managerGuideUrl:'https://synthetic.example/guide',checkInFormUrl:'https://synthetic.example/form',probationTemplatesUrl:'https://synthetic.example/templates'})}});
       const response=await GET(new Request('https://synthetic.example/cron',{headers:{authorization:'Bearer synthetic-only'}}));
       assert.equal(response.status,503);assert.equal((await response.json()).ok,false);

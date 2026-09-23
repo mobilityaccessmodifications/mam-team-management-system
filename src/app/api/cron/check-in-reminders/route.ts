@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EMAIL_PATTERN = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 const DELIVERY_BATCH_LIMIT = 10;
 
 type ClaimedReminder = {
@@ -19,6 +20,8 @@ type PreparedReminder = {
   reminder_id: string;
   employee_first_name: string;
   employee_last_name: string;
+  employee_work_email: string | null;
+  employee_personal_email: string | null;
   role: string;
   department: string;
   manager_name: string;
@@ -29,15 +32,25 @@ type PreparedReminder = {
   notify_date: string;
 };
 
+type DeliveryMode = "test" | "live";
+
 type DeliveryConfiguration = {
   webhookUrl: URL;
   webhookSecret: string;
+  mode: DeliveryMode;
   resources: {
     managerGuideUrl: string;
     checkInFormUrl: string;
     probationTemplatesUrl: string;
   };
 };
+
+function configuredDeliveryMode(): DeliveryMode | null {
+  const configured = process.env.CHECK_IN_EMAIL_MODE?.trim().toLowerCase();
+  if (configured === "marketing-test") return "test";
+  if (configured === "live") return "live";
+  return null;
+}
 
 function safeExactOrigin(value: string | undefined) {
   const candidate = value?.trim();
@@ -83,7 +96,7 @@ function workflowMilestone(value: string) {
   return labels[value] ?? null;
 }
 
-function deliveryConfiguration(): DeliveryConfiguration | null {
+function deliveryConfiguration(mode: DeliveryMode): DeliveryConfiguration | null {
   const webhookSecret = process.env.N8N_CHECKIN_REMINDER_WEBHOOK_SECRET?.trim();
   const webhookOrigin = safeExactOrigin(process.env.N8N_CHECKIN_REMINDER_WEBHOOK_ORIGIN);
   const webhookUrl = safeWebhookUrl(process.env.N8N_CHECKIN_REMINDER_WEBHOOK_URL, webhookOrigin);
@@ -102,12 +115,21 @@ function deliveryConfiguration(): DeliveryConfiguration | null {
   return {
     webhookUrl,
     webhookSecret,
+    mode,
     resources: {
       managerGuideUrl: resources.managerGuideUrl,
       checkInFormUrl: resources.checkInFormUrl,
       probationTemplatesUrl: resources.probationTemplatesUrl,
     },
   };
+}
+
+function normalizedEmail(value: unknown) {
+  if (value === null) return null;
+  if (typeof value !== "string") return null;
+  const email = value.trim().toLowerCase();
+  if (!email) return null;
+  return email.length <= 254 && EMAIL_PATTERN.test(email) ? email : null;
 }
 
 function hasValidCronSecret(request: Request, secret: string) {
@@ -144,6 +166,8 @@ function isClaimedReminder(value: unknown): value is ClaimedReminder {
 function preparedReminder(value: unknown): PreparedReminder | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
+  const employeeWorkEmail = normalizedEmail(row.employee_work_email);
+  const employeePersonalEmail = normalizedEmail(row.employee_personal_email);
   if (
     typeof row.reminder_id !== "string"
     || !UUID_PATTERN.test(row.reminder_id)
@@ -158,6 +182,7 @@ function preparedReminder(value: unknown): PreparedReminder | null {
     || typeof row.due_date !== "string"
     || typeof row.notify_date !== "string"
   ) return null;
+  if (row.milestone === "2_week" && !employeeWorkEmail && !employeePersonalEmail) return null;
   if (
     !row.employee_first_name.trim()
     || !row.employee_last_name.trim()
@@ -171,6 +196,8 @@ function preparedReminder(value: unknown): PreparedReminder | null {
     reminder_id: row.reminder_id,
     employee_first_name: row.employee_first_name,
     employee_last_name: row.employee_last_name,
+    employee_work_email: employeeWorkEmail,
+    employee_personal_email: employeePersonalEmail,
     role: row.role,
     department: row.department,
     manager_name: row.manager_name,
@@ -222,7 +249,14 @@ export async function GET(request: Request) {
     });
   }
 
-  const configuration = deliveryConfiguration();
+  const deliveryMode = configuredDeliveryMode();
+  if (!deliveryMode) {
+    return Response.json({ ok: true, code: "delivery_disabled", claimed: 0, sent: 0, failed: 0 }, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
+  const configuration = deliveryConfiguration(deliveryMode);
   if (!configuration) {
     return Response.json({ ok: false, code: "not_configured" }, {
       status: 503,
@@ -280,7 +314,7 @@ export async function GET(request: Request) {
     }
 
     let response: Response;
-    const deliveryId = `checkin:${payload.reminder_id}:${milestone}:${payload.reminder_sequence}`;
+    const deliveryId = `checkin:${payload.reminder_id}:${milestone}:${payload.reminder_sequence}:${configuration.mode}`;
     try {
       response = await fetch(configuration.webhookUrl, {
         method: "POST",
@@ -295,12 +329,15 @@ export async function GET(request: Request) {
         body: JSON.stringify({
           version: 1,
           event: "checkin-reminder",
+          mode: configuration.mode,
           deliveryId,
           employee: {
             firstName: payload.employee_first_name,
             lastName: payload.employee_last_name,
             role: payload.role,
             department: payload.department,
+            workEmail: payload.employee_work_email,
+            personalEmail: payload.employee_personal_email,
           },
           manager: {
             name: payload.manager_name,
