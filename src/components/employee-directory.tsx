@@ -901,8 +901,8 @@ function EmployeeEditor({
           <Field label="Team" required>
             <input value={editor.draft.teamName} onChange={(event) => onChange("teamName", event.target.value)} required maxLength={120} />
           </Field>
-          <Field label="Reports to">
-            <select value={editor.draft.managerId ?? ""} onChange={(event) => onChange("managerId", event.target.value || null)}>
+          <Field label="Reports to" required={isCreate && editor.draft.isActive}>
+            <select value={editor.draft.managerId ?? ""} onChange={(event) => onChange("managerId", event.target.value || null)} required={isCreate && editor.draft.isActive}>
               <option value="">No manager assigned</option>
               {managerOptions.map((manager) => <option key={manager.personId} value={manager.personId}>{manager.fullName} · {manager.positionTitle}</option>)}
             </select>
@@ -925,6 +925,7 @@ function EmployeeEditor({
           <Field label="Personal email">
             <input value={editor.draft.personalEmail} onChange={(event) => onChange("personalEmail", event.target.value)} type="email" autoComplete="email" maxLength={254} />
           </Field>
+          {isCreate && editor.draft.isActive ? <p className={`${styles.fullSpan} ${styles.fieldNote}`}>Enter at least one employee email. The Day 1 welcome email uses both work and personal addresses when both are available.</p> : null}
           <Field label="Phone">
             <input value={editor.draft.phone} onChange={(event) => onChange("phone", event.target.value)} type="tel" autoComplete="tel" maxLength={60} />
           </Field>
@@ -978,8 +979,8 @@ function EmployeeEditor({
           </button>
         </div>
         {editingSchedule ? <div className={styles.scheduleFields} id="employee-work-schedule-fields">
-          <Field label="Start date">
-            <input name="startedDate" value={editor.draft.startedDate} onChange={(event) => onChange("startedDate", event.target.value)} type="date" />
+          <Field label="Start date" required={isCreate && editor.draft.isActive}>
+            <input name="startedDate" value={editor.draft.startedDate} onChange={(event) => onChange("startedDate", event.target.value)} type="date" required={isCreate && editor.draft.isActive} />
           </Field>
           <Field label="Planned end date">
             <input name="scheduledEmploymentEndDate" value={editor.draft.scheduledEmploymentEndDate} onChange={(event) => onChange("scheduledEmploymentEndDate", event.target.value)} type="date" min={editor.draft.startedDate || undefined} />
