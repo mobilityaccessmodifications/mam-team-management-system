@@ -17,6 +17,11 @@ type CheckInReminderRpcRow = {
   completedAt?: unknown;
   lastDeliveryErrorAt?: unknown;
   needsReviewReason?: unknown;
+  reviewOutcome?: unknown;
+  reviewDate?: unknown;
+  reviewNotes?: unknown;
+  reviewVersion?: unknown;
+  reviewRecordedAt?: unknown;
 };
 
 type CheckInRegisterRpcRow = {
@@ -71,6 +76,18 @@ function reminderStatus(value: unknown): CheckInReminderStatus {
   throw new Error(CHECK_IN_REGISTER_LOAD_ERROR);
 }
 
+function reviewOutcome(value: unknown): CheckInReminder["reviewOutcome"] {
+  if (value === null || value === undefined) return null;
+  if (value === "on_track" || value === "follow_up_required" || value === "hr_review_required") return value;
+  throw new Error(CHECK_IN_REGISTER_LOAD_ERROR);
+}
+
+function reviewVersion(value: unknown) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return value;
+  throw new Error(CHECK_IN_REGISTER_LOAD_ERROR);
+}
+
 function reminder(row: CheckInReminderRpcRow): CheckInReminder {
   if (row.milestone !== "2_week" && row.milestone !== "1_month" && row.milestone !== "2_month" && row.milestone !== "3_month" && row.milestone !== "5_month") {
     throw new Error(CHECK_IN_REGISTER_LOAD_ERROR);
@@ -88,6 +105,11 @@ function reminder(row: CheckInReminderRpcRow): CheckInReminder {
     completedAt: nullableText(row.completedAt),
     lastDeliveryErrorAt: nullableText(row.lastDeliveryErrorAt),
     needsReviewReason: nullableText(row.needsReviewReason),
+    reviewOutcome: reviewOutcome(row.reviewOutcome),
+    reviewDate: nullableText(row.reviewDate),
+    reviewNotes: text(row.reviewNotes),
+    reviewVersion: reviewVersion(row.reviewVersion),
+    reviewRecordedAt: nullableText(row.reviewRecordedAt),
   };
 }
 

@@ -109,3 +109,27 @@ export async function completeVisibleCheckInReminder(reminderId: string) {
   });
   if (error) throw new Error("The check-in could not be marked complete. Refresh and try again.");
 }
+
+export type RecordCheckInReviewInput = {
+  reminderId: string;
+  outcome: "on_track" | "follow_up_required" | "hr_review_required";
+  reviewDate: string;
+  notes: string;
+  expectedVersion: number | null;
+};
+
+export async function recordVisibleEmployeeCheckInReview(input: RecordCheckInReviewInput) {
+  const supabase = await requireAuthenticatedClient();
+  const { error } = await supabase.rpc("record_employee_check_in_review", {
+    p_reminder_id: input.reminderId,
+    p_outcome_code: input.outcome,
+    p_review_date: input.reviewDate,
+    p_notes: input.notes,
+    p_expected_version: input.expectedVersion,
+  });
+  if (!error) return;
+  if (error.code === "40001") throw new Error("This outcome was updated elsewhere. Refresh and try again.");
+  if (error.code === "42501") throw new Error("You no longer have access to update this check-in.");
+  if (error.code === "22023" || error.code === "22001") throw new Error(error.message);
+  throw new Error("The review outcome could not be saved. Refresh and try again.");
+}

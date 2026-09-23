@@ -10,6 +10,11 @@ type CheckInWorkspaceReminderRpcRow = {
   sequence?: unknown;
   dueDate?: unknown;
   status?: unknown;
+  reviewOutcome?: unknown;
+  reviewDate?: unknown;
+  reviewNotes?: unknown;
+  reviewVersion?: unknown;
+  reviewRecordedAt?: unknown;
 };
 
 type CheckInWorkspaceRpcRow = {
@@ -45,6 +50,18 @@ function reminderStatus(value: unknown): CheckInWorkspaceReminder["status"] {
   throw new Error(CHECK_IN_WORKSPACE_LOAD_ERROR);
 }
 
+function reviewOutcome(value: unknown): CheckInWorkspaceReminder["reviewOutcome"] {
+  if (value === null || value === undefined) return null;
+  if (value === "on_track" || value === "follow_up_required" || value === "hr_review_required") return value;
+  throw new Error(CHECK_IN_WORKSPACE_LOAD_ERROR);
+}
+
+function reviewVersion(value: unknown) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return value;
+  throw new Error(CHECK_IN_WORKSPACE_LOAD_ERROR);
+}
+
 function workspaceReminders(value: unknown): CheckInWorkspaceReminder[] {
   if (!Array.isArray(value)) throw new Error(CHECK_IN_WORKSPACE_LOAD_ERROR);
   return value.map((item) => {
@@ -66,6 +83,11 @@ function workspaceReminders(value: unknown): CheckInWorkspaceReminder[] {
       sequence: row.sequence,
       dueDate: requiredText(row.dueDate),
       status: reminderStatus(row.status),
+      reviewOutcome: reviewOutcome(row.reviewOutcome),
+      reviewDate: typeof row.reviewDate === "string" && row.reviewDate ? row.reviewDate : null,
+      reviewNotes: text(row.reviewNotes),
+      reviewVersion: reviewVersion(row.reviewVersion),
+      reviewRecordedAt: typeof row.reviewRecordedAt === "string" && row.reviewRecordedAt ? row.reviewRecordedAt : null,
     };
   });
 }

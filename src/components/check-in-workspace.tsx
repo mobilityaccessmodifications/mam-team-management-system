@@ -12,9 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  completeVisibleCheckInReminder,
-} from "@/app/check-ins/actions";
+import { CheckInReviewOutcomeDialog } from "@/components/check-in-review-outcome-dialog";
 import styles from "@/components/check-in-register.module.css";
 import { AnimatedStatusBadge } from "@/components/ui/animated-status-badge";
 import { MotionLoader } from "@/components/ui/motion-loader";
@@ -65,7 +63,10 @@ function canCompleteReminder(reminder: CheckInWorkspaceReminder) {
   }).formatToParts(new Date());
   const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
   const today = `${value("year")}-${value("month")}-${value("day")}`;
-  return reminder.status !== "completed" && /^\d{4}-\d{2}-\d{2}$/.test(reminder.dueDate) && reminder.dueDate <= today;
+  return reminder.status !== "completed"
+    && reminder.status !== "claimed"
+    && /^\d{4}-\d{2}-\d{2}$/.test(reminder.dueDate)
+    && reminder.dueDate <= today;
 }
 
 function reminderTone(status: CheckInWorkspaceReminder["status"]): "success" | "warning" | "info" {
@@ -139,10 +140,11 @@ export function CheckInWorkspace({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedPersonId, setSelectedPersonId] = useState("");
-  const [pendingReminderId, setPendingReminderId] = useState("");
+  const [reviewReminder, setReviewReminder] = useState<CheckInWorkspaceReminder | null>(null);
   const [sort, setSort] = useState<EmployeeSort>("due");
   const [page, setPage] = useState(0);
   const selectedPersonIdRef = useRef("");
+  const refreshButtonRef = useRef<HTMLButtonElement>(null);
   const sortRef = useRef<EmployeeSort>("due");
 
   const load = useCallback(async () => {
@@ -220,28 +222,18 @@ export function CheckInWorkspace({
     setSelectedPersonId(personId);
   }
 
-  async function markComplete(reminderId: string) {
-    if (readOnly || pendingReminderId) return;
-    setPendingReminderId(reminderId);
-    setError("");
+  async function reviewSaved() {
     setNotice("");
-    try {
-      await completeVisibleCheckInReminder(reminderId);
-      await load();
-      onRecordsChanged?.();
-      setNotice("Check-in marked complete.");
-    } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "The check-in could not be updated.");
-    } finally {
-      setPendingReminderId("");
-    }
+    await load();
+    onRecordsChanged?.();
+    setNotice("Review outcome saved.");
   }
 
-  return <section className={styles.workspace} aria-label="Employee check-in tasks">
+  return <><section className={styles.workspace} aria-label="Employee check-in tasks">
     <h2 className={styles.srOnly}>Employee check-ins</h2>
     <header className={styles.toolbar}>
       {data ? <WorkspaceResources data={data} /> : <span />}
-      <button className={styles.secondaryAction} type="button" onClick={() => void load()} disabled={loading || Boolean(pendingReminderId)} aria-label="Refresh check-ins" title="Refresh">
+      <button ref={refreshButtonRef} className={styles.secondaryAction} type="button" onClick={() => void load()} disabled={loading} aria-label="Refresh check-ins" title="Refresh">
         <RefreshCw aria-hidden="true" size={16} />
       </button>
     </header>
@@ -306,18 +298,37 @@ export function CheckInWorkspace({
                 <strong>{milestoneLabel(reminder.milestone)}{reminder.sequence === "final" ? " · final reminder" : ""}</strong>
                 <p>Due {formatDate(reminder.dueDate)}</p>
               </div>
-              <AnimatedStatusBadge className={styles.status} tone={reminderTone(reminder.status)}>{reminder.status.replaceAll("_", " ")}</AnimatedStatusBadge>
+              {reminder.status === "completed" && (!readOnly || reminder.reviewOutcome) ? <button
+                className={styles.reviewOutcomeTrigger}
+                type="button"
+                onClick={() => setReviewReminder(reminder)}
+                aria-haspopup="dialog"
+                aria-label={`${readOnly ? "View" : reminder.reviewOutcome ? "View or edit" : "Add"} review outcome for ${selected.fullName}, ${milestoneLabel(reminder.milestone)}, due ${formatDate(reminder.dueDate)}`}
+              ><AnimatedStatusBadge className={styles.status} tone="success">Completed</AnimatedStatusBadge></button>
+                : <AnimatedStatusBadge className={styles.status} tone={reminderTone(reminder.status)}>{reminder.status.replaceAll("_", " ")}</AnimatedStatusBadge>}
               {!readOnly && canCompleteReminder(reminder) ? <div className={styles.reminderActions}>
-                <button type="button" disabled={Boolean(pendingReminderId)} onClick={() => void markComplete(reminder.id)}>
-                  {pendingReminderId === reminder.id ? "Saving…" : "Mark complete"}
-                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewReminder(reminder)}
+                  aria-haspopup="dialog"
+                  aria-label={`Record review outcome for ${selected.fullName}, ${milestoneLabel(reminder.milestone)}, due ${formatDate(reminder.dueDate)}`}
+                >Record outcome</button>
               </div> : null}
             </div>
           ))}
         </section>
       </article>
     </div> : null}
-  </section>;
+  </section>
+  {reviewReminder && selected ? <CheckInReviewOutcomeDialog
+    employeeName={selected.fullName}
+    milestone={milestoneLabel(reviewReminder.milestone)}
+    reminder={reviewReminder}
+    readOnly={readOnly}
+    returnFocusRef={refreshButtonRef}
+    onClose={() => setReviewReminder(null)}
+    onSaved={reviewSaved}
+  /> : null}</>;
 }
 
 function WorkspaceResources({ data }: { data: CheckInWorkspaceData }) {
