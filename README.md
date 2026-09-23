@@ -326,3 +326,17 @@ transaction for review; unknown archived teams remain null. The label backfill
 audit records changed field names only. Check-in rescheduling is suppressed only
 inside the backfill transaction and restored before commit. It does not change
 Company, Reports to, roles, approvals, leave balances or calendar permissions.
+
+### Employee team leave calendar
+
+Ordinary employees also see approved absences for active colleagues in their
+current canonical Team and company. The calendar projection minimises peer
+categories; it does not expand request, approval, balance or evidence access.
+The same server scope is used by Super Admin employee previews. Unknown teams
+fail closed, and manager/payroll visibility is retained.
+
+Run `scripts/deploy-employee-team-calendar.py inspect`, then
+`apply <reviewed-sha256>` through the MAM Supabase credential helper for
+`20260923160000`. The release verifies the project, preceding five-team migration,
+function bodies and effective ACLs. `npm run test:sql` includes synthetic
+employee-team privacy tests and full migration replay.
