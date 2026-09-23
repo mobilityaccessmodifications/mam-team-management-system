@@ -6,6 +6,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const TEST_RECIPIENT = 'marketing@mobilityaccess.com.au';
 export const TWO_WEEK_RECORD_PATH = path.join(ROOT, 'assets/checklists/2 Week New Starter Check-In Record.docx');
 export const ONE_MONTH_RECORD_PATH = path.join(ROOT, 'assets/checklists/1 Month New Starter Check-In Record.docx');
+export const TWO_MONTH_RECORD_PATH = path.join(ROOT, 'assets/checklists/2 Month Stay Interview Record.docx');
 const RECEIPT_URL = 'https://mam-team-management-system-ten.vercel.app/api/internal/integrations/notifications/receipts';
 const HR_OUTLOOK_CREDENTIAL = { id: 'vFEolsXoEOOxNyan', name: 'Microsoft Outlook account - hr@mobilityaccess.com.au' };
 const RECEIPT_CREDENTIAL = { id: 'tGtpwegru8OxtdCt', name: 'MAM Team Management - Notification Webhook Header' };
@@ -30,16 +31,16 @@ const milestone = clean(payload?.milestone);
 const reminder = clean(payload?.reminder);
 const reminderId = typeof payload?.deliveryId === 'string' ? payload.deliveryId.split(':')[1] : '';
 const expectedId = reminderId && uuid.test(reminderId) ? \`checkin:\${reminderId}:\${milestone}:\${reminder}:\${MODE}\` : '';
-const liveRecipients = ['2-week','1-month'].includes(milestone)
+const liveRecipients = ['2-week','1-month','2-month'].includes(milestone)
   ? [...new Set([...employeeRecipients, managerEmail].filter(Boolean))].sort()
   : [managerEmail].filter(Boolean);
 const valid = payload?.version === 1 && payload?.event === 'checkin-reminder' && payload?.mode === MODE
   && payload?.deliveryId === expectedId && clean(employee.firstName) && clean(employee.lastName)
   && clean(employee.role) && clean(employee.department) && clean(manager.name) && managerEmail
-  && ['2-week','1-month','3-month','5-month'].includes(milestone)
+  && ['2-week','1-month','2-month','3-month','5-month'].includes(milestone)
   && ['initial','final'].includes(reminder) && (reminder !== 'final' || milestone === '5-month')
   && /^\\d{4}-\\d{2}-\\d{2}$/.test(clean(payload?.dueDate))
-  && (!['2-week','1-month'].includes(milestone) || employeeRecipients.length > 0);
+  && (!['2-week','1-month','2-month'].includes(milestone) || employeeRecipients.length > 0);
 if (!valid) return [{ json: { valid: false, deliveryId: expectedId || 'invalid', code: 'invalid_payload' } }];
 const managerFirstName = clean(manager.name).split(/\\s+/)[0];
 return [{ json: {
@@ -85,6 +86,19 @@ return [{ json: { ...source, subject: \`Your 1-Month Check-In – \${employeeNam
 } }];`;
 }
 
+
+function twoMonthEmailCode(recordBase64) {
+  return `const source = $input.first().json;
+const escapeHtml = value => String(value).replace(/[&<>\"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[char]));
+const employee = escapeHtml(source.employeeFirstName);
+const employeeName = escapeHtml(source.employeeName);
+const manager = escapeHtml(source.managerFirstName);
+const bodyContent = \`<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#22302b"><p>Hi \${employee} and \${manager},</p><p>It’s time for \${employee}’s <strong>2-Month Stay Interview</strong>.</p><p>This conversation is a little different from the normal Check-In. It is primarily about understanding how \${employee} is experiencing the role and identifying anything we can improve while they are still settling in.</p><p>Please talk openly about what is working well, what has been harder than expected, whether the role has matched expectations, how the team and working environment are feeling, and what additional support may help.</p><p>\${employee}, this is also your opportunity to raise anything that may be frustrating, unclear or making your job harder than it needs to be.</p><p>Please use the attached <strong>2-Month Stay Interview Record</strong> to capture the key discussion points and any agreed actions.</p><p>Thanks,<br>HR Manager</p></div>\`;
+return [{ json: { ...source, subject: \`Your 2-Month Stay Interview – \${employeeName}\`, bodyContent }, binary: {
+  record: { data: ${JSON.stringify(recordBase64)}, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', fileName: '2 Month Stay Interview Record.docx' }
+} }];`;
+}
+
 const genericEmailCode = `const source = $input.first().json;
 const escapeHtml = value => String(value).replace(/[&<>\"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[char]));
 const labels = { '1-month':'1-Month Check-In', '3-month':'3-Month Probation Review', '5-month':'5-Month Probation Review' };
@@ -115,6 +129,7 @@ export function buildCheckInReminderWorkflow({
   if (!['test', 'live'].includes(mode)) throw new Error('Workflow mode must be test or live.');
   const twoWeekRecordBase64 = readFileSync(TWO_WEEK_RECORD_PATH).toString('base64');
   const oneMonthRecordBase64 = readFileSync(ONE_MONTH_RECORD_PATH).toString('base64');
+  const twoMonthRecordBase64 = readFileSync(TWO_MONTH_RECORD_PATH).toString('base64');
   const nodes = [
     node('c2000000-0000-4000-8000-000000000001', 'Receive Check-In Request', 'n8n-nodes-base.webhook', 2.1, [-980, 0], {
       authentication: 'headerAuth', httpMethod: 'POST', path: `mam-people-hub-check-in-${mode}-v2`, responseMode: 'lastNode', options: {},
@@ -163,6 +178,14 @@ export function buildCheckInReminderWorkflow({
       resource: 'message', operation: 'send', toRecipients: '={{ $json.actualRecipient }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
       additionalFields: { bodyContentType: 'html', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
     }, { credentials: { microsoftOutlookOAuth2Api: HR_OUTLOOK_CREDENTIAL } }),
+    node('c2000000-0000-4000-8000-000000000021', 'Two-Month Stay Interview?', 'n8n-nodes-base.if', 2.2, [860, -40], {
+      conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ id: 'c2000000-0000-4000-8000-000000000121', leftValue: '={{ $json.milestone === "2-month" }}', rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }], combinator: 'and' }, options: {},
+    }),
+    node('c2000000-0000-4000-8000-000000000022', 'Build 2-Month Stay Interview Email and Attachment', 'n8n-nodes-base.code', 2, [1100, 0], { mode: 'runOnceForAllItems', jsCode: twoMonthEmailCode(twoMonthRecordBase64) }),
+    node('c2000000-0000-4000-8000-000000000023', 'Send 2-Month Stay Interview Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [1340, 0], {
+      resource: 'message', operation: 'send', toRecipients: '={{ $json.actualRecipient }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
+      additionalFields: { bodyContentType: 'html', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
+    }, { credentials: { microsoftOutlookOAuth2Api: HR_OUTLOOK_CREDENTIAL } }),
   ];
   const connections = {
     'Receive Check-In Request': { main: [[{ node: 'Validate Check-In Request', type: 'main', index: 0 }]] },
@@ -174,9 +197,12 @@ export function buildCheckInReminderWorkflow({
     'Two-Week Check-In?': { main: [[{ node: 'Build 2-Week Email and Attachment', type: 'main', index: 0 }], [{ node: 'One-Month Check-In?', type: 'main', index: 0 }]] },
     'Build 2-Week Email and Attachment': { main: [[{ node: 'Send 2-Week Email from HR', type: 'main', index: 0 }]] },
     'Send 2-Week Email from HR': { main: [[{ node: 'Build Durable Check-In Confirmation', type: 'main', index: 0 }]] },
-    'One-Month Check-In?': { main: [[{ node: 'Build 1-Month Email and Attachment', type: 'main', index: 0 }], [{ node: 'Build Existing Check-In Email', type: 'main', index: 0 }]] },
+    'One-Month Check-In?': { main: [[{ node: 'Build 1-Month Email and Attachment', type: 'main', index: 0 }], [{ node: 'Two-Month Stay Interview?', type: 'main', index: 0 }]] },
     'Build 1-Month Email and Attachment': { main: [[{ node: 'Send 1-Month Email from HR', type: 'main', index: 0 }]] },
     'Send 1-Month Email from HR': { main: [[{ node: 'Build Durable Check-In Confirmation', type: 'main', index: 0 }]] },
+    'Two-Month Stay Interview?': { main: [[{ node: 'Build 2-Month Stay Interview Email and Attachment', type: 'main', index: 0 }], [{ node: 'Build Existing Check-In Email', type: 'main', index: 0 }]] },
+    'Build 2-Month Stay Interview Email and Attachment': { main: [[{ node: 'Send 2-Month Stay Interview Email from HR', type: 'main', index: 0 }]] },
+    'Send 2-Month Stay Interview Email from HR': { main: [[{ node: 'Build Durable Check-In Confirmation', type: 'main', index: 0 }]] },
     'Build Existing Check-In Email': { main: [[{ node: 'Send Existing Check-In Email from HR', type: 'main', index: 0 }]] },
     'Send Existing Check-In Email from HR': { main: [[{ node: 'Build Durable Check-In Confirmation', type: 'main', index: 0 }]] },
     'Build Durable Check-In Confirmation': { main: [[{ node: 'Confirm Durable Check-In Delivery', type: 'main', index: 0 }]] },
