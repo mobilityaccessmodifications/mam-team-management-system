@@ -1,8 +1,3 @@
-"""Hash-pinned MAM-only migration; use project credential exec supabase route.
-
-inspect is read-only. apply requires the reviewed migration SHA256.
-No employee rows, secrets or email payloads are printed.
-"""
 import hashlib
 import json
 import os

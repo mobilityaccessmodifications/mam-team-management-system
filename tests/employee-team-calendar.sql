@@ -1,4 +1,3 @@
--- First run all existing personal, payroll and manager regressions.
 \ir calendar-team-filters.sql
 reset role;
 update public.profiles set account_status='active',app_role='employee' where login_name in ('alice','jackie');
@@ -17,7 +16,6 @@ exception when insufficient_privilege then null; end $$;
 select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',false);
 select pg_temp.assert((select count(*)=3 from public.list_leave_calendar_entries_with_teams_for_preview('20000000-0000-4000-8000-000000000002')),'preview matches employee scope');
 reset role;
--- Verify all five canonical teams, independent of the reporting line.
 do $$ declare t text; begin
  foreach t in array array['MAM admin','Major','Minor','Warehouse','Equipsy'] loop
   update private.employee_directory_details set team_name=t where person_id in ('20000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000003');

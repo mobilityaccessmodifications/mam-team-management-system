@@ -1,8 +1,6 @@
 begin;
 select pg_advisory_xact_lock(hashtextextended('mam:employee-team-calendar:20260923160000',0));
 
--- Directory teams define peer availability, independently of reporting/approval.
--- Missing/unknown teams fail closed; match company as well as the canonical team.
 create function private.employee_calendar_peer_ids(p_person_id uuid)
 returns table(person_id uuid)
 language sql stable security definer set search_path = '' as $$
@@ -63,7 +61,6 @@ begin
 
   return query
   with scoped_leave as (
-    -- Scope follows request ownership and the current reporting tree, never the submitter.
     select
       request.id,
       request.employee_person_id as person_id,
@@ -92,10 +89,6 @@ begin
 
     union all
 
-    -- Cross-team approved visibility is disjoint from own/reporting-team rows:
-    -- managers see active employees; explicit payroll grants retain archived history.
-    -- Both are approved-only, category-minimised and exclude the actor's own rows
-    -- to avoid duplicate records and preserve the actor's ordinary own view.
     select
       request.id,
       request.employee_person_id as person_id,
@@ -144,8 +137,6 @@ begin
 end;
 $$;
 
-comment on function public.list_leave_calendar_entries() is
-  'Returns own leave and active same-team approved absences, Managers’ reporting-team pending/approved absences and other active teams’ approved absences. Team categories are minimised. Explicit payroll grants retain approved-only history. No reasons, notes, attachments or balances.';
 
 revoke all on function public.list_leave_calendar_entries()
   from public, anon, authenticated, service_role;
@@ -277,8 +268,6 @@ begin
 end;
 $$;
 
-comment on function public.list_leave_calendar_entries_for_preview(uuid) is
-  'System Admin-only projection of the selected active employee''s exact Leave Calendar scope.';
 
 revoke all on function public.list_leave_calendar_entries_for_preview(uuid)
   from public, anon, authenticated, service_role;
