@@ -314,6 +314,18 @@ function formatDateRange(start: string, end: string) {
   return `${date.format(first)}–${date.format(last)} ${year.format(last)}`;
 }
 
+function formatSubmissionDate(value: string) {
+  if (!value) return "";
+  const submittedAt = new Date(value);
+  if (Number.isNaN(submittedAt.valueOf())) return "";
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Australia/Melbourne",
+  }).format(submittedAt);
+}
+
 function toIsoDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -2317,6 +2329,7 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
   const showEmployee = canReview && request.personId !== profile.id;
   const isConfirmingCancellation = cancellationRequestId === request.id;
   const isCancelled = request.status === "Cancelled" || cancellationSucceeded;
+  const submissionDate = formatSubmissionDate(request.submittedAt);
   const canCancel = !readOnly
     && !isCancelled
     && canCancelOwnLeave
@@ -2340,6 +2353,7 @@ function RequestDetail({ profile, request, attachments, canReview, readOnly, hid
     </> : null}
     {!showEmployee ? <div className={styles.mobileDetailHeading}><span><h2 id={detailTitleId}>{request.leaveType}</h2></span><StatusPill status={request.status} /></div> : null}
     <dl>
+      {submissionDate ? <div><dt>Submission date</dt><dd>{submissionDate}</dd></div> : null}
       {showEmployee ? <div><dt>Leave type</dt><dd>{request.leaveType}</dd></div> : null}
       <div><dt>When</dt><dd>{request.dateLabel}</dd></div>
       <div><dt>Duration</dt><dd>{formatDurationWithTime(request)}</dd></div>
