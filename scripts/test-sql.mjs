@@ -31,6 +31,8 @@ try {
     "--host", socket, "--port", "55439", "--user", "postgres", "--database", "portal_account_executor_test"],
   { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (accounts.status !== 0) throw new Error("Account executor PostgreSQL concurrency tests failed");
+  createDatabase(socket, "mam_test_employee_calendar");
+  command("psql", [...target(socket, "mam_test_employee_calendar"), "-f", path.join(sourceRoot, "tests/employee-team-calendar.sql")]);
   passed = true;
 } finally {
   stopCluster(socket);
