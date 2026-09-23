@@ -1,6 +1,6 @@
 export type CheckInTaskCompany = "mam" | "equipsy";
 
-export type CheckInTaskMilestone = "2_week" | "1_month" | "3_month" | "5_month";
+export type CheckInTaskMilestone = "2_week" | "1_month" | "2_month" | "3_month" | "5_month";
 
 export type CheckInTaskStatus = "scheduled" | "claimed" | "delivered" | "needs_review";
 

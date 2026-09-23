@@ -93,7 +93,7 @@ export type CheckInCalendarEntry = {
   reminderId: string;
   personId: string;
   employee: string;
-  milestone: "2_week" | "1_month" | "3_month" | "5_month";
+  milestone: "2_week" | "1_month" | "2_month" | "3_month" | "5_month";
   sequence: "initial" | "final";
   dueDate: string;
   status: "scheduled" | "claimed" | "delivered" | "completed" | "needs_review";
@@ -512,7 +512,7 @@ function toCheckInCalendarEntry(value: unknown): CheckInCalendarEntry {
   const reminderId = requireText(row?.reminder_id, LOAD_ERROR);
   const personId = requireText(row?.person_id, LOAD_ERROR);
   if (!UUID_PATTERN.test(reminderId) || !UUID_PATTERN.test(personId)) throw new Error(LOAD_ERROR);
-  if (!["2_week", "1_month", "3_month", "5_month"].includes(String(row.milestone))) throw new Error(LOAD_ERROR);
+  if (!["2_week", "1_month", "2_month", "3_month", "5_month"].includes(String(row.milestone))) throw new Error(LOAD_ERROR);
   if (row.sequence !== "initial" && row.sequence !== "final") throw new Error(LOAD_ERROR);
   if (!["scheduled", "claimed", "delivered", "completed", "needs_review"].includes(String(row.status))) throw new Error(LOAD_ERROR);
 

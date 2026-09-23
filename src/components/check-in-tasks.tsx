@@ -34,6 +34,7 @@ function formatDate(value: string) {
 function milestoneLabel(value: CheckInTask["milestone"]) {
   if (value === "2_week") return "2-week check-in";
   if (value === "1_month") return "1-month check-in";
+  if (value === "2_month") return "2-month stay interview";
   if (value === "3_month") return "3-month check-in";
   return "5-month probation check-in";
 }

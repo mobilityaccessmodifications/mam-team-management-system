@@ -9,7 +9,7 @@ export type CheckInReminderStatus =
 
 export type CheckInReminder = {
   id: string;
-  milestone: "2_week" | "1_month" | "3_month" | "5_month";
+  milestone: "2_week" | "1_month" | "2_month" | "3_month" | "5_month";
   sequence: "initial" | "final";
   dueDate: string;
   notifyDate: string;

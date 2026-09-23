@@ -90,6 +90,7 @@ function workflowMilestone(value: string) {
   const labels: Record<string, string> = {
     "2_week": "2-week",
     "1_month": "1-month",
+    "2_month": "2-month",
     "3_month": "3-month",
     "5_month": "5-month",
   };
@@ -182,7 +183,7 @@ function preparedReminder(value: unknown): PreparedReminder | null {
     || typeof row.due_date !== "string"
     || typeof row.notify_date !== "string"
   ) return null;
-  if (["2_week", "1_month"].includes(row.milestone) && !employeeWorkEmail && !employeePersonalEmail) return null;
+  if (["2_week", "1_month", "2_month"].includes(row.milestone) && !employeeWorkEmail && !employeePersonalEmail) return null;
   if (
     !row.employee_first_name.trim()
     || !row.employee_last_name.trim()

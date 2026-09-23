@@ -58,7 +58,7 @@ function company(value: unknown): CheckInTaskCompany {
 }
 
 function milestone(value: unknown): CheckInTaskMilestone {
-  if (value === "2_week" || value === "1_month" || value === "3_month" || value === "5_month") return value;
+  if (value === "2_week" || value === "1_month" || value === "2_month" || value === "3_month" || value === "5_month") return value;
   throw new Error(CHECK_IN_TASK_LOAD_ERROR);
 }
 

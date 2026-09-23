@@ -53,6 +53,7 @@ function workspaceReminders(value: unknown): CheckInWorkspaceReminder[] {
     if (
       row.milestone !== "2_week"
       && row.milestone !== "1_month"
+      && row.milestone !== "2_month"
       && row.milestone !== "3_month"
       && row.milestone !== "5_month"
     ) {
