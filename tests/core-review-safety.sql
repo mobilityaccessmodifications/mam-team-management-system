@@ -29,7 +29,7 @@ select id,full_name,'mam','Synthetic role',id,
     else '10000000-0000-4000-8000-000000000005'::uuid end
 from public.profiles where login_name in ('coreemployee','coreotheremployee');
 insert into private.employee_directory_details(person_id,employment_type,work_email,first_name,last_name,team_name)
-select id,'full_time',login_name||'@example.test','Synthetic','Person','Major' from public.profiles;
+select id,'full_time',login_name||'@example.test','Synthetic','Person',case when login_name='coreotheremployee' then 'Minor' else 'Major' end from public.profiles;
 insert into private.leave_approval_grants(reviewer_user_id,scope_kind,reviewer_label,priority)
 values ('10000000-0000-4000-8000-000000000001','global','Synthetic Admin',100);
 insert into private.manager_leave_reviewers values ('10000000-0000-4000-8000-000000000001',1);
@@ -96,7 +96,7 @@ select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000004');
 set local role authenticated;
 do $$ begin
   assert (select work_email='coreemployee@example.test' from public.get_internal_org_work_email('10000000-0000-4000-8000-000000000004'));
-  assert (select count(*)=0 from public.get_internal_org_work_email('10000000-0000-4000-8000-000000000006')), 'Unrelated branch email must remain private';
+  assert (select count(*)=0 from public.get_internal_org_work_email('10000000-0000-4000-8000-000000000006')), 'Other-team email must remain private';
 end $$;
 reset role;
 

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { listEmployeeTeamDirectory } from "@/app/people/team-directory-actions";
 import type { OrganisationPerson } from "@/components/organisation-tree";
 import type { EmployeeItAsset, ItAssetType } from "@/lib/it-asset-types";
 import type { EmployeeSubscription, SubscriptionBillingCycle } from "@/lib/subscription-types";
@@ -188,13 +189,13 @@ export function EmployeeSelfResources({
  * records, and loads devices/subscriptions only through self-authorised actions.
  */
 export function EmployeeTeamDirectory({
-  people,
+  previewPersonId,
   currentPersonId,
   onRequestWorkEmail,
   onLoadMyDevices,
   onLoadMySubscriptions,
 }: {
-  people: OrganisationPerson[];
+  previewPersonId?: string;
   currentPersonId?: string;
   onRequestWorkEmail?: (personId: string) => Promise<string | null>;
   onLoadMyDevices?: () => Promise<EmployeeItAsset[]>;
@@ -211,37 +212,26 @@ export function EmployeeTeamDirectory({
   const detailDialogRef = useRef<HTMLElement>(null);
   const isMobileSheet = useMediaQuery("(max-width: 900px)");
 
-  const teamPeople = useMemo(() => {
-    if (!currentPersonId) return [];
-    const byId = new Map(people.map((person) => [person.id, person]));
-    const self = byId.get(currentPersonId);
-    if (!self) return [];
-    const rootId = self.reportsTo ?? self.id;
-    const childrenByParent = new Map<string, OrganisationPerson[]>();
-    for (const person of people) {
-      if (!person.reportsTo) continue;
-      const siblings = childrenByParent.get(person.reportsTo) ?? [];
-      siblings.push(person);
-      childrenByParent.set(person.reportsTo, siblings);
-    }
-    const included = new Set([rootId, self.id]);
-    const pending = [rootId];
-    while (pending.length > 0) {
-      const parentId = pending.pop();
-      if (!parentId) continue;
-      for (const child of childrenByParent.get(parentId) ?? []) {
-        if (included.has(child.id)) continue;
-        included.add(child.id);
-        pending.push(child.id);
-      }
-    }
-    return people.filter((person) => included.has(person.id));
-  }, [currentPersonId, people]);
+  const [teamPeople, setTeamPeople] = useState<(OrganisationPerson & { managerName: string | null })[]>([]);
+  const [directoryState, setDirectoryState] = useState<"loading" | "ready" | "error">("loading");
+  const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    listEmployeeTeamDirectory(previewPersonId).then((rows) => {
+      if (cancelled) return;
+      setTeamPeople(rows);
+      setDirectoryState("ready");
+    }).catch(() => {
+      if (cancelled) return;
+      setTeamPeople([]);
+      setDirectoryState("error");
+    });
+    return () => { cancelled = true; };
+  }, [previewPersonId, reloadKey]);
   const activePeople = useMemo(
     () => teamPeople.filter((person) => person.kind !== "org_unit" && person.isActive !== false),
     [teamPeople],
   );
-  const personById = useMemo(() => new Map(teamPeople.map((person) => [person.id, person])), [teamPeople]);
   const visiblePeople = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
     return activePeople
@@ -249,7 +239,7 @@ export function EmployeeTeamDirectory({
       .sort((first, second) => first.name.localeCompare(second.name));
   }, [activePeople, query]);
   const selectedPerson = activePeople.find((person) => person.id === selectedPersonId) ?? null;
-  const selectedManagerName = selectedPerson?.reportsTo ? personById.get(selectedPerson.reportsTo)?.name ?? "Not assigned" : "Not assigned";
+  const selectedManagerName = selectedPerson?.managerName ?? "Not assigned";
   const selectedPersonIsSelf = Boolean(selectedPerson && currentPersonId && selectedPerson.id === currentPersonId);
   const showDetails = Boolean(selectedPerson && (!isMobileSheet || mobileDetailOpen));
   const closeDetails = useCallback(() => {
@@ -287,7 +277,7 @@ export function EmployeeTeamDirectory({
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your team" type="search" />
           </label>
         </div>
-        {!visiblePeople.length ? <div className={styles.listState}><UsersRound size={18} aria-hidden="true" /><span>No team employees match that search.</span></div> : <DirectoryRecordList people={visiblePeople} selectedPersonId={selectedPersonId} currentPersonId={currentPersonId} onSelect={openDetails} />}
+        {directoryState === "loading" ? <div className={styles.listState} role="status">Loading team employees…</div> : directoryState === "error" ? <div className={styles.listState} role="alert"><span>Team employees could not be loaded.</span><button type="button" onClick={() => { setDirectoryState("loading"); setReloadKey((key) => key + 1); }}>Retry</button></div> : !visiblePeople.length ? <div className={styles.listState}><UsersRound size={18} aria-hidden="true" /><span>No team employees match that search.</span></div> : <DirectoryRecordList people={visiblePeople} selectedPersonId={selectedPersonId} currentPersonId={currentPersonId} onSelect={openDetails} />}
       </aside>
 
       {showDetails && isMobileSheet ? <button className={styles.detailBackdrop} type="button" onClick={closeDetails} aria-label="Close employee details" /> : null}
