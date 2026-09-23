@@ -1132,3 +1132,7 @@
 .header .headerActions { margin-left: auto; }
 @media (max-width: 760px) { .header > .tools { flex-basis: 100%; } }
 .header > .tools:not(.headerActions) { flex-direction: row; align-items: center; }
+
+@media (min-width: 761px) {
+  .bulkToolbar[data-active="false"] { display: none; }
+}

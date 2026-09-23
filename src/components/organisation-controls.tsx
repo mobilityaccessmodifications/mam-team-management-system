@@ -1,5 +1,6 @@
 import { Check, Focus, LocateFixed, Maximize2, Minimize2, Minus, Plus, SlidersHorizontal, Undo2, WandSparkles } from "lucide-react";
 import { type Dispatch, type SetStateAction, useRef, useState } from "react";
+import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/organisation-tree.module.css";
 
 export type OrganisationFilter = "all" | "mam" | "equipsy" | "major" | "minor" | "warehouse";
@@ -12,7 +13,7 @@ export function OrganisationFilterMenu({ companyFilter, onSelect }: {
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   return (
     <div
-      className={styles.filterMenu}
+      className={toolbar.menu}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || !filterOpen) return;
         event.preventDefault();
@@ -25,18 +26,18 @@ export function OrganisationFilterMenu({ companyFilter, onSelect }: {
         aria-label="Filter organisation"
         aria-expanded={filterOpen}
         aria-haspopup="menu"
-        className={styles.filterButton}
+        className={toolbar.button}
         onClick={() => setFilterOpen((current) => !current)}
         ref={filterButtonRef}
         title="Filter"
         type="button"
       >
         <SlidersHorizontal aria-hidden="true" size={17} />
-        <span>Filter</span>
+        <span>Filters</span>
         {companyFilter !== "all" ? <span className={styles.filterBadge}>1</span> : null}
       </button>
       {filterOpen ? (
-        <div aria-label="Organisation filters" className={styles.filterCard} role="menu">
+        <div aria-label="Organisation filters" className={`${styles.filterCard} ${toolbar.menuPanel}`} role="menu">
           <span className={styles.filterHeading}>Show teams</span>
           {([
             ["all", "All"],

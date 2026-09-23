@@ -44,6 +44,7 @@ import {
   returnItAsset,
   retireItAsset,
 } from "@/app/assets/actions";
+import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/asset-register.module.css";
 import { EmployeePicker } from "@/components/employee-picker";
 import { useAssetOwnerChange } from "@/components/use-asset-owner-change";
@@ -1008,30 +1009,30 @@ export function AssetRegister() {
   }
 
   return <section className={styles.workspace} aria-labelledby="asset-register-title">
-    <header className={styles.header}>
+    <header className={toolbar.toolbar}>
       <h2 id="asset-register-title" className={styles.visuallyHidden}>Devices</h2>
-      <div className={styles.tools}>
-        <label className={styles.searchField}>
+      <div className={toolbar.controls}>
+        <label className={toolbar.search}>
           <Search size={17} aria-hidden="true" />
           <span className={styles.visuallyHidden}>Search assets</span>
           <input value={query} onChange={(event) => { setQuery(event.target.value); setSelectedIds(new Set()); }} placeholder="Search devices" />
         </label>
-        <div className={styles.toolSummary}>
-          {hasAssetFilters ? <button className={styles.clearFilters} type="button" onClick={() => { setAssetFilters({ assetType: "", assignedTo: "", status: "" }); setSelectedIds(new Set()); }}>Clear filters</button> : null}
-          <span className={styles.assetCount}>{visibleAssets.length === assets.length ? `${assets.length} ${assets.length === 1 ? "device" : "devices"}` : `${visibleAssets.length} of ${assets.length} devices`}</span>
+        <div className={toolbar.summary}>
+          {hasAssetFilters ? <button className={toolbar.button} type="button" onClick={() => { setAssetFilters({ assetType: "", assignedTo: "", status: "" }); setSelectedIds(new Set()); }}>Clear filters</button> : null}
+          <span className={toolbar.count}>{visibleAssets.length === assets.length ? `${assets.length} ${assets.length === 1 ? "device" : "devices"}` : `${visibleAssets.length} of ${assets.length} devices`}</span>
         </div>
       </div>
-      <div className={styles.headerActions}>
-        <ScanAssetButton className={styles.secondaryAction} />
-        <a className={styles.secondaryAction} href="/assets/export?format=csv" download="devices.csv" aria-label="Download devices as CSV" title="Download CSV"><Download size={16} aria-hidden="true" /><span>CSV</span></a>
-        <a className={styles.secondaryAction} href="/assets/export?format=xlsx" download="devices.xlsx" aria-label="Download devices as Excel" title="Download Excel"><Download size={16} aria-hidden="true" /><span>Excel</span></a>
-        <button className={styles.primaryAction} type="button" onClick={() => setShowAddDevice(true)} ref={addDeviceButtonRef}><PackagePlus size={17} /> Add device</button>
+      <div className={toolbar.actions}>
+        <ScanAssetButton className={toolbar.button} />
+        <a className={toolbar.button} href="/assets/export?format=csv" download="devices.csv" aria-label="Download devices as CSV" title="Download CSV"><Download size={16} aria-hidden="true" /><span>CSV</span></a>
+        <a className={toolbar.button} href="/assets/export?format=xlsx" download="devices.xlsx" aria-label="Download devices as Excel" title="Download Excel"><Download size={16} aria-hidden="true" /><span>Excel</span></a>
+        <button className={toolbar.primary} type="button" onClick={() => setShowAddDevice(true)} ref={addDeviceButtonRef}><PackagePlus size={17} /> Add device</button>
       </div>
     </header>
 
     {notice ? <div className={styles.notice} role="status"><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={15} /></button></div> : null}
 
-    {!loading && !loadError && assets.length > 0 ? <div className={styles.bulkToolbar}>
+    {!loading && !loadError && assets.length > 0 ? <div className={styles.bulkToolbar} data-active={selectedAssets.length > 0}>
       <label className={styles.selectVisible}><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} disabled={!visibleAssets.length} aria-label="Select all visible devices" />Select visible</label>
       <span role="status">{selectedAssets.length} selected</span>
       {selectedAssets.length ? <><button type="button" className={styles.secondaryAction} onClick={() => setSelectedIds(new Set())}>Clear</button><button type="button" ref={bulkButtonRef} className={styles.primaryAction} disabled={selectedAssets.length > 100} onClick={() => setBulkTargets(selectedAssets)}><Pencil size={16} />Edit selected</button>{selectedAssets.length > 100 ? <span>Select up to 100 at a time.</span> : null}</> : null}

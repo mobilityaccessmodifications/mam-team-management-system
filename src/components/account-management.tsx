@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { FormEvent, Fragment, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/account-management.module.css";
 import { applyAccountStatusBatch, type AccountStatusFailure } from "@/components/account-status-batch";
 import { AnimatedStatusBadge } from "@/components/ui/animated-status-badge";
@@ -673,8 +674,8 @@ export function AccountManagement({
     <section className={styles.workspace} aria-labelledby="account-title">
       <h2 className={styles.srOnly} id="account-title">Login accounts</h2>
 
-      <div className={styles.listControls}>
-        <label className={styles.searchField}>
+      <div className={toolbar.toolbar}>
+        <label className={toolbar.search}>
           <Search aria-hidden="true" size={17} />
           <span className={styles.srOnly}>Search accounts</span>
           <input
@@ -687,7 +688,7 @@ export function AccountManagement({
           />
         </label>
 
-        <label className={styles.sortField}>
+        <label className={toolbar.select}>
           <span>Sort</span>
           <select
             aria-label="Sort accounts"
