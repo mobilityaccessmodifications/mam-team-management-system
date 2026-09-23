@@ -7,6 +7,11 @@ export type CheckInReminderStatus =
   | "completed"
   | "needs_review";
 
+export type CheckInReviewOutcome =
+  | "on_track"
+  | "follow_up_required"
+  | "hr_review_required";
+
 export type CheckInReminder = {
   id: string;
   milestone: "2_week" | "1_month" | "2_month" | "3_month" | "5_month";
@@ -18,6 +23,11 @@ export type CheckInReminder = {
   completedAt: string | null;
   lastDeliveryErrorAt: string | null;
   needsReviewReason: string | null;
+  reviewOutcome: CheckInReviewOutcome | null;
+  reviewDate: string | null;
+  reviewNotes: string;
+  reviewVersion: number | null;
+  reviewRecordedAt: string | null;
 };
 
 /**
@@ -73,7 +83,16 @@ export type CheckInWorkspaceRecord = {
 
 export type CheckInWorkspaceReminder = Pick<
   CheckInReminder,
-  "id" | "milestone" | "sequence" | "dueDate" | "status"
+  | "id"
+  | "milestone"
+  | "sequence"
+  | "dueDate"
+  | "status"
+  | "reviewOutcome"
+  | "reviewDate"
+  | "reviewNotes"
+  | "reviewVersion"
+  | "reviewRecordedAt"
 >;
 
 export type CheckInWorkspaceData = {

@@ -2023,12 +2023,13 @@ export function LeaveDemo({
               renderCheckInRegister={showHrWorkspace
                 ? <CheckInRegister
                     onRecordsChanged={() => void refreshLeaveWorkspace()}
+                    readOnly={isPreviewingEmployeeAccess}
                     resources={checkInResources}
                   />
                 : showManagerCheckIns
                   ? <CheckInWorkspace
                       previewPersonId={previewScopedManagerPersonId}
-                      readOnly={false}
+                      readOnly={isPreviewingEmployeeAccess}
                       onRecordsChanged={() => void refreshLeaveWorkspace()}
                       resources={checkInResources}
                     />

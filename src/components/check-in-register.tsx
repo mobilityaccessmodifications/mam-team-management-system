@@ -12,9 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  completeCheckInReminder,
-} from "@/app/check-ins/actions";
+import { CheckInReviewOutcomeDialog } from "@/components/check-in-review-outcome-dialog";
 import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/check-in-register.module.css";
 import { AnimatedStatusBadge } from "@/components/ui/animated-status-badge";
@@ -67,7 +65,10 @@ function canCompleteReminder(reminder: CheckInReminder) {
   }).formatToParts(new Date());
   const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
   const today = `${value("year")}-${value("month")}-${value("day")}`;
-  return reminder.status !== "completed" && /^\d{4}-\d{2}-\d{2}$/.test(reminder.dueDate) && reminder.dueDate <= today;
+  return reminder.status !== "completed"
+    && reminder.status !== "claimed"
+    && /^\d{4}-\d{2}-\d{2}$/.test(reminder.dueDate)
+    && reminder.dueDate <= today;
 }
 
 function reminderTone(status: CheckInReminder["status"]): "success" | "warning" | "info" {
@@ -136,20 +137,23 @@ function listMeta(record: CheckInRegisterRecord) {
 
 export function CheckInRegister({
   onRecordsChanged,
+  readOnly = false,
   resources = emptyResources,
 }: {
   onRecordsChanged?: () => void;
+  readOnly?: boolean;
   resources?: CheckInResourceLinks;
 } = {}) {
   const [data, setData] = useState<CheckInRegisterData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedPersonId, setSelectedPersonId] = useState("");
-  const [pendingAction, setPendingAction] = useState("");
+  const [reviewReminder, setReviewReminder] = useState<CheckInReminder | null>(null);
   const [notice, setNotice] = useState("");
   const [sort, setSort] = useState<EmployeeSort>("due");
   const [page, setPage] = useState(0);
   const selectedPersonIdRef = useRef("");
+  const refreshButtonRef = useRef<HTMLButtonElement>(null);
   const sortRef = useRef<EmployeeSort>("due");
   const load = useCallback(async () => {
     setLoading(true);
@@ -228,24 +232,14 @@ export function CheckInRegister({
     if (firstRecord) selectPerson(firstRecord.personId);
   }
 
-  async function runAction(key: string, task: () => Promise<unknown>, successMessage: string) {
-    if (pendingAction) return;
-    setPendingAction(key);
-    setError("");
+  async function reviewSaved() {
     setNotice("");
-    try {
-      await task();
-      await load();
-      onRecordsChanged?.();
-      setNotice(successMessage);
-    } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "The check-in record could not be updated.");
-    } finally {
-      setPendingAction("");
-    }
+    await load();
+    onRecordsChanged?.();
+    setNotice("Review outcome saved.");
   }
 
-  return <section className={styles.workspace} aria-label="Employee check-in register">
+  return <><section className={styles.workspace} aria-label="Employee check-in register">
     <h2 className={styles.srOnly}>Employee check-ins</h2>
     <header className={toolbar.toolbar}>
       <div className={toolbar.controls}>
@@ -258,7 +252,7 @@ export function CheckInRegister({
         </label>
       </div>
 
-      <button className={toolbar.iconButton} type="button" onClick={() => void load()} disabled={loading || Boolean(pendingAction)} aria-label="Refresh check-ins" title="Refresh">
+      <button ref={refreshButtonRef} className={toolbar.iconButton} type="button" onClick={() => void load()} disabled={loading} aria-label="Refresh check-ins" title="Refresh">
         <RefreshCw size={16} aria-hidden="true" />
       </button>
     </header>
@@ -324,26 +318,49 @@ export function CheckInRegister({
           {!selected.reminders.length ? <p className={styles.emptyTimeline}>No milestones</p> : selected.reminders.map((reminder) => <ReminderRow
             key={reminder.id}
             reminder={reminder}
-            pending={pendingAction}
-            onComplete={() => void runAction(`complete:${reminder.id}`, () => completeCheckInReminder(reminder.id), "The check-in has been marked complete.")}
+            employeeName={nameFor(selected)}
+            readOnly={readOnly}
+            onReview={() => setReviewReminder(reminder)}
           />)}
         </section>
       </article>
     </div> : null}
-  </section>;
+  </section>
+  {reviewReminder && selected ? <CheckInReviewOutcomeDialog
+    employeeName={nameFor(selected)}
+    milestone={milestoneLabel(reviewReminder.milestone)}
+    reminder={reviewReminder}
+    readOnly={readOnly}
+    returnFocusRef={refreshButtonRef}
+    onClose={() => setReviewReminder(null)}
+    onSaved={reviewSaved}
+  /> : null}</>;
 }
 
-function ReminderRow({ reminder, pending, onComplete }: {
+function ReminderRow({ reminder, employeeName, readOnly, onReview }: {
   reminder: CheckInReminder;
-  pending: string;
-  onComplete: () => void;
+  employeeName: string;
+  readOnly: boolean;
+  onReview: () => void;
 }) {
-  const isPending = Boolean(pending);
+  const canReview = canCompleteReminder(reminder);
   return <div className={styles.reminder} data-status={reminder.status}>
     <div className={styles.reminderCopy}><strong>{milestoneLabel(reminder.milestone)}{reminder.sequence === "final" ? " · final reminder" : ""}</strong><p>{formatDate(reminder.dueDate)}</p>{reminder.status === "needs_review" ? <small>{reasonLabel(reminder.needsReviewReason)}</small> : null}</div>
-    <AnimatedStatusBadge className={styles.status} tone={reminderTone(reminder.status)}>{reminder.status.replaceAll("_", " ")}</AnimatedStatusBadge>
+    {reminder.status === "completed" && (!readOnly || reminder.reviewOutcome) ? <button
+      className={styles.reviewOutcomeTrigger}
+      type="button"
+      onClick={onReview}
+      aria-haspopup="dialog"
+      aria-label={`${readOnly ? "View" : reminder.reviewOutcome ? "View or edit" : "Add"} review outcome for ${employeeName}, ${milestoneLabel(reminder.milestone)}, due ${formatDate(reminder.dueDate)}`}
+    ><AnimatedStatusBadge className={styles.status} tone="success">Completed</AnimatedStatusBadge></button>
+      : <AnimatedStatusBadge className={styles.status} tone={reminderTone(reminder.status)}>{reminder.status.replaceAll("_", " ")}</AnimatedStatusBadge>}
     <div className={styles.reminderActions}>
-      {canCompleteReminder(reminder) ? <button type="button" disabled={isPending} onClick={onComplete}>{pending === `complete:${reminder.id}` ? "Saving…" : "Mark complete"}</button> : null}
+      {!readOnly && canReview ? <button
+        type="button"
+        onClick={onReview}
+        aria-haspopup="dialog"
+        aria-label={`Record review outcome for ${employeeName}, ${milestoneLabel(reminder.milestone)}, due ${formatDate(reminder.dueDate)}`}
+      >Record outcome</button> : null}
     </div>
   </div>;
 }

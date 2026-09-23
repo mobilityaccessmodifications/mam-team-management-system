@@ -83,7 +83,7 @@
 
 .primaryAction,
 .secondaryAction,
-.timeline button {
+.reminderActions button {
   display: inline-flex;
   min-height: 38px;
   align-items: center;
@@ -111,11 +111,11 @@
 }
 
 .primaryAction:hover:not(:disabled),
-.timeline button:hover:not(:disabled) { filter: brightness(.94); }
+.reminderActions button:hover:not(:disabled) { filter: brightness(.94); }
 .secondaryAction:hover:not(:disabled) { border-color: var(--accent); color: #b64e18; }
 .primaryAction:disabled,
 .secondaryAction:disabled,
-.timeline button:disabled { cursor: not-allowed; opacity: .58; }
+.reminderActions button:disabled { cursor: not-allowed; opacity: .58; }
 
 .securityNote,
 .error,
@@ -216,8 +216,10 @@
 .reminderCopy small { margin-top: 4px; color: #b34b1d; font-size: 11px; }
 .status { text-transform: capitalize; }
 .reminderActions { gap: 6px; }
-.timeline button { min-height: 34px; border: 1px solid var(--surface-border-strong); background: var(--surface-raised); color: var(--text-secondary); font-size: 11px; padding: 6px 10px; }
-.timeline button:last-child { border-color: #efbd9f; color: #a8461c; }
+.reminderActions button { min-height: 34px; border: 1px solid #efbd9f; background: var(--surface-raised); color: #a8461c; font-size: 11px; padding: 6px 10px; }
+.reviewOutcomeTrigger { display: inline-flex; min-height: 44px; align-items: center; border: 0; border-radius: 999px; background: transparent; cursor: pointer; padding: 4px; }
+.reviewOutcomeTrigger:hover { background: #eff7f3; }
+.reviewOutcomeTrigger:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 28%, transparent); outline-offset: 2px; }
 
 @media (max-width: 900px) {
   .desk { grid-template-columns: 1fr; }
@@ -266,7 +268,8 @@
   .toolbar button,
   .listToolbar select,
   .pagination button,
-  .timeline button {
+  .reminderActions button,
+  .reviewOutcomeTrigger {
     min-height: 44px;
     touch-action: manipulation;
   }
@@ -337,7 +340,7 @@
 .workspace { gap: 12px; }
 .desk { border-radius: 14px; box-shadow: none; }
 .secondaryAction,
-.timeline button,
+.reminderActions button,
 .pagination button,
 .listToolbar select { min-height: 44px; border-radius: 10px; box-shadow: none; }
 .secondaryAction { width: 44px; padding: 0; }
@@ -399,7 +402,7 @@
 .employeeRow[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent); }
 .detail { padding: 24px; }
 .summaryGrid, .timeline, .privateDetails { border-color: var(--surface-border); border-radius: 14px; }
-.secondaryAction, .timeline button, .pagination button, .listToolbar select, .resources a { border-radius: 11px; }
+.secondaryAction, .reminderActions button, .pagination button, .listToolbar select, .resources a { border-radius: 11px; }
 @media (max-width: 900px) {
   .desk { border-radius: 16px; }
   .detail { padding: 16px; }
