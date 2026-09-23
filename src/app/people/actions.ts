@@ -1,5 +1,6 @@
 "use server";
 
+import { requireEmployeeTeam } from "@/lib/employee-teams";
 import { revalidatePath } from "next/cache";
 
 import {
@@ -226,7 +227,7 @@ function validateDraft(input: unknown) {
     p_personal_email: optionalEmail(value.personalEmail, "Personal email"),
     p_phone: optionalText(value.phone, "Phone", 60),
     p_position_title: requiredText(value.positionTitle, "Job title"),
-    p_team_name: requiredText(value.teamName, "Team"),
+    p_team_name: requireEmployeeTeam(value.teamName),
     p_manager_id: optionalUuid(value.managerId, "Manager"),
     p_country: optionalText(value.country, "Country", 100),
     p_address: optionalText(value.address, "Address", 500),

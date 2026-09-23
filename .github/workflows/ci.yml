@@ -83,6 +83,12 @@ jobs:
         run: |
           createdb -h localhost -U postgres openclaw_allowlist_test
           psql -h localhost -U postgres -d openclaw_allowlist_test -v ON_ERROR_STOP=1 -f tests/openclaw-allowlist.sql
+      - name: Test five-team consolidation and unchanged reporting fields
+        env:
+          PGPASSWORD: synthetic-ci-only
+        run: |
+          createdb -h localhost -U postgres five_teams_test
+          psql -h localhost -U postgres -d five_teams_test -v ON_ERROR_STOP=1 -f tests/five-employee-teams.sql
       - name: Test subscription company flags and shared management permissions
         env:
           PGPASSWORD: synthetic-ci-only

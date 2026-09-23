@@ -23,6 +23,7 @@ import {
   listManagedEmployeeDirectoryRecordsAction,
   updateManagedEmployeeDirectoryRecord,
 } from "@/app/people/manager-actions";
+import { EMPLOYEE_TEAMS } from "@/lib/employee-teams";
 import { EmployeeSelfResources } from "@/components/employee-team-directory";
 import styles from "@/components/employee-directory.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
@@ -346,7 +347,7 @@ function ManagerEmployeeEditor({
           <Field label="First name" required><input value={draft.firstName} onChange={(event) => onChange("firstName", event.target.value)} autoComplete="given-name" required maxLength={80} /></Field>
           <Field label="Last name"><input value={draft.lastName} onChange={(event) => onChange("lastName", event.target.value)} autoComplete="family-name" maxLength={120} /></Field>
           <Field label="Job title" required><input value={draft.positionTitle} onChange={(event) => onChange("positionTitle", event.target.value)} required maxLength={120} /></Field>
-          <Field label="Team"><input value={draft.teamName} onChange={(event) => onChange("teamName", event.target.value)} maxLength={120} /></Field>
+          <Field label="Team"><select value={draft.teamName} onChange={(event) => onChange("teamName", event.target.value)} required><option value="" disabled>Select a team</option>{EMPLOYEE_TEAMS.map((team) => <option key={team} value={team}>{team}</option>)}</select></Field>
           <Field label="Work email"><input value={draft.workEmail} onChange={(event) => onChange("workEmail", event.target.value)} type="email" autoComplete="email" maxLength={254} /></Field>
           <Field label="Reports to"><input value={record.managerName || "Not assigned"} readOnly aria-readonly="true" /></Field>
           <Field label="Company"><input value={companyLabel(record.company)} readOnly aria-readonly="true" /></Field>

@@ -1,5 +1,6 @@
 "use server";
 
+import { requireEmployeeTeam } from "@/lib/employee-teams";
 import { revalidatePath } from "next/cache";
 
 import {
@@ -85,7 +86,7 @@ function values(input: Record<string, unknown>) {
     p_last_name: optionalText(input.lastName, "Last name", 120),
     p_work_email: optionalEmail(input.workEmail),
     p_position_title: requiredText(input.positionTitle, "Job title", 120),
-    p_team_name: optionalText(input.teamName, "Team", 120),
+    p_team_name: requireEmployeeTeam(input.teamName),
     p_expected_person_version: version(input.personVersion),
     p_expected_detail_version: version(input.detailVersion),
   };

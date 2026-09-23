@@ -38,6 +38,7 @@ import {
   updateEmployeeDirectoryRecord,
 } from "@/app/people/actions";
 import { EmployeeDeviceAssignments } from "@/components/employee-device-assignments";
+import { EMPLOYEE_TEAMS } from "@/lib/employee-teams";
 import { EmployeePicker } from "@/components/employee-picker";
 import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/employee-directory.module.css";
@@ -872,10 +873,6 @@ function EmployeeEditor({
   onRequestDelete?: () => void;
 }) {
   const managerInputId = useId();
-  const teamOptions = [...new Set([
-    ...records.filter((record) => record.isActive).map((record) => record.teamName.trim()),
-    editor.draft.teamName,
-  ].filter(Boolean))].sort((first, second) => first.localeCompare(second));
   const managerOptions = records
     .filter((record) => record.isActive && record.personId !== currentRecord?.personId)
     .sort((first, second) => first.fullName.localeCompare(second.fullName));
@@ -909,7 +906,7 @@ function EmployeeEditor({
           <Field label="Team" required>
             <select value={editor.draft.teamName} onChange={(event) => onChange("teamName", event.target.value)} required>
               <option value="" disabled>Select a team</option>
-              {teamOptions.map((team) => <option key={team} value={team}>{team}</option>)}
+              {EMPLOYEE_TEAMS.map((team) => <option key={team} value={team}>{team}</option>)}
             </select>
           </Field>
           <div className={styles.pickerField}>
