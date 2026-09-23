@@ -7,6 +7,7 @@ export const TEST_RECIPIENT = 'marketing@mobilityaccess.com.au';
 export const TWO_WEEK_RECORD_PATH = path.join(ROOT, 'assets/checklists/2 Week New Starter Check-In Record.docx');
 export const ONE_MONTH_RECORD_PATH = path.join(ROOT, 'assets/checklists/1 Month New Starter Check-In Record.docx');
 export const TWO_MONTH_RECORD_PATH = path.join(ROOT, 'assets/checklists/2 Month Stay Interview Record.docx');
+export const THREE_MONTH_RECORD_PATH = path.join(ROOT, 'assets/checklists/3 Month Midpoint Probation Review.docx');
 const RECEIPT_URL = 'https://mam-team-management-system-ten.vercel.app/api/internal/integrations/notifications/receipts';
 const HR_OUTLOOK_CREDENTIAL = { id: 'vFEolsXoEOOxNyan', name: 'Microsoft Outlook account - hr@mobilityaccess.com.au' };
 const RECEIPT_CREDENTIAL = { id: 'tGtpwegru8OxtdCt', name: 'MAM Team Management - Notification Webhook Header' };
@@ -31,7 +32,7 @@ const milestone = clean(payload?.milestone);
 const reminder = clean(payload?.reminder);
 const reminderId = typeof payload?.deliveryId === 'string' ? payload.deliveryId.split(':')[1] : '';
 const expectedId = reminderId && uuid.test(reminderId) ? \`checkin:\${reminderId}:\${milestone}:\${reminder}:\${MODE}\` : '';
-const liveRecipients = ['2-week','1-month','2-month'].includes(milestone)
+const liveRecipients = ['2-week','1-month','2-month','3-month'].includes(milestone)
   ? [...new Set([...employeeRecipients, managerEmail].filter(Boolean))].sort()
   : [managerEmail].filter(Boolean);
 const valid = payload?.version === 1 && payload?.event === 'checkin-reminder' && payload?.mode === MODE
@@ -40,7 +41,7 @@ const valid = payload?.version === 1 && payload?.event === 'checkin-reminder' &&
   && ['2-week','1-month','2-month','3-month','5-month'].includes(milestone)
   && ['initial','final'].includes(reminder) && (reminder !== 'final' || milestone === '5-month')
   && /^\\d{4}-\\d{2}-\\d{2}$/.test(clean(payload?.dueDate))
-  && (!['2-week','1-month','2-month'].includes(milestone) || employeeRecipients.length > 0);
+  && (!['2-week','1-month','2-month','3-month'].includes(milestone) || employeeRecipients.length > 0);
 if (!valid) return [{ json: { valid: false, deliveryId: expectedId || 'invalid', code: 'invalid_payload' } }];
 const managerFirstName = clean(manager.name).split(/\\s+/)[0];
 return [{ json: {
@@ -99,6 +100,19 @@ return [{ json: { ...source, subject: \`Your 2-Month Stay Interview – \${emplo
 } }];`;
 }
 
+
+function threeMonthEmailCode(recordBase64) {
+  return `const source = $input.first().json;
+const escapeHtml = value => String(value).replace(/[&<>\"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[char]));
+const employee = escapeHtml(source.employeeFirstName);
+const employeeName = escapeHtml(source.employeeName);
+const manager = escapeHtml(source.managerFirstName);
+const bodyContent = \`<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#22302b"><p>Hi \${employee} and \${manager},</p><p>\${employee} is approaching three months with MAM/Equipsy, which means it’s time for the <strong>3-Month Midpoint Review</strong>.</p><p>This is an important opportunity to look at progress so far and make sure everyone is clear about how things are tracking as we move through the remainder of the probation period.</p><p>The discussion will cover role understanding, work quality, reliability and attendance, communication, safety, training progress, teamwork and conduct, coachability and initiative.</p><p>It should also be a genuine two-way conversation, giving \${employee} the opportunity to discuss how the role is going and any support or development they need.</p><p>\${manager}, please complete the attached <strong>3-Month Midpoint Probation Review</strong> during the meeting and clearly discuss any areas requiring further improvement or support.</p><p>Where there are significant concerns, please contact People &amp; Culture following the meeting.</p><p>Thanks,<br>HR Manager</p></div>\`;
+return [{ json: { ...source, subject: \`Your 3-Month Review – \${employeeName}\`, bodyContent }, binary: {
+  record: { data: ${JSON.stringify(recordBase64)}, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', fileName: '3 Month Midpoint Probation Review.docx' }
+} }];`;
+}
+
 const genericEmailCode = `const source = $input.first().json;
 const escapeHtml = value => String(value).replace(/[&<>\"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[char]));
 const labels = { '1-month':'1-Month Check-In', '3-month':'3-Month Probation Review', '5-month':'5-Month Probation Review' };
@@ -130,6 +144,7 @@ export function buildCheckInReminderWorkflow({
   const twoWeekRecordBase64 = readFileSync(TWO_WEEK_RECORD_PATH).toString('base64');
   const oneMonthRecordBase64 = readFileSync(ONE_MONTH_RECORD_PATH).toString('base64');
   const twoMonthRecordBase64 = readFileSync(TWO_MONTH_RECORD_PATH).toString('base64');
+  const threeMonthRecordBase64 = readFileSync(THREE_MONTH_RECORD_PATH).toString('base64');
   const nodes = [
     node('c2000000-0000-4000-8000-000000000001', 'Receive Check-In Request', 'n8n-nodes-base.webhook', 2.1, [-980, 0], {
       authentication: 'headerAuth', httpMethod: 'POST', path: `mam-people-hub-check-in-${mode}-v2`, responseMode: 'lastNode', options: {},
@@ -186,6 +201,14 @@ export function buildCheckInReminderWorkflow({
       resource: 'message', operation: 'send', toRecipients: '={{ $json.actualRecipient }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
       additionalFields: { bodyContentType: 'html', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
     }, { credentials: { microsoftOutlookOAuth2Api: HR_OUTLOOK_CREDENTIAL } }),
+    node('c2000000-0000-4000-8000-000000000024', 'Three-Month Midpoint Review?', 'n8n-nodes-base.if', 2.2, [1100, 100], {
+      conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ id: 'c2000000-0000-4000-8000-000000000124', leftValue: '={{ $json.milestone === "3-month" }}', rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }], combinator: 'and' }, options: {},
+    }),
+    node('c2000000-0000-4000-8000-000000000025', 'Build 3-Month Midpoint Review Email and Attachment', 'n8n-nodes-base.code', 2, [1340, 100], { mode: 'runOnceForAllItems', jsCode: threeMonthEmailCode(threeMonthRecordBase64) }),
+    node('c2000000-0000-4000-8000-000000000026', 'Send 3-Month Midpoint Review Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [1580, 100], {
+      resource: 'message', operation: 'send', toRecipients: '={{ $json.actualRecipient }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
+      additionalFields: { bodyContentType: 'html', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
+    }, { credentials: { microsoftOutlookOAuth2Api: HR_OUTLOOK_CREDENTIAL } }),
   ];
   const connections = {
     'Receive Check-In Request': { main: [[{ node: 'Validate Check-In Request', type: 'main', index: 0 }]] },
@@ -200,9 +223,12 @@ export function buildCheckInReminderWorkflow({
     'One-Month Check-In?': { main: [[{ node: 'Build 1-Month Email and Attachment', type: 'main', index: 0 }], [{ node: 'Two-Month Stay Interview?', type: 'main', index: 0 }]] },
     'Build 1-Month Email and Attachment': { main: [[{ node: 'Send 1-Month Email from HR', type: 'main', index: 0 }]] },
     'Send 1-Month Email from HR': { main: [[{ node: 'Build Durable Check-In Confirmation', type: 'main', index: 0 }]] },
-    'Two-Month Stay Interview?': { main: [[{ node: 'Build 2-Month Stay Interview Email and Attachment', type: 'main', index: 0 }], [{ node: 'Build Existing Check-In Email', type: 'main', index: 0 }]] },
+    'Two-Month Stay Interview?': { main: [[{ node: 'Build 2-Month Stay Interview Email and Attachment', type: 'main', index: 0 }], [{ node: 'Three-Month Midpoint Review?', type: 'main', index: 0 }]] },
     'Build 2-Month Stay Interview Email and Attachment': { main: [[{ node: 'Send 2-Month Stay Interview Email from HR', type: 'main', index: 0 }]] },
     'Send 2-Month Stay Interview Email from HR': { main: [[{ node: 'Build Durable Check-In Confirmation', type: 'main', index: 0 }]] },
+    'Three-Month Midpoint Review?': { main: [[{ node: 'Build 3-Month Midpoint Review Email and Attachment', type: 'main', index: 0 }], [{ node: 'Build Existing Check-In Email', type: 'main', index: 0 }]] },
+    'Build 3-Month Midpoint Review Email and Attachment': { main: [[{ node: 'Send 3-Month Midpoint Review Email from HR', type: 'main', index: 0 }]] },
+    'Send 3-Month Midpoint Review Email from HR': { main: [[{ node: 'Build Durable Check-In Confirmation', type: 'main', index: 0 }]] },
     'Build Existing Check-In Email': { main: [[{ node: 'Send Existing Check-In Email from HR', type: 'main', index: 0 }]] },
     'Send Existing Check-In Email from HR': { main: [[{ node: 'Build Durable Check-In Confirmation', type: 'main', index: 0 }]] },
     'Build Durable Check-In Confirmation': { main: [[{ node: 'Confirm Durable Check-In Delivery', type: 'main', index: 0 }]] },

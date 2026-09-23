@@ -183,7 +183,7 @@ function preparedReminder(value: unknown): PreparedReminder | null {
     || typeof row.due_date !== "string"
     || typeof row.notify_date !== "string"
   ) return null;
-  if (["2_week", "1_month", "2_month"].includes(row.milestone) && !employeeWorkEmail && !employeePersonalEmail) return null;
+  if (["2_week", "1_month", "2_month", "3_month"].includes(row.milestone) && !employeeWorkEmail && !employeePersonalEmail) return null;
   if (
     !row.employee_first_name.trim()
     || !row.employee_last_name.trim()
