@@ -207,7 +207,7 @@ begin
 end;
 $$;
 
--- Seven leave events plus two payroll families accept the generic UUID shape.
+-- Every released notification family accepts only its canonical key shape.
 do $$ declare event_name text; k text; r jsonb; invalid text; bad jsonb; begin
   set local role service_role;
   foreach event_name in array array['leave-submitted','leave-approved','leave-declined',
@@ -218,13 +218,32 @@ do $$ declare event_name text; k text; r jsonb; invalid text; bad jsonb; begin
   end loop;
   k := 'payroll-balance:00000000-0000-0000-0000-000000000009:2026-09';
   assert public.reserve_notification_delivery(k,'a@example.test','')->>'outcome' = 'send';
+  if to_regclass('private.employee_check_in_review_notifications') is not null then
+    foreach k in array array[
+      'new-starter:00000000-0000-0000-0000-000000000009:day-one:test',
+      'checkin:00000000-0000-0000-0000-000000000009:5-month:initial:test',
+      'checkin:00000000-0000-0000-0000-000000000009:2-week:initial:live',
+      'checkin-review:00000000-0000-0000-0000-000000000009:hr:1:test',
+      'checkin-review:00000000-0000-0000-0000-000000000009:hr:9:live'
+    ] loop
+      assert public.reserve_notification_delivery(k,'a@example.test','')->>'outcome' = 'send';
+    end loop;
+  end if;
   foreach invalid in array array['','bad',' a@example.test,','a@example.test;;b@example.test','a@example.test;bad',
     E'a@example.test\nBcc:other@example.test','Name <a@example.test>',repeat('a',255)||'@example.test',
     repeat('a@example.test,',32)||'b@example.test',repeat('a',8193)] loop
     perform pg_temp.expect_notification_error(format('select public.reserve_notification_delivery(%L,%L,%L)',k,invalid,''),'22023');
   end loop;
-  foreach invalid in array array['invalid',replace(k,'2026-09','2026-13'),replace(k,'payroll-balance','other'),
-    'leave:00000000-0000-0000-0000-000000000009:not-an-event:dddddddddddddddddddddddd'] loop
+  foreach invalid in array array['invalid',
+    'payroll-balance:00000000-0000-0000-0000-000000000009:2026-13',
+    'other:00000000-0000-0000-0000-000000000009:2026-09',
+    'leave:00000000-0000-0000-0000-000000000009:not-an-event:dddddddddddddddddddddddd',
+    'checkin:00000000-0000-0000-0000-000000000009:5-month:final:test',
+    'checkin:00000000-0000-0000-0000-000000000009:5_month:initial:test',
+    'checkin:00000000-0000-0000-0000-000000000009:5-month:initial:preview',
+    'checkin-review:00000000-0000-0000-0000-000000000009:hr:0:test',
+    'checkin-review:00000000-0000-0000-0000-000000000009:manager:1:live'
+  ] loop
     perform pg_temp.expect_notification_error(format('select public.reserve_notification_delivery(%L,%L,%L)',invalid,'a@example.test',''),'22023');
   end loop;
   foreach bad in array array[

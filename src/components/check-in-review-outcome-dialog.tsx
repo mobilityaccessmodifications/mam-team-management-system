@@ -17,7 +17,7 @@ type ReviewableReminder = Pick<
 const outcomes: Array<{ value: CheckInReviewOutcome; label: string; detail: string }> = [
   { value: "on_track", label: "On track", detail: "No follow-up" },
   { value: "follow_up_required", label: "Follow-up needed", detail: "Manager action" },
-  { value: "hr_review_required", label: "People & Culture review", detail: "Significant concern" },
+  { value: "hr_review_required", label: "HR review before decision", detail: "Notifies People & Culture" },
 ];
 
 function melbourneToday() {
