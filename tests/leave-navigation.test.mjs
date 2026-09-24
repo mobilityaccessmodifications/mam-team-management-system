@@ -169,7 +169,7 @@ test('request details show the submission date in Melbourne time', () => {
   const Detail = load('RequestDetail', { useId:()=> 'detail', styles:{}, StatusPill:'status', formatDurationWithTime:()=> '5 days', formatSubmissionDate:format, AttachmentList:()=>null, SickEvidenceNotice:()=>null, ChevronRight:'icon' });
   const tree = Detail({
     profile:{id:'reviewer'},
-    request:{id:'request',personId:'employee',employee:'Suresh Deuja',initials:'SD',leaveType:'Unpaid leave',dateLabel:'13–19 Nov 2026',approvalRequired:true,assignedReviewerLabel:'Sujant Chettri',submittedAt:'2026-09-22T23:30:00Z',canDecide:false,status:'Pending'},
+    request:{id:'request',personId:'employee',employee:'Synthetic Employee',initials:'SE',leaveType:'Unpaid leave',dateLabel:'13–19 Nov 2026',approvalRequired:true,assignedReviewerLabel:'Synthetic Reviewer',submittedAt:'2026-09-22T23:30:00Z',canDecide:false,status:'Pending'},
     attachments:[],canReview:true,hidePrivateDetails:true,
   });
   assert.match(textContent(tree), /Submission date23 Sept 2026Leave typeUnpaid leave/);
