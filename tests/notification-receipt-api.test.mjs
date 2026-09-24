@@ -77,6 +77,8 @@ test('all supported key families pass and unrelated legacy/shared keys fail', as
   for (const eventKey of [`payroll-comparison:${id}`, `payroll-balance:${id}:2026-10`, `leave:${id}:team-birthday:${'b'.repeat(24)}`,
     `new-starter:${id}:day-one:test`, `new-starter:${id}:day-one:live`,
     `checkin:${id}:5-month:initial:test`, `checkin:${id}:2-week:initial:live`,
+    `checkin:${id}:6-month:initial:test`, `checkin:${id}:6-month:initial:live`,
+    `checkin:${id}:6-month-casual:initial:test`, `checkin:${id}:6-month-casual:initial:live`,
     `checkin-review:${id}:hr:1:test`, `checkin-review:${id}:hr:9:live`]) {
     const h = harness({ outcome: 'send', eventKey, deliveryToken: token });
     assert.equal((await h.run(request({ ...input, eventKey }))).status, 200);
@@ -84,7 +86,8 @@ test('all supported key families pass and unrelated legacy/shared keys fail', as
   for (const eventKey of [`payroll-balance:${id}:2026-13`, `leave:${id}:unknown:${'b'.repeat(24)}`, `payroll-comparison:${id}:extra`,
     `new-starter:${id}:day-one:preview`, `new-starter:${id}:day-two:live`,
     `checkin:${id}:5-month:final:test`, `checkin:${id}:5_month:initial:test`,
-    `checkin:${id}:5-month:initial:preview`, `checkin-review:${id}:hr:0:test`,
+    `checkin:${id}:5-month:initial:preview`, `checkin:${id}:6-month-casual:final:live`,
+    `checkin:${id}:6-month-contract:initial:live`, `checkin-review:${id}:hr:0:test`,
     `checkin-review:${id}:manager:1:live`]) {
     const h = harness(); assert.equal((await h.run(request({ ...input, eventKey }))).status, 400); assert.equal(h.calls.length, 0);
   }
