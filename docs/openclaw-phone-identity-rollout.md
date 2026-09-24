@@ -1,11 +1,10 @@
 # Verified OpenClaw phone identities
 
-S01 is implemented locally by migration
-`20260922230000_openclaw_verified_phone_identity.sql`. The Supabase CLI generated
-the descriptive stem; its timestamp was advanced past `20260922200000` and the
-reserved accounts/core fixes. No historical migration is edited. This task does
-not apply production migrations, authorize number mappings, send messages or
-enable the bridge.
+S01 is installed by migration
+`20260922230000_openclaw_verified_phone_identity.sql`. Its production migration
+record matches the reviewed file hash. The migration deliberately adds no phone
+mappings; live entries can only be created through the authenticated
+SystemAdmin RPC below. Directory contact fields never authorize WhatsApp access.
 
 ## Enrollment is a release prerequisite
 
@@ -103,26 +102,19 @@ without it fail closed and require a new preparation. The already retired v1/v2
 HTTP protocol also has its database commit path retired; old drafts cannot bypass
 verification by calling a legacy RPC. Read-only snapshot envelopes remain usable.
 
-## Authorized release sequence (not performed by this task)
+## Release invariants
 
-1. Obtain explicit approval for the exact migration, production target and
-   verified assignments. Verify scoped project/account targets and reviewed
-   migration order. Do not use old deployment helpers that install historical
-   allowlist/bridge SQL over the new definitions.
-2. Coordinate a deny-all/disabled ingress window, then apply the reviewed forward
-   migration and deploy its matching server contract through the reviewed GitHub
-   flow. Mixed backend versions reject leave confirmations; the SQL change must
-   precede restoring allowlist ingress because the old database still trusts
-   contacts. An empty snapshot must clear cached VPS access; it is not an error or permission
-   to retain the old contacts-based allowlist.
-3. Authorized HR/SystemAdmin completes the independent verification and explicit
-   enrollment process above. Inspect the expected minimal allowlist and matched
-   person/account scope through authorized checks. Do not send real test messages
-   or create real leave records without separate approval.
-4. Verify the synchronizer's restrictive-update behavior, deny-all semantics and
-   freshness/watchdog policy before restoring authorized ingress. Bridge writes
-   always recheck live identity, regardless of allowlist cache freshness. Restart
-   all pending confirmations; never migrate old tokens into verified identities.
+For a new installation or key rotation, verify the exact MAM production targets
+and migration history before applying anything. Use the reviewed forward
+migration and GitHub deployment flow; never install historical contact-based
+allowlist SQL over the verified registry. Keep inbound access denied while
+deployments are mixed or the synchronizer is stale. Enroll only independently
+verified assignments through the SystemAdmin RPC above. The allowlist snapshot
+must be complete and authoritative: an empty snapshot means deny all. Never
+send real test messages or create real leave requests as a release smoke test.
+Bridge writes recheck live identity even when the allowlist cache is fresh.
+Pending confirmations must be restarted after a deployment; old tokens cannot
+be migrated to verified identities.
 
 Do not roll back to contact-based identity resolution or populate the registry
 from the directory to restore access. A failed rollout stays disabled until a

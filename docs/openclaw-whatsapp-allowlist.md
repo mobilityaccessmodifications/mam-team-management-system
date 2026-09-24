@@ -2,19 +2,17 @@
 
 ## Implementation status
 
-S01 changes the authorization source in forward migration
-`20260922230000_openclaw_verified_phone_identity.sql`. It is a local fix only;
-this task neither applies production SQL nor enrolls any real number. The registry
-starts empty, and all existing phone contacts remain unverified. See
-[verified phone rollout](openclaw-phone-identity-rollout.md) for the required
-independent ownership checks and SystemAdmin enrollment/revocation RPCs.
-An HR contact edit is never verification. Actual approved enrollment is a release
-prerequisite; an empty registry produces an authoritative empty allowlist.
+S01 makes the private verified-phone registry the authorization source through
+`20260922230000_openclaw_verified_phone_identity.sql`. The migration adds no
+mappings. Only independently verified assignments entered through the
+SystemAdmin enrollment/revocation RPCs are eligible; directory contact fields
+never authorize access. See [verified phone rollout](openclaw-phone-identity-rollout.md)
+for the required checks. The production allowlist is synchronized from that
+registry, and an empty registry produces an authoritative deny-all list.
 
 Historical implementation evidence below describes the original migration only:
 
-Implementation is undergoing authorized review/release; do not assume production
-is wired until the release evidence is recorded below. Migration:
+Historical implementation notes for the original contact-based migration:
 `supabase/migrations/20260917045203_openclaw_phone_allowlist.sql`.
 The CLI profile-name parsing error was resolved by supplying the existing MAM
 profile's explicit path (`--profile /Users/nixon/.supabase/mam.yaml`) to
