@@ -336,7 +336,8 @@ approved `powerbi_hr.employee_directory` projection and the dedicated
 SHA-256 with `apply <reviewed-sha256>` through the MAM Supabase credential
 helper. Its schema check verifies the exact projection, read-only role, denied
 source-table access and absence of grants to browser or service roles without
-reading employee rows. Set the role's password out of band and save it only in
+reading employee rows. Supabase's pre-existing public query-statistics views
+remain visible but contain no employee rows. Set the role's password out of band and save it only in
 Power BI's protected PostgreSQL data-source credentials. Connect using the
 Supabase Dashboard's shared Session Pooler details (port 5432), database
 `postgres`, and username `mam_powerbi_hr_reader.xtwlrjqbusadghavchqm`; do not

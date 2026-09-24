@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import urllib.error
 import urllib.request
 
 
@@ -25,8 +26,14 @@ def api(path, body=None):
         },
         data=None if body is None else json.dumps(body).encode(),
     )
-    with urllib.request.urlopen(request, timeout=90) as response:
-        return json.load(response)
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"Supabase Management API returned HTTP {error.code}: {detail[:1000]}"
+        ) from error
 
 
 def query(statement):
@@ -85,6 +92,10 @@ select
       and schema.nspname not like 'pg_temp_%'
       and relation.relkind in ('r', 'p', 'v', 'm', 'f')
       and relation.oid <> to_regclass('powerbi_hr.employee_directory')
+      and not (
+        schema.nspname = 'extensions'
+        and relation.relname in ('pg_stat_statements', 'pg_stat_statements_info')
+      )
       and (
         has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'SELECT')
         or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'INSERT')
@@ -94,7 +105,22 @@ select
         or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'REFERENCES')
         or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'TRIGGER')
       )
-  ) as no_other_relations_readable,
+  ) as no_other_business_relation_access,
+  not exists (
+    select 1
+    from pg_class relation
+    join pg_namespace schema on schema.oid = relation.relnamespace
+    where schema.nspname = 'extensions'
+      and relation.relname in ('pg_stat_statements', 'pg_stat_statements_info')
+      and (
+        has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'INSERT')
+        or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'UPDATE')
+        or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'DELETE')
+        or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'TRUNCATE')
+        or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'REFERENCES')
+        or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'TRIGGER')
+      )
+  ) as shared_statistics_views_are_read_only,
   not exists (
     select 1
     from pg_class sequence
@@ -123,7 +149,7 @@ select
     and not has_schema_privilege('authenticated', 'powerbi_hr', 'USAGE')
     and not has_table_privilege('authenticated', 'powerbi_hr.employee_directory', 'SELECT') as app_roles_not_granted,
   (
-    select array_agg(column_name order by ordinal_position)
+    select array_agg(column_name::text order by ordinal_position)
     from information_schema.columns
     where table_schema = 'powerbi_hr'
       and table_name = 'employee_directory'
@@ -160,6 +186,47 @@ select
     )[0]
 
 
+def unexpected_relation_access():
+    return query(
+        """
+select coalesce(
+  json_agg(
+    json_build_object(
+      'schema', schema.nspname,
+      'relation', relation.relname,
+      'kind', relation.relkind,
+      'select', has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'SELECT'),
+      'insert', has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'INSERT'),
+      'update', has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'UPDATE'),
+      'delete', has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'DELETE'),
+      'truncate', has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'TRUNCATE')
+    ) order by schema.nspname, relation.relname
+  ),
+  '[]'::json
+) as relations
+from pg_class relation
+join pg_namespace schema on schema.oid = relation.relnamespace
+where schema.nspname not in ('pg_catalog', 'information_schema')
+  and schema.nspname not like 'pg_temp_%'
+  and relation.relkind in ('r', 'p', 'v', 'm', 'f')
+  and relation.oid <> to_regclass('powerbi_hr.employee_directory')
+  and not (
+    schema.nspname = 'extensions'
+    and relation.relname in ('pg_stat_statements', 'pg_stat_statements_info')
+  )
+  and (
+    has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'SELECT')
+    or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'INSERT')
+    or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'UPDATE')
+    or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'DELETE')
+    or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'TRUNCATE')
+    or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'REFERENCES')
+    or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'TRIGGER')
+  )
+"""
+    )[0]["relations"]
+
+
 def main():
     project = api("")
     require(
@@ -188,7 +255,10 @@ def main():
         }
         if existing:
             require(existing[0]["statements"] == [MIGRATION.read_text()], "Recorded migration differs")
-            result["schema"] = schema_status()
+            status = schema_status()
+            result["schema"] = status
+            if not status["no_other_business_relation_access"]:
+                result["unexpectedRelationAccess"] = unexpected_relation_access()
         print(json.dumps(result, indent=2))
         return
 

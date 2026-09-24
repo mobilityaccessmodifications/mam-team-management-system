@@ -5,7 +5,7 @@ declare
   actual_columns text[];
   role_is_limited boolean;
 begin
-  select array_agg(column_name order by ordinal_position)
+  select array_agg(column_name::text order by ordinal_position)
   into actual_columns
   from information_schema.columns
   where table_schema = 'powerbi_hr'
@@ -98,6 +98,10 @@ begin
       and schema.nspname not like 'pg_temp_%'
       and relation.relkind in ('r', 'p', 'v', 'm', 'f')
       and relation.oid <> 'powerbi_hr.employee_directory'::regclass
+      and not (
+        schema.nspname = 'extensions'
+        and relation.relname in ('pg_stat_statements', 'pg_stat_statements_info')
+      )
       and (
         has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'SELECT')
         or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'INSERT')
@@ -109,6 +113,24 @@ begin
       )
   ) then
     raise exception 'Power BI role has relation access outside its approved view';
+  end if;
+
+  if exists (
+    select 1
+    from pg_class relation
+    join pg_namespace schema on schema.oid = relation.relnamespace
+    where schema.nspname = 'extensions'
+      and relation.relname in ('pg_stat_statements', 'pg_stat_statements_info')
+      and (
+        has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'INSERT')
+        or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'UPDATE')
+        or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'DELETE')
+        or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'TRUNCATE')
+        or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'REFERENCES')
+        or has_table_privilege('mam_powerbi_hr_reader', relation.oid, 'TRIGGER')
+      )
+  ) then
+    raise exception 'Supabase statistics views must remain read-only';
   end if;
 
   if exists (
