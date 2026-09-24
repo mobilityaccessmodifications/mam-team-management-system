@@ -232,6 +232,34 @@ function isLegacyReferenceOrgUnit(row: InternalOrgRow) {
     && legacyReferenceOrgUnitLabels.has(row.position_title.trim().toLocaleLowerCase());
 }
 
+type HiddenOrganisationParent = { visibleParentId: string | null; parentId: string };
+
+// The org chart skips hidden structural parents (legacy reference units and
+// vacancies), so a draft's reportsTo is only the nearest *visible* parent. An
+// unchanged visible manager keeps the real parent, and moving someone back to
+// the visible manager they left (including Undo) restores their hidden parent.
+function resolveOrganisationParent(
+  currentParentId: string | null,
+  visibleParentId: string | null,
+  reportsTo: string | null,
+  movedFromHiddenParent?: HiddenOrganisationParent,
+) {
+  if (reportsTo === visibleParentId) return currentParentId;
+  return movedFromHiddenParent?.visibleParentId === reportsTo ? movedFromHiddenParent.parentId : reportsTo;
+}
+
+function nextHiddenOrganisationParent(
+  currentParentId: string | null,
+  visibleParentId: string | null,
+  savedParentId: string | null,
+  movedFromHiddenParent?: HiddenOrganisationParent,
+): HiddenOrganisationParent | undefined {
+  if (currentParentId && currentParentId !== visibleParentId && savedParentId !== currentParentId) {
+    return { visibleParentId, parentId: currentParentId };
+  }
+  return movedFromHiddenParent && savedParentId === movedFromHiddenParent.parentId ? undefined : movedFromHiddenParent;
+}
+
 type DirectoryState = "connecting" | "live" | "error";
 
 type InitialNavigation = {
@@ -1004,8 +1032,10 @@ export function LeaveDemo({
       kind: row.node_kind === "org_unit" ? "org_unit" : "person",
       sortOrder: row.sort_order,
       isActive: row.is_active,
+      version: row.version,
     }));
   }, [organisationRows]);
+  const hiddenOrganisationParentsRef = useRef(new Map<string, HiddenOrganisationParent>());
   const directoryProfiles = useMemo<Profile[]>(() => {
     const rowsById = new Map(organisationRows.map((row) => [row.id, row]));
     const managerFor = (row: InternalOrgRow) => {
@@ -1381,21 +1411,27 @@ export function LeaveDemo({
     if (!directorySupabase) throw new Error("The directory is not connected.");
     const current = organisationRows.find((row) => row.id === id);
     if (!current) throw new Error("This person is no longer in the directory.");
+    const visibleParentId = organisationPeople.find((profile) => profile.id === id)?.reportsTo ?? null;
+    const movedFromHiddenParent = hiddenOrganisationParentsRef.current.get(id);
+    const parentId = resolveOrganisationParent(current.parent_id, visibleParentId, person.reportsTo, movedFromHiddenParent);
     const { error } = await directorySupabase.rpc("update_internal_org_node", {
       p_node_id: id,
       p_company_key: person.company,
       p_node_kind: "person",
       p_position_title: person.position,
       p_full_name: person.name,
-      p_parent_id: person.reportsTo,
+      p_parent_id: parentId,
       // Start date is HR-only and is deliberately absent from the public org
       // projection. A null value tells the hardened RPC to preserve it.
       p_started_date: null,
       p_sort_order: current.sort_order,
       p_is_active: true,
-      p_expected_version: current.version,
+      p_expected_version: person.expectedVersion ?? current.version,
     });
     if (error) throw new Error(error.message);
+    const hiddenParent = nextHiddenOrganisationParent(current.parent_id, visibleParentId, parentId, movedFromHiddenParent);
+    if (hiddenParent) hiddenOrganisationParentsRef.current.set(id, hiddenParent);
+    else hiddenOrganisationParentsRef.current.delete(id);
     await Promise.all([loadOrganisation(), loadAccounts()]);
     announce(`${person.name}'s profile was updated.`);
   }

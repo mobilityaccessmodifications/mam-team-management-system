@@ -49,6 +49,7 @@ export type OrganisationPerson = {
   kind?: "person" | "org_unit";
   sortOrder?: number;
   isActive?: boolean;
+  version?: number;
 };
 
 export type OrganisationPersonDraft = {
@@ -57,6 +58,8 @@ export type OrganisationPersonDraft = {
   company: OrganisationCompany;
   reportsTo: string | null;
   kind?: "person";
+  /** Record version the edit started from, so a stale draft cannot overwrite a newer save. */
+  expectedVersion?: number;
 };
 
 export type OrganisationTreeProps = {
@@ -1861,6 +1864,7 @@ export function OrganisationTree({
         company: person.company,
         reportsTo: nextReportsTo,
         kind: "person",
+        expectedVersion: person.version,
       });
       if (recordHistory) {
         setRelationshipHistory((current) => [...current.slice(-19), {
@@ -2070,6 +2074,7 @@ export function OrganisationTree({
       company: profile.company,
       reportsTo: profile.reportsTo,
       kind: "person",
+      expectedVersion: profile.version,
     });
     setError("");
     setEditor({ mode: "update", id: profile.id });
@@ -2180,6 +2185,7 @@ export function OrganisationTree({
       company: draft.company,
       reportsTo: draft.reportsTo || null,
       kind: "person",
+      expectedVersion: draft.expectedVersion,
     };
     if (!cleanDraft.name || !cleanDraft.position) {
       setError("Add a name and position.");
