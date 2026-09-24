@@ -1,6 +1,7 @@
 export type EmployeeDirectoryCompany = "mam" | "equipsy";
 export type EmployeeLaptopSupply = "" | "own_laptop" | "mam_laptop";
 export type EmployeeEmploymentType = "abn" | "casual" | "full_time" | "part_time";
+export type EmployeeContractType = "permanent" | "fixed_term";
 export type EmployeeWorkingWeekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type EmployeeWorkingDayTime = {
   weekday: EmployeeWorkingWeekday;
@@ -37,6 +38,7 @@ export type EmployeeDirectoryRecord = {
   workingDayTimes: EmployeeWorkingDayTime[];
   archiveReason: string;
   employmentType: EmployeeEmploymentType | "";
+  contractType: EmployeeContractType | "";
   hasPaidLeaveEntitlement: boolean;
   laptopSupplied: EmployeeLaptopSupply;
   laptopId: string;
@@ -63,6 +65,7 @@ export type EmployeeDirectoryDraft = {
   workingDayTimes: EmployeeWorkingDayTime[];
   archiveReason: string;
   employmentType: EmployeeEmploymentType | "";
+  contractType: EmployeeContractType | "";
   laptopSupplied: EmployeeLaptopSupply;
   laptopId: string;
   mouseId: string;

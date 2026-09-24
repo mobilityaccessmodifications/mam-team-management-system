@@ -122,6 +122,7 @@ function milestoneLabel(milestone: CheckInCalendarEntry["milestone"]) {
   if (milestone === "1_month") return "1-month check-in";
   if (milestone === "2_month") return "2-month stay interview";
   if (milestone === "3_month") return "3-month check-in";
+  if (milestone === "6_month") return "6-month check-in";
   return "5-Month No-Surprises Review";
 }
 

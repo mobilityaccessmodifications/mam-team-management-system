@@ -10,11 +10,13 @@ export type CheckInReminderStatus =
 export type CheckInReviewOutcome =
   | "on_track"
   | "follow_up_required"
-  | "hr_review_required";
+  | "hr_review_required"
+  | "probation_extension_pending_hr"
+  | "non_confirmation_pending_hr";
 
 export type CheckInReminder = {
   id: string;
-  milestone: "2_week" | "1_month" | "2_month" | "3_month" | "5_month";
+  milestone: "2_week" | "1_month" | "2_month" | "3_month" | "5_month" | "6_month";
   sequence: "initial" | "final";
   dueDate: string;
   notifyDate: string;
@@ -28,6 +30,7 @@ export type CheckInReminder = {
   reviewNotes: string;
   reviewVersion: number | null;
   reviewRecordedAt: string | null;
+  peopleCultureApproved: boolean;
 };
 
 /**
@@ -61,6 +64,7 @@ export type CheckInResourceLinks = {
   /** HR navigation only; never included in an automated manager reminder. */
   legacyFormsFolderUrl: string | null;
   deliveryConfigured: boolean;
+  canApproveEmploymentDecisions: boolean;
 };
 
 export type CheckInRegisterData = {
@@ -93,12 +97,13 @@ export type CheckInWorkspaceReminder = Pick<
   | "reviewNotes"
   | "reviewVersion"
   | "reviewRecordedAt"
+  | "peopleCultureApproved"
 >;
 
 export type CheckInWorkspaceData = {
   records: CheckInWorkspaceRecord[];
   resources: Pick<
     CheckInResourceLinks,
-    "managerGuideUrl" | "checkInFormUrl" | "probationTemplatesUrl"
+    "managerGuideUrl" | "checkInFormUrl" | "probationTemplatesUrl" | "canApproveEmploymentDecisions"
   >;
 };

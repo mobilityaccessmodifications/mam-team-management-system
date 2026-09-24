@@ -15,6 +15,7 @@ type CheckInWorkspaceReminderRpcRow = {
   reviewNotes?: unknown;
   reviewVersion?: unknown;
   reviewRecordedAt?: unknown;
+  peopleCultureApproved?: unknown;
 };
 
 type CheckInWorkspaceRpcRow = {
@@ -52,7 +53,8 @@ function reminderStatus(value: unknown): CheckInWorkspaceReminder["status"] {
 
 function reviewOutcome(value: unknown): CheckInWorkspaceReminder["reviewOutcome"] {
   if (value === null || value === undefined) return null;
-  if (value === "on_track" || value === "follow_up_required" || value === "hr_review_required") return value;
+  if (value === "on_track" || value === "follow_up_required" || value === "hr_review_required"
+    || value === "probation_extension_pending_hr" || value === "non_confirmation_pending_hr") return value;
   throw new Error(CHECK_IN_WORKSPACE_LOAD_ERROR);
 }
 
@@ -73,6 +75,7 @@ function workspaceReminders(value: unknown): CheckInWorkspaceReminder[] {
       && row.milestone !== "2_month"
       && row.milestone !== "3_month"
       && row.milestone !== "5_month"
+      && row.milestone !== "6_month"
     ) {
       throw new Error(CHECK_IN_WORKSPACE_LOAD_ERROR);
     }
@@ -88,6 +91,7 @@ function workspaceReminders(value: unknown): CheckInWorkspaceReminder[] {
       reviewNotes: text(row.reviewNotes),
       reviewVersion: reviewVersion(row.reviewVersion),
       reviewRecordedAt: typeof row.reviewRecordedAt === "string" && row.reviewRecordedAt ? row.reviewRecordedAt : null,
+      peopleCultureApproved: row.peopleCultureApproved === true,
     };
   });
 }

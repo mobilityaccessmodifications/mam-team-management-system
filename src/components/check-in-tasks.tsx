@@ -36,6 +36,7 @@ function milestoneLabel(value: CheckInTask["milestone"]) {
   if (value === "1_month") return "1-month check-in";
   if (value === "2_month") return "2-month stay interview";
   if (value === "3_month") return "3-month check-in";
+  if (value === "6_month") return "6-month check-in";
   return "5-Month No-Surprises Review";
 }
 

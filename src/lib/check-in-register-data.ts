@@ -22,6 +22,7 @@ type CheckInReminderRpcRow = {
   reviewNotes?: unknown;
   reviewVersion?: unknown;
   reviewRecordedAt?: unknown;
+  peopleCultureApproved?: unknown;
 };
 
 type CheckInRegisterRpcRow = {
@@ -78,7 +79,8 @@ function reminderStatus(value: unknown): CheckInReminderStatus {
 
 function reviewOutcome(value: unknown): CheckInReminder["reviewOutcome"] {
   if (value === null || value === undefined) return null;
-  if (value === "on_track" || value === "follow_up_required" || value === "hr_review_required") return value;
+  if (value === "on_track" || value === "follow_up_required" || value === "hr_review_required"
+    || value === "probation_extension_pending_hr" || value === "non_confirmation_pending_hr") return value;
   throw new Error(CHECK_IN_REGISTER_LOAD_ERROR);
 }
 
@@ -89,7 +91,7 @@ function reviewVersion(value: unknown) {
 }
 
 function reminder(row: CheckInReminderRpcRow): CheckInReminder {
-  if (row.milestone !== "2_week" && row.milestone !== "1_month" && row.milestone !== "2_month" && row.milestone !== "3_month" && row.milestone !== "5_month") {
+  if (row.milestone !== "2_week" && row.milestone !== "1_month" && row.milestone !== "2_month" && row.milestone !== "3_month" && row.milestone !== "5_month" && row.milestone !== "6_month") {
     throw new Error(CHECK_IN_REGISTER_LOAD_ERROR);
   }
   if (row.sequence !== "initial" && row.sequence !== "final") throw new Error(CHECK_IN_REGISTER_LOAD_ERROR);
@@ -110,6 +112,7 @@ function reminder(row: CheckInReminderRpcRow): CheckInReminder {
     reviewNotes: text(row.reviewNotes),
     reviewVersion: reviewVersion(row.reviewVersion),
     reviewRecordedAt: nullableText(row.reviewRecordedAt),
+    peopleCultureApproved: row.peopleCultureApproved === true,
   };
 }
 

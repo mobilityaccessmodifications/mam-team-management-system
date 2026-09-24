@@ -31,6 +31,7 @@ const emptyResources: CheckInWorkspaceData["resources"] = {
   managerGuideUrl: null,
   checkInFormUrl: null,
   probationTemplatesUrl: null,
+  canApproveEmploymentDecisions: false,
 };
 
 type EmployeeSort = "due" | "start" | "name";
@@ -51,6 +52,7 @@ function milestoneLabel(value: CheckInWorkspaceReminder["milestone"]) {
   if (value === "1_month") return "1-month check-in";
   if (value === "2_month") return "2-month stay interview";
   if (value === "3_month") return "3-month check-in";
+  if (value === "6_month") return "6-month check-in";
   return "5-Month No-Surprises Review";
 }
 
@@ -73,6 +75,12 @@ function reminderTone(status: CheckInWorkspaceReminder["status"]): "success" | "
   if (status === "completed" || status === "delivered") return "success";
   if (status === "needs_review") return "warning";
   return "info";
+}
+
+function decisionApprovalLabel(reminder: CheckInWorkspaceReminder) {
+  if (reminder.milestone !== "6_month"
+    || (reminder.reviewOutcome !== "probation_extension_pending_hr" && reminder.reviewOutcome !== "non_confirmation_pending_hr")) return null;
+  return reminder.peopleCultureApproved ? "People & Culture approved" : "People & Culture approval required";
 }
 
 function initials(record: CheckInWorkspaceRecord) {
@@ -133,7 +141,7 @@ export function CheckInWorkspace({
   onRecordsChanged?: () => void;
   previewPersonId?: string;
   readOnly?: boolean;
-  resources?: Pick<CheckInResourceLinks, "managerGuideUrl" | "checkInFormUrl" | "probationTemplatesUrl">;
+  resources?: Pick<CheckInResourceLinks, "managerGuideUrl" | "checkInFormUrl" | "probationTemplatesUrl" | "canApproveEmploymentDecisions">;
 } = {}) {
   const [data, setData] = useState<CheckInWorkspaceData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -297,6 +305,7 @@ export function CheckInWorkspace({
               <div className={styles.reminderCopy}>
                 <strong>{milestoneLabel(reminder.milestone)}{reminder.sequence === "final" ? " · final reminder" : ""}</strong>
                 <p>Due {formatDate(reminder.dueDate)}</p>
+                {decisionApprovalLabel(reminder) ? <small>{decisionApprovalLabel(reminder)}</small> : null}
               </div>
               {reminder.status === "completed" && (!readOnly || reminder.reviewOutcome) ? <button
                 className={styles.reviewOutcomeTrigger}
@@ -323,6 +332,7 @@ export function CheckInWorkspace({
   {reviewReminder && selected ? <CheckInReviewOutcomeDialog
     employeeName={selected.fullName}
     milestone={milestoneLabel(reviewReminder.milestone)}
+    canApproveEmploymentDecision={resources.canApproveEmploymentDecisions}
     reminder={reviewReminder}
     readOnly={readOnly}
     returnFocusRef={refreshButtonRef}

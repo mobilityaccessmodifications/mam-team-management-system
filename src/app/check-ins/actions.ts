@@ -6,6 +6,7 @@ import {
   completeCheckInReminderForHr,
   completeVisibleCheckInReminder as completeVisibleCheckInReminderForWorkspace,
   recordVisibleEmployeeCheckInReview,
+  approveVisibleEmployeeCheckInEmploymentDecision,
   type RecordCheckInReviewInput,
 } from "@/lib/check-in-register";
 
@@ -35,7 +36,8 @@ function checkedReviewInput(value: RecordCheckInReviewInput): RecordCheckInRevie
   if (
     !value
     || !UUID_PATTERN.test(value.reminderId)
-    || (outcome !== "on_track" && outcome !== "follow_up_required" && outcome !== "hr_review_required")
+    || (outcome !== "on_track" && outcome !== "follow_up_required" && outcome !== "hr_review_required"
+      && outcome !== "probation_extension_pending_hr" && outcome !== "non_confirmation_pending_hr")
     || !isCalendarDate(reviewDate)
     || notes.length > 2000
     || (outcome !== "on_track" && !notes)
@@ -44,6 +46,17 @@ function checkedReviewInput(value: RecordCheckInReviewInput): RecordCheckInRevie
     throw new Error("Enter a valid review outcome and try again.");
   }
   return { reminderId: value.reminderId, outcome, reviewDate, notes, expectedVersion };
+}
+
+export async function approveCheckInEmploymentDecision(input: { reminderId: string; expectedVersion: number }) {
+  const reminderId = checkedId(input?.reminderId);
+  const expectedVersion = input?.expectedVersion;
+  if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+    throw new Error("This review is invalid. Refresh and try again.");
+  }
+  await approveVisibleEmployeeCheckInEmploymentDecision({ reminderId, expectedVersion });
+  revalidatePath("/");
+  return { ok: true };
 }
 
 export async function completeCheckInReminder(reminderId: string) {

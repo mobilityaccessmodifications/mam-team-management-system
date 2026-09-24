@@ -43,6 +43,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       { data: subscriptionCredentialGrantCapability, error: subscriptionCredentialGrantCapabilityError },
       { data: analyticsApiCapability, error: analyticsApiCapabilityError },
       { data: subscriptionManagementCapability, error: subscriptionManagementCapabilityError },
+      { data: employmentDecisionApprovalCapability, error: employmentDecisionApprovalCapabilityError },
     ] = await Promise.all([
       supabase.rpc("get_portal_workspace_capabilities"),
       supabase.rpc("can_view_subscription_review_calendar"),
@@ -56,6 +57,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       // hidden without disrupting an otherwise valid portal session.
       supabase.rpc("can_manage_analytics_api"),
       supabase.rpc("can_manage_subscriptions"),
+      supabase.rpc("can_approve_employee_check_in_employment_decision"),
     ]);
     const current = Array.isArray(capabilities) ? capabilities[0] : null;
     isAdmin = current?.can_manage_accounts === true;
@@ -64,7 +66,10 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     canViewCheckIns = current?.can_view_check_in_workspace === true;
     canViewEmployeeDirectory = current?.can_view_employee_directory === true;
     canViewOrganisation = current?.can_view_organisation_chart === true;
-    checkInResources = canViewCheckIns ? getCheckInResourceLinks() : undefined;
+    checkInResources = canViewCheckIns ? {
+      ...getCheckInResourceLinks(),
+      canApproveEmploymentDecisions: !employmentDecisionApprovalCapabilityError && employmentDecisionApprovalCapability === true,
+    } : undefined;
     canChangeEmployeeView = current?.can_change_employee_view === true;
     canViewSubscriptions = current?.can_view_subscription_register === true;
     canManageSubscriptions = !subscriptionManagementCapabilityError && subscriptionManagementCapability === true;

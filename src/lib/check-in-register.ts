@@ -93,6 +93,7 @@ export function getCheckInResourceLinks(): CheckInResourceLinks {
     probationTemplatesUrl,
     legacyFormsFolderUrl,
     deliveryConfigured,
+    canApproveEmploymentDecisions: false,
   };
 }
 
@@ -112,7 +113,7 @@ export async function completeVisibleCheckInReminder(reminderId: string) {
 
 export type RecordCheckInReviewInput = {
   reminderId: string;
-  outcome: "on_track" | "follow_up_required" | "hr_review_required";
+  outcome: "on_track" | "follow_up_required" | "hr_review_required" | "probation_extension_pending_hr" | "non_confirmation_pending_hr";
   reviewDate: string;
   notes: string;
   expectedVersion: number | null;
@@ -132,4 +133,20 @@ export async function recordVisibleEmployeeCheckInReview(input: RecordCheckInRev
   if (error.code === "42501") throw new Error("You no longer have access to update this check-in.");
   if (error.code === "22023" || error.code === "22001") throw new Error(error.message);
   throw new Error("The review outcome could not be saved. Refresh and try again.");
+}
+
+export async function approveVisibleEmployeeCheckInEmploymentDecision(input: {
+  reminderId: string;
+  expectedVersion: number;
+}) {
+  const supabase = await requireAuthenticatedClient();
+  const { error } = await supabase.rpc("approve_employee_check_in_employment_decision", {
+    p_reminder_id: input.reminderId,
+    p_expected_review_version: input.expectedVersion,
+  });
+  if (!error) return;
+  if (error.code === "40001") throw new Error("This review changed. Refresh and try again.");
+  if (error.code === "42501") throw new Error("Only People & Culture can approve this employment decision.");
+  if (error.code === "22023") throw new Error(error.message);
+  throw new Error("The employment decision could not be approved. Refresh and try again.");
 }
