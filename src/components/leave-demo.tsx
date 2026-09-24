@@ -2424,13 +2424,25 @@ function ApprovalsView({ leavePriority, onBalancesSaved, pending, selected, sele
   </div>;
 }
 
+// Calendar entries are labelled "Company · Team", but a review record only
+// carries its company. Resolve the applicant's calendar team, falling back to
+// the whole company when the applicant has no visible calendar entry.
+function approvalCalendarTeamLeave(selected: LeaveRequest, requests: LeaveRequest[], rangeStart: string, rangeEnd: string) {
+  const applicantTeam = requests.find((request) => request.id === selected.id)?.team
+    ?? requests.find((request) => request.personId === selected.personId)?.team;
+  const isApplicantTeam = (team: string) => applicantTeam
+    ? team === applicantTeam
+    : team === selected.team || team.startsWith(`${selected.team} · `);
+  return requests.filter((request) => request.id !== selected.id && request.personId !== selected.personId && isApplicantTeam(request.team) && request.status !== "Declined" && request.status !== "Cancelled" && request.endDate >= rangeStart && request.startDate <= rangeEnd);
+}
+
 function ApprovalCalendar({ selected, requests, checkIns }: { selected: LeaveRequest; requests: LeaveRequest[]; checkIns: CheckInCalendarEntry[] }) {
   const [expanded, setExpanded] = useState(false);
   const calendarId = useId();
   const days = getApprovalCalendarDays(selected, expanded);
   const rangeStart = days[0].iso;
   const rangeEnd = days[days.length - 1].iso;
-  const teamLeave = requests.filter((request) => request.id !== selected.id && request.personId !== selected.personId && request.team === selected.team && request.status !== "Declined" && request.status !== "Cancelled" && request.endDate >= rangeStart && request.startDate <= rangeEnd);
+  const teamLeave = approvalCalendarTeamLeave(selected, requests, rangeStart, rangeEnd);
   const rangeCheckIns = checkIns.filter((entry) => entry.dueDate >= rangeStart && entry.dueDate <= rangeEnd);
 
   return (
