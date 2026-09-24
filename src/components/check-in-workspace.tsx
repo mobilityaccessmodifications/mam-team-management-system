@@ -110,15 +110,19 @@ function sortRecords(records: CheckInWorkspaceRecord[], sort: EmployeeSort) {
     if (sort === "start") {
       const leftDate = /^\d{4}-\d{2}-\d{2}$/.test(left.startDate) ? left.startDate : "";
       const rightDate = /^\d{4}-\d{2}-\d{2}$/.test(right.startDate) ? right.startDate : "";
-      if (leftDate && rightDate && leftDate !== rightDate) return rightDate.localeCompare(leftDate);
-      if (leftDate) return -1;
-      if (rightDate) return 1;
+      if (leftDate !== rightDate) {
+        if (!leftDate) return 1;
+        if (!rightDate) return -1;
+        return rightDate.localeCompare(leftDate);
+      }
     } else {
-      const leftDue = nextDueDate(left);
-      const rightDue = nextDueDate(right);
-      if (leftDue && rightDue && leftDue !== rightDue) return leftDue.localeCompare(rightDue);
-      if (leftDue) return -1;
-      if (rightDue) return 1;
+      const leftDue = nextDueDate(left) ?? "";
+      const rightDue = nextDueDate(right) ?? "";
+      if (leftDue !== rightDue) {
+        if (!leftDue) return 1;
+        if (!rightDue) return -1;
+        return leftDue.localeCompare(rightDue);
+      }
     }
 
     return left.fullName.localeCompare(right.fullName, "en-AU", { sensitivity: "base" });
