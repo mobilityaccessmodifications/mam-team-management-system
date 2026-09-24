@@ -6,10 +6,22 @@ import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, UNCONFIRMED_
 import { dispatchLeaveNotificationsForRequest } from "@/lib/leave-notification-outbox";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { BALANCE_PENDING_STATUS, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
+
+// Email delivery must not hold the Server Action open (up to 15 s per
+// audience). Drain after the response; the outbox cron remains the durable
+// fallback, so a scheduling failure never asks the user to submit again.
+function scheduleLeaveNotifications(requestId: string) {
+  try {
+    after(() => dispatchLeaveNotificationsForRequest(requestId));
+  } catch {
+    console.warn("Leave notification remains queued.");
+  }
+}
 
 export type LeaveStatus = "Pending" | "Approved" | "Declined" | "Cancelled" | typeof BALANCE_PENDING_STATUS;
 
@@ -1130,7 +1142,7 @@ export async function submitLeaveRequest(input: SubmitLeaveInput) {
 
   if (error) return { error: userFacingSubmitError(error) };
   const result = toSubmitResult(data);
-  await dispatchLeaveNotificationsForRequest(result.id);
+  scheduleLeaveNotifications(result.id);
   revalidatePath("/");
   return result;
 }
@@ -1161,7 +1173,7 @@ export async function submitLeaveRequestForSelectedEmployee(
 
   if (error) return { error: userFacingSubmitError(error) };
   const result = toSubmitResult(data);
-  await dispatchLeaveNotificationsForRequest(result.id);
+  scheduleLeaveNotifications(result.id);
   revalidatePath("/");
   return result;
 }
@@ -1177,7 +1189,7 @@ export async function decideLeaveRequest(input: DecideLeaveInput) {
 
   if (error) throw new Error(userFacingDecisionError(error));
   const result = toDecisionResult(data);
-  await dispatchLeaveNotificationsForRequest(result.id);
+  scheduleLeaveNotifications(result.id);
   revalidatePath("/");
   return result;
 }
@@ -1216,7 +1228,7 @@ export async function cancelMyLeaveRequest(input: CancelLeaveInput) {
       return { ok: false, message: CANCEL_ERROR } satisfies CancelLeaveResult;
     }
 
-    await dispatchLeaveNotificationsForRequest(result.id);
+    scheduleLeaveNotifications(result.id);
     revalidatePath("/");
     return { ok: true, id: result.id, status: "Cancelled" } satisfies CancelLeaveResult;
   } catch (error) {
@@ -1261,7 +1273,7 @@ export async function cancelSelectedEmployeeLeaveRequest(
       return { ok: false, message: CANCEL_ERROR } satisfies CancelLeaveResult;
     }
 
-    await dispatchLeaveNotificationsForRequest(result.id);
+    scheduleLeaveNotifications(result.id);
     revalidatePath("/");
     return { ok: true, id: result.id, status: "Cancelled" } satisfies CancelLeaveResult;
   } catch (error) {

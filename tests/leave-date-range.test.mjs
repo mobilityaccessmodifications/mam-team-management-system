@@ -34,6 +34,7 @@ test("calendar-day validation is independent of daylight saving transitions", ()
 
 function actionHarness(rpcError = null) {
   const calls = [];
+  const scheduled = [];
   const client = {
     auth: { async getUser() { calls.push("session"); return { data: { user: { id: "synthetic" } }, error: null }; } },
     async rpc(name, args) {
@@ -50,6 +51,7 @@ function actionHarness(rpcError = null) {
     "@/lib/supabase/admin": { createAdminClient() { throw new Error("Unexpected admin client"); } },
     "@/lib/leave-notification-outbox": { async dispatchLeaveNotificationsForRequest() { calls.push("notify"); } },
     "next/cache": { revalidatePath() { calls.push("revalidate"); } },
+    "next/server": { after(callback) { calls.push("after"); scheduled.push(callback); } },
   };
   const actionSource = readFileSync(new URL("../src/app/leave/actions.ts", import.meta.url), "utf8");
   const code = ts.transpileModule(actionSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -58,7 +60,7 @@ function actionHarness(rpcError = null) {
     assert.ok(id in imports, `Unexpected import: ${id}`);
     return imports[id];
   }, actionExports);
-  return { actions: actionExports, calls };
+  return { actions: actionExports, calls, scheduled };
 }
 
 const personId = "20000000-0000-4000-8000-000000000001";
@@ -80,12 +82,15 @@ test("both Server Actions reject invalid or excessive spans before session, data
 
 test("both Server Actions accept 366 days and preserve the idempotent submit RPC", async () => {
   for (const [index, submit] of submitters.entries()) {
-    const { actions, calls } = actionHarness();
+    const { actions, calls, scheduled } = actionHarness();
     assert.equal((await submit(actions, validInput)).status, "Pending");
     assert.equal(calls[1].name, "submit_leave_request_once");
     assert.equal(calls[1].args.p_person_id, index ? personId : null);
     assert.equal(calls[1].args.p_submission_key, validInput.submissionKey);
-    assert.deepEqual(calls.slice(2), ["notify", "revalidate"]);
+    // Email is drained after the response instead of delaying the action.
+    assert.deepEqual(calls.slice(2), ["after", "revalidate"]);
+    await Promise.all(scheduled.map((callback) => callback()));
+    assert.deepEqual(calls.slice(2), ["after", "revalidate", "notify"]);
   }
 });
 
