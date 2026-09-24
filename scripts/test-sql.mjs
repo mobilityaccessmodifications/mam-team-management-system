@@ -16,6 +16,7 @@ try {
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/two-week-check-in.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/check-in-review-outcomes.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/six-month-check-in-review.sql")]);
+  command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/six-month-casual-check-in.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/employee-team-directory.sql")]);
   const receipts = spawnSync(process.execPath, [path.join(sourceRoot, "tests/run-notification-delivery-sql.mjs"),
     socket, "mam_test_notification_concurrency"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });

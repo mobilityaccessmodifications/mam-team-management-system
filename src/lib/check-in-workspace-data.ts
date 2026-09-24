@@ -76,6 +76,7 @@ function workspaceReminders(value: unknown): CheckInWorkspaceReminder[] {
       && row.milestone !== "3_month"
       && row.milestone !== "5_month"
       && row.milestone !== "6_month"
+      && row.milestone !== "6_month_casual"
     ) {
       throw new Error(CHECK_IN_WORKSPACE_LOAD_ERROR);
     }

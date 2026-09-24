@@ -91,7 +91,7 @@ function reviewVersion(value: unknown) {
 }
 
 function reminder(row: CheckInReminderRpcRow): CheckInReminder {
-  if (row.milestone !== "2_week" && row.milestone !== "1_month" && row.milestone !== "2_month" && row.milestone !== "3_month" && row.milestone !== "5_month" && row.milestone !== "6_month") {
+  if (row.milestone !== "2_week" && row.milestone !== "1_month" && row.milestone !== "2_month" && row.milestone !== "3_month" && row.milestone !== "5_month" && row.milestone !== "6_month" && row.milestone !== "6_month_casual") {
     throw new Error(CHECK_IN_REGISTER_LOAD_ERROR);
   }
   if (row.sequence !== "initial" && row.sequence !== "final") throw new Error(CHECK_IN_REGISTER_LOAD_ERROR);
