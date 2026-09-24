@@ -101,7 +101,8 @@ The owner confirmed 38 ordinary hours per week and automatic future accrual. The
 ## People workflow boundaries
 
 - Recruitment is excluded.
-- Check-ins are durable and automatic for active employees. Their due tasks are visible in Calendar only to the authorised global or organisation-subtree reviewers described above.
+- Check-ins are durable and automatic for active employees. Their due tasks are visible in Calendar only to the authorised global or organisation-subtree reviewers described above. The 6-Month Check-In is scheduled five Victorian business days before the employee's six-calendar-month anniversary and applies only after System Admin records the employee as Permanent or Fixed-Term; contract type is never inferred from full-time/part-time status. Late rollout dates remain for manual review rather than triggering catch-up email.
+- Extending probation or not confirming employment at the 6-Month Check-In remains pending until a System Admin records the People & Culture approval. The decision is not communicated by People Hub before that approval.
 - Onboarding and offboarding review work must not expose private evidence, HR notes, access details or audit history outside its authorised scope.
 - No People workflow action creates a login or provisions or revokes external access.
 - An offboarding case is labelled and displayed as offboarding, never onboarding.

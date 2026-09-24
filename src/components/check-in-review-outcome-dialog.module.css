@@ -41,6 +41,7 @@
 .header button:focus-visible { outline: 3px solid color-mix(in srgb, var(--mam-orange, #f36c27) 28%, transparent); outline-offset: 2px; }
 
 .fields { display: grid; gap: 20px; min-width: 0; margin: 0; border: 0; padding: 22px 24px; }
+.approvalNotice { margin: 16px 24px 0; border: 1px solid #ebd39a; border-radius: 10px; background: #fff9e8; color: #624a12; font-size: 12px; line-height: 1.45; padding: 10px 12px; }
 .fields > legend { margin-bottom: -10px; font-size: 13px; font-weight: 760; }
 .outcomes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .outcome { position: relative; display: grid; min-width: 0; min-height: 94px; grid-template-columns: 20px minmax(0, 1fr); align-content: start; gap: 9px; border: 1px solid var(--surface-border, #d8dfdc); border-radius: 13px; background: var(--surface-raised, #fff); cursor: pointer; padding: 13px 12px; }
@@ -80,6 +81,7 @@
   .dialog { width: 100%; max-height: calc(var(--dialog-viewport-height, 100dvh) - 12px); border-radius: 20px 20px 0 0; }
   .header { padding: 18px 16px 14px; }
   .fields { gap: 16px; padding: 18px 16px; }
+  .approvalNotice { margin: 14px 16px 0; }
   .outcomes { grid-template-columns: 1fr; }
   .outcome { min-height: 66px; align-content: center; }
   .field input,.field textarea { font-size: 16px; }

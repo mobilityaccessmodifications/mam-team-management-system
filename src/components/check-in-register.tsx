@@ -37,6 +37,7 @@ const emptyResources: CheckInRegisterData["resources"] = {
   probationTemplatesUrl: null,
   legacyFormsFolderUrl: null,
   deliveryConfigured: false,
+  canApproveEmploymentDecisions: false,
 };
 
 type EmployeeSort = "due" | "start" | "name";
@@ -53,6 +54,7 @@ function milestoneLabel(value: CheckInReminder["milestone"]) {
   if (value === "1_month") return "1-month check-in";
   if (value === "2_month") return "2-month stay interview";
   if (value === "3_month") return "3-month check-in";
+  if (value === "6_month") return "6-month check-in";
   return "5-Month No-Surprises Review";
 }
 
@@ -75,6 +77,12 @@ function reminderTone(status: CheckInReminder["status"]): "success" | "warning" 
   if (status === "completed" || status === "delivered") return "success";
   if (status === "needs_review") return "warning";
   return "info";
+}
+
+function decisionApprovalLabel(reminder: CheckInReminder) {
+  if (reminder.milestone !== "6_month"
+    || (reminder.reviewOutcome !== "probation_extension_pending_hr" && reminder.reviewOutcome !== "non_confirmation_pending_hr")) return null;
+  return reminder.peopleCultureApproved ? "People & Culture approved" : "People & Culture approval required";
 }
 
 function reasonLabel(value: string | null) {
@@ -329,6 +337,7 @@ export function CheckInRegister({
   {reviewReminder && selected ? <CheckInReviewOutcomeDialog
     employeeName={nameFor(selected)}
     milestone={milestoneLabel(reviewReminder.milestone)}
+    canApproveEmploymentDecision={resources.canApproveEmploymentDecisions}
     reminder={reviewReminder}
     readOnly={readOnly}
     returnFocusRef={refreshButtonRef}
@@ -345,7 +354,7 @@ function ReminderRow({ reminder, employeeName, readOnly, onReview }: {
 }) {
   const canReview = canCompleteReminder(reminder);
   return <div className={styles.reminder} data-status={reminder.status}>
-    <div className={styles.reminderCopy}><strong>{milestoneLabel(reminder.milestone)}{reminder.sequence === "final" ? " · final reminder" : ""}</strong><p>{formatDate(reminder.dueDate)}</p>{reminder.status === "needs_review" ? <small>{reasonLabel(reminder.needsReviewReason)}</small> : null}</div>
+    <div className={styles.reminderCopy}><strong>{milestoneLabel(reminder.milestone)}{reminder.sequence === "final" ? " · final reminder" : ""}</strong><p>{formatDate(reminder.dueDate)}</p>{decisionApprovalLabel(reminder) ? <small>{decisionApprovalLabel(reminder)}</small> : null}{reminder.status === "needs_review" ? <small>{reasonLabel(reminder.needsReviewReason)}</small> : null}</div>
     {reminder.status === "completed" && (!readOnly || reminder.reviewOutcome) ? <button
       className={styles.reviewOutcomeTrigger}
       type="button"

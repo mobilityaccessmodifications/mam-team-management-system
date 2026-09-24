@@ -9,6 +9,7 @@ export const ONE_MONTH_RECORD_PATH = path.join(ROOT, 'assets/checklists/1 Month 
 export const TWO_MONTH_RECORD_PATH = path.join(ROOT, 'assets/checklists/2 Month Stay Interview Record.docx');
 export const THREE_MONTH_RECORD_PATH = path.join(ROOT, 'assets/checklists/3 Month Midpoint Probation Review.docx');
 export const FIVE_MONTH_RECORD_PATH = path.join(ROOT, 'assets/checklists/5-Month No-Surprises Review.docx');
+export const SIX_MONTH_RECORD_PATH = path.join(ROOT, 'assets/checklists/6 Month Check-In Record - Permanent and Fixed-Term.docx');
 const RECEIPT_URL = 'https://mam-team-management-system-ten.vercel.app/api/internal/integrations/notifications/receipts';
 const HR_OUTLOOK_CREDENTIAL = { id: 'vFEolsXoEOOxNyan', name: 'Microsoft Outlook account - hr@mobilityaccess.com.au' };
 const RECEIPT_CREDENTIAL = { id: 'tGtpwegru8OxtdCt', name: 'MAM Team Management - Notification Webhook Header' };
@@ -45,7 +46,7 @@ if (event === 'checkin-review-escalation') {
   const valid = payload?.version === 1 && payload?.mode === MODE && expectedId
     && employeeName && employeeName.length <= 160 && !unsafeHeaderControl.test(employeeName)
     && managerName && managerName.length <= 160 && !unsafeControl.test(managerName)
-    && ['2-week','1-month','2-month','3-month','5-month'].includes(milestone)
+    && ['2-week','1-month','2-month','3-month','5-month','6-month'].includes(milestone)
     && /^\\d{4}-\\d{2}-\\d{2}$/.test(reviewDate)
     && notes && notes.length <= 2000 && !unsafeControl.test(notes);
   if (!valid) return [{ json: { valid: false, kind: 'review-escalation', deliveryId: expectedId || 'invalid', code: 'invalid_payload' } }];
@@ -66,7 +67,7 @@ const milestone = clean(payload?.milestone);
 const reminder = clean(payload?.reminder);
 const reminderId = typeof payload?.deliveryId === 'string' ? payload.deliveryId.split(':')[1] : '';
 const expectedId = reminderId && uuid.test(reminderId) ? \`checkin:\${reminderId}:\${milestone}:\${reminder}:\${MODE}\` : '';
-const liveRecipients = ['2-week','1-month','2-month','3-month','5-month'].includes(milestone)
+const liveRecipients = ['2-week','1-month','2-month','3-month','5-month','6-month'].includes(milestone)
   ? [...new Set([...employeeRecipients, managerEmail].filter(Boolean))].sort()
   : [managerEmail].filter(Boolean);
 const visibleRecipients = [...new Set([employeeWorkEmail, managerEmail].filter(Boolean))].sort();
@@ -83,7 +84,7 @@ const valid = payload?.version === 1 && event === 'checkin-reminder' && payload?
   && [employeeFirstName, employeeLastName, employeeRole, employeeDepartment, managerName]
     .every(value => value && value.length <= 160 && !unsafeHeaderControl.test(value))
   && managerEmail
-  && ['2-week','1-month','2-month','3-month','5-month'].includes(milestone)
+  && ['2-week','1-month','2-month','3-month','5-month','6-month'].includes(milestone)
   && reminder === 'initial'
   && /^\\d{4}-\\d{2}-\\d{2}$/.test(clean(payload?.dueDate))
   && employeeRecipients.length > 0;
@@ -173,9 +174,22 @@ return [{ json: { ...source, subject: \`Your 5-Month Check-In – \${employeeNam
 } }];`;
 }
 
+function sixMonthEmailCode(recordBase64) {
+  return `const source = $input.first().json;
+if (source.milestone !== '6-month') return [{ json: { ...source, valid: false, code: 'invalid_milestone' } }];
+const escapeHtml = value => String(value).replace(/[&<>\"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[char]));
+const employee = escapeHtml(source.employeeFirstName);
+const employeeName = String(source.employeeName);
+const manager = escapeHtml(source.managerFirstName);
+const bodyContent = \`<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#22302b\"><p>Hi \${employee} and \${manager},</p><p>\${employee} is approaching six months with MAM/Equipsy, so it’s time for the <strong>6-Month Review</strong>.</p><p>This conversation is an opportunity to reflect on the first six months, recognise the progress and contribution made so far, discuss any remaining development areas and agree on priorities for the next stage.</p><p>Please come prepared for an open, two-way conversation about performance, training and support, reliability, safety, teamwork, communication and the overall employee experience.</p><p>\${manager}, please complete the attached <strong>6-Month Check-In Record</strong> during the meeting and clearly record any agreed priorities, actions or follow-up requirements.</p><p>Where an employment or probation decision requires further review, please involve People &amp; Culture before communicating the final outcome.</p><p>Thanks,<br>HR Manager</p></div>\`;
+return [{ json: { ...source, subject: \`Your 6-Month Review – \${employeeName}\`, bodyContent }, binary: {
+  record: { data: ${JSON.stringify(recordBase64)}, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', fileName: '6 Month Check-In Record - Permanent and Fixed-Term.docx' }
+} }];`;
+}
+
 const reviewEscalationEmailCode = `const source = $input.first().json;
 const escapeHtml = value => String(value).replace(/[&<>\"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[char]));
-const labels = { '2-week':'2-Week Check-In', '1-month':'1-Month Check-In', '2-month':'2-Month Stay Interview', '3-month':'3-Month Midpoint Review', '5-month':'5-Month No-Surprises Review' };
+const labels = { '2-week':'2-Week Check-In', '1-month':'1-Month Check-In', '2-month':'2-Month Stay Interview', '3-month':'3-Month Midpoint Review', '5-month':'5-Month No-Surprises Review', '6-month':'6-Month Review' };
 const bodyContent = \`<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#22302b"><p>People &amp; Culture review is required for <strong>\${escapeHtml(source.employeeName)}</strong>.</p><p><strong>Check-In:</strong> \${escapeHtml(labels[source.milestone] || source.milestone)}<br><strong>Review date:</strong> \${escapeHtml(source.reviewDate)}<br><strong>Direct Manager:</strong> \${escapeHtml(source.managerName)}</p><p><strong>Review notes</strong><br>\${escapeHtml(source.notes).replace(/\\n/g, '<br>')}</p><p><a href="https://mam-team-management-system-ten.vercel.app/?view=people&amp;section=check-ins" style="display:inline-block;padding:10px 16px;background:#ef6c24;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Open People Hub</a></p><p>Thanks,<br>People Hub</p></div>\`;
 return [{ json: { ...source, subject: \`[MAM] People & Culture review required – \${source.employeeName}\`, bodyContent } }];`;
 
@@ -204,6 +218,7 @@ export function buildCheckInReminderWorkflow({
   const twoMonthRecordBase64 = readFileSync(TWO_MONTH_RECORD_PATH).toString('base64');
   const threeMonthRecordBase64 = readFileSync(THREE_MONTH_RECORD_PATH).toString('base64');
   const fiveMonthRecordBase64 = readFileSync(FIVE_MONTH_RECORD_PATH).toString('base64');
+  const sixMonthRecordBase64 = readFileSync(SIX_MONTH_RECORD_PATH).toString('base64');
   const nodes = [
     node('c2000000-0000-4000-8000-000000000001', 'Receive Check-In Request', 'n8n-nodes-base.webhook', 2.1, [-980, 0], {
       authentication: 'headerAuth', httpMethod: 'POST', path: `mam-people-hub-check-in-${mode}-v2`, responseMode: 'lastNode', options: {},
@@ -277,6 +292,17 @@ export function buildCheckInReminderWorkflow({
       resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
       additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
     }, { credentials: { microsoftOutlookOAuth2Api: HR_OUTLOOK_CREDENTIAL } }),
+    node('c2000000-0000-4000-8000-000000000030', 'Five-Month No-Surprises Review?', 'n8n-nodes-base.if', 2.2, [1340, 260], {
+      conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ id: 'c2000000-0000-4000-8000-000000000130', leftValue: '={{ $json.milestone === "5-month" }}', rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }], combinator: 'and' }, options: {},
+    }),
+    node('c2000000-0000-4000-8000-000000000031', 'Six-Month Check-In?', 'n8n-nodes-base.if', 2.2, [1580, 320], {
+      conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ id: 'c2000000-0000-4000-8000-000000000131', leftValue: '={{ $json.milestone === "6-month" }}', rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }], combinator: 'and' }, options: {},
+    }),
+    node('c2000000-0000-4000-8000-000000000032', 'Build 6-Month Check-In Email and Attachment', 'n8n-nodes-base.code', 2, [1820, 320], { mode: 'runOnceForAllItems', jsCode: sixMonthEmailCode(sixMonthRecordBase64) }),
+    node('c2000000-0000-4000-8000-000000000033', 'Send 6-Month Check-In Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [2060, 320], {
+      resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
+      additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
+    }, { credentials: { microsoftOutlookOAuth2Api: HR_OUTLOOK_CREDENTIAL } }),
   ];
   const connections = {
     'Receive Check-In Request': { main: [[{ node: 'Validate Check-In Request', type: 'main', index: 0 }]] },
@@ -297,11 +323,15 @@ export function buildCheckInReminderWorkflow({
     'Two-Month Stay Interview?': { main: [[{ node: 'Build 2-Month Stay Interview Email and Attachment', type: 'main', index: 0 }], [{ node: 'Three-Month Midpoint Review?', type: 'main', index: 0 }]] },
     'Build 2-Month Stay Interview Email and Attachment': { main: [[{ node: 'Send 2-Month Stay Interview Email from HR', type: 'main', index: 0 }]] },
     'Send 2-Month Stay Interview Email from HR': { main: [[{ node: 'Build Durable Check-In Confirmation', type: 'main', index: 0 }]] },
-    'Three-Month Midpoint Review?': { main: [[{ node: 'Build 3-Month Midpoint Review Email and Attachment', type: 'main', index: 0 }], [{ node: 'Build 5-Month No-Surprises Review Email and Attachment', type: 'main', index: 0 }]] },
+    'Three-Month Midpoint Review?': { main: [[{ node: 'Build 3-Month Midpoint Review Email and Attachment', type: 'main', index: 0 }], [{ node: 'Five-Month No-Surprises Review?', type: 'main', index: 0 }]] },
     'Build 3-Month Midpoint Review Email and Attachment': { main: [[{ node: 'Send 3-Month Midpoint Review Email from HR', type: 'main', index: 0 }]] },
     'Send 3-Month Midpoint Review Email from HR': { main: [[{ node: 'Build Durable Check-In Confirmation', type: 'main', index: 0 }]] },
+    'Five-Month No-Surprises Review?': { main: [[{ node: 'Build 5-Month No-Surprises Review Email and Attachment', type: 'main', index: 0 }], [{ node: 'Six-Month Check-In?', type: 'main', index: 0 }]] },
+    'Six-Month Check-In?': { main: [[{ node: 'Build 6-Month Check-In Email and Attachment', type: 'main', index: 0 }], [{ node: 'Return Check-In Rejection', type: 'main', index: 0 }]] },
     'Build 5-Month No-Surprises Review Email and Attachment': { main: [[{ node: 'Send 5-Month No-Surprises Review Email from HR', type: 'main', index: 0 }]] },
     'Send 5-Month No-Surprises Review Email from HR': { main: [[{ node: 'Build Durable Check-In Confirmation', type: 'main', index: 0 }]] },
+    'Build 6-Month Check-In Email and Attachment': { main: [[{ node: 'Send 6-Month Check-In Email from HR', type: 'main', index: 0 }]] },
+    'Send 6-Month Check-In Email from HR': { main: [[{ node: 'Build Durable Check-In Confirmation', type: 'main', index: 0 }]] },
     'Build Durable Check-In Confirmation': { main: [[{ node: 'Confirm Durable Check-In Delivery', type: 'main', index: 0 }]] },
     'Confirm Durable Check-In Delivery': { main: [[{ node: 'Validate Durable Check-In Confirmation', type: 'main', index: 0 }]] },
     'Already Delivered?': { main: [[{ node: 'Return Check-In Duplicate', type: 'main', index: 0 }], [{ node: 'Return Check-In Rejection', type: 'main', index: 0 }]] },

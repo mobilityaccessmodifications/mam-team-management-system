@@ -3,7 +3,7 @@
 import { AlertCircle, Check, LoaderCircle, X } from "lucide-react";
 import { type FormEvent, type RefObject, useCallback, useRef, useState } from "react";
 
-import { recordCheckInReview } from "@/app/check-ins/actions";
+import { approveCheckInEmploymentDecision, recordCheckInReview } from "@/app/check-ins/actions";
 import styles from "@/components/check-in-review-outcome-dialog.module.css";
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
@@ -11,13 +11,18 @@ import type { CheckInReminder, CheckInReviewOutcome } from "@/lib/check-in-regis
 
 type ReviewableReminder = Pick<
   CheckInReminder,
-  "id" | "dueDate" | "reviewOutcome" | "reviewDate" | "reviewNotes" | "reviewVersion"
+  "id" | "milestone" | "dueDate" | "reviewOutcome" | "reviewDate" | "reviewNotes" | "reviewVersion" | "peopleCultureApproved"
 >;
 
-const outcomes: Array<{ value: CheckInReviewOutcome; label: string; detail: string }> = [
+const standardOutcomes: Array<{ value: CheckInReviewOutcome; label: string; detail: string }> = [
   { value: "on_track", label: "On track", detail: "No follow-up" },
   { value: "follow_up_required", label: "Follow-up needed", detail: "Manager action" },
   { value: "hr_review_required", label: "HR review before decision", detail: "Notifies People & Culture" },
+];
+
+const employmentDecisionOutcomes: Array<{ value: CheckInReviewOutcome; label: string; detail: string }> = [
+  { value: "probation_extension_pending_hr", label: "Extend probation", detail: "P&C approval required" },
+  { value: "non_confirmation_pending_hr", label: "Do not confirm", detail: "P&C approval required" },
 ];
 
 function melbourneToday() {
@@ -41,6 +46,7 @@ export function CheckInReviewOutcomeDialog({
   employeeName,
   milestone,
   reminder,
+  canApproveEmploymentDecision = false,
   readOnly = false,
   returnFocusRef,
   onClose,
@@ -49,6 +55,7 @@ export function CheckInReviewOutcomeDialog({
   employeeName: string;
   milestone: string;
   reminder: ReviewableReminder;
+  canApproveEmploymentDecision?: boolean;
   readOnly?: boolean;
   returnFocusRef: RefObject<HTMLElement | null>;
   onClose: () => void;
@@ -58,10 +65,17 @@ export function CheckInReviewOutcomeDialog({
   const [reviewDate, setReviewDate] = useState(reminder.reviewDate ?? melbourneToday());
   const [notes, setNotes] = useState(reminder.reviewNotes);
   const [saving, setSaving] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [peopleCultureApproved, setPeopleCultureApproved] = useState(reminder.peopleCultureApproved);
   const [error, setError] = useState("");
   const dialogRef = useRef<HTMLElement>(null);
   const initialFocusRef = useRef<HTMLInputElement>(null);
-  const closeWhenReady = useCallback(() => { if (!saving) onClose(); }, [onClose, saving]);
+  const closeWhenReady = useCallback(() => { if (!saving && !approving) onClose(); }, [onClose, saving, approving]);
+  const isEmploymentDecision = outcome === "probation_extension_pending_hr" || outcome === "non_confirmation_pending_hr";
+  const needsPeopleCultureApproval = reminder.milestone === "6_month" && isEmploymentDecision;
+  const outcomes = reminder.milestone === "6_month"
+    ? [...standardOutcomes, ...employmentDecisionOutcomes]
+    : standardOutcomes;
   useDialogFocus(true, dialogRef, readOnly ? null : initialFocusRef, closeWhenReady, returnFocusRef);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -91,6 +105,21 @@ export function CheckInReviewOutcomeDialog({
     }
   }
 
+  async function approveEmploymentDecision() {
+    if (approving || saving || !canApproveEmploymentDecision || !needsPeopleCultureApproval || !reminder.reviewVersion) return;
+    setApproving(true);
+    setError("");
+    try {
+      await approveCheckInEmploymentDecision({ reminderId: reminder.id, expectedVersion: reminder.reviewVersion });
+      setPeopleCultureApproved(true);
+      await onSaved();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The employment decision could not be approved. Try again.");
+    } finally {
+      setApproving(false);
+    }
+  }
+
   return <ModalBackdrop className={styles.backdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
     <section className={styles.dialog} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="check-in-review-title" tabIndex={-1}>
       <header className={styles.header}>
@@ -99,11 +128,15 @@ export function CheckInReviewOutcomeDialog({
           <h2 id="check-in-review-title">Review outcome</h2>
           <span>{milestone} · {formatDate(reminder.dueDate)}</span>
         </div>
-        <button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close review outcome"><X size={19} /></button>
+        <button type="button" onClick={closeWhenReady} disabled={saving || approving} aria-label="Close review outcome"><X size={19} /></button>
       </header>
 
+      {needsPeopleCultureApproval ? <p className={styles.approvalNotice} role="status">
+        {peopleCultureApproved ? "People & Culture approved this decision." : "This decision cannot be communicated until People & Culture approves it."}
+      </p> : null}
+
       <form onSubmit={submit}>
-        <fieldset className={styles.fields} disabled={saving || readOnly}>
+        <fieldset className={styles.fields} disabled={saving || approving || readOnly}>
           <legend>Outcome</legend>
           <div className={styles.outcomes}>
             {outcomes.map((option) => <label className={styles.outcome} data-selected={outcome === option.value} key={option.value}>
@@ -141,7 +174,11 @@ export function CheckInReviewOutcomeDialog({
         {error ? <p className={styles.error} role="alert"><AlertCircle size={16} />{error}</p> : null}
 
         <footer className={styles.footer}>
-          <button className={styles.secondary} type="button" onClick={closeWhenReady} disabled={saving}>{readOnly ? "Close" : "Cancel"}</button>
+          <button className={styles.secondary} type="button" onClick={closeWhenReady} disabled={saving || approving}>{readOnly ? "Close" : "Cancel"}</button>
+          {!readOnly && canApproveEmploymentDecision && needsPeopleCultureApproval && !peopleCultureApproved && reminder.reviewVersion ? <button className={styles.secondary} type="button" onClick={() => void approveEmploymentDecision()} disabled={approving || saving}>
+            {approving ? <LoaderCircle className={styles.spinner} size={17} aria-hidden="true" /> : <Check size={17} aria-hidden="true" />}
+            {approving ? "Approving…" : "Approve as People & Culture"}
+          </button> : null}
           {!readOnly ? <button className={styles.primary} type="submit" disabled={saving}>
             {saving ? <LoaderCircle className={styles.spinner} size={17} aria-hidden="true" /> : <Check size={17} aria-hidden="true" />}
             {saving ? "Saving…" : reminder.reviewOutcome ? "Save changes" : "Save outcome"}

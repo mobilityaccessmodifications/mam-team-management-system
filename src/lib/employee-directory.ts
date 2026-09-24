@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   EmployeeDirectoryCompany,
   EmployeeEmploymentType,
+  EmployeeContractType,
   EmployeeLaptopSupply,
   EmployeeDirectoryRecord,
   EmployeeWorkingDayTime,
@@ -145,7 +146,7 @@ function assetTags(value: unknown) {
   return value;
 }
 
-function toRecord(row: DirectoryRpcRow): EmployeeDirectoryRecord {
+function toRecord(row: DirectoryRpcRow, contractType: EmployeeContractType | ""): EmployeeDirectoryRecord {
   const selectedWeekdays = workingWeekdays(row.working_weekdays);
   return {
     personId: requiredText(row.person_id),
@@ -172,6 +173,7 @@ function toRecord(row: DirectoryRpcRow): EmployeeDirectoryRecord {
     workingDayTimes: workingDayTimes(row.working_day_times, selectedWeekdays),
     archiveReason: optionalText(row.archive_reason),
     employmentType: employmentType(row.employment_type),
+    contractType,
     hasPaidLeaveEntitlement: row.has_paid_leave_entitlement === true,
     laptopSupplied: laptopSupply(row.laptop_supplied),
     laptopId: optionalText(row.laptop_id),
@@ -219,9 +221,19 @@ export async function listEmployeeDirectoryRecordsWithClient(
     }));
   }
   if (archiveError || !Array.isArray(archiveData)) throw new Error(GENERIC_LOAD_ERROR);
+  const { data: contractRows, error: contractError } = await supabase.rpc("list_employee_check_in_contract_classifications");
+  if (contractError || !Array.isArray(contractRows)) throw new Error(GENERIC_LOAD_ERROR);
+  const contractTypes = new Map<string, EmployeeContractType>();
+  for (const item of contractRows) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(GENERIC_LOAD_ERROR);
+    const row = item as Record<string, unknown>;
+    if (typeof row.person_id !== "string" || !UUID_PATTERN.test(row.person_id)) throw new Error(GENERIC_LOAD_ERROR);
+    if (row.contract_type !== "permanent" && row.contract_type !== "fixed_term") throw new Error(GENERIC_LOAD_ERROR);
+    contractTypes.set(row.person_id, row.contract_type);
+  }
 
   return (archiveData as DirectoryRpcRow[])
-    .map(toRecord)
+    .map((row) => toRecord(row, contractTypes.get(row.person_id) ?? ""))
     .sort((first, second) => first.fullName.localeCompare(second.fullName));
 }
 
@@ -244,5 +256,11 @@ export async function findEmployeeDirectoryRecord(
     }));
   }
   if (error || !Array.isArray(data) || data.length !== 1) throw new Error(GENERIC_LOAD_ERROR);
-  return toRecord(data[0] as DirectoryRpcRow);
+  const { data: contractRows, error: contractError } = await supabase.rpc("list_employee_check_in_contract_classifications");
+  if (contractError || !Array.isArray(contractRows)) throw new Error(GENERIC_LOAD_ERROR);
+  const contract = contractRows.find((item) => item && typeof item === "object" && !Array.isArray(item)
+    && (item as Record<string, unknown>).person_id === personId) as Record<string, unknown> | undefined;
+  const contractType = contract?.contract_type ?? "";
+  if (contractType !== "" && contractType !== "permanent" && contractType !== "fixed_term") throw new Error(GENERIC_LOAD_ERROR);
+  return toRecord(data[0] as DirectoryRpcRow, contractType);
 }

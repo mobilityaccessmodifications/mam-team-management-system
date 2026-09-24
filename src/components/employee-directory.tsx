@@ -117,6 +117,7 @@ const emptyDraft: EmployeeDirectoryDraft = {
   workingDayTimes: [],
   archiveReason: "",
   employmentType: "",
+  contractType: "",
   laptopSupplied: "",
   laptopId: "",
   mouseId: "",
@@ -145,6 +146,7 @@ function toDraft(record: EmployeeDirectoryRecord): EmployeeDirectoryDraft {
     workingDayTimes: record.workingDayTimes,
     archiveReason: record.archiveReason,
     employmentType: record.employmentType,
+    contractType: record.contractType,
     laptopSupplied: record.laptopSupplied,
     laptopId: record.laptopId,
     mouseId: record.mouseId,
@@ -967,6 +969,13 @@ function EmployeeEditor({
               <option value="casual">Casual</option>
               <option value="full_time">Full Time</option>
               <option value="part_time">Part Time</option>
+            </select>
+          </Field>
+          <Field label="Contract type">
+            <select value={editor.draft.contractType} onChange={(event) => onChange("contractType", event.target.value)}>
+              <option value="">Not set</option>
+              <option value="permanent">Permanent</option>
+              <option value="fixed_term">Fixed-Term</option>
             </select>
           </Field>
           {!editor.draft.isActive ? <Field label="Archive reason" className={styles.fullSpan}>
