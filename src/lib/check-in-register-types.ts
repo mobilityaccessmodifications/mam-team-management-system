@@ -16,7 +16,7 @@ export type CheckInReviewOutcome =
 
 export type CheckInReminder = {
   id: string;
-  milestone: "2_week" | "1_month" | "2_month" | "3_month" | "5_month" | "6_month";
+  milestone: "2_week" | "1_month" | "2_month" | "3_month" | "5_month" | "6_month" | "6_month_casual";
   sequence: "initial" | "final";
   dueDate: string;
   notifyDate: string;
