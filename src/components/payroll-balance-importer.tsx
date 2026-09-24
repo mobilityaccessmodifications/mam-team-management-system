@@ -368,9 +368,12 @@ export function PayrollBalanceImporter({
             <div className={styles.accessList}>
               {filteredAccessPeople.map((person) => <label className={styles.accessOption} key={person.personId}>
                 <input type="checkbox" checked={selectedAccess.has(person.personId)} disabled={busy === "access"} onChange={(event) => {
+                  // React clears currentTarget once this handler returns, but a
+                  // queued updater can run later during render.
+                  const checked = event.currentTarget.checked;
                   setSelectedAccess((current) => {
                     const next = new Set(current);
-                    if (event.currentTarget.checked) next.add(person.personId);
+                    if (checked) next.add(person.personId);
                     else next.delete(person.personId);
                     return next;
                   });
