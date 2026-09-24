@@ -1,19 +1,14 @@
-# WhatsApp self-leave bridge — local implementation draft, NOT enabled
+# WhatsApp self-leave bridge
 
-S01 update: all phone identity resolution now requires independent enrollment in
-the private verified-phone registry. See [verified identity rollout](openclaw-phone-identity-rollout.md)
-for the SystemAdmin enrollment/revocation RPCs, sealed enrollment-version checks,
-legacy DB commit retirement and the required empty-registry rollout. This task
-has not approved or created production mappings. Contact edits never authorize
-OpenClaw access. Historical v1/v2 behavior described below is not a supported
-write path; the current HTTP route accepts v3 and old confirmations must restart.
-
-Status: contract, HMAC HTTP route, optimistic-CAS store and additive migration
-draft exist locally. There is **no production migration, secret provisioning or
-VPS installation**. Full-stack database and native adapter verification is still
-required. Do not point MCP at this path and describe it as working.
-Do not reuse the read-only allowlist secret. No real leave or notification was
-created. Existing portal submission and its database permissions are unchanged.
+The production-capable v3 bridge accepts only signed requests from the trusted
+native OpenClaw adapter. Runtime access requires the production route flag, the
+private database release gate, and one dedicated random secret shared between
+the production app and the protected VPS service environment. Do not reuse the
+read-only allowlist or cron secret. See [verified phone rollout](openclaw-phone-identity-rollout.md)
+for the private registry and SystemAdmin enrollment rules. Directory contact
+edits never authorize OpenClaw access. Historical v1/v2 write paths are retired;
+old confirmations must restart. Existing portal leave submission and its
+database permissions are unchanged.
 
 ## Existing workflow audit
 
@@ -305,34 +300,28 @@ production migration or external review was performed in this source-inclusion
 step. The imported runtime, package and manifest hashes match the temporary
 source; only its operator README was expanded.
 
-## Deployment sequence (NOT executed; requires approval)
+## Release checklist
 
 Native plugin source is now included at
 [`integrations/openclaw-leave/`](../integrations/openclaw-leave/README.md):
 `index.js`, `package.json`, `openclaw.plugin.json`, and operator README. The
-runtime source matches the coordinating task's temporary tested copy; no
-temporary harness, credentials, dependencies or generated build output were
-copied. The coordinating task reported native OpenClaw 2026.9.4 build/validation
-success. The repository's `tests/openclaw-leave-plugin.test.mjs` is an offline
-registration/identity/signature/confirmation smoke test with fake SDK/fetch;
-it is not native SDK or real-channel E2E evidence. Installation behavior has
-not been verified; follow the README's stop gate, not an install-then-disable
-recipe. No plugin is installed or enabled by these source additions.
+The plugin source is in [`integrations/openclaw-leave/`](../integrations/openclaw-leave/README.md).
+Offline tests with fake SDK/fetch do not prove live channel behavior. For a new
+installation or key rotation, follow the target checks, scoped migration
+verification, reviewed GitHub deployment, protected secret provisioning,
+native plugin validation and restrictive-policy checks below. Do not apply a
+historical migration over a newer production schema.
 
-1. Finish full-schema tests, portal/bridge concurrency tests, cleanup operational verification and native
-   plugin host bindings. Independently review the exact internal diff after explicit
-   external-code-review authorization; do not reuse the phone-normalization review.
-2. Verify MAM Supabase target, apply only the reviewed migration with its recorded
-   hash/version; leave database gate false. Check service-only ACL and all triggers.
-3. Provision a new `MAM_OPENCLAW_LEAVE_BRIDGE_SECRET` in People production and the
-   trusted VPS adapter only; configure exact `MAM_OPENCLAW_LEAVE_ACCOUNT`.
-   Keep `MAM_OPENCLAW_LEAVE_ENABLED=false` until gateway verification passes.
-4. Authorized GitHub PR/merge triggers Vercel; never direct-deploy local code.
-5. Install the independently tested native plugin and trusted inbound hook on the
-   approved VPS, verify sender/account/quote provenance with synthetic tests.
-6. Only after explicit release authorization and complete checks, enable the
-   private database gate and route flag. Never expose a DB key to VPS. Do not create
-   real leave or send employee test messages as a smoke test without authorization.
+1. Verify MAM production targets, existing migration history, service-only ACLs
+   and current identity scope before changing anything.
+2. Deploy server changes through a reviewed GitHub merge; production Vercel
+   deployment must follow that merge, never a direct local deploy.
+3. Store a new high-entropy `MAM_OPENCLAW_LEAVE_BRIDGE_SECRET` only in production
+   and the trusted VPS service environment. Match the exact account and endpoint.
+4. Keep ingress denied until the native plugin, allowlist policy, synchronizer
+   and freshness watchdog are verified. Never expose database credentials to VPS.
+5. Do not send employee test messages or create real leave requests as a smoke
+   test without separate authorization.
 
 ## Authorized review follow-up (2026-09-18)
 
