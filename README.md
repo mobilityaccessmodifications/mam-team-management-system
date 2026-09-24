@@ -326,3 +326,19 @@ transaction for review; unknown archived teams remain null. The label backfill
 audit records changed field names only. Check-in rescheduling is suppressed only
 inside the backfill transaction and restored before commit. It does not change
 Company, Reports to, roles, approvals, leave balances or calendar permissions.
+
+### Power BI HR directory
+
+Migration `20260924235000_powerbi_hr_employee_directory` creates only the
+approved `powerbi_hr.employee_directory` projection and the dedicated
+`mam_powerbi_hr_reader` database login. Review and inspect it with
+`scripts/deploy-powerbi-hr-directory.py inspect`, then apply the reviewed
+SHA-256 with `apply <reviewed-sha256>` through the MAM Supabase credential
+helper. Its schema check verifies the exact projection, read-only role, denied
+source-table access and absence of grants to browser or service roles without
+reading employee rows. Set the role's password out of band and save it only in
+Power BI's protected PostgreSQL data-source credentials. Connect using the
+Supabase Dashboard's shared Session Pooler details (port 5432), database
+`postgres`, and username `mam_powerbi_hr_reader.xtwlrjqbusadghavchqm`; do not
+guess the pooler host. Limit semantic-model sharing to approved HR and
+management viewers.

@@ -65,7 +65,7 @@ Creating an employee record in the HR Directory does not create an Auth user, se
 
 ## HR employee-data boundary
 
-The organisation tree is deliberately limited to safe structural information: name, position, company and reporting relationship. Private employee details are available only to an active database-controlled System Admin through authenticated server actions and controlled database functions. The employee CSV is generated on demand for that authorised session using the agreed 13-column shape, with Company immediately after Team; it excludes login names, Auth aliases and password data, and the application does not retain the export.
+The organisation tree is deliberately limited to safe structural information: name, position, company and reporting relationship. Private employee details are available to an active database-controlled System Admin through authenticated server actions and controlled database functions. Power BI receives a separate approved field projection through `powerbi_hr.employee_directory`, using a dedicated read-only PostgreSQL login that cannot access the source tables. Its password is configured outside migrations and stored only in Power BI data-source credentials; the Power BI semantic model is shared only with approved HR and management viewers. The employee CSV is generated on demand for an authorised application session using the agreed 13-column shape, with Company immediately after Team; it excludes login names, Auth aliases and password data, and the application does not retain the export.
 
 ## Deployed durable leave boundary
 
