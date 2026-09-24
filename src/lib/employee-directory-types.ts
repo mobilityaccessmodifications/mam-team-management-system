@@ -85,6 +85,8 @@ export type UpdateEmployeeDirectoryInput = EmployeeDirectoryDraft & {
 
 export type EmployeeDirectoryMutationResult = {
   record: EmployeeDirectoryRecord;
+  /** The directory change was saved, but a follow-up setting was not. */
+  warning?: string;
 };
 
 /**

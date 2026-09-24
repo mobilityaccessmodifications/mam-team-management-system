@@ -204,9 +204,21 @@ export async function listEmployeeDirectoryRecordsForManager() {
   return listEmployeeDirectoryRecordsWithClient(supabase);
 }
 
-export async function listEmployeeDirectoryRecordsWithClient(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-) {
+async function listContractTypes(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const { data: contractRows, error: contractError } = await supabase.rpc("list_employee_check_in_contract_classifications");
+  if (contractError || !Array.isArray(contractRows)) throw new Error(GENERIC_LOAD_ERROR);
+  const contractTypes = new Map<string, EmployeeContractType>();
+  for (const item of contractRows) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(GENERIC_LOAD_ERROR);
+    const row = item as Record<string, unknown>;
+    if (typeof row.person_id !== "string" || !UUID_PATTERN.test(row.person_id)) throw new Error(GENERIC_LOAD_ERROR);
+    if (row.contract_type !== "permanent" && row.contract_type !== "fixed_term") throw new Error(GENERIC_LOAD_ERROR);
+    contractTypes.set(row.person_id, row.contract_type);
+  }
+  return contractTypes;
+}
+
+async function listDirectoryRows(supabase: Awaited<ReturnType<typeof createClient>>) {
   let { data: archiveData, error: archiveError } = await supabase.rpc("list_employee_directory_records_with_work_schedule_times", {
     p_include_archived: true,
   });
@@ -221,27 +233,10 @@ export async function listEmployeeDirectoryRecordsWithClient(
     }));
   }
   if (archiveError || !Array.isArray(archiveData)) throw new Error(GENERIC_LOAD_ERROR);
-  const { data: contractRows, error: contractError } = await supabase.rpc("list_employee_check_in_contract_classifications");
-  if (contractError || !Array.isArray(contractRows)) throw new Error(GENERIC_LOAD_ERROR);
-  const contractTypes = new Map<string, EmployeeContractType>();
-  for (const item of contractRows) {
-    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(GENERIC_LOAD_ERROR);
-    const row = item as Record<string, unknown>;
-    if (typeof row.person_id !== "string" || !UUID_PATTERN.test(row.person_id)) throw new Error(GENERIC_LOAD_ERROR);
-    if (row.contract_type !== "permanent" && row.contract_type !== "fixed_term") throw new Error(GENERIC_LOAD_ERROR);
-    contractTypes.set(row.person_id, row.contract_type);
-  }
-
-  return (archiveData as DirectoryRpcRow[])
-    .map((row) => toRecord(row, contractTypes.get(row.person_id) ?? ""))
-    .sort((first, second) => first.fullName.localeCompare(second.fullName));
+  return archiveData as DirectoryRpcRow[];
 }
 
-export async function findEmployeeDirectoryRecord(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  personId: string,
-) {
-  if (!UUID_PATTERN.test(personId)) throw new Error(GENERIC_LOAD_ERROR);
+async function getDirectoryRow(supabase: Awaited<ReturnType<typeof createClient>>, personId: string) {
   let { data, error } = await supabase.rpc("get_employee_directory_record_with_work_schedule_times", {
     p_person_id: personId,
   });
@@ -256,11 +251,24 @@ export async function findEmployeeDirectoryRecord(
     }));
   }
   if (error || !Array.isArray(data) || data.length !== 1) throw new Error(GENERIC_LOAD_ERROR);
-  const { data: contractRows, error: contractError } = await supabase.rpc("list_employee_check_in_contract_classifications");
-  if (contractError || !Array.isArray(contractRows)) throw new Error(GENERIC_LOAD_ERROR);
-  const contract = contractRows.find((item) => item && typeof item === "object" && !Array.isArray(item)
-    && (item as Record<string, unknown>).person_id === personId) as Record<string, unknown> | undefined;
-  const contractType = contract?.contract_type ?? "";
-  if (contractType !== "" && contractType !== "permanent" && contractType !== "fixed_term") throw new Error(GENERIC_LOAD_ERROR);
-  return toRecord(data[0] as DirectoryRpcRow, contractType);
+  return data[0] as DirectoryRpcRow;
+}
+
+export async function listEmployeeDirectoryRecordsWithClient(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+) {
+  // The two reads are independent, so neither waits for the other.
+  const [rows, contractTypes] = await Promise.all([listDirectoryRows(supabase), listContractTypes(supabase)]);
+  return rows
+    .map((row) => toRecord(row, contractTypes.get(row.person_id) ?? ""))
+    .sort((first, second) => first.fullName.localeCompare(second.fullName));
+}
+
+export async function findEmployeeDirectoryRecord(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  personId: string,
+) {
+  if (!UUID_PATTERN.test(personId)) throw new Error(GENERIC_LOAD_ERROR);
+  const [row, contractTypes] = await Promise.all([getDirectoryRow(supabase, personId), listContractTypes(supabase)]);
+  return toRecord(row, contractTypes.get(personId) ?? "");
 }

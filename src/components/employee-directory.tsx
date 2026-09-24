@@ -54,9 +54,21 @@ import type {
   UpdateEmployeeDirectoryInput,
 } from "@/lib/employee-directory-types";
 
+// Edits keep the record versions their draft was built from, so a refreshed
+// list cannot make a stale draft pass the server's concurrency check.
 type EditorState =
   | { mode: "create"; draft: EmployeeDirectoryDraft }
-  | { mode: "edit"; personId: string; draft: EmployeeDirectoryDraft };
+  | { mode: "edit"; personId: string; personVersion: number; detailVersion: number; draft: EmployeeDirectoryDraft };
+
+function editEditor(record: EmployeeDirectoryRecord): EditorState {
+  return {
+    mode: "edit",
+    personId: record.personId,
+    personVersion: record.personVersion,
+    detailVersion: record.detailVersion,
+    draft: toDraft(record),
+  };
+}
 
 type DirectorySort = "name" | "startedDate" | "company";
 
@@ -453,7 +465,7 @@ export function EmployeeDirectory({
   // the draft so typing is never overwritten by a parent render.
   const activeEditor = externallySelectedRecord
     && (editor?.mode !== "edit" || editor.personId !== externallySelectedRecord.personId)
-    ? { mode: "edit" as const, personId: externallySelectedRecord.personId, draft: toDraft(externallySelectedRecord) }
+    ? editEditor(externallySelectedRecord)
     : editor;
   const currentRecord = selectedRecord(records, activeEditor);
   const editorHasUnsavedChanges = hasUnsavedChanges(currentRecord, activeEditor);
@@ -476,7 +488,7 @@ export function EmployeeDirectory({
   }
 
   function openRecord(record: EmployeeDirectoryRecord) {
-    setEditor({ mode: "edit", personId: record.personId, draft: toDraft(record) });
+    setEditor(editEditor(record));
     setSaveError("");
     setNotice("");
     onSelectedPersonId?.(record.personId);
@@ -557,7 +569,7 @@ export function EmployeeDirectory({
         return;
       }
       setRecords((current) => current.map((candidate) => candidate.personId === result.record.personId ? result.record : candidate));
-      setEditor({ mode: "edit", personId: result.record.personId, draft: toDraft(result.record) });
+      setEditor(editEditor(result.record));
       setEndDatePrompt(null);
       setNotice("Employment ended, portal account disabled and profile archived.");
       setDirectoryFilter("archived");
@@ -604,20 +616,23 @@ export function EmployeeDirectory({
     setSaveError("");
     try {
       let saved: EmployeeDirectoryRecord;
+      let warning: string | undefined;
       if (editorToSave.mode === "create") {
         const result = await createEmployeeDirectoryRecord(editorToSave.draft as CreateEmployeeDirectoryInput);
         saved = result.record;
+        warning = result.warning;
       } else {
         const record = selectedRecord(records, editorToSave);
         if (!record) throw new Error("This record is no longer available. Refresh the directory and try again.");
         const input: UpdateEmployeeDirectoryInput = {
           ...editorToSave.draft,
           personId: record.personId,
-          personVersion: record.personVersion,
-          detailVersion: record.detailVersion,
+          personVersion: editorToSave.personVersion,
+          detailVersion: editorToSave.detailVersion,
         };
         const result = await updateEmployeeDirectoryRecord(input);
         saved = result.record;
+        warning = result.warning;
       }
 
       setRecords((current) => {
@@ -627,8 +642,9 @@ export function EmployeeDirectory({
           : [...current, saved];
         return next.sort((first, second) => first.fullName.localeCompare(second.fullName));
       });
-      setEditor({ mode: "edit", personId: saved.personId, draft: toDraft(saved) });
-      setNotice(editorToSave.mode === "create" ? "Employee record created." : "Employee record saved.");
+      setEditor(editEditor(saved));
+      if (warning) setSaveError(warning);
+      else setNotice(editorToSave.mode === "create" ? "Employee record created." : "Employee record saved.");
       onSelectedPersonId?.(saved.personId);
       await onRecordsChanged?.();
     } catch (error) {

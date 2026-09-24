@@ -164,7 +164,12 @@ export async function GET(request: Request) {
     const prepared = !preparedResult.error && Array.isArray(preparedResult.data)
       ? preparedReminder(preparedResult.data[0]) : null;
     if (!prepared) {
-      if (preparedResult.error) await markFailed(supabase,candidate.reminder_id,candidate.claim_token,"configuration_error");
+      // An empty result means the claim is already released (moved to review)
+      // or no longer ours. A returned row that fails local validation still
+      // holds the claim, so release it through the counted retry path instead
+      // of letting it expire and be reclaimed without a recorded failure.
+      const releasedByPrepare = !preparedResult.error && Array.isArray(preparedResult.data) && preparedResult.data.length === 0;
+      if (!releasedByPrepare) await markFailed(supabase,candidate.reminder_id,candidate.claim_token,"configuration_error");
       failed += 1;
       return;
     }

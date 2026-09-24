@@ -294,6 +294,24 @@ function mutationError(error: { message?: string } | null) {
   return new Error(GENERIC_SAVE_ERROR);
 }
 
+const CONTRACT_TYPE_NOT_SAVED = "Employee details were saved, but the contract type was not. Choose it again and save.";
+
+async function saveContractClassification(
+  supabase: Awaited<ReturnType<typeof requireEmployeeDirectoryManager>>["supabase"],
+  personId: string,
+  contractType: ReturnType<typeof validateDraft>["p_contract_type"],
+) {
+  try {
+    const { error } = await supabase.rpc("set_employee_check_in_contract_classification", {
+      p_person_id: personId,
+      p_contract_type: contractType,
+    });
+    return error ? CONTRACT_TYPE_NOT_SAVED : undefined;
+  } catch {
+    return CONTRACT_TYPE_NOT_SAVED;
+  }
+}
+
 /** Returns only HR-authorised employee records; never account credentials. */
 export async function listEmployeeDirectoryRecords(): Promise<EmployeeDirectoryRecord[]> {
   return listEmployeeDirectoryRecordsForManager();
@@ -346,14 +364,15 @@ export async function createEmployeeDirectoryRecord(
   if (error) throw mutationError(error);
 
   const personId = returnedPersonId(data);
-  const { error: contractError } = await supabase.rpc("set_employee_check_in_contract_classification", {
-    p_person_id: personId,
-    p_contract_type: selectedContractType,
-  });
-  if (contractError) throw mutationError(contractError);
+  // A new person has no classification, so only an explicit choice needs the
+  // second call. The employee already exists; never turn its failure into a
+  // save error that invites a duplicate create.
+  const warning = selectedContractType === null
+    ? undefined
+    : await saveContractClassification(supabase, personId, selectedContractType);
   const record = await findEmployeeDirectoryRecord(supabase, personId);
   revalidatePath("/");
-  return { record };
+  return warning ? { record, warning } : { record };
 }
 
 export async function updateEmployeeDirectoryRecord(
@@ -396,14 +415,12 @@ export async function updateEmployeeDirectoryRecord(
   if (error) throw mutationError(error);
 
   const personId = returnedPersonId(data);
-  const { error: contractError } = await supabase.rpc("set_employee_check_in_contract_classification", {
-    p_person_id: personId,
-    p_contract_type: selectedContractType,
-  });
-  if (contractError) throw mutationError(contractError);
+  // The directory change is already committed; report a classification
+  // failure against the fresh record instead of failing the whole save.
+  const warning = await saveContractClassification(supabase, personId, selectedContractType);
   const record = await findEmployeeDirectoryRecord(supabase, personId);
   revalidatePath("/");
-  return { record };
+  return warning ? { record, warning } : { record };
 }
 
 export type ArchiveEmployeeDirectoryResult =

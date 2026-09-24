@@ -77,6 +77,12 @@ function toDraft(record: ManagedEmployeeDirectoryRecord): ManagedEmployeeDirecto
   };
 }
 
+type DraftVersions = Pick<ManagedEmployeeDirectoryRecord, "personId" | "personVersion" | "detailVersion">;
+
+function draftVersionsFor(record: ManagedEmployeeDirectoryRecord): DraftVersions {
+  return { personId: record.personId, personVersion: record.personVersion, detailVersion: record.detailVersion };
+}
+
 function Field({
   label,
   required,
@@ -107,6 +113,9 @@ export function ManagerEmployeeDirectory({
   const [query, setQuery] = useState("");
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ManagedEmployeeDirectoryDraft | null>(null);
+  // The record versions the draft was built from. A Realtime reload refreshes
+  // `records`, which must not make a stale draft pass the version check.
+  const [draftVersions, setDraftVersions] = useState<DraftVersions | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [notice, setNotice] = useState("");
@@ -121,6 +130,7 @@ export function ManagerEmployeeDirectory({
         setRecords([]);
         setSelectedPersonId(null);
         setDraft(null);
+        setDraftVersions(null);
         setLoadError(result.message);
         return;
       }
@@ -134,6 +144,7 @@ export function ManagerEmployeeDirectory({
       setRecords([]);
       setSelectedPersonId(null);
       setDraft(null);
+      setDraftVersions(null);
       setLoadError(error instanceof Error ? error.message : "Team employee records could not be loaded. Refresh and try again.");
     } finally {
       setLoading(false);
@@ -162,6 +173,7 @@ export function ManagerEmployeeDirectory({
   const openRecord = useCallback((record: ManagedEmployeeDirectoryRecord) => {
     setSelectedPersonId(record.personId);
     setDraft(toDraft(record));
+    setDraftVersions(draftVersionsFor(record));
     setSaveError("");
     setNotice("");
   }, []);
@@ -170,6 +182,7 @@ export function ManagerEmployeeDirectory({
     if (saving) return;
     setSelectedPersonId(null);
     setDraft(null);
+    setDraftVersions(null);
     setSaveError("");
   }, [saving]);
 
@@ -182,6 +195,10 @@ export function ManagerEmployeeDirectory({
   async function saveRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedRecord || !draft || saving) return;
+    if (draftVersions?.personId !== selectedRecord.personId) {
+      setSaveError("This record has changed. Refresh it, then try again.");
+      return;
+    }
 
     setSaving(true);
     setSaveError("");
@@ -189,8 +206,8 @@ export function ManagerEmployeeDirectory({
     try {
       const result = await updateManagedEmployeeDirectoryRecord({
         personId: selectedRecord.personId,
-        personVersion: selectedRecord.personVersion,
-        detailVersion: selectedRecord.detailVersion,
+        personVersion: draftVersions.personVersion,
+        detailVersion: draftVersions.detailVersion,
         previewManagerPersonId,
         ...draft,
       });
@@ -198,6 +215,7 @@ export function ManagerEmployeeDirectory({
         record.personId === result.record.personId ? result.record : record
       )));
       setDraft(toDraft(result.record));
+      setDraftVersions(draftVersionsFor(result.record));
       setNotice("Employee record updated.");
       await onRecordsChanged?.();
     } catch (error) {

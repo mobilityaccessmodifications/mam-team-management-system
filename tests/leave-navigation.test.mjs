@@ -169,7 +169,7 @@ test('request details show the submission date in Melbourne time', () => {
   const Detail = load('RequestDetail', { useId:()=> 'detail', styles:{}, StatusPill:'status', formatDurationWithTime:()=> '5 days', formatSubmissionDate:format, AttachmentList:()=>null, SickEvidenceNotice:()=>null, ChevronRight:'icon' });
   const tree = Detail({
     profile:{id:'reviewer'},
-    request:{id:'request',personId:'employee',employee:'Suresh Deuja',initials:'SD',leaveType:'Unpaid leave',dateLabel:'13–19 Nov 2026',approvalRequired:true,assignedReviewerLabel:'Sujant Chettri',submittedAt:'2026-09-22T23:30:00Z',canDecide:false,status:'Pending'},
+    request:{id:'request',personId:'employee',employee:'Synthetic Employee',initials:'SE',leaveType:'Unpaid leave',dateLabel:'13–19 Nov 2026',approvalRequired:true,assignedReviewerLabel:'Synthetic Reviewer',submittedAt:'2026-09-22T23:30:00Z',canDecide:false,status:'Pending'},
     attachments:[],canReview:true,hidePrivateDetails:true,
   });
   assert.match(textContent(tree), /Submission date23 Sept 2026Leave typeUnpaid leave/);
@@ -246,6 +246,7 @@ test('calendar toggle expands and collapses the same calendar even without overl
     useState: () => [expanded, value => { expanded = value; }], useId: () => 'calendar',
     styles: {}, getApprovalCalendarDays: (_, value) => value ? [{iso:'2026-12-28'}, {iso:'2027-02-21'}] : [{iso:'2027-01-18'}, {iso:'2027-01-31'}],
     formatDateRange: (start,end) => `${start}–${end}`, formatTimeRange: () => '', checkInMilestoneLabel: () => '',
+    approvalCalendarTeamLeave: load('approvalCalendarTeamLeave', {}),
   });
   const props = {selected:{id:'request',startDate:'2027-01-22',endDate:'2027-01-25'},requests:[],checkIns:[]};
   for (const [label, expected] of [['Expand calendar',false],['Collapse calendar',true],['Expand calendar',false]]) {
@@ -258,4 +259,22 @@ test('calendar toggle expands and collapses the same calendar even without overl
     assert.match(viewport.props.children.props['aria-label'], expected ? /2026-12-28–2027-02-21/ : /2027-01-18–2027-01-31/);
     action.props.onClick();
   }
+});
+
+test('approval calendar shows the applicant team’s leave from team-labelled calendar entries', () => {
+  const teamLeave = load('approvalCalendarTeamLeave', {});
+  const entry = (id, personId, team, status = 'Approved', startDate = '2027-01-20', endDate = '2027-01-22') => ({ id, personId, team, status, startDate, endDate });
+  const selected = { id: 'request', personId: 'applicant', team: 'MAM', startDate: '2027-01-20', endDate: '2027-01-21' };
+  const calendar = [
+    entry('request', 'applicant', 'MAM · Trades', 'Pending'),
+    entry('teammate', 'teammate', 'MAM · Trades'),
+    entry('teammate-pending', 'pending-teammate', 'MAM · Trades', 'Pending'),
+    entry('declined', 'declined-teammate', 'MAM · Trades', 'Declined'),
+    entry('other-team', 'scheduler', 'MAM · Scheduling'),
+    entry('other-company', 'equipsy', 'Equipsy · Trades'),
+    entry('outside-range', 'later', 'MAM · Trades', 'Approved', '2027-03-01', '2027-03-02'),
+  ];
+  assert.deepEqual(teamLeave(selected, calendar, '2027-01-18', '2027-01-31').map((request) => request.id), ['teammate', 'teammate-pending']);
+  // Without a visible applicant entry, fall back to the applicant's company.
+  assert.deepEqual(teamLeave(selected, calendar.slice(1), '2027-01-18', '2027-01-31').map((request) => request.id), ['teammate', 'teammate-pending', 'other-team']);
 });
