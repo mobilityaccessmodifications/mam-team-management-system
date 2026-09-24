@@ -69,6 +69,7 @@ test('Day 1 test workflow hard-routes to Marketing and attaches the reviewed che
 
 test('live workflow includes both employee addresses once and the direct manager', () => {
   const workflow = buildNewStarterDayOneWorkflow({ mode: 'live' });
+  assert.equal(workflow.settings.saveDataErrorExecution,'none');
   const validatorNode = workflow.nodes.find((node) => node.name === 'Validate Day 1 Request');
   const validator = new Function('$input',validatorNode.parameters.jsCode);
   const payload = {

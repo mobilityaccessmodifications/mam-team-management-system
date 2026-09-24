@@ -159,7 +159,7 @@ export function buildNewStarterDayOneWorkflow({
   };
   return {
     name: `MAM People Hub - Day 1 New Starter Email (${mode === 'test' ? 'Marketing Test' : 'Live'})`, nodes, connections,
-    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne', saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all', saveExecutionProgress: false },
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne', saveDataSuccessExecution: 'none', saveDataErrorExecution: mode === 'live' ? 'none' : 'all', saveExecutionProgress: false },
   };
 }
 
