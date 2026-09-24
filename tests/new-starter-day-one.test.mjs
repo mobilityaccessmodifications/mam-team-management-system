@@ -175,6 +175,39 @@ test('a claimed reminder moved to review is surfaced as an incomplete recovery r
   }
 });
 
+test('a prepared reminder that fails local validation releases its claim through the retry path', async () => {
+  const previousEnv = { ...process.env };
+  const PreviousDate = globalThis.Date;
+  Object.assign(process.env,{
+    CRON_SECRET:'synthetic-cron',NEW_STARTER_DAY_ONE_EMAIL_MODE:'live',
+    N8N_NEW_STARTER_WEBHOOK_ORIGIN:'https://n8n.example.test',N8N_NEW_STARTER_WEBHOOK_URL:'https://n8n.example.test/webhook/day-one',
+    N8N_CHECKIN_REMINDER_WEBHOOK_SECRET:'x'.repeat(40),
+  });
+  globalThis.Date = class extends PreviousDate { constructor(...args) { super(...(args.length ? args : ['2026-09-23T00:00:00Z'])); } };
+  const failures = [];
+  const admin = { rpc: async (name,args) => {
+    if (name === 'claim_due_new_starter_day_one_reminders') return { data:[{ reminder_id:reminderId,claim_token:claimToken }],error:null };
+    // The database accepts this address, but the delivery contract requires a domain dot.
+    if (name === 'prepare_new_starter_day_one_delivery') return { data:[{
+      reminder_id:reminderId,employee_first_name:'Taylor',employee_work_email:'work@example.test',
+      employee_personal_email:null,role:'Coordinator',company_key:'mam',
+      manager_first_name:'Morgan',manager_email:'manager@localhost',commencement_date:'2026-10-05',notify_date:'2026-10-02',
+    }],error:null };
+    if (name === 'fail_new_starter_day_one_delivery') { failures.push(args); return { data:true,error:null }; }
+    throw new Error(`unexpected RPC ${name}`);
+  } };
+  try {
+    const response = await loadRoute(admin).GET(request());
+    assert.equal(response.status,503);
+    assert.deepEqual(await response.json(),{ ok:false,code:'delivery_incomplete',claimed:1,sent:0,failed:1 });
+    assert.deepEqual(failures,[{ p_reminder_id:reminderId,p_claim_token:claimToken,p_error_code:'configuration_error' }]);
+  } finally {
+    globalThis.Date = PreviousDate;
+    for (const key of Object.keys(process.env)) if (!(key in previousEnv)) delete process.env[key];
+    Object.assign(process.env,previousEnv);
+  }
+});
+
 test('new active employee creation fails before mutation without start date, direct manager or an employee email', async () => {
   const source = ts.transpileModule(readFileSync('src/app/people/actions.ts','utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
