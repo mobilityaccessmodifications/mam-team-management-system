@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { HR_EMAIL_SIGNATURE_HTML } from './hr-email-signature.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const TEST_RECIPIENT = 'marketing@mobilityaccess.com.au';
@@ -60,7 +61,7 @@ const escapeHtml = value => String(value).replace(/[&<>\"']/g, char => ({'&':'&a
 const employee = escapeHtml(source.employeeFirstName);
 const manager = escapeHtml(source.managerFirstName);
 const role = escapeHtml(source.role);
-const bodyContent = \`<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#22302b"><p>Hi \${employee} and \${manager},</p><p>We’re looking forward to \${employee} joining us as our new <strong>\${role}</strong>.</p><p>On the first day, you’ll spend some time together making sure everything is ready for a safe and organised start.</p><p>This will include your role and reporting line, first-week expectations, workplace induction, systems and equipment access, safety requirements, PPE where applicable, and who to go to when you need help.</p><p>\${manager}, please use the attached <strong>Day 1 New Starter Readiness Checklist</strong> to make sure everything has been covered and complete it by the end of \${employee}’s first day.</p><p>Welcome to the team, \${employee}!</p><p>Thanks,<br>HR Manager</p></div>\`;
+const bodyContent = \`<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#22302b"><p>Hi \${employee} and \${manager},</p><p>We’re looking forward to \${employee} joining us as our new <strong>\${role}</strong>.</p><p>On the first day, you’ll spend some time together making sure everything is ready for a safe and organised start.</p><p>This will include your role and reporting line, first-week expectations, workplace induction, systems and equipment access, safety requirements, PPE where applicable, and who to go to when you need help.</p><p>\${manager}, please use the attached <strong>Day 1 New Starter Readiness Checklist</strong> to make sure everything has been covered and complete it by the end of \${employee}’s first day.</p><p>Welcome to the team, \${employee}!</p><p>Thanks,<br>HR Manager</p>${HR_EMAIL_SIGNATURE_HTML}</div>\`;
 return [{ json: { ...source, subject: 'Welcome to MAM/Equipsy – Your First Day', bodyContent }, binary: {
   checklist: { data: ${JSON.stringify(checklistBase64)}, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', fileName: 'Day 1 New Starter Readiness Checklist.docx' }
 } }];`;
