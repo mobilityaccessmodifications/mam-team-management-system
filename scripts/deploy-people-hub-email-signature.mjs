@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { HR_EMAIL_SIGNATURE_HTML } from './hr-email-signature.mjs';
 
@@ -9,6 +10,7 @@ const targets = [
     id: 'D6UG5ACZGILCpsOk',
     name: 'MAM People System - Leave Email Delivery',
     version: 'b72eee0c-35fd-484d-90c8-aebdf1bb67dc',
+    baselineHash: 'ffe28207e91124b7ad00f7de748173c430176d59377e1aada039c0470913f1f7',
     sends: ['Send Leave Notification to HR'],
     field: 'emailHtml',
   },
@@ -16,6 +18,7 @@ const targets = [
     id: 'zXBU666FFCjAhD87',
     name: 'MAM People System - Check-In Reminder Email Delivery',
     version: '728d981e-c610-4cce-bad8-6d4d20d27ba7',
+    baselineHash: 'fff7b182a72c4793a75efd081a2aabc918055ce9dbd7ff85594ec35a8c2b0980',
     sends: [
       'Send 2-Week Email from HR',
       'Send Existing Check-In Email from HR',
@@ -29,6 +32,7 @@ const targets = [
     id: 'LkLlS67zCHQeenIy',
     name: 'MAM Team Management - Synthetic Email Notifications (Marketing Test)',
     version: '901749c6-a910-4ae1-92b4-213d17c8b467',
+    baselineHash: '5aea326b1d82b62ee19abdeb915c2dc50f25a08e878dc4dd6cf3788195cb96dc',
     sends: ['Send to MAM HR Test Inbox'],
     field: 'emailHtml',
   },
@@ -81,7 +85,7 @@ function inspect(workflow, target) {
       && node.parameters?.resource === 'message' && node.parameters?.operation === 'send'
       && node.parameters?.additionalFields?.bodyContentType === 'html', `${target.id}: send node changed: ${name}`);
     currentBodies.push(node.parameters.bodyContent);
-    node.parameters.bodyContent = signedBody;
+    node.parameters.bodyContent = expectedBody;
   }
   const sendNames = nodes.filter((node) => node.type === 'n8n-nodes-base.microsoftOutlook'
     && node.parameters?.resource === 'message' && node.parameters?.operation === 'send')
@@ -91,6 +95,12 @@ function inspect(workflow, target) {
   const plain = currentBodies.every((body) => body === expectedBody);
   const signed = currentBodies.every((body) => body === signedBody);
   requireCondition(plain || signed, `${target.id}: mixed or unreviewed email bodies`);
+  const baselineHash = createHash('sha256').update(JSON.stringify({
+    name: workflow.name, nodes, connections: workflow.connections, settings: workflow.settings,
+  })).digest('hex');
+  requireCondition(baselineHash === target.baselineHash,
+    `${target.id}: workflow has other unreviewed changes`);
+  for (const name of target.sends) nodes.find((node) => node.name === name).parameters.bodyContent = signedBody;
   if (plain) requireCondition(workflow.versionId === target.version
     && workflow.activeVersionId === target.version, `${target.id}: unsigned published version changed`);
   return {
@@ -116,6 +126,8 @@ async function main() {
     const latest = await api(values, 'GET', `workflows/${target.id}`);
     requireCondition(latest.versionId === before.versionId
       && latest.activeVersionId === before.activeVersionId
+      && latest.active === before.active
+      && latest.name === before.name
       && JSON.stringify(latest.nodes) === JSON.stringify(before.nodes)
       && JSON.stringify(latest.connections) === JSON.stringify(before.connections)
       && JSON.stringify(latest.settings) === JSON.stringify(before.settings),
