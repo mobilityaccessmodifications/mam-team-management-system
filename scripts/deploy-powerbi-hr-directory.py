@@ -112,8 +112,7 @@ select
     select 1
     from pg_proc routine
     join pg_namespace schema on schema.oid = routine.pronamespace
-    where schema.nspname not in ('pg_catalog', 'information_schema')
-      and schema.nspname not like 'pg_temp_%'
+    where has_schema_privilege('mam_powerbi_hr_reader', schema.oid, 'USAGE')
       and routine.prosecdef
       and has_function_privilege('mam_powerbi_hr_reader', routine.oid, 'EXECUTE')
   ) as no_security_definer_routines,
