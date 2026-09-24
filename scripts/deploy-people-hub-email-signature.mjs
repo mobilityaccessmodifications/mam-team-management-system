@@ -2,6 +2,8 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { HR_EMAIL_SIGNATURE_HTML } from './hr-email-signature.mjs';
 
+const N8N_ROOT = '/Volumes/UG/MAM/opencode/n8n';
+
 const targets = [
   {
     id: 'D6UG5ACZGILCpsOk',
@@ -37,9 +39,9 @@ function requireCondition(ok, message) {
 }
 
 function config() {
-  const verified = spawnSync('python3', ['scripts/verify.py'], { encoding: 'utf8' });
+  const verified = spawnSync('python3', ['scripts/verify.py'], { cwd: N8N_ROOT, encoding: 'utf8' });
   requireCondition(verified.status === 0 && verified.stdout.includes('MAM'), 'MAM n8n verification failed');
-  const values = Object.fromEntries(readFileSync('.env', 'utf8').split(/\r?\n/)
+  const values = Object.fromEntries(readFileSync(`${N8N_ROOT}/.env`, 'utf8').split(/\r?\n/)
     .filter((line) => /^[A-Z][A-Z0-9_]*=/.test(line))
     .map((line) => {
       const separator = line.indexOf('=');
@@ -64,22 +66,21 @@ async function api(values, method, path, body) {
   return response.json();
 }
 
-function verifyAndPatch(workflow, target) {
+function inspect(workflow, target) {
   requireCondition(workflow.id === target.id && workflow.name === target.name, `${target.id}: unexpected workflow`);
-  requireCondition(workflow.active === true && workflow.versionId === target.version
-    && workflow.activeVersionId === target.version, `${target.id}: published version changed; review before applying`);
+  requireCondition(workflow.active === true, `${target.id}: workflow is not active`);
   const nodes = structuredClone(workflow.nodes);
   const expectedBody = `={{ $json.${target.field} }}`;
   const signedBody = `={{ String($json.${target.field} ?? '') + ${JSON.stringify(HR_EMAIL_SIGNATURE_HTML)} }}`;
-  requireCondition(!nodes.some((node) => node.parameters?.bodyContent === signedBody), `${target.id}: signature already present`);
+  const currentBodies = [];
   for (const name of target.sends) {
     const matches = nodes.filter((node) => node.name === name);
     requireCondition(matches.length === 1, `${target.id}: send node missing or duplicated: ${name}`);
     const node = matches[0];
     requireCondition(node.type === 'n8n-nodes-base.microsoftOutlook'
       && node.parameters?.resource === 'message' && node.parameters?.operation === 'send'
-      && node.parameters?.bodyContent === expectedBody
       && node.parameters?.additionalFields?.bodyContentType === 'html', `${target.id}: send node changed: ${name}`);
+    currentBodies.push(node.parameters.bodyContent);
     node.parameters.bodyContent = signedBody;
   }
   const sendNames = nodes.filter((node) => node.type === 'n8n-nodes-base.microsoftOutlook'
@@ -87,7 +88,15 @@ function verifyAndPatch(workflow, target) {
     .map((node) => node.name).sort();
   requireCondition(JSON.stringify(sendNames) === JSON.stringify([...target.sends].sort()),
     `${target.id}: unreviewed Outlook send node found`);
-  return { name: workflow.name, nodes, connections: workflow.connections, settings: workflow.settings };
+  const plain = currentBodies.every((body) => body === expectedBody);
+  const signed = currentBodies.every((body) => body === signedBody);
+  requireCondition(plain || signed, `${target.id}: mixed or unreviewed email bodies`);
+  if (plain) requireCondition(workflow.versionId === target.version
+    && workflow.activeVersionId === target.version, `${target.id}: unsigned published version changed`);
+  return {
+    state: plain ? 'pending' : workflow.activeVersionId === workflow.versionId ? 'published' : 'draft',
+    payload: { name: workflow.name, nodes, connections: workflow.connections, settings: workflow.settings },
+  };
 }
 
 async function main() {
@@ -97,13 +106,13 @@ async function main() {
   const plans = [];
   for (const target of targets) {
     const before = await api(values, 'GET', `workflows/${target.id}`);
-    plans.push({ target, before, payload: verifyAndPatch(before, target) });
+    plans.push({ target, before, ...inspect(before, target) });
   }
   if (!apply) {
-    console.log(JSON.stringify({ mode: 'plan', workflows: plans.map(({ target }) => ({ id: target.id, sendNodes: target.sends.length })) }));
+    console.log(JSON.stringify({ mode: 'plan', workflows: plans.map(({ target, state }) => ({ id: target.id, state, sendNodes: target.sends.length })) }));
     return;
   }
-  for (const { target, before, payload } of plans) {
+  for (const { target, before, payload, state } of plans) {
     const latest = await api(values, 'GET', `workflows/${target.id}`);
     requireCondition(latest.versionId === before.versionId
       && latest.activeVersionId === before.activeVersionId
@@ -111,12 +120,18 @@ async function main() {
       && JSON.stringify(latest.connections) === JSON.stringify(before.connections)
       && JSON.stringify(latest.settings) === JSON.stringify(before.settings),
     `${target.id}: workflow changed since the rollout plan`);
-    await api(values, 'PUT', `workflows/${target.id}`, payload);
-    const draft = await api(values, 'GET', `workflows/${target.id}`);
-    requireCondition(draft.active === true && draft.versionId !== target.version
-      && target.sends.every((name) => draft.nodes.find((node) => node.name === name)?.parameters?.bodyContent
-        === payload.nodes.find((node) => node.name === name).parameters.bodyContent),
-    `${target.id}: unexpected draft state after update`);
+    if (state === 'published') {
+      console.log(JSON.stringify({ id: target.id, published: true, alreadyApplied: true }));
+      continue;
+    }
+    if (state === 'pending') {
+      await api(values, 'PUT', `workflows/${target.id}`, payload);
+      const draft = await api(values, 'GET', `workflows/${target.id}`);
+      requireCondition(draft.active === true && draft.versionId !== target.version
+        && target.sends.every((name) => draft.nodes.find((node) => node.name === name)?.parameters?.bodyContent
+          === payload.nodes.find((node) => node.name === name).parameters.bodyContent),
+      `${target.id}: unexpected draft state after update`);
+    }
     await api(values, 'POST', `workflows/${target.id}/activate`);
     const published = await api(values, 'GET', `workflows/${target.id}`);
     requireCondition(published.active === true && published.activeVersionId === published.versionId,
