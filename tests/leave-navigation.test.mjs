@@ -16,6 +16,7 @@ function load(name, bindings) {
   return new Function('require', 'exports', ...Object.keys(bindings), code + `\nreturn ${name};`)(require, {}, ...Object.values(bindings));
 }
 function buttons(node) { if (!node || typeof node !== 'object') return []; if (Array.isArray(node)) return node.flatMap(buttons); return [...(node.type === 'button' ? [node] : []), ...buttons(node.props?.children)]; }
+function textContent(node) { if (node == null || typeof node === 'boolean') return ''; if (typeof node !== 'object') return String(node); if (Array.isArray(node)) return node.map(textContent).join(''); return textContent(node.props?.children); }
 test('Leave navigation defaults to Pending register while explicit approvals remain reachable', () => {
   const calls = [];
   const navigate = load('navigate', { canViewActiveWorkspaceCalendar: true, setActiveView: v => calls.push(v), scrollPageToTop() {}, changeLeaveStatusFilter: f => calls.push(f), chooseLeaveSection: s => calls.push(s) });
@@ -150,13 +151,28 @@ test('only an uploader-owned attachment offers a confirmed destructive action', 
   assert.deepEqual(deleted, ['owned']);
 });
 test('View more is available only for an authorised approvable request and opens that record', () => {
-  const Detail = load('RequestDetail', { useId:()=> 'detail', styles:{}, StatusPill:'status', formatDurationWithTime:()=> '2 days', AttachmentList:()=>null, SickEvidenceNotice:()=>null, ChevronRight:'icon' });
+  const Detail = load('RequestDetail', { useId:()=> 'detail', styles:{}, StatusPill:'status', formatDurationWithTime:()=> '2 days', formatSubmissionDate:()=> '', AttachmentList:()=>null, SickEvidenceNotice:()=>null, ChevronRight:'icon' });
   for (const [canReview, canDecide, count] of [[true,true,1],[true,false,0],[false,true,0]]) {
     const calls = [];
     const tree = Detail({profile:{id:'self'}, request:{id:'second',personId:'self',canDecide,status:'Pending'}, attachments:[],canReview,hidePrivateDetails:true,onViewMore:id=>calls.push(id)});
     const actions = buttons(tree); assert.equal(actions.length,count);
     if(count) { actions[0].props.onClick(); assert.deepEqual(calls,['second']); }
   }
+});
+
+test('request details show the submission date in Melbourne time', () => {
+  const format = load('formatSubmissionDate', {});
+  assert.equal(format('2026-09-22T23:30:00Z'), '23 Sept 2026');
+  assert.equal(format(''), '');
+  assert.equal(format('invalid'), '');
+
+  const Detail = load('RequestDetail', { useId:()=> 'detail', styles:{}, StatusPill:'status', formatDurationWithTime:()=> '5 days', formatSubmissionDate:format, AttachmentList:()=>null, SickEvidenceNotice:()=>null, ChevronRight:'icon' });
+  const tree = Detail({
+    profile:{id:'reviewer'},
+    request:{id:'request',personId:'employee',employee:'Suresh Deuja',initials:'SD',leaveType:'Unpaid leave',dateLabel:'13–19 Nov 2026',approvalRequired:true,assignedReviewerLabel:'Sujant Chettri',submittedAt:'2026-09-22T23:30:00Z',canDecide:false,status:'Pending'},
+    attachments:[],canReview:true,hidePrivateDetails:true,
+  });
+  assert.match(textContent(tree), /Submission date23 Sept 2026Leave typeUnpaid leave/);
 });
 
 test('annual approval has one balance-aware action and preserves conditional decisions', () => {
