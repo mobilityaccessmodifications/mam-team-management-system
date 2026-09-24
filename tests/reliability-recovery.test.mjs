@@ -46,6 +46,7 @@ test('check-in network failures and failed acknowledgements surface as retryable
       const admin={rpc:async(name)=>{calls.push(name);
         if(name==='claim_due_employee_check_in_reminders')return {data:[{reminder_id:id,claim_token:id}],error:null};
         if(name==='prepare_employee_check_in_reminder_delivery')return {data:[{reminder_id:id,employee_first_name:'Test',employee_last_name:'Person',employee_work_email:'test@example.test',employee_personal_email:'home@example.test',role:'Test',department:'Test',manager_name:'Test Manager',manager_email:'manager@example.test',milestone:'2_week',reminder_sequence:'initial',due_date:'2026-09-28',notify_date:'2026-09-21'}],error:null};
+        if(name==='claim_due_employee_check_in_review_notifications')return {data:[],error:null};
         return {data:false,error:scenario==='retry-write'?{message:'offline'}:null};
       }};
       globalThis.fetch=async(_url,options)=>{if(scenario!=='completion')throw new Error('offline');const payload=JSON.parse(options.body);assert.equal(payload.mode,'test');assert.equal(payload.employee.workEmail,'test@example.test');return Response.json({ok:true,sent:true,deliveryId:`checkin:${id}:2-week:initial:test`});};
@@ -54,6 +55,45 @@ test('check-in network failures and failed acknowledgements surface as retryable
       assert.equal(response.status,503);assert.equal((await response.json()).ok,false);
       assert.ok(calls.includes(scenario==='completion'?'complete_employee_check_in_reminder_delivery':'fail_employee_check_in_reminder_delivery'));
     }
+  }finally{globalThis.Date=oldDate;globalThis.fetch=oldFetch;for(const k of Object.keys(process.env))if(!(k in oldEnv))delete process.env[k];Object.assign(process.env,oldEnv);}
+});
+
+test('check-in worker delivers a recipient-free People & Culture escalation through the durable queue',async()=>{
+  const oldDate=globalThis.Date,oldFetch=globalThis.fetch,oldEnv={...process.env};
+  globalThis.Date=class extends oldDate{constructor(...args){super(...(args.length?args:['2026-09-21T00:00:00Z']));}};
+  Object.assign(process.env,{CRON_SECRET:'synthetic-only',CHECK_IN_EMAIL_MODE:'marketing-test',N8N_CHECKIN_REMINDER_WEBHOOK_SECRET:'synthetic',N8N_CHECKIN_REMINDER_WEBHOOK_ORIGIN:'https://synthetic.example',N8N_CHECKIN_REMINDER_WEBHOOK_URL:'https://synthetic.example/hook'});
+  const notificationId='30000000-0000-4000-8000-000000000001';
+  const reviewId='40000000-0000-4000-8000-000000000001';
+  const claimToken='50000000-0000-4000-8000-000000000001';
+  const calls=[];
+  try{
+    const admin={rpc:async(name,args)=>{calls.push({name,args});
+      if(name==='claim_due_employee_check_in_reminders')return {data:[],error:null};
+      if(name==='claim_due_employee_check_in_review_notifications')return {data:[{notification_id:notificationId,claim_token:claimToken}],error:null};
+      if(name==='prepare_employee_check_in_review_notification_delivery')return {data:[{notification_id:notificationId,review_id:reviewId,review_version:2,employee_name:'Test Person',manager_name:'Test Manager',milestone:'5_month',review_date:'2026-09-20',notes:'HR review requested.'}],error:null};
+      if(name==='complete_employee_check_in_review_notification_delivery')return {data:true,error:null};
+      throw new Error('Unexpected RPC '+name);
+    }};
+    globalThis.fetch=async(_url,options)=>{
+      const payload=JSON.parse(options.body);
+      const deliveryId='checkin-review:'+reviewId+':hr:2:test';
+      assert.equal(options.headers['Idempotency-Key'],deliveryId);
+      assert.equal(payload.event,'checkin-review-escalation');
+      assert.equal(payload.deliveryId,deliveryId);
+      assert.equal(Object.hasOwn(payload,'recipient'),false);
+      assert.equal(Object.hasOwn(payload,'email'),false);
+      return Response.json({ok:true,sent:true,alreadySent:false,deliveryId});
+    };
+    const {GET}=load('src/app/api/cron/check-in-reminders/route.ts',{'@/lib/supabase/admin':{createAdminClient:()=>admin},'@/lib/check-in-register':{getCheckInResourceLinks:()=>({managerGuideUrl:'https://synthetic.example/guide',checkInFormUrl:'https://synthetic.example/form',probationTemplatesUrl:'https://synthetic.example/templates'})}});
+    const response=await GET(new Request('https://synthetic.example/cron',{headers:{authorization:'Bearer synthetic-only'}}));
+    const body=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(body.ok,true);
+    assert.equal(body.reviewNotifications.sent,1);
+    assert.ok(calls.some(call=>call.name==='complete_employee_check_in_review_notification_delivery'
+      && call.args.p_notification_id===notificationId
+      && call.args.p_claim_token===claimToken
+      && call.args.p_provider_delivery_id==='checkin-review:'+reviewId+':hr:2:test'));
   }finally{globalThis.Date=oldDate;globalThis.fetch=oldFetch;for(const k of Object.keys(process.env))if(!(k in oldEnv))delete process.env[k];Object.assign(process.env,oldEnv);}
 });
 

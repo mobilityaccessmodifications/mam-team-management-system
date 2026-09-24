@@ -75,12 +75,17 @@ test('reserve validates and canonicalizes every recipient without accepting extr
 
 test('all supported key families pass and unrelated legacy/shared keys fail', async () => {
   for (const eventKey of [`payroll-comparison:${id}`, `payroll-balance:${id}:2026-10`, `leave:${id}:team-birthday:${'b'.repeat(24)}`,
-    `new-starter:${id}:day-one:test`, `new-starter:${id}:day-one:live`]) {
+    `new-starter:${id}:day-one:test`, `new-starter:${id}:day-one:live`,
+    `checkin:${id}:5-month:initial:test`, `checkin:${id}:2-week:initial:live`,
+    `checkin-review:${id}:hr:1:test`, `checkin-review:${id}:hr:9:live`]) {
     const h = harness({ outcome: 'send', eventKey, deliveryToken: token });
     assert.equal((await h.run(request({ ...input, eventKey }))).status, 200);
   }
   for (const eventKey of [`payroll-balance:${id}:2026-13`, `leave:${id}:unknown:${'b'.repeat(24)}`, `payroll-comparison:${id}:extra`,
-    `new-starter:${id}:day-one:preview`, `new-starter:${id}:day-two:live`]) {
+    `new-starter:${id}:day-one:preview`, `new-starter:${id}:day-two:live`,
+    `checkin:${id}:5-month:final:test`, `checkin:${id}:5_month:initial:test`,
+    `checkin:${id}:5-month:initial:preview`, `checkin-review:${id}:hr:0:test`,
+    `checkin-review:${id}:manager:1:live`]) {
     const h = harness(); assert.equal((await h.run(request({ ...input, eventKey }))).status, 400); assert.equal(h.calls.length, 0);
   }
   const legacy = `leave:${id}:leave-submitted:${'b'.repeat(24)}`;

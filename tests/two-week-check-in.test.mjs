@@ -54,7 +54,8 @@ test('Marketing test workflow hard-routes the 2-Week email and attaches the supp
   assert.equal(Buffer.from(email.binary.record.data, 'base64').length, readFileSync(TWO_WEEK_RECORD_PATH).length);
 
   const send = nodes['Send 2-Week Email from HR'];
-  assert.equal(send.parameters.toRecipients, '={{ $json.actualRecipient }}');
+  assert.equal(send.parameters.toRecipients, '={{ $json.deliveryTo }}');
+  assert.equal(send.parameters.additionalFields.bccRecipients, '={{ $json.deliveryBcc }}');
   assert.equal(send.credentials.microsoftOutlookOAuth2Api.name, 'Microsoft Outlook account - hr@mobilityaccess.com.au');
 });
 
@@ -68,6 +69,8 @@ test('Live 2-Week workflow de-duplicates employee work, personal and direct-mana
   });
   const [result] = validate({ first: () => ({ json: { body: livePayload } }) });
   assert.equal(result.json.actualRecipient, 'manager@example.test,same@example.test');
+  assert.equal(result.json.deliveryTo, 'manager@example.test,same@example.test');
+  assert.equal(result.json.deliveryBcc, '');
 });
 
 test('2-Week workflow rejects a request without an employee email', () => {

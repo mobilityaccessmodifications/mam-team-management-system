@@ -16,6 +16,11 @@ type ClaimedReminder = {
   claim_token: string;
 };
 
+type ClaimedReviewNotification = {
+  notification_id: string;
+  claim_token: string;
+};
+
 type PreparedReminder = {
   reminder_id: string;
   employee_first_name: string;
@@ -30,6 +35,17 @@ type PreparedReminder = {
   reminder_sequence: string;
   due_date: string;
   notify_date: string;
+};
+
+type PreparedReviewNotification = {
+  notification_id: string;
+  review_id: string;
+  review_version: number;
+  employee_name: string;
+  manager_name: string;
+  milestone: string;
+  review_date: string;
+  notes: string;
 };
 
 type DeliveryMode = "test" | "live";
@@ -164,6 +180,15 @@ function isClaimedReminder(value: unknown): value is ClaimedReminder {
     && UUID_PATTERN.test(row.claim_token);
 }
 
+function isClaimedReviewNotification(value: unknown): value is ClaimedReviewNotification {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.notification_id === "string"
+    && typeof row.claim_token === "string"
+    && UUID_PATTERN.test(row.notification_id)
+    && UUID_PATTERN.test(row.claim_token);
+}
+
 function preparedReminder(value: unknown): PreparedReminder | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
@@ -183,7 +208,7 @@ function preparedReminder(value: unknown): PreparedReminder | null {
     || typeof row.due_date !== "string"
     || typeof row.notify_date !== "string"
   ) return null;
-  if (["2_week", "1_month", "2_month", "3_month"].includes(row.milestone) && !employeeWorkEmail && !employeePersonalEmail) return null;
+  if (["2_week", "1_month", "2_month", "3_month", "5_month"].includes(row.milestone) && !employeeWorkEmail && !employeePersonalEmail) return null;
   if (
     !row.employee_first_name.trim()
     || !row.employee_last_name.trim()
@@ -210,6 +235,39 @@ function preparedReminder(value: unknown): PreparedReminder | null {
   };
 }
 
+function preparedReviewNotification(value: unknown): PreparedReviewNotification | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (
+    typeof row.notification_id !== "string"
+    || !UUID_PATTERN.test(row.notification_id)
+    || typeof row.review_id !== "string"
+    || !UUID_PATTERN.test(row.review_id)
+    || !Number.isSafeInteger(row.review_version)
+    || Number(row.review_version) < 1
+    || typeof row.employee_name !== "string"
+    || typeof row.manager_name !== "string"
+    || typeof row.milestone !== "string"
+    || typeof row.review_date !== "string"
+    || typeof row.notes !== "string"
+    || !row.employee_name.trim()
+    || !row.manager_name.trim()
+    || !row.notes.trim()
+    || !/^\d{4}-\d{2}-\d{2}$/.test(row.review_date)
+    || !workflowMilestone(row.milestone)
+  ) return null;
+  return {
+    notification_id: row.notification_id,
+    review_id: row.review_id,
+    review_version: Number(row.review_version),
+    employee_name: row.employee_name,
+    manager_name: row.manager_name,
+    milestone: row.milestone,
+    review_date: row.review_date,
+    notes: row.notes,
+  };
+}
+
 function providerFailureCode(response: Response) {
   if (response.status === 408 || response.status === 504) return "provider_timeout";
   if (response.status >= 400 && response.status < 500) return "provider_rejected";
@@ -228,6 +286,137 @@ async function markFailed(
     p_error_code: code,
   });
   if (result.error) throw new Error("Reminder retry could not be recorded.");
+}
+
+async function markReviewNotificationFailed(
+  supabase: ReturnType<typeof createAdminClient>,
+  notificationId: string,
+  claimToken: string,
+  code: "network_error" | "provider_timeout" | "provider_rejected" | "invalid_response" | "configuration_error",
+) {
+  const result = await supabase.rpc("fail_employee_check_in_review_notification_delivery", {
+    p_notification_id: notificationId,
+    p_claim_token: claimToken,
+    p_error_code: code,
+  });
+  if (result.error) throw new Error("People & Culture notification retry could not be recorded.");
+}
+
+async function dispatchReviewNotifications(
+  supabase: ReturnType<typeof createAdminClient>,
+  configuration: DeliveryConfiguration,
+) {
+  const { data: claimedData, error: claimError } = await supabase.rpc(
+    "claim_due_employee_check_in_review_notifications",
+    { p_limit: DELIVERY_BATCH_LIMIT },
+  );
+  if (claimError || !Array.isArray(claimedData)) {
+    return { ok: false, claimed: 0, sent: 0, failed: 1, acceptedPendingFinalisation: 0, backlogLikely: false };
+  }
+
+  let sent = 0;
+  let failed = 0;
+  let acceptedPendingFinalisation = 0;
+  const outcomes = await Promise.allSettled(claimedData.map(async (candidate) => {
+    if (!isClaimedReviewNotification(candidate)) {
+      failed += 1;
+      return;
+    }
+    const { data: preparedData, error: preparedError } = await supabase.rpc(
+      "prepare_employee_check_in_review_notification_delivery",
+      { p_notification_id: candidate.notification_id, p_claim_token: candidate.claim_token },
+    );
+    if (preparedError) {
+      await markReviewNotificationFailed(supabase, candidate.notification_id, candidate.claim_token, "configuration_error");
+      failed += 1;
+      return;
+    }
+    const payload = Array.isArray(preparedData) ? preparedReviewNotification(preparedData[0]) : null;
+    if (Array.isArray(preparedData) && preparedData.length === 0) return;
+    if (!payload) {
+      await markReviewNotificationFailed(supabase, candidate.notification_id, candidate.claim_token, "configuration_error");
+      failed += 1;
+      return;
+    }
+    const milestone = workflowMilestone(payload.milestone);
+    if (!milestone) {
+      await markReviewNotificationFailed(supabase, payload.notification_id, candidate.claim_token, "configuration_error");
+      failed += 1;
+      return;
+    }
+
+    const deliveryId = `checkin-review:${payload.review_id}:hr:${payload.review_version}:${configuration.mode}`;
+    let response: Response;
+    try {
+      response = await fetch(configuration.webhookUrl, {
+        method: "POST",
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000),
+        headers: {
+          "Content-Type": "application/json",
+          "X-MAM-Check-In-Webhook-Secret": configuration.webhookSecret,
+          "Idempotency-Key": deliveryId,
+        },
+        body: JSON.stringify({
+          version: 1,
+          event: "checkin-review-escalation",
+          mode: configuration.mode,
+          deliveryId,
+          employeeName: payload.employee_name,
+          managerName: payload.manager_name,
+          milestone,
+          reviewDate: payload.review_date,
+          notes: payload.notes,
+          reviewVersion: payload.review_version,
+        }),
+      });
+    } catch (error) {
+      const code = error instanceof DOMException && error.name === "TimeoutError"
+        ? "provider_timeout"
+        : "network_error";
+      await markReviewNotificationFailed(supabase, payload.notification_id, candidate.claim_token, code);
+      failed += 1;
+      return;
+    }
+    if (!response.ok) {
+      await markReviewNotificationFailed(
+        supabase,
+        payload.notification_id,
+        candidate.claim_token,
+        providerFailureCode(response),
+      );
+      failed += 1;
+      return;
+    }
+    const responseBody = await response.json().catch(() => null) as unknown;
+    const result = responseBody && typeof responseBody === "object" && !Array.isArray(responseBody)
+      ? responseBody as Record<string, unknown>
+      : null;
+    if (!(result?.ok === true && result.deliveryId === deliveryId && (result.sent === true || result.alreadySent === true))) {
+      await markReviewNotificationFailed(supabase, payload.notification_id, candidate.claim_token, "invalid_response");
+      failed += 1;
+      return;
+    }
+    const { data: completionData, error: completionError } = await supabase.rpc(
+      "complete_employee_check_in_review_notification_delivery",
+      {
+        p_notification_id: payload.notification_id,
+        p_claim_token: candidate.claim_token,
+        p_provider_delivery_id: deliveryId,
+      },
+    );
+    if (completionError || completionData !== true) acceptedPendingFinalisation += 1;
+    else sent += 1;
+  }));
+  failed += outcomes.filter((outcome) => outcome.status === "rejected").length;
+  return {
+    ok: failed === 0 && acceptedPendingFinalisation === 0,
+    claimed: claimedData.length,
+    sent,
+    failed,
+    acceptedPendingFinalisation,
+    backlogLikely: claimedData.length === DELIVERY_BATCH_LIMIT,
+  };
 }
 
 /**
@@ -308,7 +497,7 @@ export async function GET(request: Request) {
     }
 
     const milestone = workflowMilestone(payload.milestone);
-    if (!milestone || (payload.reminder_sequence !== "initial" && payload.reminder_sequence !== "final")) {
+    if (!milestone || payload.reminder_sequence !== "initial") {
       await markFailed(supabase, payload.reminder_id, candidate.claim_token, "configuration_error");
       failed += 1;
       return;
@@ -395,13 +584,17 @@ export async function GET(request: Request) {
   }));
 
   failed += outcomes.filter((outcome) => outcome.status === "rejected").length;
-  const ok = failed === 0 && acceptedPendingFinalisation === 0;
+  const reviewNotifications = await dispatchReviewNotifications(supabase, configuration);
+  const ok = failed === 0
+    && acceptedPendingFinalisation === 0
+    && reviewNotifications.ok;
   return Response.json({
     ok,
     claimed: claimedData.length,
     sent,
     failed,
     acceptedPendingFinalisation,
-    backlogLikely: claimedData.length === DELIVERY_BATCH_LIMIT,
+    backlogLikely: claimedData.length === DELIVERY_BATCH_LIMIT || reviewNotifications.backlogLikely,
+    reviewNotifications,
   }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }

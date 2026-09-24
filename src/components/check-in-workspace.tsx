@@ -51,7 +51,7 @@ function milestoneLabel(value: CheckInWorkspaceReminder["milestone"]) {
   if (value === "1_month") return "1-month check-in";
   if (value === "2_month") return "2-month stay interview";
   if (value === "3_month") return "3-month check-in";
-  return "5-month probation check-in";
+  return "5-Month No-Surprises Review";
 }
 
 function canCompleteReminder(reminder: CheckInWorkspaceReminder) {

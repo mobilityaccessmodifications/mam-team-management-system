@@ -101,6 +101,8 @@ test("completed timeline status opens the shared accessible outcome dialog", () 
   assert.match(dialog, /role="dialog" aria-modal="true"/);
   assert.match(dialog, /recordCheckInReview/);
   assert.match(dialog, /expectedVersion: reminder\.reviewVersion/);
+  assert.match(dialog, /HR review before decision/);
+  assert.match(dialog, /Notifies People & Culture/);
   assert.match(dialog, /readOnly \? null : initialFocusRef/);
   assert.match(dialog, /returnFocusRef/);
   assert.match(register, /reminder\.status !== "claimed"/);
