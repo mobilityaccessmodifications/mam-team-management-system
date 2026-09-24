@@ -11,6 +11,10 @@ import {
 } from '../scripts/build-new-starter-day-one-workflow.mjs';
 
 const require = createRequire(import.meta.url);
+const ackModule = { exports: {} };
+new Function('require', 'module', 'exports', ts.transpileModule(readFileSync('src/lib/check-in-delivery-ack.ts', 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText)(require, ackModule, ackModule.exports);
 const teamModule = { exports: {} };
 new Function('exports', ts.transpileModule(readFileSync('src/lib/employee-teams.ts','utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText)(teamModule.exports);
 const reminderId = '10000000-0000-4000-8000-000000000001';
@@ -22,7 +26,8 @@ function loadRoute(admin) {
   }).outputText;
   const mod = { exports: {} };
   new Function('require','module','exports',source)((id) => id === '@/lib/supabase/admin'
-    ? { createAdminClient: () => admin } : require(id), mod, mod.exports);
+    ? { createAdminClient: () => admin } : id === '@/lib/check-in-delivery-ack'
+      ? ackModule.exports : require(id), mod, mod.exports);
   return mod.exports;
 }
 

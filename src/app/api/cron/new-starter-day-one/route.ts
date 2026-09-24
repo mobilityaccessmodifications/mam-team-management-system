@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 
+import { readCheckInDeliveryAck } from "@/lib/check-in-delivery-ack";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,6 @@ type PreparedReminder = {
   notify_date: string;
 };
 type DeliveryConfiguration = { webhookUrl: URL; webhookSecret: string; mode: DeliveryMode };
-type DeliveryAck = { ok: true; sent: boolean; alreadySent: boolean; deliveryId: string };
 
 function safeExactOrigin(value: string | undefined) {
   const candidate = value?.trim();
@@ -122,20 +122,6 @@ function providerFailureCode(response: Response) {
   return "network_error" as const;
 }
 
-async function readAck(response: Response): Promise<DeliveryAck | null> {
-  const length = response.headers.get("content-length");
-  if (length && (!/^\d+$/.test(length) || Number(length) > 8192)) return null;
-  const raw = await response.text();
-  if (raw.length > 8192) return null;
-  try {
-    const value = JSON.parse(raw) as Record<string, unknown>;
-    if (value.ok !== true || typeof value.deliveryId !== "string"
-      || typeof value.sent !== "boolean" || typeof value.alreadySent !== "boolean"
-      || value.sent === value.alreadySent) return null;
-    return value as DeliveryAck;
-  } catch { return null; }
-}
-
 async function markFailed(
   supabase: ReturnType<typeof createAdminClient>, reminderId: string, claimToken: string,
   code: "network_error" | "provider_timeout" | "provider_rejected" | "invalid_response" | "configuration_error",
@@ -210,8 +196,8 @@ export async function GET(request: Request) {
       failed += 1;
       return;
     }
-    const ack = await readAck(response);
-    if (!ack || ack.deliveryId !== deliveryId) {
+    const ack = await readCheckInDeliveryAck(response, deliveryId);
+    if (!ack) {
       await markFailed(supabase,candidate.reminder_id,candidate.claim_token,"invalid_response");
       failed += 1;
       return;

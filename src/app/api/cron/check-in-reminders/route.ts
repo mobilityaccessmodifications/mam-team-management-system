@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 
+import { readCheckInDeliveryAck } from "@/lib/check-in-delivery-ack";
 import { getCheckInResourceLinks } from "@/lib/check-in-register";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -390,11 +391,8 @@ async function dispatchReviewNotifications(
       failed += 1;
       return;
     }
-    const responseBody = await response.json().catch(() => null) as unknown;
-    const result = responseBody && typeof responseBody === "object" && !Array.isArray(responseBody)
-      ? responseBody as Record<string, unknown>
-      : null;
-    if (!(result?.ok === true && result.deliveryId === deliveryId && (result.sent === true || result.alreadySent === true))) {
+    const ack = await readCheckInDeliveryAck(response, deliveryId);
+    if (!ack) {
       await markReviewNotificationFailed(supabase, payload.notification_id, candidate.claim_token, "invalid_response");
       failed += 1;
       return;
@@ -556,14 +554,8 @@ export async function GET(request: Request) {
       return;
     }
 
-    const responseBody = await response.json().catch(() => null) as unknown;
-    const result = responseBody && typeof responseBody === "object" && !Array.isArray(responseBody)
-      ? responseBody as Record<string, unknown>
-      : null;
-    const accepted = result?.ok === true
-      && result.deliveryId === deliveryId
-      && (result.sent === true || result.alreadySent === true);
-    if (!accepted) {
+    const ack = await readCheckInDeliveryAck(response, deliveryId);
+    if (!ack) {
       await markFailed(supabase, payload.reminder_id, candidate.claim_token, "invalid_response");
       failed += 1;
       return;

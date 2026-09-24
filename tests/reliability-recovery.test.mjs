@@ -11,6 +11,7 @@ function load(file, imports) {
   new Function('require','module','exports',js)((id)=>id in imports ? imports[id] : require(id),mod,mod.exports);
   return mod.exports;
 }
+const checkInAck = load('src/lib/check-in-delivery-ack.ts', {});
 const id='10000000-0000-4000-8000-000000000001';
 const path=`${id}/${id}.csv`;
 test('archive cleanup resumes after storage deletion succeeds but database finalisation fails',async()=>{
@@ -49,8 +50,8 @@ test('check-in network failures and failed acknowledgements surface as retryable
         if(name==='claim_due_employee_check_in_review_notifications')return {data:[],error:null};
         return {data:false,error:scenario==='retry-write'?{message:'offline'}:null};
       }};
-      globalThis.fetch=async(_url,options)=>{if(scenario!=='completion')throw new Error('offline');const payload=JSON.parse(options.body);assert.equal(payload.mode,'test');assert.equal(payload.employee.workEmail,'test@example.test');return Response.json({ok:true,sent:true,deliveryId:`checkin:${id}:2-week:initial:test`});};
-      const {GET}=load('src/app/api/cron/check-in-reminders/route.ts',{'@/lib/supabase/admin':{createAdminClient:()=>admin},'@/lib/check-in-register':{getCheckInResourceLinks:()=>({managerGuideUrl:'https://synthetic.example/guide',checkInFormUrl:'https://synthetic.example/form',probationTemplatesUrl:'https://synthetic.example/templates'})}});
+      globalThis.fetch=async(_url,options)=>{if(scenario!=='completion')throw new Error('offline');const payload=JSON.parse(options.body);assert.equal(payload.mode,'test');assert.equal(payload.employee.workEmail,'test@example.test');return Response.json({ok:true,sent:true,alreadySent:false,deliveryId:`checkin:${id}:2-week:initial:test`});};
+      const {GET}=load('src/app/api/cron/check-in-reminders/route.ts',{'@/lib/check-in-delivery-ack':checkInAck,'@/lib/supabase/admin':{createAdminClient:()=>admin},'@/lib/check-in-register':{getCheckInResourceLinks:()=>({managerGuideUrl:'https://synthetic.example/guide',checkInFormUrl:'https://synthetic.example/form',probationTemplatesUrl:'https://synthetic.example/templates'})}});
       const response=await GET(new Request('https://synthetic.example/cron',{headers:{authorization:'Bearer synthetic-only'}}));
       assert.equal(response.status,503);assert.equal((await response.json()).ok,false);
       assert.ok(calls.includes(scenario==='completion'?'complete_employee_check_in_reminder_delivery':'fail_employee_check_in_reminder_delivery'));
@@ -84,7 +85,7 @@ test('check-in worker delivers a recipient-free People & Culture escalation thro
       assert.equal(Object.hasOwn(payload,'email'),false);
       return Response.json({ok:true,sent:true,alreadySent:false,deliveryId});
     };
-    const {GET}=load('src/app/api/cron/check-in-reminders/route.ts',{'@/lib/supabase/admin':{createAdminClient:()=>admin},'@/lib/check-in-register':{getCheckInResourceLinks:()=>({managerGuideUrl:'https://synthetic.example/guide',checkInFormUrl:'https://synthetic.example/form',probationTemplatesUrl:'https://synthetic.example/templates'})}});
+    const {GET}=load('src/app/api/cron/check-in-reminders/route.ts',{'@/lib/check-in-delivery-ack':checkInAck,'@/lib/supabase/admin':{createAdminClient:()=>admin},'@/lib/check-in-register':{getCheckInResourceLinks:()=>({managerGuideUrl:'https://synthetic.example/guide',checkInFormUrl:'https://synthetic.example/form',probationTemplatesUrl:'https://synthetic.example/templates'})}});
     const response=await GET(new Request('https://synthetic.example/cron',{headers:{authorization:'Bearer synthetic-only'}}));
     const body=await response.json();
     assert.equal(response.status,200);

@@ -8,7 +8,7 @@ import urllib.request
 PROJECT='xtwlrjqbusadghavchqm'
 ORG='fwlmbmospuwoaosffvmw'
 ROOT=Path(__file__).resolve().parents[1]
-VERSIONS={'20260921190000':'reliable_leave_submission','20260921191000':'check_in_retry_catchup'}
+VERSIONS={'20260921190000':'reliable_leave_submission','20260921191000':'check_in_retry_catchup','20260925020000':'six_month_notification_receipt_keys'}
 def api(path,body=None):
     r=urllib.request.Request('https://api.supabase.com/v1/projects/'+PROJECT+path,
         headers={'Authorization':'Bearer '+os.environ['SUPABASE_ACCESS_TOKEN'],'Content-Type':'application/json','User-Agent':'supabase-cli/2.54.11'},
