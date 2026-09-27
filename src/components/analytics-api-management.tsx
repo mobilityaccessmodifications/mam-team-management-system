@@ -13,6 +13,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -86,6 +87,7 @@ export function AnalyticsApiManagement() {
         {activeKey ? "Rotate key" : "Generate key"}
       </button>
     </header>
+    <Link className={styles.copyGuide} href="/analytics-api-docs">API documentation</Link>
 
     {notice ? <p className={styles.notice} role="status"><CheckCircle2 size={16} aria-hidden="true" />{notice}</p> : null}
     {keyState.state === "loading" ? <div className={styles.state}><LoaderCircle className={styles.spinner} size={22} /><span>Loading API access…</span></div> : null}
