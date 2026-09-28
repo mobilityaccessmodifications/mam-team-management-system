@@ -4,7 +4,7 @@ import styles from "./page.module.css";
 
 const datasets = [
   ["overview", "Headcount, asset and subscription totals, plus date-filtered leave/check-in totals."],
-  ["employees", "Current directory facts and archived/active status."],
+  ["employees", "Current directory facts including first_name and last_name, plus archived/active status."],
   ["leave_requests", "Durable leave workflow records."],
   ["leave_events", "Leave request and decision history."],
   ["check_ins", "Check-in schedule and status records."],
