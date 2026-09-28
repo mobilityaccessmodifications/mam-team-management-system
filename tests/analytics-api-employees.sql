@@ -19,6 +19,9 @@ begin
   from jsonb_array_elements(v_payload -> 'data') as row(value)
   where row.value ->> 'employee_id' = v_employee_id::text;
 
+  if v_employee is null then
+    raise exception 'Analytics employees dataset must include the synthetic employee row';
+  end if;
   if v_employee ->> 'first_name' is distinct from 'Sandbox' then
     raise exception 'Analytics employees dataset must include the directory first_name';
   end if;
@@ -28,8 +31,24 @@ begin
   if v_employee ?| array['work_email', 'personal_email', 'phone', 'date_of_birth'] then
     raise exception 'Analytics employees dataset must exclude private employee contact fields';
   end if;
+  if array(select jsonb_object_keys(v_employee) order by 1) is distinct from array[
+    'company', 'employee_id', 'employment_status', 'first_name', 'last_name',
+    'position_title', 'record_created_at', 'record_updated_at', 'started_on'
+  ]::text[] then
+    raise exception 'Analytics employees dataset must return only its documented projection fields';
+  end if;
   if not has_function_privilege('service_role', 'public.analytics_dashboard_dataset(text,date,date,integer,integer)', 'EXECUTE')
-    or has_function_privilege('authenticated', 'public.analytics_dashboard_dataset(text,date,date,integer,integer)', 'EXECUTE') then
+    or has_function_privilege('anon', 'public.analytics_dashboard_dataset(text,date,date,integer,integer)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.analytics_dashboard_dataset(text,date,date,integer,integer)', 'EXECUTE')
+    or exists (
+      select 1
+      from pg_proc p
+      cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) privilege
+      where p.oid = 'public.analytics_dashboard_dataset(text,date,date,integer,integer)'::regprocedure
+        and privilege.privilege_type = 'EXECUTE'
+        and (privilege.is_grantable
+          or privilege.grantee not in (p.proowner, 'service_role'::regrole::oid))
+    ) then
     raise exception 'Analytics dataset RPC must remain service-role-only';
   end if;
 end;
