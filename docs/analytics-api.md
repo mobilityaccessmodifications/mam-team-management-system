@@ -33,7 +33,9 @@ Datasets:
 
 - `overview` — current headcount, asset and subscription totals plus
   date-filtered leave/check-in totals.
-- `employees` — current directory record facts and archived/active status.
+- `employees` — employee_id, first_name, last_name, company, position_title,
+  employment_status, started_on, record_created_at, record_updated_at. The name
+  fields are null when no private directory detail is stored for that employee.
 - `leave_requests` and `leave_events` — durable leave workflow history.
 - `check_ins` and `check_in_events` — schedule and delivery/completion history.
 - `asset_custody` — every durable device assignment and return period.
