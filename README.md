@@ -147,6 +147,22 @@ See `docs/environment-management.md` for the complete environment model.
 6. For any future production change, verify the applicable migration history in the exact MAM project. Test leave persistence and privacy, plus automatic check-in scheduling, weekend due-date forward adjustment, weekend advance-notification backward adjustment, Calendar visibility, role scope, manager-view data minimisation and the pre-1-July-2026 completed backfill.
 7. Deploy without changing the established production URL.
 
+### Analytics API employee names
+
+The `employees` dataset includes `first_name` and `last_name`, sourced only
+from the private employee-detail record. It does not expose HR contacts or
+grant access to the HR directory RPC. Before releasing this change, run
+`scripts/deploy-analytics-employee-names.py inspect` and then
+`apply <reviewed-sha256>` through the MAM Supabase credential wrapper. This
+hash-pinned helper verifies the exact project, predecessor migration, private
+name columns, RPC security attributes and grants; it applies only this
+transactional migration through the Management API and records the migration
+with its exact source. Do not use `supabase db push` for this release because
+the production ledger contains unrelated version drift. After the helper
+verifies the schema, merge the reviewed PR into `main` and verify the MAM
+Vercel production deployment. Ask the Maton/Power BI owner to refresh the
+existing connection and confirm the two fields appear; do not rotate its key.
+
 ### Leave request email privacy
 
 Leave request emails include dates, business days, requested hours and status,
