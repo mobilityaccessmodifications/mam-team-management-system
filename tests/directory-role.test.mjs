@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import { readFileSync, existsSync } from 'node:fs';
+import test from 'node:test';
+const action = readFileSync('src/app/people/actions.ts', 'utf8');
+const ui = readFileSync('src/components/employee-directory.tsx', 'utf8');
+const migrationPath = 'supabase/migrations/20260930130000_directory_role_control.sql';
+const migration = existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : '';
+const css = readFileSync('src/components/employee-directory.module.css', 'utf8');
+const sqlRunner = readFileSync('scripts/test-sql.mjs', 'utf8');
+test('role action validates inputs and rechecks authenticated administrator', () => {
+  assert.match(action, /export async function updateEmployeeDirectoryRole/);
+  assert.match(action, /await requireEmployeeDirectoryManager\(\)/);
+  assert.match(action, /employee|manager|system_admin/);
+  assert.match(action, /update_employee_directory_role/);
+  assert.match(action, /list_employee_directory_roles/);
+  assert.match(action, /can_manage_portal_accounts/);
+  assert.match(action, /p_expected_role/);
+  assert.match(action, /"hr"/);
+});
+test('role control replaces reporting picker only for edits and explains permission effects', () => {
+  assert.match(ui, /isCreate\s*\?[^]*?<EmployeePicker/);
+  assert.match(ui, /updateEmployeeDirectoryRole/);
+  assert.match(ui, /listEmployeeDirectoryRoles/);
+  assert.match(ui, /Save role/);
+  assert.match(ui, /Role/);
+  assert.match(ui, /Team member/);
+  assert.match(ui, /Manager/);
+  assert.match(ui, /Admin/);
+  assert.match(ui, /permission/i);
+  assert.match(ui, /independent|separate|explicit/i);
+  assert.match(ui, /styles\.roleImpact/);
+  assert.match(css, /\.roleImpact\s*\{/);
+});
+test('SQL role mutation checks caller and target, audits and never touches independent grants', () => {
+  assert.match(migration, /^begin;[\s\S]*commit;\s*$/);
+  assert.match(migration, /private\.is_system_portal_account_admin\(\)/);
+  assert.match(migration, /private\.is_active_portal_account/);
+  assert.match(migration, /private\.employee_directory_audit_events/);
+  assert.match(migration, /app_role/);
+  assert.doesNotMatch(migration, /(?:update|delete from) private\.[a-z_]*grants/i);
+  assert.match(sqlRunner, /tests\/directory-role\.sql/);
+});

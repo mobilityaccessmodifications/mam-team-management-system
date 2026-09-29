@@ -329,6 +329,50 @@ export async function getOrganisationPersonWorkEmail(
   return getOrganisationPersonWorkEmailForMember(personId);
 }
 
+export type DirectoryRole = "employee" | "manager" | "system_admin";
+export type DirectoryStoredRole = DirectoryRole | "hr";
+
+export async function listEmployeeDirectoryRoles(): Promise<Record<string, DirectoryStoredRole | null>> {
+  const { supabase } = await requireEmployeeDirectoryManager();
+  const { data, error } = await supabase.rpc("list_employee_directory_roles");
+  if (error || !Array.isArray(data)) throw new Error("Employee roles could not be loaded. Refresh and try again.");
+  const roles: Record<string, DirectoryStoredRole | null> = {};
+  for (const row of data) {
+    if (!row || typeof row.person_id !== "string" || !UUID_PATTERN.test(row.person_id)) throw new Error(GENERIC_SAVE_ERROR);
+    if (row.app_role !== null && row.app_role !== "employee" && row.app_role !== "manager" && row.app_role !== "system_admin" && row.app_role !== "hr") throw new Error(GENERIC_SAVE_ERROR);
+    roles[row.person_id] = row.app_role;
+  }
+  return roles;
+}
+
+export async function updateEmployeeDirectoryRole(input: {
+  personId: string;
+  role: DirectoryRole;
+  expectedRole: DirectoryStoredRole;
+}): Promise<DirectoryRole> {
+  const value = inputObject(input);
+  if (typeof value.personId !== "string" || !UUID_PATTERN.test(value.personId)
+    || (value.role !== "employee" && value.role !== "manager" && value.role !== "system_admin")
+    || (value.expectedRole !== "employee" && value.expectedRole !== "manager" && value.expectedRole !== "system_admin" && value.expectedRole !== "hr")) {
+    throw new Error("Choose a valid role and refresh the employee record.");
+  }
+  const { supabase } = await requireEmployeeDirectoryManager();
+  const { data: allowed, error: accessError } = await supabase.rpc("can_manage_portal_accounts");
+  if (accessError || allowed !== true) throw new Error("Only a System Admin can change roles.");
+  const { data, error } = await supabase.rpc("update_employee_directory_role", {
+    p_person_id: value.personId,
+    p_role: value.role,
+    p_expected_role: value.expectedRole,
+  });
+  if (error || data !== value.role) {
+    throw new Error(error?.code === "40001"
+      ? "Role has changed. Refresh the directory and try again."
+      : "Role could not be saved. Refresh and try again.");
+  }
+  revalidatePath("/");
+  return data as DirectoryRole;
+}
+
 export async function createEmployeeDirectoryRecord(
   input: CreateEmployeeDirectoryInput,
 ): Promise<EmployeeDirectoryMutationResult> {

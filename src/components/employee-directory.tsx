@@ -35,6 +35,10 @@ import {
   archiveEmployeeDirectoryRecord,
   deleteEmployeeDirectoryRecord,
   listEmployeeDirectoryRecords,
+  listEmployeeDirectoryRoles,
+  updateEmployeeDirectoryRole,
+  type DirectoryRole,
+  type DirectoryStoredRole,
   updateEmployeeDirectoryRecord,
 } from "@/app/people/actions";
 import { EmployeeDeviceAssignments } from "@/components/employee-device-assignments";
@@ -335,6 +339,8 @@ export function EmployeeDirectory({
   refreshKey,
 }: EmployeeDirectoryProps) {
   const [records, setRecords] = useState<EmployeeDirectoryRecord[]>(initialRecords ?? []);
+  const [roles, setRoles] = useState<Record<string, DirectoryStoredRole | null>>({});
+  const [roleLoadError, setRoleLoadError] = useState("");
   const [loading, setLoading] = useState(!initialRecords);
   const [loadError, setLoadError] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -428,6 +434,16 @@ export function EmployeeDirectory({
       cancelled = true;
     };
   }, [refreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listEmployeeDirectoryRoles().then((response) => {
+      if (!cancelled) { setRoles(response); setRoleLoadError(""); }
+    }).catch(() => {
+      if (!cancelled) { setRoles({}); setRoleLoadError("Roles could not be loaded. Refresh and try again."); }
+    });
+    return () => { cancelled = true; };
+  }, [loadAttempt, refreshKey]);
 
   const statusRecords = useMemo(
     () => records.filter((record) => directoryFilter === "active" ? record.isActive : !record.isActive),
@@ -736,6 +752,13 @@ export function EmployeeDirectory({
           editor={activeEditor}
           currentRecord={currentRecord}
           records={records}
+          role={activeEditor.mode === "edit" ? roles[activeEditor.personId] : null}
+          roleLoaded={activeEditor.mode === "edit" && Object.hasOwn(roles, activeEditor.personId)}
+          roleLoadError={roleLoadError}
+          onRoleSaved={(role) => {
+            if (activeEditor.mode === "edit") setRoles((current) => ({ ...current, [activeEditor.personId]: role }));
+            setNotice("Role saved.");
+          }}
           saving={saving}
           error={saveError}
           onChange={handleDraftChange}
@@ -862,6 +885,10 @@ function EmployeeEditor({
   editor,
   currentRecord,
   records,
+  role,
+  roleLoaded,
+  roleLoadError,
+  onRoleSaved,
   saving,
   error,
   onChange,
@@ -877,6 +904,10 @@ function EmployeeEditor({
   editor: EditorState;
   currentRecord: EmployeeDirectoryRecord | null;
   records: EmployeeDirectoryRecord[];
+  role: DirectoryStoredRole | null | undefined;
+  roleLoaded: boolean;
+  roleLoadError: string;
+  onRoleSaved: (role: DirectoryRole) => void;
   saving: boolean;
   error: string;
   onChange: (key: keyof EmployeeDirectoryDraft, value: EmployeeDirectoryDraft[keyof EmployeeDirectoryDraft]) => void;
@@ -895,7 +926,25 @@ function EmployeeEditor({
     .filter((record) => record.isActive && record.personId !== currentRecord?.personId)
     .sort((first, second) => first.fullName.localeCompare(second.fullName));
   const isCreate = editor.mode === "create";
+  const [roleSelection, setRoleSelection] = useState<{ base: DirectoryStoredRole | null; selected: DirectoryRole } | null>(null);
+  const selectedRole = roleSelection?.base === (role ?? null) ? roleSelection?.selected ?? role ?? null : role ?? null;
+  const [roleSaving, setRoleSaving] = useState(false);
+  const [roleError, setRoleError] = useState("");
   const [editingSchedule, setEditingSchedule] = useState(isCreate);
+
+  async function saveRole() {
+    if (editor.mode !== "edit" || !role || !selectedRole || selectedRole === "hr" || roleSaving || selectedRole === role) return;
+    setRoleSaving(true);
+    setRoleError("");
+    try {
+      const saved = await updateEmployeeDirectoryRole({ personId: editor.personId, role: selectedRole, expectedRole: role });
+      onRoleSaved(saved);
+    } catch (error) {
+      setRoleError(error instanceof Error ? error.message : "Role could not be saved.");
+    } finally {
+      setRoleSaving(false);
+    }
+  }
 
   return <section className={styles.editor} ref={dialogRef} role={mobileModal ? "dialog" : undefined} aria-modal={mobileModal ? "true" : undefined} aria-label={isCreate ? "Add employee" : "Edit employee"} tabIndex={-1}>
     <header className={styles.editorHeader}>
@@ -927,8 +976,8 @@ function EmployeeEditor({
               {EMPLOYEE_TEAMS.map((team) => <option key={team} value={team}>{team}</option>)}
             </select>
           </Field>
-          <div className={styles.pickerField}>
-            <label htmlFor={managerInputId}>Reports to{isCreate && editor.draft.isActive ? <b aria-hidden="true"> *</b> : null}</label>
+          {isCreate ? <div className={styles.pickerField}>
+            <label htmlFor={managerInputId}>Reports to{editor.draft.isActive ? <b aria-hidden="true"> *</b> : null}</label>
             <EmployeePicker
               id={managerInputId}
               ariaLabel="Reports to"
@@ -937,10 +986,32 @@ function EmployeeEditor({
               value={editor.draft.managerId ?? ""}
               onValueChange={(personId) => onChange("managerId", personId || null)}
               placeholder="No manager assigned"
-              required={isCreate && editor.draft.isActive}
+              required={editor.draft.isActive}
               disabled={saving}
             />
-          </div>
+          </div> : <div className={styles.pickerField}>
+            <label htmlFor={managerInputId}>Role</label>
+            <select id={managerInputId} value={selectedRole ?? ""} disabled={!currentRecord?.isActive || !roleLoaded || !role || saving || roleSaving} onChange={(event) => { setRoleSelection({ base: role ?? null, selected: event.target.value as DirectoryRole }); setRoleError(""); }}>
+              {role === "hr" ? <option value="hr">Legacy HR</option> : null}
+              {!role ? <option value="">No active portal account</option> : null}
+              <option value="employee">Team member</option>
+              <option value="manager">Manager</option>
+              <option value="system_admin">Admin</option>
+            </select>
+          </div>}
+          {!isCreate && selectedRole ? <div className={`${styles.fullSpan} ${styles.roleImpact}`} role="status">
+            <strong>Role impact</strong>
+            <p>{selectedRole === "hr"
+              ? "Legacy HR: this older profile role does not itself grant current Directory, Accounts or organisation administration. Choose a current role to replace it."
+              : selectedRole === "employee"
+              ? "Team member: own profile, leave and calendar, and a limited team directory. No organisation chart, team approvals or administration from this role."
+              : selectedRole === "manager"
+                ? "Manager: organisation chart and reporting-team leave visibility, eligible leave approvals and check-in reviews. Authority follows the reporting tree."
+                : "Admin: full Directory, Accounts and organisation editing, plus operational oversight and administration."}</p>
+            <p>Separate explicit permission grants, including payroll and subscription access, are independent of this role and are not changed here. Reporting relationships are edited in the Organisation chart.</p>
+            {roleError ? <p role="alert">{roleError}</p> : null}
+            <button type="button" className={styles.secondaryAction} onClick={() => void saveRole()} disabled={saving || roleSaving || !currentRecord?.isActive || !role || selectedRole === "hr" || selectedRole === role}>Save role</button>
+          </div> : !isCreate && roleLoadError ? <p className={`${styles.fullSpan} ${styles.formError}`} role="alert">{roleLoadError}</p> : null}
           <Field label="Company">
             <select value={editor.draft.company} onChange={(event) => onChange("company", event.target.value)}>
               <option value="mam">MAM</option>
