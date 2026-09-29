@@ -127,21 +127,36 @@ numeric values are JSON numbers. Nullable source values are returned as JSON
 
 ### `employees`
 
-Directory facts for employees and archived employee records. Names are read
-from the private employee-detail record; either name may be null when not
-stored. No contact details are returned.
+Directory facts for employees and archived employee records. Name, team,
+employment and work-schedule fields are read from their existing private HR
+projections. Nullable source fields remain `null`; an unrecorded daily-time
+schedule is an empty array. No contact details are returned.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `employee_id` | UUID | Stable directory person identifier. |
 | `first_name` | string or null | First name from private directory details. |
 | `last_name` | string or null | Last name from private directory details. |
+| `team` | string or null | HR team label from the employee directory. |
+| `scheduled_employment_end_date` | date or null | Scheduled employment end date; null if not recorded. |
+| `employment_type` | string or null | Employment arrangement: `abn`, `casual`, `full_time` or `part_time`, when recorded. |
+| `contract_type` | string or null | HR check-in classification: `permanent` or `fixed_term`; null when none is recorded. |
+| `working_weekdays` | integer array or null | ISO weekdays, `1` Monday through `7` Sunday; null means no usual weekdays are recorded. |
+| `working_day_times` | array of objects | Optional intervals with `weekday`, `start_time` and `end_time` (`HH:MM`); `[]` means no exact daily times are recorded. |
 | `company` | string | Company key, such as `mam` or `equipsy`. |
 | `position_title` | string or null | Directory position title. |
 | `employment_status` | string | `active` or `archived`. |
 | `started_on` | date or null | Recorded start date. |
 | `record_created_at` | timestamp | Directory record creation time. |
 | `record_updated_at` | timestamp | Directory record last-update time. |
+
+The employee `from`/`to` filters continue to use the `record_created_at`
+calendar date, not the start or scheduled employment end date. `working_weekdays`
+uses ISO-8601 weekday numbering. Each `working_day_times` item has this shape:
+
+```json
+{"weekday": 1, "start_time": "09:00", "end_time": "17:00"}
+```
 
 ### `leave_requests`
 
@@ -302,6 +317,14 @@ Synthetic employee response (IDs and values below are examples only):
       "employee_id": "00000000-0000-4000-8000-000000000001",
       "first_name": "Alex",
       "last_name": "Example",
+      "team": "Major",
+      "scheduled_employment_end_date": "2027-12-31",
+      "employment_type": "casual",
+      "contract_type": "fixed_term",
+      "working_weekdays": [1, 3, 5],
+      "working_day_times": [
+        {"weekday": 1, "start_time": "09:00", "end_time": "17:00"}
+      ],
       "company": "mam",
       "position_title": "Coordinator",
       "employment_status": "active",
@@ -320,10 +343,11 @@ Synthetic employee response (IDs and values below are examples only):
 
 ## Data boundaries
 
-The `employees` dataset exposes `first_name` and `last_name` for this approved
-reporting use; other datasets carry employee IDs, not employee names. The API
-does not return work/personal email, phone, date of birth, street address,
-leave type/category, leave reason, employee or manager notes, leave evidence,
+The `employees` dataset exposes employee names, team, scheduled employment end
+date, employment type, contract type and work-schedule fields for the approved
+reporting use. Other datasets carry employee IDs, not names. The API does not
+return work/personal email, phone, date of birth, street address, leave
+type/category, leave reason, employee or manager notes, leave evidence,
 authentication data, passwords, recovery codes, asset passcodes, subscription
 credentials or member names. Check-in `needs_review_reason` is an operational
 review reason, not a leave reason or contact field.
@@ -340,8 +364,9 @@ their durable register.
   `employee_id`/`responsible_employee_id` as applicable.
 - Page record datasets until the returned rows are exhausted; compare the
   accumulated row count with `pagination.total` for the same filter window.
-- Refresh the connector after adding a field so the downstream model discovers
-  `first_name` and `last_name`.
+- Refresh the connector after adding fields so the downstream model discovers
+  `first_name`, `last_name`, `scheduled_employment_end_date`, `team`,
+  `employment_type`, `contract_type`, `working_weekdays` and `working_day_times`.
 - Do not rotate a key just to refresh a model. Rotation immediately invalidates
   the old key.
 

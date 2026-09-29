@@ -20,6 +20,7 @@ test("both API guides document the full analytics response contract", () => {
     "assets.total", "assets.assigned", "assets.available", "assets.repair", "assets.retired",
     "subscriptions.total", "subscriptions.active", "subscriptions.paused", "subscriptions.cancelled", "subscriptions.monthly_cost_aud",
     "employee_id", "first_name", "last_name", "company", "position_title", "employment_status", "started_on", "record_created_at", "record_updated_at",
+    "scheduled_employment_end_date", "team", "employment_type", "contract_type", "working_weekdays", "working_day_times",
     "request_id", "start_date", "end_date", "business_days", "hours", "status", "submitted_at", "decided_at", "updated_at",
     "event_id", "event_type", "occurred_at", "reminder_id", "milestone", "sequence", "due_date", "notify_date", "needs_review_reason", "attempt_count", "delivered_at", "completed_at",
     "error_code", "custody_id", "asset_id", "asset_code", "asset_type", "asset_status", "assigned_on", "returned_on", "recorded_at",
