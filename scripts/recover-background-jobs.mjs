@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const origin = 'https://mam-team-management-system-ten.vercel.app';
 const paths = [
-  'leave-notifications', 'check-in-reminders', 'new-starter-day-one', 'leave-priority-reminders',
+  'leave-notifications', 'check-in-reminders', 'new-starter-day-one', 'onboarding-credentials', 'leave-priority-reminders',
 ];
 
 export async function runRecovery(secret, fetchJob = fetch, log = console) {

@@ -1,5 +1,7 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
+import { createPortalAccount } from "@/app/accounts/actions";
 import { requireEmployeeTeam } from "@/lib/employee-teams";
 import { revalidatePath } from "next/cache";
 
@@ -367,10 +369,22 @@ export async function createEmployeeDirectoryRecord(
   // A new person has no classification, so only an explicit choice needs the
   // second call. The employee already exists; never turn its failure into a
   // save error that invites a duplicate create.
-  const warning = selectedContractType === null
+  let warning = selectedContractType === null
     ? undefined
     : await saveContractClassification(supabase, personId, selectedContractType);
   const record = await findEmployeeDirectoryRecord(supabase, personId);
+  if (values.p_is_active) {
+    try {
+      await createPortalAccount({
+        personId,
+        accountVersion: record.personVersion,
+        loginName: values.p_work_email ?? values.p_personal_email!,
+        newPassword: `${randomBytes(24).toString("base64url")}aA1!`,
+      });
+    } catch {
+      warning = [warning, "Employee saved, but account creation needs administrator review. Do not create the employee again."].filter(Boolean).join(" ");
+    }
+  }
   revalidatePath("/");
   return warning ? { record, warning } : { record };
 }

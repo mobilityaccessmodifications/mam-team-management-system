@@ -225,6 +225,7 @@ test('new active employee creation fails before mutation without start date, dir
       listEmployeeDirectoryRecordsForManager: async () => [],
     },
     '@/lib/organisation-directory': { getOrganisationPersonWorkEmailForMember: async () => null },
+    '@/app/accounts/actions': { createPortalAccount: async () => ({}) },
     '@/lib/supabase/admin': { createAdminClient: () => ({}) },
     '@/lib/portal-account-status': {
       preparePortalAccountStatusChange: async () => ({}), finalisePortalAccountStatusChange: async () => ({}), recoverPortalAccountStatusChange: async () => ({}),

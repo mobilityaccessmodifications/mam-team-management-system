@@ -98,22 +98,22 @@ test('check-in worker delivers a recipient-free People & Culture escalation thro
   }finally{globalThis.Date=oldDate;globalThis.fetch=oldFetch;for(const k of Object.keys(process.env))if(!(k in oldEnv))delete process.env[k];Object.assign(process.env,oldEnv);}
 });
 
-test('independent recovery credential permits only the four leased delivery workers',async()=>{
+test('independent recovery credential permits only the five leased delivery workers',async()=>{
   const prior={recovery:process.env.MAM_BACKGROUND_RECOVERY_SECRET,cron:process.env.CRON_SECRET};
   process.env.MAM_BACKGROUND_RECOVERY_SECRET='synthetic-recovery';process.env.CRON_SECRET='synthetic-primary';
   const calls=[];
   const worker=async(request)=>{assert.equal(request.headers.get('authorization'),'Bearer synthetic-primary');calls.push(1);return Response.json({ok:true});};
   const {GET}=load('src/app/api/cron/recovery/route.ts',{
     '../leave-notifications/route':{GET:worker},'../check-in-reminders/route':{GET:worker},'../leave-priority-reminders/route':{GET:worker},
-    '../new-starter-day-one/route':{GET:worker},
+    '../new-starter-day-one/route':{GET:worker},'../onboarding-credentials/route':{GET:worker},
   });
   const request=(job,token='synthetic-recovery')=>new Request(`https://synthetic.example/recovery?job=${job}`,{headers:{authorization:`Bearer ${token}`}});
   try{
     assert.equal((await GET(request('leave-notifications','wrong'))).status,401);
     for(const name of ['leave-attachment-cleanup','constructor','__proto__','https://attacker.example'])assert.equal((await GET(request(name))).status,400);
     assert.equal(calls.length,0);
-    for(const name of ['leave-notifications','check-in-reminders','new-starter-day-one','leave-priority-reminders'])assert.equal((await GET(request(name))).status,200);
-    assert.equal(calls.length,4);
+    for(const name of ['leave-notifications','check-in-reminders','new-starter-day-one','onboarding-credentials','leave-priority-reminders'])assert.equal((await GET(request(name))).status,200);
+    assert.equal(calls.length,5);
   }finally{
     for(const [key,value] of [['MAM_BACKGROUND_RECOVERY_SECRET',prior.recovery],['CRON_SECRET',prior.cron]]){
       if(value===undefined)delete process.env[key];else process.env[key]=value;

@@ -133,6 +133,7 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
   new Function("require", "module", "exports", source)(
     (id) => {
       if (id === "next/cache") return { revalidatePath() {} };
+      if (id === "@/app/accounts/actions") return { createPortalAccount: async () => ({}) };
       if (id === "@/lib/supabase/admin") return { createAdminClient: () => admin };
       if (id === "@/lib/employee-teams") return teamModule.exports;
       if (id === "@/lib/portal-account-status") return helper.exports;

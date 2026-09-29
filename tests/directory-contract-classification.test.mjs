@@ -36,6 +36,7 @@ function loadActions({ classificationError = null } = {}) {
       listEmployeeDirectoryRecordsForManager: async () => [],
     },
     '@/lib/organisation-directory': { getOrganisationPersonWorkEmailForMember: async () => null },
+    '@/app/accounts/actions': { createPortalAccount: async () => ({}) },
     '@/lib/supabase/admin': { createAdminClient: () => ({}) },
     '@/lib/portal-account-status': {
       preparePortalAccountStatusChange: async () => ({}), finalisePortalAccountStatusChange: async () => ({}), recoverPortalAccountStatusChange: async () => ({}),
