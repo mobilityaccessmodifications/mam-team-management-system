@@ -39,6 +39,7 @@ if writes:
     assert "notify pgrst,'reload schema';" in writes[0]
     assert g['literal'](sql) in writes[0], 'different ledger bytes'
   else:
+    assert "select (array_agg(id))[1] as id from candidates" in writes[0]
     assert "having count(*)=1 and bool_and(eligible)" in writes[0]
     assert "on conflict (person_id) do nothing" in writes[0]
 print(json.dumps({'writes':len(writes)}))
