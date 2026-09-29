@@ -59,8 +59,32 @@ do $$ begin
  assert (select archive_reason='Resigned' from private.employee_directory_details where person_id='92000000-0000-4000-8000-000000000002'), 'Reason retained';
 end $$;
 update private.employee_directory_details set first_name='Edited synthetic' where person_id='92000000-0000-4000-8000-000000000002';
+update private.employee_directory_details set scheduled_employment_end_date=null where person_id='92000000-0000-4000-8000-000000000002';
 do $$ begin
+ assert (select count(*)=1 from private.scheduled_employee_offboarding where person_id='92000000-0000-4000-8000-000000000002' and auth_ban_confirmed_at is null), 'Archived schedule must retain pending Auth work';
  assert (select first_name='Edited synthetic' and archive_reason='Resigned' from private.employee_directory_details where person_id='92000000-0000-4000-8000-000000000002'), 'Archived HR details remain editable';
  assert (select account_status='disabled' from public.profiles where id='92000000-0000-4000-8000-000000000002'), 'Editing archived data never re-enables login';
+end $$;
+do $$ begin
+ begin
+  update public.internal_org_people set auth_user_id='92000000-0000-4000-8000-000000000005' where id='92000000-0000-4000-8000-000000000002';
+  raise exception 'Late portal linkage accepted' using errcode='ZX001';
+ exception when object_not_in_prerequisite_state then null; end;
+end $$;
+reset role;
+set session authorization service_role;
+do $$ begin
+ assert session_user='service_role', 'Exercise genuine PostgREST role boundary';
+ assert not public.run_scheduled_employee_offboarding('92000000-0000-4000-8000-000000000002','2099-01-09 13:00:00+00'), 'Service role may call definer archive';
+ assert (public.claim_scheduled_offboarding_auth_ban('92000000-0000-4000-8000-000000000002','92000000-0000-4000-8000-000000000004')->>'auth_user_id')='92000000-0000-4000-8000-000000000002', 'Claim reads linked identity';
+ assert not public.confirm_scheduled_offboarding_auth_ban('92000000-0000-4000-8000-000000000002'), 'Receipt required before confirmation';
+ assert (public.claim_scheduled_offboarding_auth_ban('92000000-0000-4000-8000-000000000002','92000000-0000-4000-8000-000000000005')->>'state')='executing', 'Second executor cannot write Auth';
+ assert not public.record_scheduled_offboarding_auth_ban('92000000-0000-4000-8000-000000000002','92000000-0000-4000-8000-000000000002','92000000-0000-4000-8000-000000000005',true), 'Wrong executor cannot record';
+ assert public.record_scheduled_offboarding_auth_ban('92000000-0000-4000-8000-000000000002','92000000-0000-4000-8000-000000000002','92000000-0000-4000-8000-000000000004',true), 'Original executor receipt';
+ assert public.confirm_scheduled_offboarding_auth_ban('92000000-0000-4000-8000-000000000002'), 'Confirmed only after receipt';
+end $$;
+reset session authorization;
+do $$ begin
+ assert (select auth_ban_confirmed_at is not null from private.scheduled_employee_offboarding where person_id='92000000-0000-4000-8000-000000000002'), 'Service role confirms exact account after receipt';
 end $$;
 rollback;

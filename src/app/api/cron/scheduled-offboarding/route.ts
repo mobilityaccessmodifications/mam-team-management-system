@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -34,17 +35,38 @@ export async function GET(request: Request) {
           if (result.error) throw new Error("Archive failed");
           if (result.data !== true) continue;
         }
-        if (candidate.auth_user_id) {
-          const { data: banned, error: banError } = await admin.auth.admin.updateUserById(candidate.auth_user_id, { ban_duration: "876000h" });
-          if (banError || banned.user?.id !== candidate.auth_user_id) throw new Error("Auth ban unconfirmed");
-          const { data: verified, error: verifyError } = await admin.auth.admin.getUserById(candidate.auth_user_id);
-          if (verifyError || verified.user?.id !== candidate.auth_user_id
-            || !verified.user.banned_until || Date.parse(verified.user.banned_until) <= Date.now()) {
-            throw new Error("Auth ban not verified");
+        const executorToken = randomUUID();
+        const { data: claim, error: claimError } = await admin.rpc("claim_scheduled_offboarding_auth_ban", {
+          p_person_id: candidate.person_id, p_executor_token: executorToken,
+        });
+        if (claimError || !claim || !["execute", "succeeded", "no_account"].includes(claim.state)
+          || (claim.auth_user_id !== null && !UUID.test(claim.auth_user_id))
+          || (claim.state === "no_account" && claim.auth_user_id !== null)
+          || (claim.state !== "no_account" && !claim.auth_user_id)) throw new Error("Auth claim unresolved");
+        if (claim.state === "execute") {
+          let succeeded = false;
+          try {
+            const { data: banned, error: banError } = await admin.auth.admin.updateUserById(claim.auth_user_id, { ban_duration: "876000h" });
+            if (!banError && banned.user?.id === claim.auth_user_id) {
+              const { data: verified, error: verifyError } = await admin.auth.admin.getUserById(claim.auth_user_id);
+              succeeded = !verifyError && verified.user?.id === claim.auth_user_id
+                && !!verified.user.banned_until && Date.parse(verified.user.banned_until) > Date.now();
+            }
+          } catch { succeeded = false; }
+          let recorded = false;
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            try {
+              const receipt = await admin.rpc("record_scheduled_offboarding_auth_ban", {
+                p_person_id: candidate.person_id, p_auth_user_id: claim.auth_user_id,
+                p_executor_token: executorToken, p_succeeded: succeeded,
+              });
+              if (!receipt.error && receipt.data === true) { recorded = true; break; }
+            } catch { recorded = false; }
           }
+          if (!succeeded || !recorded) throw new Error("Auth ban unresolved");
         }
         const result = await admin.rpc("confirm_scheduled_offboarding_auth_ban", { p_person_id: candidate.person_id });
-        if (result.error) throw new Error("Confirmation failed");
+        if (result.error || result.data !== true) throw new Error("Confirmation failed");
         completed += 1;
       } catch {
         failed += 1;

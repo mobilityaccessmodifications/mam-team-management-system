@@ -5,14 +5,24 @@ import test from "node:test";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
-function loadRoute({ candidates = [], runError = null, banError = null } = {}) {
+function loadRoute({ candidates = [], runError = null, banError = null, confirm = true } = {}) {
   const calls = [];
+  let state = "not_started";
   const admin = {
     async rpc(name, args) {
       calls.push([name, args]);
       if (name === "list_scheduled_employee_offboarding") return { data: candidates, error: null };
       if (name === "run_scheduled_employee_offboarding") return { data: !runError, error: runError };
-      if (name === "confirm_scheduled_offboarding_auth_ban") return { data: null, error: null };
+      if (name === "claim_scheduled_offboarding_auth_ban") {
+        const result = state === "not_started" ? "execute" : state;
+        if (state === "not_started") state = "executing";
+        return { data: { auth_user_id: user, state: result }, error: null };
+      }
+      if (name === "record_scheduled_offboarding_auth_ban") {
+        state = args.p_succeeded ? "succeeded" : "unknown";
+        return { data: true, error: null };
+      }
+      if (name === "confirm_scheduled_offboarding_auth_ban") return { data: confirm, error: null };
       throw Error(`Unexpected RPC ${name}`);
     },
     auth: { admin: {
@@ -47,9 +57,9 @@ test("cron archives then bans Auth and confirms exactly the linked account", asy
   const { GET, calls } = loadRoute({ candidates: [{ person_id: person, auth_user_id: user, is_active: true }] });
   const response = await GET(request(process.env.CRON_SECRET));
   assert.equal(response.status, 200, JSON.stringify({ body: await response.json(), calls }));
-  assert.deepEqual(calls.map((entry) => entry[0]), ["list_scheduled_employee_offboarding", "run_scheduled_employee_offboarding", "ban", "inspect_ban", "confirm_scheduled_offboarding_auth_ban"]);
-  assert.equal(calls[2][1], user);
-  assert.equal(calls[2][2].ban_duration, "876000h");
+  assert.deepEqual(calls.map((entry) => entry[0]), ["list_scheduled_employee_offboarding", "run_scheduled_employee_offboarding", "claim_scheduled_offboarding_auth_ban", "ban", "inspect_ban", "record_scheduled_offboarding_auth_ban", "confirm_scheduled_offboarding_auth_ban"]);
+  assert.equal(calls[3][1], user);
+  assert.equal(calls[3][2].ban_duration, "876000h");
 });
 
 test("cron does not ban Auth if transactional archive fails", async () => {
@@ -64,4 +74,25 @@ test("failed Auth ban remains unconfirmed for retry", async () => {
   const { GET, calls } = loadRoute({ candidates: [{ person_id: person, auth_user_id: user, is_active: false }], banError: { message: "unavailable" } });
   assert.equal((await GET(request(process.env.CRON_SECRET))).status, 500);
   assert.equal(calls.some((entry) => entry[0] === "confirm_scheduled_offboarding_auth_ban"), false);
+});
+
+test("cron uses freshly claimed identity rather than a stale null candidate", async () => {
+  process.env.CRON_SECRET = "synthetic-cron-secret";
+  const { GET, calls } = loadRoute({ candidates: [{ person_id: person, auth_user_id: null, is_active: true }] });
+  await GET(request(process.env.CRON_SECRET));
+  assert.equal(calls.some(([name, id]) => name === "ban" && id === user), true);
+});
+
+test("ambiguous Auth response never grants a second provider write", async () => {
+  process.env.CRON_SECRET = "synthetic-cron-secret";
+  const { GET, calls } = loadRoute({ candidates: [{ person_id: person, auth_user_id: user, is_active: false }], banError: { message: "timeout" } });
+  await GET(request(process.env.CRON_SECRET));
+  await GET(request(process.env.CRON_SECRET));
+  assert.equal(calls.filter(([name]) => name === "ban").length, 1);
+});
+
+test("confirmation no-op is not reported as completed", async () => {
+  process.env.CRON_SECRET = "synthetic-cron-secret";
+  const { GET } = loadRoute({ candidates: [{ person_id: person, auth_user_id: user, is_active: false }], confirm: false });
+  assert.equal((await GET(request(process.env.CRON_SECRET))).status, 500);
 });

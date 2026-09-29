@@ -6,7 +6,10 @@ create table private.scheduled_employee_offboarding (
   reason text not null check (reason in ('Resigned','End of contract','Terminated','Redundant','Other')),
   scheduled_by uuid not null references auth.users(id),
   scheduled_at timestamptz not null default clock_timestamp(),
-  auth_ban_confirmed_at timestamptz
+  auth_ban_confirmed_at timestamptz,
+  auth_ban_user_id uuid,
+  auth_ban_executor_token uuid,
+  auth_ban_status text not null default 'not_started' check (auth_ban_status in ('not_started','executing','unknown','succeeded'))
 );
 alter table private.scheduled_employee_offboarding enable row level security;
 revoke all on private.scheduled_employee_offboarding from public, anon, authenticated;
@@ -57,7 +60,8 @@ security definer set search_path='' as $$
 begin
   if new.scheduled_employment_end_date is distinct from old.scheduled_employment_end_date then
     if new.scheduled_employment_end_date is null then
-      delete from private.scheduled_employee_offboarding where person_id=new.person_id and auth_ban_confirmed_at is null;
+      delete from private.scheduled_employee_offboarding where person_id=new.person_id and auth_ban_confirmed_at is null
+        and exists (select 1 from public.internal_org_people person where person.id=new.person_id and person.is_active);
     else
       update private.scheduled_employee_offboarding set end_date=new.scheduled_employment_end_date
       where person_id=new.person_id and auth_ban_confirmed_at is null;
@@ -88,7 +92,7 @@ declare
   v_profile public.profiles%rowtype;
   v_version bigint;
 begin
-  if current_user <> 'service_role' and session_user <> 'postgres' then
+  if (select auth.role()) is distinct from 'service_role' and session_user not in ('service_role','postgres') then
     raise exception 'Service role required.' using errcode='42501';
   end if;
   perform pg_advisory_xact_lock(hashtextextended('internal_org_people_hierarchy', 0));
@@ -129,18 +133,86 @@ end $$;
 revoke all on function public.run_scheduled_employee_offboarding(uuid,timestamptz) from public,anon,authenticated;
 grant execute on function public.run_scheduled_employee_offboarding(uuid,timestamptz) to service_role;
 
-create function public.confirm_scheduled_offboarding_auth_ban(p_person_id uuid) returns void
+create function private.prevent_late_offboarding_account_link() returns trigger
 language plpgsql security definer set search_path='' as $$
 begin
-  if current_user <> 'service_role' and session_user <> 'postgres' then
+  if new.auth_user_id is distinct from old.auth_user_id and new.auth_user_id is not null
+    and not new.is_active and exists (
+      select 1 from private.scheduled_employee_offboarding schedule
+      where schedule.person_id=new.id and schedule.auth_ban_confirmed_at is null
+    ) then
+    raise exception 'Archived offboarding cannot acquire a portal account.' using errcode='55000';
+  end if;
+  return new;
+end $$;
+create trigger prevent_late_offboarding_account_link before update of auth_user_id
+on public.internal_org_people for each row execute function private.prevent_late_offboarding_account_link();
+
+create function public.claim_scheduled_offboarding_auth_ban(p_person_id uuid, p_executor_token uuid)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare
+  v_person public.internal_org_people%rowtype;
+  v_schedule private.scheduled_employee_offboarding%rowtype;
+begin
+  if p_executor_token is null then raise exception 'Executor required.' using errcode='22004'; end if;
+  select * into v_person from public.internal_org_people where id=p_person_id for update;
+  select * into v_schedule from private.scheduled_employee_offboarding where person_id=p_person_id for update;
+  if v_person.id is null or v_person.is_active or v_schedule.person_id is null
+    or v_schedule.auth_ban_confirmed_at is not null then
+    raise exception 'Offboarding is not ready.' using errcode='55000';
+  end if;
+  if v_schedule.auth_ban_status <> 'not_started' then
+    if v_schedule.auth_ban_user_id is distinct from v_person.auth_user_id then
+      raise exception 'Linked account changed during offboarding.' using errcode='55000';
+    end if;
+    return jsonb_build_object('auth_user_id',v_schedule.auth_ban_user_id,'state',v_schedule.auth_ban_status);
+  end if;
+  if v_person.auth_user_id is null then
+    return jsonb_build_object('auth_user_id',null,'state','no_account');
+  end if;
+  if not exists(select 1 from public.profiles profile where profile.id=v_person.auth_user_id and profile.account_status='disabled') then
+    raise exception 'Linked account must be disabled first.' using errcode='55000';
+  end if;
+  update private.scheduled_employee_offboarding set auth_ban_user_id=v_person.auth_user_id,
+    auth_ban_executor_token=p_executor_token,auth_ban_status='executing' where person_id=p_person_id;
+  return jsonb_build_object('auth_user_id',v_person.auth_user_id,'state','execute');
+end $$;
+revoke all on function public.claim_scheduled_offboarding_auth_ban(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.claim_scheduled_offboarding_auth_ban(uuid,uuid) to service_role;
+
+create function public.record_scheduled_offboarding_auth_ban(p_person_id uuid, p_auth_user_id uuid,
+  p_executor_token uuid, p_succeeded boolean) returns boolean
+language plpgsql security definer set search_path='' as $$
+declare v_schedule private.scheduled_employee_offboarding%rowtype;
+begin
+  select * into v_schedule from private.scheduled_employee_offboarding where person_id=p_person_id for update;
+  if v_schedule.person_id is null or v_schedule.auth_ban_user_id is distinct from p_auth_user_id
+    or v_schedule.auth_ban_executor_token is distinct from p_executor_token or p_succeeded is null then return false; end if;
+  if v_schedule.auth_ban_status=(case when p_succeeded then 'succeeded' else 'unknown' end) then return true; end if;
+  if v_schedule.auth_ban_status <> 'executing' then return false; end if;
+  update private.scheduled_employee_offboarding set auth_ban_status=(case when p_succeeded then 'succeeded' else 'unknown' end)
+  where person_id=p_person_id;
+  return true;
+end $$;
+revoke all on function public.record_scheduled_offboarding_auth_ban(uuid,uuid,uuid,boolean) from public,anon,authenticated;
+grant execute on function public.record_scheduled_offboarding_auth_ban(uuid,uuid,uuid,boolean) to service_role;
+
+create function public.confirm_scheduled_offboarding_auth_ban(p_person_id uuid) returns boolean
+language plpgsql security definer set search_path='' as $$
+declare v_changed integer;
+begin
+  if (select auth.role()) is distinct from 'service_role' and session_user not in ('service_role','postgres') then
     raise exception 'Service role required.' using errcode='42501';
   end if;
   update private.scheduled_employee_offboarding schedule set auth_ban_confirmed_at=clock_timestamp()
   from public.internal_org_people person
   left join public.profiles profile on profile.id=person.auth_user_id
   where schedule.person_id=p_person_id and person.id=p_person_id and not person.is_active
-    and (person.auth_user_id is null or profile.account_status='disabled')
+    and ((person.auth_user_id is null and schedule.auth_ban_status='not_started')
+      or (person.auth_user_id=schedule.auth_ban_user_id and profile.account_status='disabled' and schedule.auth_ban_status='succeeded'))
     and schedule.auth_ban_confirmed_at is null;
+  get diagnostics v_changed = row_count;
+  return v_changed = 1;
 end $$;
 revoke all on function public.confirm_scheduled_offboarding_auth_ban(uuid) from public,anon,authenticated;
 grant execute on function public.confirm_scheduled_offboarding_auth_ban(uuid) to service_role;
