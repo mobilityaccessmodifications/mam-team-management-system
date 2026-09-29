@@ -4,8 +4,11 @@ export function calendarEventIsVisible(
   team: string | undefined,
   hiddenKinds: readonly string[],
   hiddenTeams: readonly string[],
+  leaveType?: string,
+  hiddenLeaveTypes: readonly string[] = [],
 ) {
-  return !hiddenKinds.includes(kind) && (!team || !hiddenTeams.includes(team));
+  return !hiddenKinds.includes(kind) && (!team || !hiddenTeams.includes(team))
+    && (!leaveType || !hiddenLeaveTypes.includes(leaveType));
 }
 
 export function calendarTeamOptions(requests: ReadonlyArray<{ team: string }>) {

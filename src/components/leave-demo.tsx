@@ -179,6 +179,9 @@ type LeaveRequest = {
   approvalRequired: boolean;
   status: RequestStatus;
   submittedAt: string;
+  requestedAt?: string;
+  approvedBy?: string;
+  documentCount?: number;
   assignedReviewerLabel?: string;
   canDecide: boolean;
   /** Server-derived only. A missing capability intentionally fails closed. */
@@ -501,6 +504,9 @@ function toCalendarLeaveRequest(record: LeaveCalendarEntry): LeaveRequest {
     approvalRequired: true,
     status: record.status,
     submittedAt: "",
+    requestedAt: record.requestedAt,
+    approvedBy: record.approvedBy,
+    documentCount: record.documentCount,
     canDecide: false,
     canCancel: false,
     canAttach: false,
@@ -2016,6 +2022,7 @@ export function LeaveDemo({
             birthdays={calendarHidesTeamEvents ? [] : calendarBirthdays}
             checkIns={calendarHidesTeamEvents ? [] : calendarCheckIns}
             requests={calendarHidesTeamEvents ? [] : calendarRequests.map((request) => ({ ...request, position: organisationRows.find((person) => person.id === request.personId)?.position_title }))}
+            attachments={isPreviewingEmployeeAccess ? [] : leaveAttachments}
             subscriptionReviews={calendarSubscriptionReviews}
             payrollBalanceReminders={calendarPayrollBalanceReminders}
             showSubscriptionReviews={canViewSubscriptionReviewCalendarForProfile}

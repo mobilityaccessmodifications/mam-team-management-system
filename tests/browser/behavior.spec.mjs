@@ -39,3 +39,73 @@ for (const width of [390, 1440]) {
     });
   }
 }
+
+test("staff Calendar renders approved and pending types, details and working type filters", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?fixture=staff-calendar");
+  await expect(page.getByRole("group", { name: "Leave colour key" })).toContainText("Sick leave");
+  await expect(page.getByRole("group", { name: "Leave colour key" })).toContainText("Approved – pending leave balance");
+  await page.getByRole("button", { name: "Week", exact: true }).click();
+  await page.getByRole("button", { name: "Today" }).click();
+  await expect(page.getByText(/Sample Staff · Sick leave/).first()).toBeVisible();
+  await expect(page.getByText(/Other Staff · Annual leave \(Pending\)/).first()).toBeVisible();
+  const eventColour = async (label) => page.getByText(label).first().evaluate((node) => getComputedStyle(node.closest(".df-event")).backgroundColor);
+  expect(await eventColour(/Sample Staff · Sick leave/)).toBe("rgb(255, 240, 228)");
+  expect(await eventColour(/Other Staff · Annual leave \(Pending\)/)).toBe("rgb(229, 239, 255)");
+  await page.getByText(/Sample Staff · Sick leave/).first().evaluate((node) => node.click());
+  await expect(page.getByText("Type of leave: Sick leave")).toBeVisible();
+  await expect(page.getByText("Documents uploaded: 1")).toBeVisible();
+  await expect(page.getByText("Approved by: Sample Reviewer")).toBeVisible();
+  await expect(page.getByRole("link", { name: "sample.pdf" })).toHaveAttribute("href", "/leave/attachments/33333333-3333-4333-8333-333333333333");
+  await page.getByRole("button", { name: "Close event details" }).click();
+  await page.getByText("Filters", { exact: true }).click();
+  await page.getByRole("group", { name: "Leave by type" }).getByLabel("Sick leave").uncheck();
+  await expect(page.getByText(/Sample Staff · Sick leave/)).toHaveCount(0);
+  await expect(page.getByText(/Other Staff · Annual leave \(Pending\)/).first()).toBeVisible();
+  await page.getByRole("button", { name: "Show all" }).click();
+  await expect(page.getByText(/Sample Staff · Sick leave/).first()).toBeVisible();
+  await page.getByText("Filters", { exact: true }).click();
+  await page.getByRole("group", { name: "Events" }).getByLabel("Pending leave", { exact: true }).uncheck();
+  await expect(page.getByText(/Other Staff · Annual leave \(Pending\)/)).toHaveCount(0);
+  await expect(page.getByText(/Sample Staff · Sick leave/).first()).toBeVisible();
+});
+
+test("pending leave details remain readable on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?fixture=staff-calendar");
+  await page.getByRole("button", { name: "Week", exact: true }).click();
+  await page.getByRole("button", { name: "Today" }).click();
+  await expect(page.getByText(/Other Staff · Annual leave \(Pending\)/).first()).toBeVisible();
+  await page.getByText(/Other Staff · Annual leave \(Pending\)/).first().click();
+  await expect(page.getByRole("dialog", { name: "Event details" })).toBeVisible();
+  await expect(page.getByText("Type of leave: Annual leave")).toBeVisible();
+  await expect(page.getByText("Status: Pending")).toBeVisible();
+  await expect(page.getByText("Requested: 2 Sept 2026")).toBeVisible();
+  await expect(page.getByText("Approved by: Awaiting approval")).toBeVisible();
+  await expect(page.getByText("Documents uploaded: None")).toBeVisible();
+});
+
+test("staff month view preserves the visible date and other leave types when filtered", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?fixture=staff-calendar");
+  await page.getByRole("button", { name: "Today" }).click();
+  await expect(page.getByText(/Other Staff · Annual leave \(Pending\)/).first()).toBeVisible();
+  await page.getByText("Filters", { exact: true }).click();
+  await page.getByRole("group", { name: "Leave by type" }).getByLabel("Sick leave").uncheck();
+  await expect(page.getByText(/Sample Staff · Sick leave/)).toHaveCount(0);
+  await expect(page.getByText(/Other Staff · Annual leave \(Pending\)/).first()).toBeVisible();
+});
+
+test("employee calendar keeps generic leave and no staff-only details or legend", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?fixture=employee-calendar");
+  await expect(page.getByRole("group", { name: "Leave colour key" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Week", exact: true }).click();
+  await page.getByRole("button", { name: "Today" }).click();
+  await expect(page.getByText(/Other Staff · Approved leave/).first()).toBeVisible();
+  await page.getByText(/Other Staff · Approved leave/).first().evaluate((node) => node.click());
+  await expect(page.getByText("Documents uploaded: 1")).toHaveCount(0);
+  await expect(page.getByText("Approved by: Sample Reviewer")).toHaveCount(0);
+  await page.getByText("Filters", { exact: true }).click();
+  await expect(page.getByRole("group", { name: "Leave by type" })).toHaveCount(0);
+});

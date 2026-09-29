@@ -78,6 +78,18 @@ test("calendar parser accepts the person-scoped RPC contract and preserves archi
   assert.equal(parsed.leaveType, "Approved leave");
 });
 
+test("staff calendar parser accepts only bounded dates, approver names and document counts", () => {
+  const row = { ...validCalendarRow, leave_type_label: "Sick leave", requested_at: "2026-08-01T12:00:00+00:00",
+    approved_by: "Synthetic Reviewer", document_count: 2 };
+  const parsed = calendarParser.toCalendarEntry(row);
+  assert.equal(parsed.requestedAt, row.requested_at);
+  assert.equal(parsed.approvedBy, "Synthetic Reviewer");
+  assert.equal(parsed.documentCount, 2);
+  assert.equal(calendarParser.toCalendarEntry({ ...row, approved_by: null }).approvedBy, undefined);
+  assert.throws(() => calendarParser.toCalendarEntry({ ...row, document_count: -1 }), /Leave records could not be loaded/);
+  assert.throws(() => calendarParser.toCalendarEntry({ ...row, requested_at: "invalid" }), /Leave records could not be loaded/);
+});
+
 test("calendar parser fails closed when an old company-wide RPC row lacks person identity", () => {
   const { person_id: ignored, ...legacyCalendarRow } = validCalendarRow;
   assert.equal(ignored, validCalendarRow.person_id);
@@ -85,4 +97,9 @@ test("calendar parser fails closed when an old company-wide RPC row lacks person
     () => calendarParser.toCalendarEntry(legacyCalendarRow),
     /Leave records could not be loaded/,
   );
+});
+
+test("standard PostgreSQL verification runs staff calendar access regressions", () => {
+  const runner = fs.readFileSync("scripts/test-sql.mjs", "utf8");
+  assert.match(runner, /calendar-staff-details\.sql/);
 });

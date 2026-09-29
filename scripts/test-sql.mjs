@@ -40,6 +40,8 @@ try {
   if (accounts.status !== 0) throw new Error("Account executor PostgreSQL concurrency tests failed");
   createDatabase(socket, "mam_test_employee_calendar");
   command("psql", [...target(socket, "mam_test_employee_calendar"), "-f", path.join(sourceRoot, "tests/employee-team-calendar.sql")]);
+  createDatabase(socket, "mam_test_staff_calendar");
+  command("psql", [...target(socket, "mam_test_staff_calendar"), "-f", path.join(sourceRoot, "tests/calendar-staff-details.sql")]);
   passed = true;
 } finally {
   stopCluster(socket);

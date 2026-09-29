@@ -88,6 +88,9 @@ export type LeaveCalendarEntry = Omit<
 > & {
   personId: string;
   teamName: string;
+  requestedAt?: string;
+  approvedBy?: string;
+  documentCount?: number;
 };
 
 /**
@@ -239,6 +242,9 @@ type CalendarRpcRow = Omit<
 > & {
   person_id: string;
   team_name: string;
+  requested_at?: unknown;
+  approved_by?: unknown;
+  document_count?: unknown;
 };
 
 type AttachmentRpcRow = {
@@ -493,6 +499,15 @@ function toCalendarEntry(value: unknown): LeaveCalendarEntry {
   const id = requireText(row?.id, LOAD_ERROR);
   if (!UUID_PATTERN.test(id)) throw new Error(LOAD_ERROR);
 
+  let details: Pick<LeaveCalendarEntry, "requestedAt" | "approvedBy" | "documentCount"> = {};
+  if (row.requested_at !== undefined || row.document_count !== undefined) {
+    const requestedAt = requireText(row.requested_at, LOAD_ERROR);
+    const documentCount = Number(row.document_count);
+    if (!/^\d{4}-\d{2}-\d{2}T/.test(requestedAt) || !Number.isFinite(Date.parse(requestedAt))
+      || !Number.isSafeInteger(documentCount) || documentCount < 0 || documentCount > 10) throw new Error(LOAD_ERROR);
+    details = { requestedAt, approvedBy: optionalText(row.approved_by), documentCount };
+  }
+
   return {
     id,
     personId: requiredUuid(row.person_id, LOAD_ERROR),
@@ -507,6 +522,7 @@ function toCalendarEntry(value: unknown): LeaveCalendarEntry {
     days: positiveNumber(row.business_days, LOAD_ERROR),
     hours: optionalPositiveNumber(row.hours, LOAD_ERROR),
     status: status(row.status, LOAD_ERROR),
+    ...details,
   };
 }
 
@@ -885,6 +901,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
     const preview = await getSelectedEmployeeLeaveWorkspacePreview(supabase, checkedPreviewPersonId);
     const [
       { data: calendarData, error: calendarError },
+      { data: staffCalendarData, error: staffCalendarError },
       { data: birthdayData, error: birthdayError },
       { data: checkInData, error: checkInError },
       { data: subscriptionReviewData, error: subscriptionReviewError },
@@ -893,6 +910,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
       { data: entitlementPolicyData, error: entitlementPolicyError },
     ] = await Promise.all([
       supabase.rpc("list_leave_calendar_entries_with_teams_for_preview", { p_person_id: checkedPreviewPersonId }),
+      supabase.rpc("list_staff_leave_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("list_calendar_birthdays_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("list_employee_check_in_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("list_subscription_review_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
@@ -901,6 +919,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
       supabase.rpc("get_selected_employee_leave_entitlement_policy", { p_person_id: checkedPreviewPersonId }),
     ]);
     const calendar = parseOptionalProjection(calendarData, calendarError, toCalendarEntry);
+    const staffCalendar = parseOptionalProjection(staffCalendarData, staffCalendarError, toCalendarEntry);
     const birthdays = parseOptionalProjection(birthdayData, birthdayError, toBirthdayCalendarEntry);
     const checkIns = parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry);
     const subscriptionReviews = parseOptionalProjection(subscriptionReviewData, subscriptionReviewError, toSubscriptionReviewCalendarEntry);
@@ -921,7 +940,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
     return {
       ...preview,
       ...policy,
-      calendarEntries: calendar.rows,
+      calendarEntries: staffCalendar.rows.length ? staffCalendar.rows : calendar.rows,
       birthdayEntries: birthdays.rows,
       checkInEntries: checkIns.rows,
       subscriptionReviewEntries: subscriptionReviews.rows,
@@ -940,6 +959,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
   const [
     { data: workspaceData, error: workspaceError },
     { data: calendarData, error: calendarError },
+    { data: staffCalendarData, error: staffCalendarError },
     { data: birthdayData, error: birthdayError },
     { data: checkInData, error: checkInError },
     { data: subscriptionReviewData, error: subscriptionReviewError },
@@ -952,6 +972,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
   ] = await Promise.all([
     supabase.rpc("list_leave_workspace_requests"),
     supabase.rpc("list_leave_calendar_entries_with_teams"),
+    supabase.rpc("list_staff_leave_calendar_entries"),
     supabase.rpc("list_calendar_birthdays"),
     supabase.rpc("list_employee_check_in_calendar_entries"),
     supabase.rpc("list_subscription_review_calendar_entries"),
@@ -978,6 +999,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
   // Calendar is available to every active employee. Each database projection
   // independently returns only that employee's authorised records.
   const calendar = parseOptionalProjection(calendarData, calendarError, toCalendarEntry);
+  const staffCalendar = parseOptionalProjection(staffCalendarData, staffCalendarError, toCalendarEntry);
   const birthdays = parseOptionalProjection(birthdayData, birthdayError, toBirthdayCalendarEntry);
   const checkIns = parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry);
   const subscriptionReviews = parseOptionalProjection(subscriptionReviewData, subscriptionReviewError, toSubscriptionReviewCalendarEntry);
@@ -1003,7 +1025,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
     ...policy,
     requests,
     attachments: attachments.rows,
-    calendarEntries: calendar.rows,
+    calendarEntries: staffCalendar.rows.length ? staffCalendar.rows : calendar.rows,
     birthdayEntries: birthdays.rows,
     checkInEntries: checkIns.rows,
     subscriptionReviewEntries: subscriptionReviews.rows,
