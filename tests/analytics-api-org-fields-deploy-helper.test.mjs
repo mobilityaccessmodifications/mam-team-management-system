@@ -65,9 +65,10 @@ def fake_query(statement):
 g['api']=fake_api
 g['query']=fake_query
 g['schema_state']=lambda:dict(state)
+local_files={version:name for version,name in g['migration_files']().items() if version<='20260929140000'}
 if ${laterLocalOnly ? "True" : "False"}:
-  local_files=g['migration_files']()
-  g['migration_files']=lambda:{**local_files,'20260929150000':'later_migration'}
+  local_files['20260929150000']='later_migration'
+g['migration_files']=lambda:local_files
 g['sys'].argv=['deploy-analytics-employee-org-fields.py',${JSON.stringify(operation)},${wrongHash ? '"wrong-hash"' : 'hashlib.sha256(sql.encode()).hexdigest()'}]
 g['main']()
 assert len(writes)==${operation === "apply" && !recorded && !wrongHash && !unsafe ? 1 : 0}, ('unexpected write count',len(writes))
