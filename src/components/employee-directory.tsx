@@ -571,8 +571,8 @@ export function EmployeeDirectory({
       setRecords((current) => current.map((candidate) => candidate.personId === result.record.personId ? result.record : candidate));
       setEditor(editEditor(result.record));
       setEndDatePrompt(null);
-      setNotice("Employment ended, portal account disabled and profile archived.");
-      setDirectoryFilter("archived");
+      setNotice(result.record.isActive ? "Offboarding scheduled for the day after the final working day." : "Employment ended, portal account disabled and profile archived.");
+      if (!result.record.isActive) setDirectoryFilter("archived");
       await onRecordsChanged?.();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "The employee profile could not be archived.");
@@ -755,12 +755,12 @@ export function EmployeeDirectory({
             <button type="button" className={styles.modalClose} onClick={closeEndDatePrompt} disabled={archiving} aria-label="Close"><X size={17} /></button>
           </header>
           <div className={styles.modalBody}>
-            <p>This archives the employee and disables sign-in. Return their devices first.</p>
+            <p>A future end date keeps the employee and sign-in active through that day; offboarding runs after Melbourne midnight. Return their devices first.</p>
             <label className={styles.modalField}><span>Employment end date <b aria-hidden="true">*</b></span><input ref={endDateInputRef} type="date" value={endDatePrompt.date} onChange={(event) => setEndDatePrompt((current) => current ? { ...current, date: event.target.value } : current)} required /></label>
             <label className={styles.modalField}><span>Reason for leaving <b aria-hidden="true">*</b></span><select value={endDatePrompt.reason} onChange={(event) => setEndDatePrompt((current) => current ? { ...current, reason: event.target.value } : current)} required aria-required="true"><option value="" disabled>Select a reason</option>{employmentEndReasons.map((reason) => <option key={reason.value} value={reason.value}>{reason.label}</option>)}</select></label>
             {saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}
           </div>
-          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={closeEndDatePrompt} disabled={archiving}>Cancel</button><button type="button" className={styles.dangerAction} onClick={() => void confirmEndDate()} disabled={archiving}><UserMinus size={15} />{archiving ? "Ending employment…" : "End employment & disable account"}</button></footer>
+          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={closeEndDatePrompt} disabled={archiving}>Cancel</button><button type="button" className={styles.dangerAction} onClick={() => void confirmEndDate()} disabled={archiving}><UserMinus size={15} />{archiving ? "Saving end date…" : "Confirm end date"}</button></footer>
         </section>
       </ModalBackdrop> : null}
 

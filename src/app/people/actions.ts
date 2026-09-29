@@ -499,6 +499,21 @@ export async function archiveEmployeeDirectoryRecord(input: {
     const expectedDetailVersion = version(inputValue.detailVersion);
 
     const { supabase, actorUserId } = await requireEmployeeDirectoryManager();
+    const parts = new Intl.DateTimeFormat("en-AU", { timeZone: "Australia/Melbourne", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+    const today = (key: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === key)?.value ?? "";
+    if (endDate > `${today("year")}-${today("month")}-${today("day")}`) {
+      const { data, error } = await supabase.rpc("schedule_employee_offboarding", {
+        p_person_id: inputValue.personId,
+        p_expected_person_version: expectedPersonVersion,
+        p_expected_detail_version: expectedDetailVersion,
+        p_end_date: endDate,
+        p_reason: reason,
+      });
+      if (error || data !== inputValue.personId) return { ok: false, message: error?.message ?? "The offboarding schedule could not be saved. Refresh and try again." };
+      const record = await findEmployeeDirectoryRecord(supabase, inputValue.personId);
+      revalidatePath("/");
+      return { ok: true, record };
+    }
     admin = createAdminClient();
 
     // The database RPC owns the transactional archive and profile-status

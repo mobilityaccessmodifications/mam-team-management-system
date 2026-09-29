@@ -9,6 +9,10 @@
       "schedule": "35 16 * * *"
     },
     {
+      "path": "/api/cron/scheduled-offboarding",
+      "schedule": "0 13,14 * * *"
+    },
+    {
       "path": "/api/cron/leave-attachment-cleanup",
       "schedule": "17 16 * * *"
     }
