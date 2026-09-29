@@ -424,3 +424,18 @@
   .filters > summary { padding: 8px; gap: 5px; }
   .filterPanel { position: fixed; top: 150px; right: 16px; }
 }
+
+.leaveLegend {
+  align-items: center;
+  background: var(--surface-raised, #fff);
+  border-bottom: 1px solid var(--surface-border, #d8dfdc);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 9px 16px;
+}
+.leaveLegend span { align-items: center; color: #34443f; display: inline-flex; font-size: 12px; gap: 7px; }
+.leaveLegend i { border: 2px solid; border-radius: 4px; display: inline-block; height: 14px; width: 14px; }
+.documentList { margin: -6px 0 0; padding-left: 23px; overflow-wrap: anywhere; }
+.documentList a { color: #164487; font-size: 13px; text-decoration: underline; }
+.documentList a:focus-visible { outline: 2px solid var(--mam-orange); outline-offset: 2px; }

@@ -35,7 +35,9 @@ function compile(source, overrides = {}, bindings = {}) {
 function selected(file, names, bindings = {}, overrides = {}) {
   const source = readFileSync(file, "utf8");
   const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const statements = ast.statements.filter((statement) => ts.isFunctionDeclaration(statement) && names.includes(statement.name?.text));
+  const statements = ast.statements.filter((statement) =>
+    ts.isFunctionDeclaration(statement) && names.includes(statement.name?.text)
+    || ts.isVariableStatement(statement) && statement.declarationList.declarations.some((declaration) => names.includes(declaration.name.getText(ast))));
   assert.equal(statements.length, names.length);
   return compile(`${statements.map((statement) => statement.getText(ast)).join("\n")}\n${names.map((name) => `exports.${name} = ${name};`).join("\n")}`, overrides, bindings);
 }
@@ -139,7 +141,7 @@ test("U07: leave records render a named list with native, actionable detail butt
   }
 });
 
-const calendar = selected("src/components/team-calendar.tsx", ["formatDate", "formatDateRange", "formatLeaveDuration", "milestoneLabel", "createMAMEvent", "eventMeta", "buildEvents", "EventDetail", "MobileEventDetail"], {
+const calendar = selected("src/components/team-calendar.tsx", ["leaveColors", "formatDate", "formatDateRange", "formatLeaveDuration", "milestoneLabel", "createMAMEvent", "eventMeta", "buildEvents", "EventDetail", "MobileEventDetail"], {
   ...icons, ...priority, styles, timeZone: "Australia/Melbourne", Temporal: require("temporal-polyfill").Temporal,
   createEvent: (event) => event, createAllDayEvent: (event) => ({ ...event, allDay: true }), getVictorianPublicHolidays: () => [],
   useRef: React.useRef, useDialogFocus: blank, ModalBackdrop: ({ children }) => React.createElement("div", null, children),
@@ -164,6 +166,56 @@ test("U05: authorised duration survives the event mapper and shared desktop/mobi
       assert.doesNotMatch(html, /Annual leave|reason|balance/i);
     }
   }
+});
+
+test("staff leave cards show the type and status with a distinct calendar colour per leave type", () => {
+  for (const [leaveType, color] of [
+    ["Annual leave", "annual"], ["Sick leave", "sick"], ["Unpaid leave", "unpaid"], ["Carer's leave", "carer"], ["Other leave", "other"],
+  ]) {
+    for (const status of ["Approved", "Pending"]) {
+      const [event] = calendar.buildEvents([], [], [{ ...request, employee: "Sample Employee", leaveType, status,
+        startDate: "2026-09-23", endDate: "2026-09-23", requestedAt: "2026-09-01T12:00:00Z", documentCount: 1,
+        approvedBy: status === "Approved" ? "Sample Reviewer" : undefined }], [], [], []);
+      assert.equal(event.calendarId, `${color}-${status.toLowerCase()}`);
+      assert.match(event.title, new RegExp(leaveType.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+      if (status === "Pending") assert.match(event.title, /Pending/);
+      const html = renderToStaticMarkup(React.createElement(calendar.EventDetail, { event, onClose: blank }));
+      assert.match(html, /Type of leave/);
+      assert.match(html, /Documents uploaded/);
+      assert.match(html, /Requested/);
+      assert.match(html, /Date of leave/);
+      assert.match(html, status === "Pending" ? /Awaiting approval/ : /Sample Reviewer/);
+    }
+  }
+});
+
+test("employee calendar cards and details retain the existing availability-only appearance", () => {
+  const [event] = calendar.buildEvents([], [], [{ ...request, employee: "Sample Employee", leaveType: "Approved leave",
+    status: "Approved", startDate: "2026-09-23", endDate: "2026-09-23" }], [], [], []);
+  assert.equal(event.calendarId, "approved");
+  const html = renderToStaticMarkup(React.createElement(calendar.EventDetail, { event, onClose: blank }));
+  assert.doesNotMatch(html, /Documents uploaded|Requested|Approved by|Type of leave/);
+});
+
+test("staff leave-type filter shows only authorised choices and toggles independently of status", () => {
+  const { CalendarFilters } = compile(readFileSync("src/components/calendar-filters.tsx", "utf8"), {
+    "@/components/team-calendar.module.css": styles,
+    "lucide-react": { ChevronDown: blank, Filter: blank },
+  });
+  const selected = [];
+  const props = { kinds: [{ id: "pending", name: "Pending leave" }], teams: [],
+    leaveTypes: ["Sick leave"], hiddenKinds: [], hiddenTeams: [], hiddenLeaveTypes: [],
+    onKind: blank, onTeam: blank, onLeaveType: (value) => selected.push(value), onReset: blank };
+  const tree = CalendarFilters(props);
+  const html = renderToStaticMarkup(tree);
+  assert.match(html, /Leave by type/);
+  assert.match(html, /Sick leave/);
+  assert.doesNotMatch(html, /Annual leave/);
+  const checkbox = nodes(nodes(tree).find((node) => node.type === "label" && content(node) === "Sick leave"))
+    .find((node) => node.type === "input");
+  checkbox.props.onChange();
+  assert.deepEqual(selected, ["Sick leave"]);
+  assert.doesNotMatch(renderToStaticMarkup(CalendarFilters({ ...props, leaveTypes: [] })), /Leave by type/);
 });
 
 function submissionTarget(context) {

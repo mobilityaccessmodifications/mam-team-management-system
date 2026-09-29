@@ -22,3 +22,9 @@ test('team choices come only from authorised input, deduplicate and distinguish 
   assert.deepEqual(options([{team:'MAM · Warehouse'},{team:'Equipsy · Warehouse'},{team:'MAM · Warehouse'}]),['Equipsy · Warehouse','MAM · Warehouse']);
   assert.deepEqual(options([]),[]);
 });
+test('status, leave type and team filters combine without hiding non-leave events', () => {
+  assert.equal(visible('approved','MAM · Minor',[],[], 'Sick leave',['Sick leave']),false);
+  assert.equal(visible('pending','MAM · Minor',[],[], 'Annual leave',['Sick leave']),true);
+  assert.equal(visible('pending','MAM · Minor',['pending'],[], 'Annual leave',[]),false);
+  assert.equal(visible('birthday',undefined,[],[],undefined,['Sick leave']),true);
+});

@@ -24,7 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { createPortal } from "react-dom";
 import { Temporal } from "temporal-polyfill";
 
-import type { BirthdayCalendarEntry, CheckInCalendarEntry, PayrollBalanceReminderCalendarEntry, SubscriptionReviewCalendarEntry } from "@/app/leave/actions";
+import type { BirthdayCalendarEntry, CheckInCalendarEntry, LeaveAttachment, PayrollBalanceReminderCalendarEntry, SubscriptionReviewCalendarEntry } from "@/app/leave/actions";
 import { CalendarFilters } from "@/components/calendar-filters";
 import { calendarEventIsVisible, calendarTeamOptions } from "@/lib/calendar-filters";
 import { syncCalendarEvents } from "@/lib/sync-calendar-events";
@@ -62,15 +62,19 @@ type CalendarLeaveRequest = {
   days: number;
   hours?: number;
   status: "Pending" | "Approved" | "Declined" | "Cancelled" | typeof BALANCE_PENDING_STATUS;
+  requestedAt?: string;
+  approvedBy?: string;
+  documentCount?: number;
 };
 
 type EventKind = "approved" | "pending" | "balance-pending" | "birthday" | "check-in" | "subscription" | "payroll-balance" | "public-holiday";
-type MAMEventMeta = { kind: EventKind; subject: string; detail: string; identity?: string; leaveType?: string; dateLabel: string; priority: number; team?: string; duration?: { days: number; hours?: number } };
+type MAMEventMeta = { kind: EventKind; subject: string; detail: string; identity?: string; leaveType?: string; dateLabel: string; priority: number; team?: string; duration?: { days: number; hours?: number }; requestedAt?: string; approvedBy?: string; documentCount?: number; documents?: Pick<LeaveAttachment, "id" | "fileName">[] };
 
 type TeamCalendarProps = {
   birthdays: BirthdayCalendarEntry[];
   checkIns: CheckInCalendarEntry[];
   requests: CalendarLeaveRequest[];
+  attachments: Pick<LeaveAttachment, "id" | "leaveRequestId" | "fileName">[];
   subscriptionReviews: SubscriptionReviewCalendarEntry[];
   payrollBalanceReminders: PayrollBalanceReminderCalendarEntry[];
   showSubscriptionReviews: boolean;
@@ -94,6 +98,19 @@ const calendars: CalendarType[] = [
   { id: "subscription", name: "Subscription reviews", icon: "$", isVisible: true, readOnly: true, colors: { eventColor: "#fff7df", eventSelectedColor: "#b77914", lineColor: "#b77914", textColor: "#744d0f" } },
   { id: "payroll-balance", name: "Payroll balance updates", icon: "↑", isVisible: true, readOnly: true, colors: { eventColor: "#eef8f4", eventSelectedColor: "#26745a", lineColor: "#26745a", textColor: "#19513f" } },
 ];
+const leaveColors = [
+  { id: "annual", name: "Annual leave", background: "#e5efff", foreground: "#164487", border: "#3972c3" },
+  { id: "sick", name: "Sick leave", background: "#fff0e4", foreground: "#883b0b", border: "#c65a18" },
+  { id: "unpaid", name: "Unpaid leave", background: "#e1f4e9", foreground: "#155838", border: "#278552" },
+  { id: "carer", name: "Carer's leave", background: "#f1eafb", foreground: "#573083", border: "#8256b1" },
+  { id: "other", name: "Other leave", background: "#f0f2f5", foreground: "#34435a", border: "#617488" },
+];
+const staffCalendars: CalendarType[] = leaveColors.flatMap(({ id, name, background, foreground, border }) =>
+  (["approved", "pending"] as const).map((status) => ({
+    id: `${id}-${status}`, name: `${name} · ${status}`, icon: status === "pending" ? "◷" : "✓",
+    isVisible: true, readOnly: true,
+    colors: { eventColor: background, eventSelectedColor: border, lineColor: border, textColor: foreground },
+  })));
 
 function isLeapYear(year: number) {
   return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
@@ -134,7 +151,7 @@ function createMAMEvent({ id, title, startDate, endDate = startDate, startTime, 
   endDate?: string;
   startTime?: string;
   endTime?: string;
-  calendarId: EventKind;
+  calendarId: string;
   meta: MAMEventMeta;
 }) {
   if (startTime && endTime) {
@@ -170,19 +187,23 @@ function buildEvents(
   reviews: SubscriptionReviewCalendarEntry[],
   payrollReminders: PayrollBalanceReminderCalendarEntry[],
   years: number[],
+  attachments: Pick<LeaveAttachment, "id" | "leaveRequestId" | "fileName">[] = [],
 ) {
   const leave = requests.filter((request) => request.status === "Approved" || request.status === "Pending" || request.status === BALANCE_PENDING_STATUS).map((request) => {
     const kind: EventKind = request.status === BALANCE_PENDING_STATUS ? "balance-pending" : request.status === "Approved" ? "approved" : "pending";
     const times = request.startTime && request.endTime ? ` · ${request.startTime.slice(0, 5)}–${request.endTime.slice(0, 5)}` : "";
+    const staffDetail = Boolean(request.requestedAt && request.documentCount !== undefined);
+    const color = leaveColors.find((item) => item.name === request.leaveType);
+    const calendarId = staffDetail && color && kind !== "balance-pending" ? `${color.id}-${kind}` : kind;
     return createMAMEvent({
       id: `leave:${request.id}`,
-      title: `${request.employee} · ${request.leaveType}`,
+      title: `${request.employee} · ${request.leaveType}${staffDetail && kind !== "approved" ? ` (${kind === "balance-pending" ? "Pending balance" : "Pending"})` : ""}`,
       startDate: request.startDate,
       endDate: request.endDate,
       startTime: request.startTime,
       endTime: request.endTime,
-      calendarId: kind,
-      meta: { kind, team: request.team, subject: request.employee, detail: `${request.status} · ${request.leaveType}${request.team ? ` · ${request.team}` : ""}`, identity: Array.from(new Set([request.position, ...request.team.split(" · ").reverse()].filter(Boolean))).join(" · "), leaveType: request.leaveType, dateLabel: `${formatDateRange(request.startDate, request.endDate)}${times}`, duration: { days: request.days, hours: request.hours }, priority: kind === "pending" ? 4 : 5 },
+      calendarId,
+      meta: { kind, team: request.team, subject: request.employee, detail: `${request.status} · ${request.leaveType}${request.team ? ` · ${request.team}` : ""}`, identity: Array.from(new Set([request.position, ...request.team.split(" · ").reverse()].filter(Boolean))).join(" · "), leaveType: request.leaveType, dateLabel: `${formatDateRange(request.startDate, request.endDate)}${times}`, duration: { days: request.days, hours: request.hours }, priority: kind === "pending" ? 4 : 5, requestedAt: staffDetail ? request.requestedAt : undefined, approvedBy: staffDetail ? request.approvedBy : undefined, documentCount: staffDetail ? request.documentCount : undefined, documents: staffDetail ? attachments.filter((item) => item.leaveRequestId === request.id) : undefined },
     });
   });
 
@@ -231,6 +252,7 @@ function buildEvents(
 function EventDetail({ event, onClose }: EventDetailContentProps) {
   const meta = eventMeta(event);
   const icon = meta.kind === "public-holiday" ? <Flag size={18} /> : meta.kind === "birthday" ? <Gift size={18} /> : meta.kind === "check-in" ? <CheckCircle2 size={18} /> : meta.kind === "subscription" ? <WalletCards size={18} /> : meta.kind === "payroll-balance" ? <FileSpreadsheet size={18} /> : <CalendarDays size={18} />;
+  const staffDetail = meta.requestedAt !== undefined && meta.documentCount !== undefined;
   return (
     <div className={styles.eventDetail}>
       <div className={styles.eventDetailHeader}>
@@ -238,8 +260,15 @@ function EventDetail({ event, onClose }: EventDetailContentProps) {
         <div><span>{meta.identity ?? meta.detail}</span><h3>{meta.subject}</h3></div>
         <button type="button" onClick={onClose} aria-label="Close event details"><X size={18} /></button>
       </div>
-      {meta.leaveType ? <div className={styles.eventDetailDate}><CalendarDays size={16} /><span>{meta.leaveType}</span></div> : null}
-      <div className={styles.eventDetailDate}><Clock3 size={16} /><span>{meta.dateLabel}</span></div>
+      {meta.leaveType ? <div className={styles.eventDetailDate}><CalendarDays size={16} /><span>{staffDetail ? "Type of leave: " : ""}{meta.leaveType}</span></div> : null}
+      {staffDetail ? <div className={styles.eventDetailDate}><Clock3 size={16} /><span>Status: {meta.kind === "balance-pending" ? "Approved – pending leave balance" : meta.kind === "pending" ? "Pending" : "Approved"}</span></div> : null}
+      <div className={styles.eventDetailDate}><Clock3 size={16} /><span>{staffDetail ? "Date of leave: " : ""}{meta.dateLabel}</span></div>
+      {staffDetail ? <>
+        <div className={styles.eventDetailDate}><Clock3 size={16} /><span>Requested: {new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone }).format(new Date(meta.requestedAt ?? ""))}</span></div>
+        <div className={styles.eventDetailDate}><CheckCircle2 size={16} /><span>Approved by: {meta.kind === "approved" ? meta.approvedBy ?? "Not recorded" : "Awaiting approval"}</span></div>
+        <div className={styles.eventDetailDate}><FileSpreadsheet size={16} /><span>Documents uploaded: {meta.documentCount === 0 ? "None" : meta.documentCount}</span></div>
+        {meta.documents?.length ? <ul className={styles.documentList}>{meta.documents.map((document) => <li key={document.id}><a href={`/leave/attachments/${document.id}`}>{document.fileName}</a></li>)}</ul> : null}
+      </> : null}
       {meta.duration ? <div className={styles.eventDetailDate}><Clock3 size={16} aria-hidden="true" /><span>Duration: {formatLeaveDuration(meta.duration)}</span></div> : null}
     </div>
   );
@@ -274,29 +303,32 @@ function MobileEventDetail({ draftEvent, isOpen, onClose }: MobileEventProps) {
   );
 }
 
-function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, showSubscriptionReviews, showPayrollBalanceReminders, reviewOnly, loading }: TeamCalendarProps) {
+function TeamCalendarClient({ birthdays, checkIns, requests, attachments, subscriptionReviews, payrollBalanceReminders, showSubscriptionReviews, showPayrollBalanceReminders, reviewOnly, loading }: TeamCalendarProps) {
   const [filterHost, setFilterHost] = useState<HTMLElement | null>(null);
   const [hiddenKinds, setHiddenKinds] = useState<string[]>([]);
   const [hiddenTeams, setHiddenTeams] = useState<string[]>([]);
+  const [hiddenLeaveTypes, setHiddenLeaveTypes] = useState<string[]>([]);
+  const staffLeave = requests.some((request) => request.requestedAt !== undefined && request.documentCount !== undefined);
+  const leaveTypes = useMemo(() => staffLeave ? Array.from(new Set(requests.map((request) => request.leaveType))).sort() : [], [requests, staffLeave]);
   const teams = useMemo(() => calendarTeamOptions(requests), [requests]);
   const year = new Date().getFullYear();
   const calendarFrameRef = useRef<HTMLDivElement>(null);
   const [visibleYears, setVisibleYears] = useState([year - 1, year, year + 1]);
-  const events = useMemo(() => buildEvents(birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, visibleYears), [birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, visibleYears]);
+  const events = useMemo(() => buildEvents(birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, visibleYears, attachments), [birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, visibleYears, attachments]);
   // Keep the calendar instance stable while its event data syncs. Recreating it
   // whenever visibleYears changes resets the active view back to Month (which
   // made Year appear to do nothing).
-  const visibleCalendars = useMemo(() => calendars.filter((item) => {
+  const visibleCalendars = useMemo(() => [...calendars.filter((item) => {
     if (item.id === "public-holiday") return true;
     if (item.id === "subscription") return showSubscriptionReviews;
     if (item.id === "payroll-balance") return showPayrollBalanceReminders;
     return !reviewOnly;
-  }), [reviewOnly, showPayrollBalanceReminders, showSubscriptionReviews]);
+  }), ...(staffLeave && !reviewOnly ? staffCalendars : [])], [reviewOnly, staffLeave, showPayrollBalanceReminders, showSubscriptionReviews]);
   const filteredEvents = useMemo(() => events.filter((event) => {
     const meta = eventMeta(event);
-    return visibleCalendars.some((kind) => kind.id === meta.kind)
-      && calendarEventIsVisible(meta.kind, meta.team, hiddenKinds, hiddenTeams);
-  }), [events, visibleCalendars, hiddenKinds, hiddenTeams]);
+    return visibleCalendars.some((calendar) => calendar.id === event.calendarId)
+      && calendarEventIsVisible(meta.kind, meta.team, hiddenKinds, hiddenTeams, staffLeave ? meta.leaveType : undefined, hiddenLeaveTypes);
+  }), [events, visibleCalendars, hiddenKinds, hiddenTeams, hiddenLeaveTypes, staffLeave]);
   const defaultCalendar = visibleCalendars[0]?.id ?? "approved";
   const calendarVersion = `${reviewOnly ? "limited" : "team"}:${visibleCalendars.map((item) => item.id).join(",")}`;
   const onVisibleRangeChange = useCallback((start: Date, end: Date) => {
@@ -400,10 +432,16 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
 
   return (
     <section className={styles.calendarSection} aria-label={reviewOnly ? "Personal operations reminders" : "Team calendar"}>
-      {filterHost ? createPortal(<CalendarFilters kinds={visibleCalendars} teams={teams} hiddenKinds={hiddenKinds} hiddenTeams={hiddenTeams}
+      {filterHost ? createPortal(<CalendarFilters kinds={visibleCalendars.filter((item) => !staffCalendars.includes(item))} teams={teams} leaveTypes={leaveTypes} hiddenKinds={hiddenKinds} hiddenTeams={hiddenTeams} hiddenLeaveTypes={hiddenLeaveTypes}
         onKind={(id) => setHiddenKinds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])}
         onTeam={(team) => setHiddenTeams((current) => current.includes(team) ? current.filter((item) => item !== team) : [...current, team])}
-        onReset={() => { setHiddenKinds([]); setHiddenTeams([]); }} />, filterHost) : null}
+        onLeaveType={(type) => setHiddenLeaveTypes((current) => current.includes(type) ? current.filter((item) => item !== type) : [...current, type])}
+        onReset={() => { setHiddenKinds([]); setHiddenTeams([]); setHiddenLeaveTypes([]); }} />, filterHost) : null}
+      {staffLeave && !reviewOnly ? <div className={styles.leaveLegend} role="group" aria-label="Leave colour key">
+        {leaveColors.map((color) => <span key={color.id}><i aria-hidden="true" style={{ background: color.background, borderColor: color.border }} />{color.name}</span>)}
+        <span><i aria-hidden="true" style={{ background: "#fff2b3", borderColor: "#c79a12" }} />Approved – pending leave balance</span>
+        <span>Pending leave is marked “Pending” on each event</span>
+      </div> : null}
       <div
         className={styles.calendarFrame}
         aria-busy={loading}
