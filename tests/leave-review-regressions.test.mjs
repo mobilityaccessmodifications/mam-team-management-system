@@ -181,7 +181,7 @@ test("staff leave cards show the type and status with a distinct calendar colour
       if (status === "Pending") assert.match(event.title, /Pending/);
       const html = renderToStaticMarkup(React.createElement(calendar.EventDetail, { event, onClose: blank }));
       assert.match(html, /Type of leave/);
-      assert.match(html, /Documents uploaded/);
+      assert.doesNotMatch(html, /Documents uploaded|\/leave\/attachments\//);
       assert.match(html, /Requested/);
       assert.match(html, /Date of leave/);
       assert.match(html, status === "Pending" ? /Awaiting approval/ : /Sample Reviewer/);
