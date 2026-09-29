@@ -48,8 +48,8 @@ const controls = compile(readFileSync("src/components/leave-priority-controls.ts
   "@/components/leave-accrual-controls": { LeaveAccrualControls: blank, LeaveAccrualNotice: blank },
 });
 const icons = Object.fromEntries(["CalendarDays", "Clock3", "ClipboardList", "CheckCircle2", "ChevronRight", "XCircle", "Search", "Flag", "Gift", "WalletCards", "FileSpreadsheet", "X"].map((name) => [name, blank]));
-const { ApprovalsView, RequestsView } = selected("src/components/leave-demo.tsx", ["ApprovalsView", "RequestsView"], {
-  ...icons, ...priority, ...controls, styles,
+const { ApprovalsView, RequestsView } = selected("src/components/leave-demo.tsx", ["ApprovalsView", "RequestsView", "getLeaveRegisterPage"], {
+  ...icons, ...priority, ...controls, styles, registerToolbar: styles,
   useState: React.useState, useRef: React.useRef, useEffect: React.useEffect, useDialogFocus: blank,
   StatusPill: ({ status }) => React.createElement("span", null, status), PanelHeader: blank,
   AttachmentList: blank, ApprovalCalendar: blank, RequestDetail: blank,
@@ -131,7 +131,7 @@ test("U07: leave records render a named list with native, actionable detail butt
     assert.doesNotMatch(html, /role="(?:table|row)"/);
     // Execute the same rendered list's callback with inert hooks.
     const { RequestsView: render } = selected("src/components/leave-demo.tsx", ["RequestsView"], {
-      ...icons, ...priority, styles, useState: () => [false, blank], useRef: () => ({ current: null }), useEffect: blank, useDialogFocus: blank,
+      ...icons, ...priority, styles, registerToolbar: styles, getLeaveRegisterPage: selected("src/components/leave-demo.tsx", ["getLeaveRegisterPage"]).getLeaveRegisterPage, useState: (initial) => [typeof initial === "function" ? initial() : initial, blank], useRef: () => ({ current: null }), useEffect: blank, useDialogFocus: blank,
       StatusPill: blank, RequestDetail: blank, formatDuration: () => "1 day",
     });
     const button = nodes(render(props)).find((node) => node.type === "button" && node.props["aria-label"]?.startsWith("View leave details"));
@@ -139,6 +139,44 @@ test("U07: leave records render a named list with native, actionable detail butt
     button.props.onClick();
     assert.deepEqual(onSelect, [request.id]);
   }
+});
+
+test("Leave register renders search, sort and a bounded page for every status tab", () => {
+  const rows = Array.from({ length: 45 }, (_, index) => ({ ...request, id: `request-${index}`, employee: `Synthetic ${index}` }));
+  for (const filter of ["All", "Pending", "Waiting for balance", "Approved", "Declined", "Cancelled"]) {
+    const html = renderToStaticMarkup(React.createElement(RequestsView, {
+      profile: { id: "self" }, requests: rows, allRequests: rows, filter, canReview: true,
+      attachmentsByRequestId: new Map(), onSelect: blank, onFilter: blank,
+    }));
+    assert.match(html, /aria-label="Search leave requests"/);
+    assert.match(html, /aria-label="Sort leave requests"/);
+    assert.match(html, /aria-label="Leave request pagination"/);
+    assert.match(html, /Page 1 of 3/);
+    assert.equal((html.match(/aria-label="View leave details for/g) ?? []).length, 20);
+  }
+  const selected = rows[25];
+  const deepLink = renderToStaticMarkup(React.createElement(RequestsView, {
+    profile: { id: "self" }, requests: rows, allRequests: rows, filter: "All", canReview: true,
+    selected, attachmentsByRequestId: new Map(), onSelect: blank, onFilter: blank,
+  }));
+  assert.match(deepLink, /Page 2 of 3/);
+  assert.match(deepLink, /View leave details for Synthetic 25/);
+  assert.doesNotMatch(deepLink, /View leave details for Synthetic 0:/);
+});
+
+test("changing pages never renders another request's actionable details", () => {
+  let stateIndex = 0;
+  const rows = Array.from({ length: 25 }, (_, index) => ({ ...request, id: `request-${index}`, employee: `Synthetic ${index}` }));
+  const { RequestsView: render } = selected("src/components/leave-demo.tsx", ["RequestsView", "getLeaveRegisterPage"], {
+    ...icons, ...priority, styles, registerToolbar: styles,
+    useState: (initial) => [++stateIndex === 4 ? { selectedId: rows[0].id, page: 2 } : typeof initial === "function" ? initial() : initial, blank],
+    useRef: () => ({ current: null }), useEffect: blank, useDialogFocus: blank,
+    StatusPill: blank, RequestDetail: "actionable-details", formatDuration: () => "1 day",
+  });
+  const tree = render({ profile: { id: "self" }, requests: rows, allRequests: rows, selected: rows[0],
+    filter: "All", canReview: true, attachmentsByRequestId: new Map(), onSelect: blank, onFilter: blank });
+  assert.equal(nodes(tree).some((node) => node.type === "actionable-details"), false);
+  assert.equal(nodes(tree).some((node) => node.type === "button" && node.props["aria-label"]?.includes("Synthetic 20")), true);
 });
 
 const calendar = selected("src/components/team-calendar.tsx", ["leaveColors", "formatDate", "formatDateRange", "formatLeaveDuration", "milestoneLabel", "createMAMEvent", "eventMeta", "buildEvents", "EventDetail", "MobileEventDetail"], {

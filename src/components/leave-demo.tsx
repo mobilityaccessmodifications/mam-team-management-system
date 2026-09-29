@@ -30,6 +30,7 @@ import {
 import { FormEvent, type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
+import registerToolbar from "@/components/people-toolbar.module.css";
 import { ApprovalBalancePill, ApprovalLeaveBalances, LeavePriorityControls, SickEvidenceNotice } from "@/components/leave-priority-controls";
 import { BALANCE_PENDING_STATUS, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import {
@@ -2320,16 +2321,47 @@ function LeaveView({ leavePriority, onBalancesSaved, profile, section, requests,
       ) : null}
       {applyAction}
       </div>
-      {section === "requests" ? <RequestsView profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} canViewAllLeave={canViewAllLeave} attachmentsByRequestId={attachmentsByRequestId} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onViewMore={(id) => onSelect(id, "approvals")} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onDeleteSupportingFile={onDeleteSupportingFile} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
+      {section === "requests" ? <RequestsView key={filter} profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} canViewAllLeave={canViewAllLeave} attachmentsByRequestId={attachmentsByRequestId} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onViewMore={(id) => onSelect(id, "approvals")} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onDeleteSupportingFile={onDeleteSupportingFile} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
       {section === "approvals" && canReview ? <ApprovalsView leavePriority={leavePriority} onBalancesSaved={onBalancesSaved} pending={pending} selected={selected} selectedId={selectedId} note={note} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={busy} readOnly={readOnly} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} onDeleteSupportingFile={onDeleteSupportingFile} /> : null}
       {section === "balance" && canAccessBalance ? <div className={styles.balanceWorkspace}>{balanceContent}</div> : null}
     </section>
   );
 }
 
+type LeaveRegisterSort = "default" | "oldest" | "employee" | "leaveType";
+
+function getLeaveRegisterPage(requests: LeaveRequest[], query: string, sort: LeaveRegisterSort, page: number, pageSize: number) {
+  const needle = query.trim().toLocaleLowerCase();
+  const matching = requests.filter((request) => !needle || [request.employee, request.leaveType, request.team, request.dateLabel, request.startDate, request.endDate, request.status]
+    .join(" ").toLocaleLowerCase().includes(needle));
+  const sorted = sort === "default" ? matching : [...matching].sort((first, second) => {
+    if (sort === "oldest") return first.startDate.localeCompare(second.startDate) || first.id.localeCompare(second.id);
+    if (sort === "employee") return first.employee.localeCompare(second.employee) || first.id.localeCompare(second.id);
+    return first.leaveType.localeCompare(second.leaveType) || first.id.localeCompare(second.id);
+  });
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  return { rows: sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize), total: sorted.length, totalPages, page: currentPage };
+}
+
+function getLeaveRegisterSelectionPage(requests: LeaveRequest[], selectedId: string, query: string, sort: LeaveRegisterSort, pageSize: number) {
+  const visible = getLeaveRegisterPage(requests, query, sort, 1, Math.max(1, requests.length)).rows;
+  const index = visible.findIndex((request) => request.id === selectedId);
+  return index < 0 ? null : Math.floor(index / pageSize) + 1;
+}
+
 function RequestsView({ profile, requests, allRequests, selected, filter, canReview, canViewAllLeave, attachmentsByRequestId, readOnly, hidePrivateDetails, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onViewMore, onCloseMobileDetail, onAddSupportingFiles, onDeleteSupportingFile, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; canViewAllLeave?: boolean; attachmentsByRequestId: Map<string, LeaveAttachment[]>; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onViewMore: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onDeleteSupportingFile: (attachmentId: string) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   const filters: ("All" | RequestStatus)[] = ["All", "Pending", BALANCE_PENDING_STATUS, "Approved", "Declined", "Cancelled"];
   const isEmployee = !canReview && !canViewAllLeave;
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<LeaveRegisterSort>("default");
+  const [pageSize, setPageSize] = useState(20);
+  const [pageState, setPageState] = useState({ selectedId: selected?.id, page: Math.floor(Math.max(0, requests.findIndex((request) => request.id === selected?.id)) / 20) + 1 });
+  const page = pageState.selectedId === selected?.id ? pageState.page
+    : getLeaveRegisterSelectionPage(requests, selected?.id ?? "", query, sort, pageSize) ?? 1;
+  const setPage = (nextPage: number) => setPageState({ selectedId: selected?.id, page: nextPage });
+  const register = getLeaveRegisterPage(requests, query, sort, page, pageSize);
+  const pageSelected = register.rows.find((request) => request.id === selected?.id);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const mobileDetailDialogRef = useRef<HTMLElement>(null);
   const mobileDetailCloseButtonRef = useRef<HTMLButtonElement>(null);
@@ -2342,7 +2374,7 @@ function RequestsView({ profile, requests, allRequests, selected, filter, canRev
     return () => mediaQuery.removeEventListener("change", updateViewport);
   }, []);
 
-  const mobileDetailDialogOpen = Boolean(mobileDetailOpen && isMobileViewport && selected);
+  const mobileDetailDialogOpen = Boolean(mobileDetailOpen && isMobileViewport && pageSelected);
   useDialogFocus(
     mobileDetailDialogOpen,
     mobileDetailDialogRef,
@@ -2355,17 +2387,26 @@ function RequestsView({ profile, requests, allRequests, selected, filter, canRev
       <div className={styles.viewToolbar}>
         <div className={styles.filterTabs} role="group" aria-label="Leave request status">{filters.map((item) => <button aria-pressed={filter === item} className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item === BALANCE_PENDING_STATUS ? "Waiting for balance" : item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => request.status === item).length}</span></button>)}</div>
       </div>
-      <div className={`${styles.recordsGrid} ${isEmployee ? styles.employeeRecordsGrid : ""} ${!selected ? styles.recordsGridNoDetail : ""} ${mobileDetailDialogOpen ? styles.recordsGridMobileDetailOpen : ""}`}>
+      <div className={registerToolbar.toolbar}>
+        <div className={registerToolbar.controls}>
+          <label className={registerToolbar.search}><Search size={17} aria-hidden="true" /><input aria-label="Search leave requests" placeholder="Search leave requests" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} /></label>
+          <label className={registerToolbar.select}>Sort by<select aria-label="Sort leave requests" value={sort} onChange={(event) => { setSort(event.target.value as LeaveRegisterSort); setPage(1); }}><option value="default">Newest first</option><option value="oldest">Oldest first</option><option value="employee">Employee A–Z</option><option value="leaveType">Leave type A–Z</option></select></label>
+          <label className={registerToolbar.select}>Rows<select aria-label="Leave requests per page" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label>
+        </div>
+        <span className={registerToolbar.count} aria-live="polite">{register.total === requests.length ? `${register.total} requests` : `${register.total} of ${requests.length} requests`}</span>
+      </div>
+      <div className={`${styles.recordsGrid} ${isEmployee ? styles.employeeRecordsGrid : ""} ${!pageSelected ? styles.recordsGridNoDetail : ""} ${mobileDetailDialogOpen ? styles.recordsGridMobileDetailOpen : ""}`}>
         <div className={styles.recordsTable}>
           <div className={`${styles.tableHead} ${isEmployee ? styles.employeeTableRow : ""}`} aria-hidden="true">{!isEmployee ? <span>Employee</span> : null}<span>Leave</span><span>Dates</span><span>Duration</span><span>Status</span><span /></div>
           <ul className={styles.recordsList} role="list" aria-label="Leave requests">
-          {requests.map((request) => <li key={request.id}><button className={`${styles.tableRow} ${isEmployee ? styles.employeeTableRow : ""} ${selected?.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} aria-label={`View leave details for ${request.personId === profile.id ? "you" : request.employee}: ${request.leaveType}, ${request.dateLabel}, ${formatDuration(request)}, ${request.status}`}>{!isEmployee ? <span><i aria-hidden="true">{request.initials}</i><b>{request.personId === profile.id ? "You" : request.employee}<small>{request.team}</small></b></span> : null}<span><b>{request.leaveType}</b></span><span>{request.dateLabel}</span><span>{formatDuration(request)}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} aria-hidden="true" /></button></li>)}
+          {register.rows.map((request) => <li key={request.id}><button className={`${styles.tableRow} ${isEmployee ? styles.employeeTableRow : ""} ${pageSelected?.id === request.id ? styles.tableRowActive : ""}`} type="button" onClick={() => onSelect(request.id)} aria-label={`View leave details for ${request.personId === profile.id ? "you" : request.employee}: ${request.leaveType}, ${request.dateLabel}, ${formatDuration(request)}, ${request.status}`}>{!isEmployee ? <span><i aria-hidden="true">{request.initials}</i><b>{request.personId === profile.id ? "You" : request.employee}<small>{request.team}</small></b></span> : null}<span><b>{request.leaveType}</b></span><span>{request.dateLabel}</span><span>{formatDuration(request)}</span><span><StatusPill status={request.status} /></span><ChevronRight size={15} aria-hidden="true" /></button></li>)}
           </ul>
-          {!requests.length ? <div className={styles.emptyState}><Search size={23} /><strong>{allRequests.length ? "No matching requests" : "No leave requests"}</strong></div> : null}
+          {!register.total ? <div className={styles.emptyState}><Search size={23} /><strong>{allRequests.length ? "No matching requests" : "No leave requests"}</strong></div> : null}
+          {register.total > pageSize ? <nav className={styles.registerPagination} aria-label="Leave request pagination"><span aria-live="polite">Page {register.page} of {register.totalPages} · {((register.page - 1) * pageSize) + 1}–{Math.min(register.page * pageSize, register.total)} of {register.total}</span><div><button type="button" aria-label="Previous page" disabled={register.page === 1} onClick={() => setPage(register.page - 1)}>Previous</button><button type="button" aria-label="Next page" disabled={register.page === register.totalPages} onClick={() => setPage(register.page + 1)}>Next</button></div></nav> : null}
         </div>
-        {selected ? <>
+        {pageSelected ? <>
           {mobileDetailDialogOpen ? <button className={styles.mobileDetailBackdrop} type="button" aria-label="Close leave details" onClick={onCloseMobileDetail} /> : null}
-          <RequestDetail profile={profile} request={selected} attachments={attachmentsByRequestId.get(selected.id) ?? []} canReview={canReview} canViewAllLeave={canViewAllLeave} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileOpen={mobileDetailDialogOpen} mobileDialogRef={mobileDetailDialogRef} mobileCloseButtonRef={mobileDetailCloseButtonRef} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancellationSucceeded={cancelledRequestId === selected.id} busy={busy} onViewMore={onViewMore} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onDeleteSupportingFile={onDeleteSupportingFile} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} />
+          <RequestDetail profile={profile} request={pageSelected} attachments={attachmentsByRequestId.get(pageSelected.id) ?? []} canReview={canReview} canViewAllLeave={canViewAllLeave} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileOpen={mobileDetailDialogOpen} mobileDialogRef={mobileDetailDialogRef} mobileCloseButtonRef={mobileDetailCloseButtonRef} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancellationSucceeded={cancelledRequestId === pageSelected.id} busy={busy} onViewMore={onViewMore} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onDeleteSupportingFile={onDeleteSupportingFile} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} />
         </> : null}
       </div>
     </section>
