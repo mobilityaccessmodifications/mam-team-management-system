@@ -64,8 +64,8 @@ def main():
     require(project["id"] == PROJECT and project["organization_id"] == ORGANISATION,
             "MAM Supabase target mismatch")
     predecessor = query("""select version from supabase_migrations.schema_migrations
-      where version in ('20260907033546','20260929133000')""")
-    require({row["version"] for row in predecessor} == {"20260907033546", "20260929133000"},
+      where version in ('20260907033546','20260929133000','20260929140000')""")
+    require({row["version"] for row in predecessor} == {"20260907033546", "20260929133000", "20260929140000"},
             "Leave preview/read-grant predecessors missing")
     granted = query("""select count(*) as grants,
       count(*) filter (where person.node_kind='person' and person.is_active
