@@ -160,6 +160,20 @@ test('View more is available only for an authorised approvable request and opens
   }
 });
 
+test('read-only all-staff viewer sees employee and evidence without an approval path', () => {
+  const LeaveView = load('LeaveView', { styles: {}, RequestsView: 'records', ApprovalsView: 'approvals', revealSelectedLeaveTab() {} });
+  const tree = LeaveView({ section: 'requests', allRequests: [{ id: 'pending' }], pending: [], canReview: false, canViewAllLeave: true, canAccessBalance: false });
+  assert.equal(buttons(tree).some(button => textContent(button).includes('Approvals')), false);
+  const records = tree.props.children.find(child => child?.type === 'records');
+  assert.equal(records.props.canViewAllLeave, true);
+
+  const Detail = load('RequestDetail', { useId: () => 'detail', styles: {}, StatusPill: 'status', formatDurationWithTime: () => '2 days', formatSubmissionDate: () => '', AttachmentList: 'attachments', SickEvidenceNotice: () => null, ChevronRight: 'icon' });
+  const detail = Detail({ profile: { id: 'viewer' }, request: { id: 'pending', personId: 'owner', employee: 'Synthetic Owner', initials: 'SO', leaveType: 'Unpaid leave', status: 'Pending', canDecide: false, canAttach: false, canCancel: false }, attachments: [{ id: 'evidence', fileName: 'fixture.pdf' }], canReview: false, canViewAllLeave: true, hidePrivateDetails: false });
+  assert.match(textContent(detail), /Synthetic Owner/);
+  assert.equal(detail.props.children.some(child => child?.type === 'attachments'), true);
+  assert.equal(buttons(detail).some(button => textContent(button).includes('View more') || textContent(button).includes('Cancel leave')), false);
+  assert.match(fs.readFileSync('src/app/leave/actions.ts', 'utf8'), /rpc\("can_view_all_leave_requests"\)/);
+});
 test('request details show the submission date in Melbourne time', () => {
   const format = load('formatSubmissionDate', {});
   assert.equal(format('2026-09-22T23:30:00Z'), '23 Sept 2026');
