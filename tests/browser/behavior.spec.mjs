@@ -96,6 +96,28 @@ test("staff month view preserves the visible date and other leave types when fil
   await expect(page.getByText(/Other Staff · Annual leave \(Pending\)/).first()).toBeVisible();
 });
 
+test("Filters stays clickable over the calendar more control", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?fixture=staff-calendar&crowded=1");
+  await page.getByRole("button", { name: "Today" }).click();
+  const more = page.locator(".df-month-day-cell-more-events").first();
+  await expect(more).toBeVisible();
+  await page.getByText("Filters", { exact: true }).click();
+  const panel = page.getByRole("group", { name: "Leave by type" }).locator("..").locator("..");
+  const moreBox = await more.boundingBox();
+  const panelBox = await panel.boundingBox();
+  const x = Math.max(moreBox.x, panelBox.x) + 10;
+  const y = moreBox.y + moreBox.height / 2;
+  expect(x).toBeLessThan(Math.min(moreBox.x + moreBox.width, panelBox.x + panelBox.width));
+  expect(y).toBeGreaterThan(panelBox.y);
+  expect(y).toBeLessThan(panelBox.y + panelBox.height);
+  expect(await panel.evaluate((node, point) => node.contains(document.elementFromPoint(point.x, point.y)), { x, y })).toBe(true);
+  const sick = page.getByRole("group", { name: "Leave by type" }).getByLabel("Sick leave");
+  await sick.scrollIntoViewIfNeeded();
+  await sick.uncheck({ timeout: 3000 });
+  await expect(sick).not.toBeChecked();
+});
+
 for (const width of [390, 760, 768, 900, 1024, 1440]) {
   test(`calendar Filters panel stays above the month grid at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });

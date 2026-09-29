@@ -154,6 +154,7 @@ export type LeaveWorkspaceData = {
    * request is pending.
    */
   canReviewLeave: boolean;
+  canViewAllLeave: boolean;
   /** Employment classification is authoritative; ABN/Casual receive Unpaid leave only. */
   employmentType: "abn" | "casual" | "full_time" | "part_time" | null;
   hasPaidLeaveEntitlement: boolean;
@@ -877,6 +878,7 @@ async function getSelectedEmployeeLeaveWorkspacePreview(
         status: request.status,
       })),
     canReviewLeave: payload.can_review_leave,
+    canViewAllLeave: false,
     warning: payload.is_truncated
       ? "Leave history is limited to the 1,000 most recent visible requests."
       : undefined,
@@ -965,6 +967,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
     { data: subscriptionReviewData, error: subscriptionReviewError },
     { data: canViewSubscriptionReviewCalendar, error: subscriptionReviewCalendarPermissionError },
     { data: canReviewLeave, error: canReviewError },
+    { data: canViewAllLeave, error: canViewAllLeaveError },
     { data: attachmentData, error: attachmentError },
     { data: entitlementPolicyData, error: entitlementPolicyError },
     { data: payrollBalanceReminderData, error: payrollBalanceReminderError },
@@ -978,13 +981,15 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
     supabase.rpc("list_subscription_review_calendar_entries"),
     supabase.rpc("can_view_subscription_review_calendar"),
     supabase.rpc("can_review_leave_workspace"),
+    supabase.rpc("can_view_all_leave_requests"),
     supabase.rpc("list_leave_workspace_attachments"),
     supabase.rpc("get_my_leave_entitlement_policy"),
     supabase.rpc("list_payroll_balance_reminder_calendar_entries"),
     supabase.rpc("can_import_payroll_balances"),
   ]);
 
-  if (workspaceError || canReviewError || !Array.isArray(workspaceData) || typeof canReviewLeave !== "boolean") {
+  if (workspaceError || canReviewError || canViewAllLeaveError || !Array.isArray(workspaceData)
+    || typeof canReviewLeave !== "boolean" || typeof canViewAllLeave !== "boolean") {
     throw new Error(LOAD_ERROR);
   }
 
@@ -1040,6 +1045,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
       ? false
       : canImportPayrollBalances === true,
     canReviewLeave,
+    canViewAllLeave,
     isProfilePreview: false,
     warning: unavailable.length
       ? `Some optional data is temporarily unavailable (${unavailable.join(", ")}). Leave requests remain available.`
