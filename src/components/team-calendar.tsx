@@ -24,7 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { createPortal } from "react-dom";
 import { Temporal } from "temporal-polyfill";
 
-import type { BirthdayCalendarEntry, CheckInCalendarEntry, LeaveAttachment, PayrollBalanceReminderCalendarEntry, SubscriptionReviewCalendarEntry } from "@/app/leave/actions";
+import type { BirthdayCalendarEntry, CheckInCalendarEntry, PayrollBalanceReminderCalendarEntry, SubscriptionReviewCalendarEntry } from "@/app/leave/actions";
 import { CalendarFilters } from "@/components/calendar-filters";
 import { calendarEventIsVisible, calendarTeamOptions } from "@/lib/calendar-filters";
 import { syncCalendarEvents } from "@/lib/sync-calendar-events";
@@ -68,13 +68,12 @@ type CalendarLeaveRequest = {
 };
 
 type EventKind = "approved" | "pending" | "balance-pending" | "birthday" | "check-in" | "subscription" | "payroll-balance" | "public-holiday";
-type MAMEventMeta = { kind: EventKind; subject: string; detail: string; identity?: string; leaveType?: string; dateLabel: string; priority: number; team?: string; duration?: { days: number; hours?: number }; requestedAt?: string; approvedBy?: string; documentCount?: number; documents?: Pick<LeaveAttachment, "id" | "fileName">[] };
+type MAMEventMeta = { kind: EventKind; subject: string; detail: string; identity?: string; leaveType?: string; dateLabel: string; priority: number; team?: string; duration?: { days: number; hours?: number }; requestedAt?: string; approvedBy?: string; documentCount?: number };
 
 type TeamCalendarProps = {
   birthdays: BirthdayCalendarEntry[];
   checkIns: CheckInCalendarEntry[];
   requests: CalendarLeaveRequest[];
-  attachments: Pick<LeaveAttachment, "id" | "leaveRequestId" | "fileName">[];
   subscriptionReviews: SubscriptionReviewCalendarEntry[];
   payrollBalanceReminders: PayrollBalanceReminderCalendarEntry[];
   showSubscriptionReviews: boolean;
@@ -187,7 +186,6 @@ function buildEvents(
   reviews: SubscriptionReviewCalendarEntry[],
   payrollReminders: PayrollBalanceReminderCalendarEntry[],
   years: number[],
-  attachments: Pick<LeaveAttachment, "id" | "leaveRequestId" | "fileName">[] = [],
 ) {
   const leave = requests.filter((request) => request.status === "Approved" || request.status === "Pending" || request.status === BALANCE_PENDING_STATUS).map((request) => {
     const kind: EventKind = request.status === BALANCE_PENDING_STATUS ? "balance-pending" : request.status === "Approved" ? "approved" : "pending";
@@ -203,7 +201,7 @@ function buildEvents(
       startTime: request.startTime,
       endTime: request.endTime,
       calendarId,
-      meta: { kind, team: request.team, subject: request.employee, detail: `${request.status} · ${request.leaveType}${request.team ? ` · ${request.team}` : ""}`, identity: Array.from(new Set([request.position, ...request.team.split(" · ").reverse()].filter(Boolean))).join(" · "), leaveType: request.leaveType, dateLabel: `${formatDateRange(request.startDate, request.endDate)}${times}`, duration: { days: request.days, hours: request.hours }, priority: kind === "pending" ? 4 : 5, requestedAt: staffDetail ? request.requestedAt : undefined, approvedBy: staffDetail ? request.approvedBy : undefined, documentCount: staffDetail ? request.documentCount : undefined, documents: staffDetail ? attachments.filter((item) => item.leaveRequestId === request.id) : undefined },
+      meta: { kind, team: request.team, subject: request.employee, detail: `${request.status} · ${request.leaveType}${request.team ? ` · ${request.team}` : ""}`, identity: Array.from(new Set([request.position, ...request.team.split(" · ").reverse()].filter(Boolean))).join(" · "), leaveType: request.leaveType, dateLabel: `${formatDateRange(request.startDate, request.endDate)}${times}`, duration: { days: request.days, hours: request.hours }, priority: kind === "pending" ? 4 : 5, requestedAt: staffDetail ? request.requestedAt : undefined, approvedBy: staffDetail ? request.approvedBy : undefined, documentCount: staffDetail ? request.documentCount : undefined },
     });
   });
 
@@ -266,8 +264,6 @@ function EventDetail({ event, onClose }: EventDetailContentProps) {
       {staffDetail ? <>
         <div className={styles.eventDetailDate}><Clock3 size={16} /><span>Requested: {new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone }).format(new Date(meta.requestedAt ?? ""))}</span></div>
         <div className={styles.eventDetailDate}><CheckCircle2 size={16} /><span>Approved by: {meta.kind === "approved" ? meta.approvedBy ?? "Not recorded" : "Awaiting approval"}</span></div>
-        <div className={styles.eventDetailDate}><FileSpreadsheet size={16} /><span>Documents uploaded: {meta.documentCount === 0 ? "None" : meta.documentCount}</span></div>
-        {meta.documents?.length ? <ul className={styles.documentList}>{meta.documents.map((document) => <li key={document.id}><a href={`/leave/attachments/${document.id}`}>{document.fileName}</a></li>)}</ul> : null}
       </> : null}
       {meta.duration ? <div className={styles.eventDetailDate}><Clock3 size={16} aria-hidden="true" /><span>Duration: {formatLeaveDuration(meta.duration)}</span></div> : null}
     </div>
@@ -303,7 +299,7 @@ function MobileEventDetail({ draftEvent, isOpen, onClose }: MobileEventProps) {
   );
 }
 
-function TeamCalendarClient({ birthdays, checkIns, requests, attachments, subscriptionReviews, payrollBalanceReminders, showSubscriptionReviews, showPayrollBalanceReminders, reviewOnly, loading }: TeamCalendarProps) {
+function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, showSubscriptionReviews, showPayrollBalanceReminders, reviewOnly, loading }: TeamCalendarProps) {
   const [filterHost, setFilterHost] = useState<HTMLElement | null>(null);
   const [hiddenKinds, setHiddenKinds] = useState<string[]>([]);
   const [hiddenTeams, setHiddenTeams] = useState<string[]>([]);
@@ -314,7 +310,7 @@ function TeamCalendarClient({ birthdays, checkIns, requests, attachments, subscr
   const year = new Date().getFullYear();
   const calendarFrameRef = useRef<HTMLDivElement>(null);
   const [visibleYears, setVisibleYears] = useState([year - 1, year, year + 1]);
-  const events = useMemo(() => buildEvents(birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, visibleYears, attachments), [birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, visibleYears, attachments]);
+  const events = useMemo(() => buildEvents(birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, visibleYears), [birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, visibleYears]);
   // Keep the calendar instance stable while its event data syncs. Recreating it
   // whenever visibleYears changes resets the active view back to Month (which
   // made Year appear to do nothing).

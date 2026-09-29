@@ -54,9 +54,9 @@ test("staff Calendar renders approved and pending types, details and working typ
   expect(await eventColour(/Other Staff · Annual leave \(Pending\)/)).toBe("rgb(229, 239, 255)");
   await page.getByText(/Sample Staff · Sick leave/).first().evaluate((node) => node.click());
   await expect(page.getByText("Type of leave: Sick leave")).toBeVisible();
-  await expect(page.getByText("Documents uploaded: 1")).toBeVisible();
+  await expect(page.getByText(/Documents uploaded:/)).toHaveCount(0);
   await expect(page.getByText("Approved by: Sample Reviewer")).toBeVisible();
-  await expect(page.getByRole("link", { name: "sample.pdf" })).toHaveAttribute("href", "/leave/attachments/33333333-3333-4333-8333-333333333333");
+  await expect(page.getByRole("link", { name: "sample.pdf" })).toHaveCount(0);
   await page.getByRole("button", { name: "Close event details" }).click();
   await page.getByText("Filters", { exact: true }).click();
   await page.getByRole("group", { name: "Leave by type" }).getByLabel("Sick leave").uncheck();
@@ -82,7 +82,12 @@ test("pending leave details remain readable on a phone", async ({ page }) => {
   await expect(page.getByText("Status: Pending")).toBeVisible();
   await expect(page.getByText("Requested: 2 Sept 2026")).toBeVisible();
   await expect(page.getByText("Approved by: Awaiting approval")).toBeVisible();
-  await expect(page.getByText("Documents uploaded: None")).toBeVisible();
+  await expect(page.getByText(/Documents uploaded:/)).toHaveCount(0);
+  await page.getByRole("dialog", { name: "Event details" }).getByRole("button", { name: "Close event details" }).click();
+  await page.getByText(/Sample Staff · Sick leave/).first().click();
+  await expect(page.getByRole("dialog", { name: "Event details" })).toBeVisible();
+  await expect(page.getByText(/Documents uploaded:/)).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "sample.pdf" })).toHaveCount(0);
 });
 
 test("staff month view preserves the visible date and other leave types when filtered", async ({ page }) => {
