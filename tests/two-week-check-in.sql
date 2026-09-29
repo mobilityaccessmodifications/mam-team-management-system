@@ -33,9 +33,9 @@ insert into public.internal_org_people (
 insert into private.employee_directory_details (
   person_id, first_name, last_name, team_name, work_email, personal_email
 ) values
-  ('73000000-0000-4000-8000-000000000001', 'Synthetic', 'Manager', 'MAM admin', 'manager@example.test', null),
-  ('73000000-0000-4000-8000-000000000002', 'Synthetic', 'Starter', 'MAM admin', 'employee@example.test', 'personal@example.test'),
-  ('73000000-0000-4000-8000-000000000003', 'Legacy', 'Starter', 'MAM admin', 'legacy@example.test', null);
+  ('73000000-0000-4000-8000-000000000001', 'Synthetic', 'Manager', 'Operation & Accounts', 'manager@example.test', null),
+  ('73000000-0000-4000-8000-000000000002', 'Synthetic', 'Starter', 'Operation & Accounts', 'employee@example.test', 'personal@example.test'),
+  ('73000000-0000-4000-8000-000000000003', 'Legacy', 'Starter', 'Operation & Accounts', 'legacy@example.test', null);
 
 select private.sync_employee_check_in_reminders('73000000-0000-4000-8000-000000000002', false, false);
 

@@ -46,7 +46,7 @@ function loadActions({ classificationError = null } = {}) {
 
 const draft = {
   firstName: 'Taylor', lastName: 'Synthetic', workEmail: 'work@example.test', personalEmail: '', phone: '',
-  positionTitle: 'Coordinator', teamName: 'MAM admin', managerId, country: '', address: '', dateOfBirth: '',
+  positionTitle: 'Coordinator', teamName: 'Operation & Accounts', managerId, country: '', address: '', dateOfBirth: '',
   startedDate: '2026-10-05', scheduledEmploymentEndDate: '', workingWeekdays: null, workingDayTimes: [], archiveReason: '',
   employmentType: 'full_time', contractType: '', laptopSupplied: '', laptopId: '', mouseId: '', keyboardId: '', assetTags: [],
   company: 'mam', isActive: true,

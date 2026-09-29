@@ -232,7 +232,7 @@ test('new active employee creation fails before mutation without start date, dir
   })[id] ?? require(id),mod,mod.exports);
   const valid = {
     firstName:'Taylor',lastName:'Starter',workEmail:'work@example.test',personalEmail:'home@example.test',phone:'',
-    positionTitle:'Coordinator',teamName:'MAM admin',managerId:reminderId,country:'',address:'',dateOfBirth:'',
+    positionTitle:'Coordinator',teamName:'Operation & Accounts',managerId:reminderId,country:'',address:'',dateOfBirth:'',
     startedDate:'2026-10-05',scheduledEmploymentEndDate:'',workingWeekdays:null,workingDayTimes:[],archiveReason:'',
     employmentType:'full_time',laptopSupplied:'',laptopId:'',mouseId:'',keyboardId:'',assetTags:[],company:'mam',isActive:true,
   };

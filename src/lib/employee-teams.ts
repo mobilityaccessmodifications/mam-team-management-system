@@ -1,5 +1,5 @@
 /** Directory classification only; never an authorisation or reporting rule. */
-export const EMPLOYEE_TEAMS = ["MAM admin", "Major", "Minor", "Warehouse", "Equipsy"] as const;
+export const EMPLOYEE_TEAMS = ["Operation & Accounts", "Management", "Major", "Minor", "Warehouse", "Equipsy"] as const;
 
 export function requireEmployeeTeam(value: unknown): string {
   if (typeof value !== "string" || !(EMPLOYEE_TEAMS as readonly string[]).includes(value)) {
