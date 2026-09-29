@@ -17,8 +17,9 @@ test('role action validates inputs and rechecks authenticated administrator', ()
   assert.match(action, /p_expected_role/);
   assert.match(action, /"hr"/);
 });
-test('role control replaces reporting picker only for edits and explains permission effects', () => {
-  assert.match(ui, /isCreate\s*\?[^]*?<EmployeePicker/);
+test('role control remains edit-only and explains permission effects', () => {
+  assert.doesNotMatch(ui, /<EmployeePicker\b/);
+  assert.match(ui, /!isCreate\s*\?\s*<div className=\{styles\.pickerField\}>/);
   assert.match(ui, /updateEmployeeDirectoryRole/);
   assert.match(ui, /listEmployeeDirectoryRoles/);
   assert.match(ui, /Save role/);

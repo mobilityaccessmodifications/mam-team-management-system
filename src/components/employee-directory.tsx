@@ -43,7 +43,6 @@ import {
 } from "@/app/people/actions";
 import { EmployeeDeviceAssignments } from "@/components/employee-device-assignments";
 import { EMPLOYEE_TEAMS } from "@/lib/employee-teams";
-import { EmployeePicker } from "@/components/employee-picker";
 import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/employee-directory.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
@@ -751,7 +750,6 @@ export function EmployeeDirectory({
           mobileModal={isMobileSheet}
           editor={activeEditor}
           currentRecord={currentRecord}
-          records={records}
           role={activeEditor.mode === "edit" ? roles[activeEditor.personId] : null}
           roleLoaded={activeEditor.mode === "edit" && Object.hasOwn(roles, activeEditor.personId)}
           roleLoadError={roleLoadError}
@@ -884,7 +882,6 @@ function EmployeeEditor({
   mobileModal,
   editor,
   currentRecord,
-  records,
   role,
   roleLoaded,
   roleLoadError,
@@ -903,7 +900,6 @@ function EmployeeEditor({
   mobileModal: boolean;
   editor: EditorState;
   currentRecord: EmployeeDirectoryRecord | null;
-  records: EmployeeDirectoryRecord[];
   role: DirectoryStoredRole | null | undefined;
   roleLoaded: boolean;
   roleLoadError: string;
@@ -922,9 +918,6 @@ function EmployeeEditor({
   onRequestDelete?: () => void;
 }) {
   const managerInputId = useId();
-  const managerOptions = records
-    .filter((record) => record.isActive && record.personId !== currentRecord?.personId)
-    .sort((first, second) => first.fullName.localeCompare(second.fullName));
   const isCreate = editor.mode === "create";
   const [roleSelection, setRoleSelection] = useState<{ base: DirectoryStoredRole | null; selected: DirectoryRole } | null>(null);
   const selectedRole = roleSelection?.base === (role ?? null) ? roleSelection?.selected ?? role ?? null : role ?? null;
@@ -976,20 +969,7 @@ function EmployeeEditor({
               {EMPLOYEE_TEAMS.map((team) => <option key={team} value={team}>{team}</option>)}
             </select>
           </Field>
-          {isCreate ? <div className={styles.pickerField}>
-            <label htmlFor={managerInputId}>Reports to{editor.draft.isActive ? <b aria-hidden="true"> *</b> : null}</label>
-            <EmployeePicker
-              id={managerInputId}
-              ariaLabel="Reports to"
-              name="managerId"
-              assignees={managerOptions}
-              value={editor.draft.managerId ?? ""}
-              onValueChange={(personId) => onChange("managerId", personId || null)}
-              placeholder="No manager assigned"
-              required={editor.draft.isActive}
-              disabled={saving}
-            />
-          </div> : <div className={styles.pickerField}>
+          {!isCreate ? <div className={styles.pickerField}>
             <label htmlFor={managerInputId}>Role</label>
             <select id={managerInputId} value={selectedRole ?? ""} disabled={!currentRecord?.isActive || !roleLoaded || !role || saving || roleSaving} onChange={(event) => { setRoleSelection({ base: role ?? null, selected: event.target.value as DirectoryRole }); setRoleError(""); }}>
               {role === "hr" ? <option value="hr">Legacy HR</option> : null}
@@ -998,7 +978,7 @@ function EmployeeEditor({
               <option value="manager">Manager</option>
               <option value="system_admin">Admin</option>
             </select>
-          </div>}
+          </div> : null}
           {!isCreate && selectedRole ? <div className={`${styles.fullSpan} ${styles.roleImpact}`} role="status">
             <strong>Role impact</strong>
             <p>{selectedRole === "hr"

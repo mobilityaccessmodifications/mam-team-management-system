@@ -381,13 +381,13 @@ export async function createEmployeeDirectoryRecord(
   const { p_contract_type: selectedContractType, ...directoryValues } = values;
   if (values.p_is_active) {
     if (!values.p_started_date) throw new Error("A start date is required for a new active employee.");
-    if (!values.p_manager_id) throw new Error("A direct manager is required for a new active employee.");
     if (!values.p_work_email && !values.p_personal_email) {
       throw new Error("Enter at least one work or personal email for the new employee.");
     }
   }
   let { data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule_times", {
     ...directoryValues,
+    p_manager_id: null,
     p_sort_order: 0,
   });
   if (isMissingWorkScheduleRpc(error) && values.p_working_day_times.length === 0) {
@@ -395,12 +395,14 @@ export async function createEmployeeDirectoryRecord(
     void p_working_day_times;
     ({ data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule", {
       ...weekdayValues,
+      p_manager_id: null,
       p_sort_order: 0,
     }));
   }
   if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
     ({ data, error } = await supabase.rpc("create_employee_directory_record_with_employment_type", {
       ...legacyDraftValues({ ...directoryValues, p_contract_type: selectedContractType }),
+      p_manager_id: null,
       p_sort_order: 0,
     }));
   }
@@ -443,6 +445,8 @@ export async function updateEmployeeDirectoryRecord(
   const { supabase } = await requireEmployeeDirectoryManager();
   const values = validateDraft(inputValue);
   const { p_contract_type: selectedContractType, ...directoryValues } = values;
+  const currentRecord = await findEmployeeDirectoryRecord(supabase, inputValue.personId);
+  directoryValues.p_manager_id = currentRecord.managerId;
   let { data, error } = await supabase.rpc("update_employee_directory_record_with_work_schedule_times", {
     ...directoryValues,
     p_person_id: inputValue.personId,

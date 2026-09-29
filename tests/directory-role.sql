@@ -28,6 +28,25 @@ reset role;
 update public.profiles set app_role='hr' where id='92000000-0000-4000-8000-000000000002';
 select pg_temp.set_test_actor('92000000-0000-4000-8000-000000000001');
 set local role authenticated;
+do $$
+declare v_person_id uuid;
+begin
+  select person_id into v_person_id
+  from public.create_employee_directory_record_with_work_schedule_times(
+    p_first_name => 'Unassigned', p_last_name => 'Synthetic',
+    p_work_email => 'unassigned@example.test', p_personal_email => null,
+    p_phone => null, p_position_title => 'Coordinator', p_team_name => 'MAM admin',
+    p_manager_id => null, p_country => null, p_date_of_birth => null,
+    p_started_date => date '2026-10-05', p_scheduled_employment_end_date => null,
+    p_company_key => 'mam', p_is_active => true, p_laptop_supplied => null,
+    p_laptop_id => null, p_mouse_id => null, p_keyboard_id => null,
+    p_asset_tags => null, p_address => null, p_employment_type => 'full_time',
+    p_working_weekdays => null, p_working_day_times => '[]'::jsonb
+  );
+  assert v_person_id is not null, 'Active employee created without manager';
+  assert (select parent_id is null and is_active from public.internal_org_people where id=v_person_id),
+    'Unassigned employee has no inferred reporting link';
+end $$;
 do $$ begin
   begin
     perform public.update_employee_directory_role('92000000-0000-4000-8000-000000000003','hr','employee');
