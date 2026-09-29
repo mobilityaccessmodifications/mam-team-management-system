@@ -64,6 +64,18 @@ do $$ begin
   end;
 end $$;
 reset role;
+select pg_temp.set_test_actor('90000000-0000-4000-8000-000000000005');
+set local role authenticated;
+do $$ declare preview jsonb; begin
+  preview := public.get_leave_workspace_for_preview('90000000-0000-4000-8000-000000000001');
+  assert jsonb_array_length(preview->'requests')=1, 'Admin preview of read-only viewer includes peer pending request';
+  assert jsonb_array_length(preview->'attachments')=1, 'Admin preview includes peer evidence metadata';
+  assert preview->>'can_view_all_leave'='true', 'Preview carries selected viewer read capability';
+  assert preview->>'can_review_leave'='false', 'Read-only preview has no approval capability';
+  assert preview->'requests'->0->>'can_decide'='false', 'Preview does not inherit Admin decision permission';
+end $$;
+reset role;
+select pg_temp.set_test_actor('90000000-0000-4000-8000-000000000001');
 update public.leave_requests set status='approved' where id=(select id from read_grant_request);
 set local role authenticated;
 do $$ begin
@@ -82,6 +94,14 @@ set local role authenticated;
 do $$ begin
   assert (select count(*)=0 from public.list_leave_workspace_requests()), 'Revoked viewer loses peer records';
   assert not public.can_download_leave_request_attachment('90000000-0000-4000-8000-000000000004'), 'Revoked viewer loses evidence access';
+end $$;
+reset role;
+select pg_temp.set_test_actor('90000000-0000-4000-8000-000000000005');
+set local role authenticated;
+do $$ declare preview jsonb; begin
+  preview := public.get_leave_workspace_for_preview('90000000-0000-4000-8000-000000000001');
+  assert jsonb_array_length(preview->'requests')=0, 'Revoked viewer preview loses peer requests';
+  assert preview->>'can_view_all_leave'='false', 'Revoked viewer preview loses read capability';
 end $$;
 reset role;
 select pg_temp.set_test_actor('90000000-0000-4000-8000-000000000003');

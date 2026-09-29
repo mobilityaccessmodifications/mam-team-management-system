@@ -174,6 +174,12 @@ test('read-only all-staff viewer sees employee and evidence without an approval 
   assert.equal(buttons(detail).some(button => textContent(button).includes('View more') || textContent(button).includes('Cancel leave')), false);
   assert.match(fs.readFileSync('src/app/leave/actions.ts', 'utf8'), /rpc\("can_view_all_leave_requests"\)/);
 });
+test('admin Change Profile uses the selected employee read capability without approving', () => {
+  const actions = fs.readFileSync('src/app/leave/actions.ts', 'utf8');
+  assert.match(actions, /canViewAllLeave: payload\.can_view_all_leave/);
+  assert.match(source, /canViewAllLeave=\{canViewAllLeave\}/);
+  assert.match(source, /canReview=\{canReviewLeave\}/);
+});
 test('request details show the submission date in Melbourne time', () => {
   const format = load('formatSubmissionDate', {});
   assert.equal(format('2026-09-22T23:30:00Z'), '23 Sept 2026');

@@ -840,12 +840,14 @@ async function getSelectedEmployeeLeaveWorkspacePreview(
     requests?: unknown;
     attachments?: unknown;
     can_review_leave?: unknown;
+    can_view_all_leave?: unknown;
     is_truncated?: unknown;
   };
   if (
     !Array.isArray(payload.requests)
     || !Array.isArray(payload.attachments)
     || typeof payload.can_review_leave !== "boolean"
+    || typeof payload.can_view_all_leave !== "boolean"
     || typeof payload.is_truncated !== "boolean"
   ) throw new Error(LOAD_ERROR);
 
@@ -878,7 +880,7 @@ async function getSelectedEmployeeLeaveWorkspacePreview(
         status: request.status,
       })),
     canReviewLeave: payload.can_review_leave,
-    canViewAllLeave: false,
+    canViewAllLeave: payload.can_view_all_leave,
     warning: payload.is_truncated
       ? "Leave history is limited to the 1,000 most recent visible requests."
       : undefined,
