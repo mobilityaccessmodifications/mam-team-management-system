@@ -40,12 +40,18 @@ const datasets = [
   {
     name: "employees",
     shape: "Array<Object>",
-    description: "Directory facts for current and archived employees. Names come from private employee details and may be null; no contact fields are returned.",
+    description: "Directory facts for current and archived employees. Name, team, employment and schedule fields use private HR projections; nullable source fields stay null and unrecorded daily times are an empty array. No contact fields are returned.",
     dateRange: "record_created_at calendar date, not started_on.",
     fields: [
       ["employee_id", "UUID", "Stable directory person identifier."],
       ["first_name", "string | null", "First name, null when not stored."],
       ["last_name", "string | null", "Last name, null when not stored."],
+      ["team", "string | null", "HR team label, null when not stored."],
+      ["scheduled_employment_end_date", "date | null", "Scheduled employment end date, null when not recorded."],
+      ["employment_type", "string | null", "Employment arrangement: abn, casual, full_time or part_time, when recorded."],
+      ["contract_type", "string | null", "HR check-in classification: permanent or fixed_term; null when unset."],
+      ["working_weekdays", "integer[] | null", "ISO weekdays 1=Monday through 7=Sunday; null when not recorded."],
+      ["working_day_times", "object[]", "Optional weekday/start_time/end_time intervals; [] when exact hours are not recorded."],
       ["company", "string", "Company key, such as mam or equipsy."],
       ["position_title", "string | null", "Directory position title."],
       ["employment_status", "string", "active or archived."],
@@ -227,6 +233,7 @@ export default function AnalyticsApiDocsPage() {
           {dataset.fields.map(([field, type, meaning]) => <tr key={field}><td><code>{field}</code></td><td>{type}</td><td>{meaning}</td></tr>)}
         </tbody></table></div>
       </section>)}
+      <p>For <code>employees</code>, <code>from</code>/<code>to</code> continue to filter by <code>record_created_at</code>, not start or scheduled end date. <code>working_weekdays</code> uses ISO numbering. Each <code>working_day_times</code> item is <code>{'{ "weekday": 1, "start_time": "09:00", "end_time": "17:00" }'}</code>.</p>
       <p>The API returns only eligible records present in durable system projections. It does not reconstruct history for fields that pre-date their durable register.</p>
     </section>
 
@@ -275,6 +282,14 @@ export default function AnalyticsApiDocsPage() {
     "employee_id": "00000000-0000-4000-8000-000000000001",
     "first_name": "Alex",
     "last_name": "Example",
+    "team": "Major",
+    "scheduled_employment_end_date": "2027-12-31",
+    "employment_type": "casual",
+    "contract_type": "fixed_term",
+    "working_weekdays": [1, 3, 5],
+    "working_day_times": [
+      { "weekday": 1, "start_time": "09:00", "end_time": "17:00" }
+    ],
     "company": "mam",
     "position_title": "Coordinator",
     "employment_status": "active",
@@ -288,7 +303,7 @@ export default function AnalyticsApiDocsPage() {
 
     <section className={styles.card}>
       <h2>Data boundaries</h2>
-      <p>The <code>employees</code> dataset exposes <code>first_name</code> and <code>last_name</code> for this approved reporting use; other datasets carry employee IDs, not employee names. The API excludes work/personal email, phone, date of birth, street address, leave type/category, leave reason, employee/manager notes, leave evidence, authentication data, passwords, recovery codes, asset passcodes, subscription credentials and member names. Check-in <code>needs_review_reason</code> is an operational review reason, not a leave reason or contact field.</p>
+      <p>The <code>employees</code> dataset exposes employee names, team, scheduled employment end date, employment type, contract type and work-schedule fields for the approved reporting use; other datasets carry employee IDs, not names. The API excludes work/personal email, phone, date of birth, street address, leave type/category, leave reason, employee/manager notes, leave evidence, authentication data, passwords, recovery codes, asset passcodes, subscription credentials and member names. Check-in <code>needs_review_reason</code> is an operational review reason, not a leave reason or contact field.</p>
       <p>Employee and object UUIDs are stable operational identifiers for joins between approved datasets. They are not database credentials and cannot be used to query Supabase directly.</p>
     </section>
   </main>;
