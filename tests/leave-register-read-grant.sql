@@ -34,7 +34,19 @@ do $$ begin
   assert not public.can_download_leave_request_attachment('90000000-0000-4000-8000-000000000004'), 'Ungrant viewer cannot download';
 end $$;
 reset role;
-insert into private.leave_register_read_grants(person_id) values ('90000000-0000-4000-8000-000000000001');
+with candidates as materialized (
+  select person.id, profile.app_role='employee' as eligible
+  from public.internal_org_people person
+  join public.profiles profile on profile.id=person.auth_user_id
+  where person.full_name='Synthetic Viewer' and person.node_kind='person'
+    and person.is_active and profile.account_status='active'
+    and profile.login_name is not null
+), sole as (
+  select (array_agg(id))[1] as id from candidates
+  having count(*)=1 and bool_and(eligible)
+)
+insert into private.leave_register_read_grants(person_id)
+select id from sole;
 select pg_temp.set_test_actor('90000000-0000-4000-8000-000000000001');
 set local role authenticated;
 do $$ begin

@@ -156,7 +156,7 @@ def main():
                   and person.is_active and profile.account_status='active'
                   and profile.login_name is not null
               ), sole as (
-                select min(id) as id from candidates
+                select (array_agg(id))[1] as id from candidates
                 having count(*)=1 and bool_and(eligible)
               )
               insert into private.leave_register_read_grants(person_id)
