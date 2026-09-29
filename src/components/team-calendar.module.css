@@ -413,6 +413,7 @@
 
 /* Place the existing filters beside the calendar header controls. */
 .filters { order: -1; position: relative; border: 0; background: transparent; }
+.calendarFrame :global(.df-header:has(details[open])) { position: relative; z-index: 51; }
 .filters > summary { min-height: 44px; padding: 10px 14px; border: 1px solid var(--surface-border, #d8dfdc); border-radius: 11px; background: var(--surface-raised, #fff); box-shadow: var(--shadow-xs); white-space: nowrap; }
 .filters > summary::after { content: none; }
 .filters[open] > summary::after { content: none; }
