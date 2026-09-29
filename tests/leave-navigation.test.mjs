@@ -174,6 +174,34 @@ test('read-only all-staff viewer sees employee and evidence without an approval 
   assert.equal(buttons(detail).some(button => textContent(button).includes('View more') || textContent(button).includes('Cancel leave')), false);
   assert.match(fs.readFileSync('src/app/leave/actions.ts', 'utf8'), /rpc\("can_view_all_leave_requests"\)/);
 });
+test('Leave register searches and sorts only visible fields before paging', () => {
+  const page = load('getLeaveRegisterPage', {});
+  const rows = Array.from({ length: 45 }, (_, index) => ({
+    id: `row-${index}`, employee: index === 30 ? 'Synthetic Target' : `Person ${index}`,
+    leaveType: index === 30 ? 'Sick leave' : 'Annual leave',
+    startDate: `2026-10-${String(index % 28 + 1).padStart(2, '0')}`,
+    endDate: '2026-11-01', dateLabel: 'October 2026', status: 'Approved',
+    team: 'MAM', employeeNote: index === 30 ? 'private-only-needle' : undefined,
+  }));
+  assert.equal(page(rows, '', 'default', 1, 20).rows.length, 20);
+  assert.deepEqual(page(rows, '', 'default', 2, 20).rows.map(row => row.id), rows.slice(20, 40).map(row => row.id));
+  assert.equal(page(rows, '', 'default', 99, 20).page, 3);
+  assert.equal(page(rows, '', 'default', 99, 20).rows.length, 5);
+  assert.deepEqual(page(rows, 'synthetic target', 'default', 2, 20).rows.map(row => row.id), ['row-30']);
+  assert.deepEqual(page(rows, 'sick leave', 'default', 1, 20).rows.map(row => row.id), ['row-30']);
+  assert.equal(page(rows, 'private-only-needle', 'default', 1, 20).total, 0);
+  assert.equal(page(rows, '', 'oldest', 1, 20).rows[0].startDate, '2026-10-01');
+  assert.equal(page(rows, '', 'employee', 1, 20).rows[0].employee, 'Person 0');
+  assert.equal(page([], '', 'default', 1, 20).totalPages, 1);
+});
+test('Leave register locates an externally selected request after the tab has mounted', () => {
+  const selectionPage = load('getLeaveRegisterSelectionPage', { getLeaveRegisterPage: load('getLeaveRegisterPage', {}) });
+  const rows = Array.from({ length: 45 }, (_, index) => ({ id: `row-${index}`, employee: `Person ${index}`, leaveType: 'Annual leave', startDate: '2026-10-01' }));
+  assert.equal(selectionPage(rows, 'row-32', '', 'default', 20), 2);
+  assert.equal(selectionPage(rows, 'row-32', 'person 32', 'default', 20), 1);
+  assert.equal(selectionPage(rows, 'row-32', 'not a match', 'default', 20), null);
+  assert.equal(selectionPage(rows, 'missing', '', 'default', 20), null);
+});
 test('admin Change Profile uses the selected employee read capability without approving', () => {
   const actions = fs.readFileSync('src/app/leave/actions.ts', 'utf8');
   assert.match(actions, /canViewAllLeave: payload\.can_view_all_leave/);

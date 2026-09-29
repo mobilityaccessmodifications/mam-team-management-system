@@ -1234,6 +1234,8 @@
 }
 
 .recordsWorkspace {
+  display: grid;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -1326,7 +1328,7 @@
   gap: 15px;
   padding: 0 7px 0 0;
   border: 1px solid var(--line);
-  border-radius: 9px 9px 0 0;
+  border-radius: 9px;
   background: white;
 }
 
@@ -1412,8 +1414,7 @@
   grid-template-columns: minmax(720px, 1fr) 320px;
   align-items: stretch;
   border: 1px solid var(--line);
-  border-top: 0;
-  border-radius: 0 0 9px 9px;
+  border-radius: 9px;
   background: white;
   overflow: hidden;
 }
@@ -1428,6 +1429,33 @@
   padding: 0;
   list-style: none;
 }
+
+.registerPagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.registerPagination > div { display: flex; gap: 8px; }
+.registerPagination button {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.registerPagination button:disabled { opacity: .45; cursor: not-allowed; }
+.registerPagination button:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
 
 .tableHead,
 .tableRow {
