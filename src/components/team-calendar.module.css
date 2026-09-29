@@ -421,9 +421,12 @@
 .filterPanel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 100; width: min(560px, calc(100vw - 32px)); padding: 16px; border: 1px solid var(--surface-border, #d8dfdc); border-radius: 14px; background: var(--surface-raised, #fff); box-shadow: var(--shadow-md); }
 .calendarFrame { overflow: visible; }
 .calendarFrame :global(.df-header-right) { gap: 10px; }
+@media (max-width: 900px) {
+  .filterPanel { width: min(400px, calc(100vw - 80px)); }
+}
 @media (max-width: 760px) {
   .filters > summary { padding: 8px; gap: 5px; }
-  .filterPanel { position: fixed; top: 150px; right: 16px; }
+  .filterPanel { right: 0; }
 }
 
 .leaveLegend {

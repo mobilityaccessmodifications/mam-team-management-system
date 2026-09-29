@@ -96,6 +96,32 @@ test("staff month view preserves the visible date and other leave types when fil
   await expect(page.getByText(/Other Staff · Annual leave \(Pending\)/).first()).toBeVisible();
 });
 
+for (const width of [390, 760, 768, 900, 1024, 1440]) {
+  test(`calendar Filters panel stays above the month grid at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/?fixture=staff-calendar");
+    await page.getByText("Filters", { exact: true }).click();
+    const summary = page.locator("details > summary").filter({ hasText: "Filters" });
+    const panel = page.getByRole("group", { name: "Leave by type" }).locator("..", { has: page.getByLabel("Sick leave") }).locator("..");
+    const summaryBox = await summary.boundingBox();
+    const panelBox = await panel.boundingBox();
+    expect(panelBox.y, "Filters panel should open below its trigger").toBeGreaterThanOrEqual(summaryBox.y + summaryBox.height);
+    expect(panelBox.x).toBeGreaterThanOrEqual(0);
+    expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(width);
+    const sick = page.getByRole("group", { name: "Leave by type" }).getByLabel("Sick leave");
+    await expect(sick).toBeVisible();
+    await sick.scrollIntoViewIfNeeded();
+    const hit = await sick.evaluate((input) => {
+      const box = input.getBoundingClientRect();
+      const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return { hit: top === input || input.parentElement?.contains(top), blocker: top?.className || top?.tagName };
+    });
+    expect(hit.hit, `Filter checkbox covered by ${hit.blocker}`).toBe(true);
+    await sick.uncheck();
+    await expect(page.getByText(/Sample Staff · Sick leave/)).toHaveCount(0);
+  });
+}
+
 test("employee calendar keeps generic leave and no staff-only details or legend", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?fixture=employee-calendar");
