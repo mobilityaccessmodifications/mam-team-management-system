@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+
+test("Analytics post-migration verification markers match each SQL field expression", () => {
+  const helper = readFileSync("scripts/deploy-analytics-employee-org-fields.py", "utf8");
+  const migration = readFileSync("supabase/migrations/20260929140000_analytics_employee_org_fields.sql", "utf8");
+  const expressions = [
+    "'team', (select employee_detail.team_name from private.employee_directory_details employee_detail where employee_detail.person_id = person.id)",
+    "'scheduled_employment_end_date', (select employee_detail.scheduled_employment_end_date from private.employee_directory_details employee_detail where employee_detail.person_id = person.id)",
+    "'employment_type', (select employee_detail.employment_type from private.employee_directory_details employee_detail where employee_detail.person_id = person.id)",
+    "'contract_type', (select classification.contract_type from private.employee_check_in_contract_classifications classification where classification.person_id = person.id)",
+    "'working_weekdays', (select employee_detail.working_weekdays from private.employee_directory_details employee_detail where employee_detail.person_id = person.id)",
+    "'working_day_times', coalesce((select employee_detail.working_day_times from private.employee_directory_details employee_detail where employee_detail.person_id = person.id), '[]'::jsonb)",
+  ];
+  for (const expression of expressions) {
+    assert.ok(migration.includes(expression), `migration is missing ${expression}`);
+    assert.ok(helper.includes(`position($$${expression}$$ in pg_get_functiondef`), `post-migration check is not aligned for ${expression}`);
+  }
+});
 
 function run(operation, { recorded = false, wrongHash = false, unsafe = false, laterLocalOnly = false, laterRemote = false } = {}) {
   const source = String.raw`

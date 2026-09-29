@@ -101,7 +101,7 @@ select
     and position($$'employment_type', (select employee_detail.employment_type from private.employee_directory_details employee_detail where employee_detail.person_id = person.id)$$ in pg_get_functiondef(p.oid)) > 0
     and position($$'contract_type', (select classification.contract_type from private.employee_check_in_contract_classifications classification where classification.person_id = person.id)$$ in pg_get_functiondef(p.oid)) > 0
     and position($$'working_weekdays', (select employee_detail.working_weekdays from private.employee_directory_details employee_detail where employee_detail.person_id = person.id)$$ in pg_get_functiondef(p.oid)) > 0
-    and position($$'working_day_times', coalesce((select employee_detail.working_day_times from private.employee_directory_details employee_detail where employee_detail.person_id = person.id), '[]'::jsonb))$$ in pg_get_functiondef(p.oid)) > 0
+    and position($$'working_day_times', coalesce((select employee_detail.working_day_times from private.employee_directory_details employee_detail where employee_detail.person_id = person.id), '[]'::jsonb)$$ in pg_get_functiondef(p.oid)) > 0
   ) as fields_projected,
   (
     position($$'team', (select employee_detail.team_name from private.employee_directory_details employee_detail where employee_detail.person_id = person.id)$$ in pg_get_functiondef(p.oid)) = 0
@@ -109,7 +109,7 @@ select
     and position($$'employment_type', (select employee_detail.employment_type from private.employee_directory_details employee_detail where employee_detail.person_id = person.id)$$ in pg_get_functiondef(p.oid)) = 0
     and position($$'contract_type', (select classification.contract_type from private.employee_check_in_contract_classifications classification where classification.person_id = person.id)$$ in pg_get_functiondef(p.oid)) = 0
     and position($$'working_weekdays', (select employee_detail.working_weekdays from private.employee_directory_details employee_detail where employee_detail.person_id = person.id)$$ in pg_get_functiondef(p.oid)) = 0
-    and position($$'working_day_times', coalesce((select employee_detail.working_day_times from private.employee_directory_details employee_detail where employee_detail.person_id = person.id), '[]'::jsonb))$$ in pg_get_functiondef(p.oid)) = 0
+    and position($$'working_day_times', coalesce((select employee_detail.working_day_times from private.employee_directory_details employee_detail where employee_detail.person_id = person.id), '[]'::jsonb)$$ in pg_get_functiondef(p.oid)) = 0
   ) as fields_not_preprojected
 from pg_proc p join pg_roles owner_role on owner_role.oid = p.proowner
 where p.oid = to_regprocedure({literal(RPC)})
