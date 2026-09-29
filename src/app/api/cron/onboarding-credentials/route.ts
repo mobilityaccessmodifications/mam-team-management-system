@@ -23,9 +23,20 @@ export async function GET(request: Request) {
   if (!authorised(request)) return Response.json({ ok: false, code: "unauthorized" }, { status: 401, headers });
   const url = process.env.ONBOARDING_CREDENTIAL_WEBHOOK_URL;
   const secret = process.env.ONBOARDING_CREDENTIAL_WEBHOOK_SECRET;
-  if (process.env.ONBOARDING_CREDENTIAL_EMAIL_MODE !== "live" || !url || !secret || !/^https:\/\//.test(url)) {
+  const destination = process.env.ONBOARDING_CREDENTIAL_WEBHOOK_ORIGIN;
+  let bound = false;
+  try {
+    const target = new URL(url ?? "");
+    const origin = new URL(destination ?? "");
+    bound = target.protocol === "https:" && origin.protocol === "https:" && origin.pathname === "/"
+      && !origin.search && !origin.hash && !origin.username && !origin.password
+      && target.origin === origin.origin && target.username === "" && target.password === ""
+      && !target.search && !target.hash && target.pathname === "/webhook/mam-people-hub-onboarding-credentials-v1";
+  } catch { /* disabled */ }
+  if (process.env.ONBOARDING_CREDENTIAL_EMAIL_MODE !== "live") {
     return Response.json({ ok: true, code: "delivery_disabled", claimed: 0, sent: 0, failed: 0 }, { headers });
   }
+  if (!url || !secret || !bound) return Response.json({ ok: false, code: "invalid_delivery_configuration" }, { status: 503, headers });
   const admin = createAdminClient();
   const claimed = await admin.rpc("claim_due_onboarding_credentials", { p_limit: 10 });
   if (claimed.error || !Array.isArray(claimed.data)) return Response.json({ ok: false, code: "claim_failed" }, { status: 503, headers });
@@ -43,7 +54,8 @@ export async function GET(request: Request) {
       failed++;
     };
     if (!login || !recipients.length || !recipients.includes(login)) { await fail("invalid_recipient"); continue; }
-    const begin = await admin.rpc("begin_onboarding_credential_delivery", { p_delivery_id: item.delivery_id, p_claim_token: item.claim_token });
+    const begin = await admin.rpc("begin_onboarding_credential_delivery", { p_delivery_id: item.delivery_id, p_claim_token: item.claim_token,
+      p_login: login, p_work_email: recipient(item.work_email), p_personal_email: recipient(item.personal_email) });
     if (begin.error || begin.data !== true) { await fail("invalid_context"); continue; }
     const temporaryPassword = `${randomBytes(24).toString("base64url")}aA1!`;
     try {
@@ -59,7 +71,7 @@ export async function GET(request: Request) {
       });
       if (!response.ok) { await fail("provider_rejected"); continue; }
       const ack = await response.json();
-      if (ack?.ok !== true || ack.deliveryId !== item.delivery_id) { await fail("invalid_ack"); continue; }
+      if (ack?.ok !== true || ack.sent !== true || ack.deliveryId !== item.delivery_id) { await fail("invalid_ack"); continue; }
       const completed = await admin.rpc("complete_onboarding_credential_delivery", { p_delivery_id: item.delivery_id, p_claim_token: item.claim_token });
       if (completed.error || completed.data !== true) { failed++; continue; }
       sent++;

@@ -11,6 +11,7 @@ const COMPARISON = new RegExp(`^payroll-comparison:${UUID_SOURCE}$`);
 const NEW_STARTER = new RegExp(`^new-starter:${UUID_SOURCE}:day-one:(test|live)$`);
 const CHECK_IN = new RegExp(`^checkin:${UUID_SOURCE}:(2-week|1-month|2-month|3-month|5-month|6-month|6-month-casual):initial:(test|live)$`);
 const CHECK_IN_REVIEW = new RegExp(`^checkin-review:${UUID_SOURCE}:hr:[1-9][0-9]*:(test|live)$`);
+const ONBOARDING_CREDENTIAL = new RegExp(`^onboarding-credential:${UUID_SOURCE}$`);
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 const headers = { "Cache-Control": "private, no-store, max-age=0", "X-Content-Type-Options": "nosniff" };
@@ -29,7 +30,7 @@ const reply = (body: unknown, status = 200) => Response.json(body, { status, hea
 const error = (code: string, status: number) => reply({ ok: false, code }, status);
 const eventKey = (value: unknown): value is string => typeof value === "string" && value.length <= 256
   && (LEAVE.test(value) || PAYROLL.test(value) || COMPARISON.test(value) || NEW_STARTER.test(value)
-    || CHECK_IN.test(value) || CHECK_IN_REVIEW.test(value));
+    || CHECK_IN.test(value) || CHECK_IN_REVIEW.test(value) || ONBOARDING_CREDENTIAL.test(value));
 
 /** Do not silently drop malformed addresses: that would change the send intent. */
 function recipients(value: unknown, required: boolean): string | null {

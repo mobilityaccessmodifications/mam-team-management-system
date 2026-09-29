@@ -57,6 +57,17 @@ test("sandbox mode rejects outbound integration variables without leaking their 
   );
 });
 
+test('sandbox rejects onboarding webhook settings without exposing credentials', () => {
+  const { assertSandboxEnvironment } = load('src/lib/sandbox-safety.ts');
+  for (const variable of ['ONBOARDING_CREDENTIAL_WEBHOOK_ORIGIN', 'ONBOARDING_CREDENTIAL_WEBHOOK_URL', 'ONBOARDING_CREDENTIAL_WEBHOOK_SECRET', 'ONBOARDING_CREDENTIAL_EMAIL_MODE']) {
+    assert.throws(() => assertSandboxEnvironment({ ...localEnvironment, [variable]: 'synthetic-sensitive-value' }), error => {
+      assert.match(error.message, new RegExp(variable));
+      assert.doesNotMatch(error.message, /synthetic-sensitive-value/);
+      return true;
+    });
+  }
+});
+
 test("sandbox fetch guard blocks remote requests before the network and permits loopback", async () => {
   const { createSandboxFetch } = load("src/lib/sandbox-safety.ts");
   const requests = [];

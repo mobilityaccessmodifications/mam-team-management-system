@@ -24,7 +24,7 @@ function routeFixture(options = {}) {
     rpc: async (name, args) => {
       calls.push({ name, args });
       if (name === 'claim_due_onboarding_credentials') return ok([{ delivery_id: deliveryId, claim_token: claimToken, person_id: personId, auth_user_id: userId, login_name: 'work@example.test', work_email: 'work@example.test', personal_email: 'home@example.test' }]);
-      if (name === 'begin_onboarding_credential_delivery') return ok(true);
+      if (name === 'begin_onboarding_credential_delivery') return ok(options.stale ? false : true);
       if (name === 'complete_onboarding_credential_delivery') return ok(true);
       if (name === 'fail_onboarding_credential_delivery') return ok(true);
       throw new Error(`Unexpected RPC ${name}`);
@@ -33,11 +33,11 @@ function routeFixture(options = {}) {
   };
   const originalFetch = globalThis.fetch;
   const previous = { ...process.env };
-  Object.assign(process.env, { CRON_SECRET: 'synthetic-cron', ONBOARDING_CREDENTIAL_WEBHOOK_URL: 'https://n8n.example.test/webhook/onboarding', ONBOARDING_CREDENTIAL_WEBHOOK_SECRET: 'synthetic-secret', ONBOARDING_CREDENTIAL_EMAIL_MODE: 'live' });
+  Object.assign(process.env, { CRON_SECRET: 'synthetic-cron', ONBOARDING_CREDENTIAL_WEBHOOK_ORIGIN: 'https://n8n.example.test', ONBOARDING_CREDENTIAL_WEBHOOK_URL: 'https://n8n.example.test/webhook/mam-people-hub-onboarding-credentials-v1', ONBOARDING_CREDENTIAL_WEBHOOK_SECRET: 'synthetic-secret', ONBOARDING_CREDENTIAL_EMAIL_MODE: 'live' });
   globalThis.fetch = async (_url, fetchOptions) => {
     payload = JSON.parse(fetchOptions.body);
     if (options.throwOnFetch || fetchOptions.signal?.aborted) throw new Error('failed');
-    return Response.json(options.badAcknowledgement ? { ok: false, deliveryId: payload.deliveryId } : { ok: true, deliveryId: payload.deliveryId });
+    return Response.json(options.badAcknowledgement ? { ok: false, deliveryId: payload.deliveryId } : { ok: true, sent: true, deliveryId: payload.deliveryId });
   };
   const route = load('src/app/api/cron/onboarding-credentials/route.ts', { '@/lib/supabase/admin': { createAdminClient: () => admin } });
   return { route, calls, get payload() { return payload; }, cleanup() { globalThis.fetch = originalFetch; for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key]; Object.assign(process.env, previous); } };
@@ -59,6 +59,28 @@ test('delivery sends only distinct employee addresses and transient password, th
     assert.deepEqual(fixture.calls.map((call) => call.name), ['claim_due_onboarding_credentials', 'begin_onboarding_credential_delivery', 'complete_onboarding_credential_delivery']);
     assert.ok(!JSON.stringify(await result.json()).includes(fixture.payload.temporaryPassword));
     assert.ok(!JSON.stringify(fixture.calls).includes(fixture.payload.temporaryPassword));
+  } finally { fixture.cleanup(); }
+});
+test('live destination must match verified MAM origin and exact webhook path', async () => {
+  const fixture = routeFixture();
+  try {
+    for (const url of ['https://other.example.test/webhook/mam-people-hub-onboarding-credentials-v1',
+      'https://n8n.example.test/webhook/other',
+      'https://n8n.example.test/webhook/mam-people-hub-onboarding-credentials-v1?redirect=other',
+      'http://n8n.example.test/webhook/mam-people-hub-onboarding-credentials-v1']) {
+      process.env.ONBOARDING_CREDENTIAL_WEBHOOK_URL = url;
+      assert.equal((await fixture.route.GET(request())).status, 503);
+    }
+    assert.equal(fixture.calls.length, 0);
+  } finally { fixture.cleanup(); }
+});
+test('claimed contact snapshot is bound at begin before password rotation', async () => {
+  const fixture = routeFixture({ stale: true });
+  try {
+    await fixture.route.GET(request());
+    const begin = fixture.calls.find(call => call.name === 'begin_onboarding_credential_delivery');
+    assert.deepEqual([begin.args.p_login, begin.args.p_work_email, begin.args.p_personal_email], ['work@example.test', 'work@example.test', 'home@example.test']);
+    assert.equal(fixture.payload, undefined);
   } finally { fixture.cleanup(); }
 });
 test('password update failure records safe failure and never emails', async () => {

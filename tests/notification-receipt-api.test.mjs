@@ -79,6 +79,7 @@ test('all supported key families pass and unrelated legacy/shared keys fail', as
     `checkin:${id}:5-month:initial:test`, `checkin:${id}:2-week:initial:live`,
     `checkin:${id}:6-month:initial:test`, `checkin:${id}:6-month:initial:live`,
     `checkin:${id}:6-month-casual:initial:test`, `checkin:${id}:6-month-casual:initial:live`,
+    `onboarding-credential:${id}`,
     `checkin-review:${id}:hr:1:test`, `checkin-review:${id}:hr:9:live`]) {
     const h = harness({ outcome: 'send', eventKey, deliveryToken: token });
     assert.equal((await h.run(request({ ...input, eventKey }))).status, 200);
