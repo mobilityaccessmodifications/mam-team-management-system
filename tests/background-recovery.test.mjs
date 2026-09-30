@@ -15,5 +15,6 @@ test('a failed recovery worker cannot prevent both Check-In workers from running
   assert.ok(called.includes('check-in-reminders'));
   assert.ok(called.includes('new-starter-day-one'));
   assert.ok(called.includes('onboarding-credentials'));
+  assert.ok(called.includes('scheduled-offboarding'));
   assert.deepEqual(errors, ['leave-notifications: dispatcher unavailable.']);
 });

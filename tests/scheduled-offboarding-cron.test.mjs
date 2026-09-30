@@ -45,6 +45,13 @@ const request = (secret) => new Request("https://example.test/api/cron/scheduled
 const person = "92000000-0000-4000-8000-000000000002";
 const user = "92000000-0000-4000-8000-000000000003";
 
+test("offboarding uses the independent recovery scheduler on a daily-cron-only Vercel plan", () => {
+  const config = JSON.parse(readFileSync("vercel.json", "utf8"));
+  assert.ok(!config.crons.some(job => job.path === "/api/cron/scheduled-offboarding"));
+  assert.match(readFileSync("scripts/recover-background-jobs.mjs", "utf8"), /'scheduled-offboarding'/);
+  assert.match(readFileSync("src\/app\/api\/cron\/recovery\/route.ts", "utf8"), /"scheduled-offboarding": scheduledOffboarding/);
+});
+
 test("cron rejects requests without the secret before querying", async () => {
   process.env.CRON_SECRET = "synthetic-cron-secret";
   const { GET, calls } = loadRoute();

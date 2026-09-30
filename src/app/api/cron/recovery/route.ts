@@ -3,6 +3,7 @@ import { GET as leaveNotifications } from "../leave-notifications/route";
 import { GET as checkInReminders } from "../check-in-reminders/route";
 import { GET as newStarterDayOne } from "../new-starter-day-one/route";
 import { GET as onboardingCredentials } from "../onboarding-credentials/route";
+import { GET as scheduledOffboarding } from "../scheduled-offboarding/route";
 import { GET as priorityReminders } from "../leave-priority-reminders/route";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ const jobs: Record<string, (request: Request) => Promise<Response>> = {
   "check-in-reminders": checkInReminders,
   "new-starter-day-one": newStarterDayOne,
   "onboarding-credentials": onboardingCredentials,
+  "scheduled-offboarding": scheduledOffboarding,
   "leave-priority-reminders": priorityReminders,
 };
 export async function GET(request: Request) {
