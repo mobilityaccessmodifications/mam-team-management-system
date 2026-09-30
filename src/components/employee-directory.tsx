@@ -921,6 +921,7 @@ function EmployeeEditor({
   const isCreate = editor.mode === "create";
   const [roleSelection, setRoleSelection] = useState<{ base: DirectoryStoredRole | null; selected: DirectoryRole } | null>(null);
   const selectedRole = roleSelection?.base === (role ?? null) ? roleSelection?.selected ?? role ?? null : role ?? null;
+  const [editingRole, setEditingRole] = useState(false);
   const [roleSaving, setRoleSaving] = useState(false);
   const [roleError, setRoleError] = useState("");
   const [editingSchedule, setEditingSchedule] = useState(isCreate);
@@ -970,16 +971,16 @@ function EmployeeEditor({
             </select>
           </Field>
           {!isCreate ? <div className={styles.pickerField}>
-            <label htmlFor={managerInputId}>Role</label>
-            <select id={managerInputId} value={selectedRole ?? ""} disabled={!currentRecord?.isActive || !roleLoaded || !role || saving || roleSaving} onChange={(event) => { setRoleSelection({ base: role ?? null, selected: event.target.value as DirectoryRole }); setRoleError(""); }}>
+            <button type="button" className={styles.secondaryAction} aria-expanded={editingRole} onClick={() => setEditingRole(!editingRole)} disabled={saving || roleSaving}>Role</button>
+            {editingRole ? <select aria-label="Role" id={managerInputId} value={selectedRole ?? ""} disabled={!currentRecord?.isActive || !roleLoaded || !role || saving || roleSaving} onChange={(event) => { setRoleSelection({ base: role ?? null, selected: event.target.value as DirectoryRole }); setRoleError(""); }}>
               {role === "hr" ? <option value="hr">Legacy HR</option> : null}
               {!role ? <option value="">No active portal account</option> : null}
               <option value="employee">Team member</option>
               <option value="manager">Manager</option>
               <option value="system_admin">Admin</option>
-            </select>
+            </select> : null}
           </div> : null}
-          {!isCreate && selectedRole ? <div className={`${styles.fullSpan} ${styles.roleImpact}`} role="status">
+          {!isCreate && editingRole && selectedRole ? <div className={`${styles.fullSpan} ${styles.roleImpact}`} role="status">
             <strong>Role impact</strong>
             <p>{selectedRole === "hr"
               ? "Legacy HR: organisation chart and subscription register read access, but no current Directory or Accounts administration from this role. Switching to Team member removes those operational views."
@@ -1036,6 +1037,7 @@ function EmployeeEditor({
               <option value="casual">Casual</option>
               <option value="full_time">Full Time</option>
               <option value="part_time">Part Time</option>
+              <option value="overseas">Overseas</option>
             </select>
           </Field>
           <Field label="Contract type">

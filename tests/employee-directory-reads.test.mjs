@@ -32,6 +32,16 @@ function deferredClient() {
   return { client, pending };
 }
 
+test('Overseas employment survives list and single-record projections without paid entitlement', async () => {
+  const client = { rpc: async (name) => ({ data: name === 'list_employee_check_in_contract_classifications' ? [] : [{ ...row, employment_type: 'overseas', has_paid_leave_entitlement: false }], error: null }) };
+  const records = await directory.exports.listEmployeeDirectoryRecordsWithClient(client);
+  const record = await directory.exports.findEmployeeDirectoryRecord(client, personId);
+  for (const projected of [records[0], record]) {
+    assert.equal(projected.employmentType, 'overseas');
+    assert.equal(projected.hasPaidLeaveEntitlement, false);
+  }
+});
+
 test('directory list and single-record reads fetch contract types concurrently', async () => {
   for (const [load, recordRpc, data] of [
     [(client) => directory.exports.listEmployeeDirectoryRecordsWithClient(client), 'list_employee_directory_records_with_work_schedule_times', [row]],

@@ -70,7 +70,7 @@ test('duplicate phone even unlinked is rejected, no identity-selected payload ac
   assert.equal((await f.call(f.packet('prepare',input()))).body.code,'not_available');
   f.setRows([employee()]); assert.equal((await f.call(f.packet('prepare',{...input(),personId:employee().personId}))).status,400);
 });
-for(const employmentType of ['casual','abn']) test(`${employmentType} defaults missing type unpaid but never silently converts explicit paid`,async()=>{
+for(const employmentType of ['casual','abn','overseas']) test(`${employmentType} defaults missing type unpaid but never silently converts explicit paid`,async()=>{
   const f=fixture(); f.setRows([{...employee(),employmentType}]); const fields={...input()}; delete fields.leaveType;
   assert.match((await f.call(f.packet('prepare',fields))).body.summary,/Type: Unpaid leave/);
   assert.equal((await f.call(f.packet('prepare',input()))).body.code,'needs_input'); assert.equal(f.writes(),0);
