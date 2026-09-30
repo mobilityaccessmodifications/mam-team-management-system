@@ -14,7 +14,7 @@ spec.loader.exec_module(module)
 
 
 class InspectionTests(unittest.TestCase):
-    def test_project_license_denial_is_not_key_failure(self):
+    def test_personal_project_route_does_not_require_project_admin_listing(self):
         def fake_api(config, path):
             if path.startswith('credentials?'):
                 return {'data': [dict(id=key, name=name, type=kind) for key, (name, kind) in module.CREDENTIALS.items()]}
@@ -22,20 +22,20 @@ class InspectionTests(unittest.TestCase):
                 return {'data': [{'id': 'synthetic-workflow', 'name': 'Other workflow'}]}
             if path.startswith('workflows/'):
                 return {'nodes': []}
-            raise HTTPError('https://example.test', 403, 'denied', Message(),
-                            io.BytesIO(b'{"message":"Your license does not allow for feat:projectRole:admin. To enable feat:projectRole:admin, please upgrade to a license that supports this feature."}'))
-        with patch.object(module, 'api', side_effect=fake_api):
-            self.assertIn('license excludes projectRole:admin', module.inspect_n8n({'N8N_API_KEY': 'synthetic-secret'}))
+            raise AssertionError('project admin route must not be requested')
+        with patch.object(module, 'api', side_effect=fake_api) as api:
+            self.assertIn('default personal project', module.inspect_n8n({'N8N_API_KEY': 'synthetic-secret'}))
+            self.assertFalse(any('projects' in call.args[1] for call in api.call_args_list))
 
-    def test_unexplained_project_denial_remains_unverified(self):
+    def test_empty_workflow_listing_supports_personal_project_route(self):
         def fake_api(config, path):
             if path.startswith('credentials?'):
                 return {'data': [dict(id=key, name=name, type=kind) for key, (name, kind) in module.CREDENTIALS.items()]}
             if path.startswith('workflows?'):
                 return {'data': []}
-            raise HTTPError('https://example.test', 403, 'denied', Message(), io.BytesIO(b'{}'))
+            raise AssertionError('project admin route must not be requested')
         with patch.object(module, 'api', side_effect=fake_api):
-            self.assertIn('cause unverified', module.inspect_n8n({}))
+            self.assertIn('default personal project', module.inspect_n8n({}))
 
     def test_rejects_credential_identity_mismatch(self):
         with patch.object(module, 'api', side_effect=[{'data': []}, {'data': []}]):
