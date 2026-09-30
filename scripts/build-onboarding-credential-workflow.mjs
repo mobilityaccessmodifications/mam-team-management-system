@@ -53,11 +53,10 @@ return [{ json: send ? { ...context, deliveryToken: token, shouldSend: true }
     }, { credentials: { microsoftOutlookOAuth2Api: { id: 'vFEolsXoEOOxNyan', name: 'Microsoft Outlook account - hr@mobilityaccess.com.au' } } }),
     node('c1000000-0000-4000-8000-000000000011', 'Build Provider Receipt', 'n8n-nodes-base.code', 2, [900,-120], { jsCode: `const context = $('Build Credential Email').first().json;
 const provider = $input.first().json;
-const messageId = typeof provider?.id === 'string' && provider.id.length > 0 && provider.id.length <= 1024 ? provider.id : null;
-if (!messageId) throw new Error('Provider identity unavailable');
+if (provider?.success !== true) throw new Error('Provider acceptance unavailable');
 return [{ json: { action: 'confirm', eventKey: 'onboarding-credential:' + context.deliveryId,
   recipient: context.actualRecipient, cc: '', deliveryToken: context.deliveryToken,
-  providerReceipt: { accepted: true, messageId, requestId: null, statusCode: 202 } } }];` }),
+  providerReceipt: { accepted: true, messageId: null, requestId: null, statusCode: null } } }];` }),
     receiptNode('c1000000-0000-4000-8000-000000000012', 'Confirm Credential Delivery', [1120,-120], '={{ $json }}'),
     node('c1000000-0000-4000-8000-000000000006', 'Acknowledge Credential Email', 'n8n-nodes-base.code', 2, [1340,-120], {
       jsCode: `const context = $('Build Credential Email').first().json;

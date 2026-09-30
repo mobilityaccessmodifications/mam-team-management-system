@@ -14,8 +14,10 @@ test('live workflow requires bound header credential and durable reservation bef
   const receiptCode = new Function('$input', '$', flow.nodes.find(n => n.name === 'Build Provider Receipt').parameters.jsCode);
   const context = { deliveryId: '10000000-0000-4000-8000-000000000004', actualRecipient: 'work@example.test', deliveryToken: '20000000-0000-4000-8000-000000000001' };
   const $ = () => ({ first: () => ({ json: context }) });
-  assert.throws(() => receiptCode({ first: () => ({ json: {} }) }, $), /Provider identity unavailable/);
-  assert.equal(receiptCode({ first: () => ({ json: { id: 'synthetic-provider-id' } }) }, $)[0].json.providerReceipt.messageId, 'synthetic-provider-id');
+  assert.throws(() => receiptCode({ first: () => ({ json: {} }) }, $), /Provider acceptance unavailable/);
+  assert.throws(() => receiptCode({ first: () => ({ json: { success: false } }) }, $), /Provider acceptance unavailable/);
+  assert.deepEqual(receiptCode({ first: () => ({ json: { success: true } }) }, $)[0].json.providerReceipt,
+    { accepted: true, messageId: null, requestId: null, statusCode: null });
   const gate = new Function('$input', '$', flow.nodes.find(n => n.name === 'Gate Credential Reservation').parameters.jsCode);
   const gateContext = { ...context, temporaryPassword: 'synthetic-long-enough-password' };
   const gateLookup = () => ({ first: () => ({ json: gateContext }) });
