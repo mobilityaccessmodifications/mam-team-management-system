@@ -1,0 +1,7 @@
+[Unit]
+Description=Prune MAM Hermes leave confirmation state
+
+[Service]
+Type=oneshot
+EnvironmentFile=/home/codex/.hermes/.env
+ExecStart=/usr/bin/python3 /home/codex/.hermes/plugins/mam-hermes-leave/__init__.py prune

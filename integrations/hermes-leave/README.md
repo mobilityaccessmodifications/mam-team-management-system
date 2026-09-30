@@ -1,0 +1,25 @@
+# MAM Hermes leave integration
+
+This integration ports the MAM WhatsApp self-leave protocol to Hermes. It uses the existing People System v3 bridge endpoint and keeps employee identity, drafts, and confirmation out of model-selected arguments. The OpenClaw gateway remains the production WhatsApp owner until a reviewed cutover.
+
+## Offline verification
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_hermes*.py'
+ruff check --no-cache integrations/hermes-leave tests/test_hermes_allowlist.py tests/test_hermes_leave_plugin.py
+hermes plugins doctor integrations/hermes-leave --ci
+npm run check
+```
+
+## Production prerequisites
+
+1. Complete MAM project review and GitHub release checks. Back up the existing OpenClaw config, WhatsApp session and protected integration environment. Keep the old service and rollback path intact.
+2. Install only the reviewed plugin revision. Provision `MAM_HERMES_LEAVE_ENABLED`, `MAM_HERMES_LEAVE_BRIDGE_URL`, `MAM_HERMES_LEAVE_BRIDGE_SECRET`, `MAM_HERMES_LEAVE_ACCOUNT`, and `MAM_HERMES_LEAVE_STATE_DIR` in the protected Hermes environment. The URL must be the deployed MAM People System v3 leave route; the account and secret must match that endpoint. Never print or commit the secret. Keep the state directory owned by the gateway user at mode 0700; confirmation packets are written at mode 0600 before submission. Install and enable the reviewed `systemd/mam-hermes-leave-prune.*` user units so unverified packets become token-free guards after one hour and all guards expire after 24 hours, even without inbound traffic. Treat a failed prune timer as a cutover blocker.
+3. Provision the protected allowlist secret under `MAM_HERMES_ALLOWLIST_DIR` (owned by `codex`, mode 0700) and configure `MAM_HERMES_ALLOWLIST_URL` for the deployed MAM allowlist route in a 0600 `config.env`. Run a fresh synchronizer cycle with `WHATSAPP_ENABLED=false`; install and enable the reviewed `systemd/mam-hermes-allowlist-*` user units for five-minute sync and independent one-minute watchdog. Both run under the `codex` user. Sync and watchdog use a shared process lock and retain a stop-required marker until the gateway is verified stopped and its disabled configuration is durably written. The script never enables WhatsApp on its own.
+4. Set `platform_toolsets.whatsapp` to exactly `[mam_hermes_leave, no_mcp]`. Verify the effective WhatsApp tool list contains `mam_leave_prepare` and no terminal, file, browser, code execution, delegation, AroFlo MCP or other plugin tool. Keep `WHATSAPP_MODE=bot`, `WHATSAPP_DM_POLICY=allowlist`, `WHATSAPP_GROUP_POLICY=disabled`, `WHATSAPP_FORWARD_OWNER_MESSAGES=false`, and unknown-DM behavior `ignore`. Set `HERMES_GATEWAY_BUSY_INPUT_MODE=queue` and `HERMES_GATEWAY_BUSY_TEXT_MODE=interrupt` so Hermes queues each busy WhatsApp text as its own turn, without merging or steering it into a running leave request. Verify no profile-specific display config overrides these values and verify the plugin's WhatsApp busy handler is wired after connection. Busy Confirm is rejected with a retry message; a busy edit invalidates any earlier draft before the current turn can send its summary. The synchronizer sets bot mode while WhatsApp is still disabled; verify the effective bridge mode is bot before cutover. Verify there is no config override broadening these env policies. Do not enable WhatsApp if any check fails.
+5. Coordinate one WhatsApp owner: disable and stop OpenClaw's gateway and its allowlist timers before starting Hermes WhatsApp; verify the old gateway is inactive so an allowlist update or user-manager restart cannot revive it mid-cutover. Reuse the Baileys session only after a verified offline copy and successful connection check; otherwise pair by QR with the account owner. Never run both bridges against the same account. Keep the original session and units untouched for rollback.
+6. Verify plugin registration, sender/receipt tests, fresh allowlist, gateway/channel health, and a controlled non-submitting WhatsApp interaction. Do not create a real leave request or send a test confirmation without explicit HR approval. Keep the old OpenClaw data and disabled units for rollback.
+
+Confirm messages with the same one-second WhatsApp timestamp as the summary delivery are rejected because their order cannot be proven. Ask the sender to send a new standalone Confirm. A first-contact LID chat is accepted when the trusted WhatsApp bridge supplies its phone-JID sender alternate and no conflicting mapping exists; a LID-only sender still needs a verified bidirectional phone mapping. The durable unresolved guard is keyed by account and phone so a session-key change cannot create a second submission; retries use the original session identity recorded before the first confirmation attempt.
+
+If the new channel fails, set `WHATSAPP_ENABLED=false`, restart Hermes, then re-enable and start the unchanged OpenClaw gateway and its allowlist timers. Re-check the central allowlist before accepting employee messages. Do not delete either session or the old plugin during rollback.

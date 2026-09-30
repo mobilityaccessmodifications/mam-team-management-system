@@ -1,0 +1,8 @@
+name: mam-hermes-leave
+version: 0.1.0
+description: MAM WhatsApp self-service leave
+provides_tools:
+  - mam_leave_prepare
+provides_hooks:
+  - pre_gateway_dispatch
+  - pre_llm_call
