@@ -13,7 +13,7 @@ MIGRATIONS = (
     ("20260930120000", "rename_mam_admin_team", "ead4f704c96088ebe6b1693090499cbcd8f15aff9594942f87dc4bca2d75d208"),
     ("20260930120100", "onboarding_credentials", "e65f5840b7ff808e02db11e5b37083c0e17b12bc340bbf3821f9a9d25d242498"),
     ("20260930130000", "directory_role_control", "bb6f16f9e16979abd1993f357e28f75ca3b457037a5ddcfa0b5e5dad47e7a521"),
-    ("20260930150000", "scheduled_employee_offboarding", "d616f548e4e88213596536f8790ea76db95b1072898aac1305a2f38708f0ed87"),
+    ("20260930150000", "scheduled_employee_offboarding", "e479aa9f13651d75eade6e9e659098501f6f306a3d5a5cc43155ea95b42745ff"),
 )
 PREDECESSOR = ("20260923170000", "employee_team_directory")
 FUNCTIONS = (

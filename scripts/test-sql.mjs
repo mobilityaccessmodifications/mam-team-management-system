@@ -11,6 +11,9 @@ console.log(`Disposable PostgreSQL socket: ${socket}`);
 try {
   const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (replay.status !== 0) throw new Error("Full migration replay failed");
+  command("createdb", ["-h", socket, "-p", "55439", "-U", "postgres", "--template=mam_test_replay", "mam_test_offboarding_admin"]);
+  const offboardingRace = spawnSync(process.execPath, [path.join(sourceRoot, "tests/run-offboarding-admin-concurrency.mjs"), socket, "mam_test_offboarding_admin"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
+  if (offboardingRace.status !== 0) throw new Error("Offboarding administrator PostgreSQL concurrency tests failed");
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/leave-register-read-grant.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/analytics-api-employees.sql")]);
   console.log("PASS: Analytics employees dataset exposes names without private contacts; RPC remains service-role-only");

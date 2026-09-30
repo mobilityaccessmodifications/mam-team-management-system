@@ -97,6 +97,7 @@ begin
   if (select auth.role()) is distinct from 'service_role' and session_user not in ('service_role','postgres') then
     raise exception 'Service role required.' using errcode='42501';
   end if;
+  perform pg_advisory_xact_lock(hashtextextended('mam:directory-role-control', 0));
   perform pg_advisory_xact_lock(hashtextextended('internal_org_people_hierarchy', 0));
   select * into v_person from public.internal_org_people where id=p_person_id and node_kind='person' for update;
   select * into v_schedule from private.scheduled_employee_offboarding where person_id=p_person_id for update;
