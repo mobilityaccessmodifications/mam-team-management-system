@@ -30,6 +30,11 @@ test('role control remains edit-only and explains permission effects', () => {
   assert.match(ui, /permission/i);
   assert.match(ui, /independent|separate|explicit/i);
   assert.match(ui, /styles\.roleImpact/);
+  assert.match(ui, /Admin:.*payroll.*subscription/i);
+  assert.match(ui, /Manager:.*subscription register/i);
+  assert.match(ui, /Legacy HR:.*organisation chart.*subscription register/i);
+  assert.match(ui, /explicit.*grants.*additional/i);
+  assert.doesNotMatch(ui, /permission grants, including payroll and subscription access, are independent of this role/);
   assert.match(css, /\.roleImpact\s*\{/);
 });
 test('SQL role mutation checks caller and target, audits and never touches independent grants', () => {

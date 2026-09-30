@@ -25,6 +25,8 @@ try {
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/reporting-calendar-scope.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/scheduled-offboarding.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/directory-role.sql")]);
+  const directoryRace = spawnSync(process.execPath, [path.join(sourceRoot, "tests/run-directory-role-concurrency.mjs"), socket, "mam_test_replay"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
+  if (directoryRace.status !== 0) throw new Error("Directory role PostgreSQL concurrency tests failed");
   const receipts = spawnSync(process.execPath, [path.join(sourceRoot, "tests/run-notification-delivery-sql.mjs"),
     socket, "mam_test_notification_concurrency"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (receipts.status !== 0) throw new Error("Durable notification PostgreSQL concurrency tests failed");

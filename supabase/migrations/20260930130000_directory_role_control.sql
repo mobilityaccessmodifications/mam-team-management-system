@@ -40,8 +40,13 @@ as $$
 declare
   v_user_id uuid;
   v_old_role text;
+  v_actor_role text;
 begin
-  if not private.is_system_portal_account_admin() then
+  perform pg_advisory_xact_lock(hashtextextended('mam:directory-role-control', 0));
+  select profile.app_role into v_actor_role
+  from public.profiles profile where profile.id = (select auth.uid()) for update;
+  if v_actor_role is distinct from 'system_admin'
+    or not private.is_system_portal_account_admin() then
     raise exception 'Directory access denied.' using errcode = '42501';
   end if;
   if p_role is null or p_role not in ('employee','manager','system_admin') then
@@ -64,6 +69,17 @@ begin
   end if;
   if v_user_id = (select auth.uid()) and p_role <> 'system_admin' then
     raise exception 'You cannot remove your own administrator access.' using errcode = '42501';
+  end if;
+  if v_old_role = 'system_admin' and p_role <> 'system_admin'
+    and not exists (
+      select 1 from public.profiles other_profile
+      where other_profile.id <> v_user_id
+        and other_profile.app_role = 'system_admin'
+        and other_profile.account_status = 'active'
+        and other_profile.login_name is not null
+        and private.is_active_portal_account(other_profile.id)
+    ) then
+    raise exception 'At least one active administrator is required.' using errcode = '42501';
   end if;
   if v_old_role is distinct from p_role then
     update public.profiles set app_role = p_role where id = v_user_id;

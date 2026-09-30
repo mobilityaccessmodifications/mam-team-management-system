@@ -982,13 +982,13 @@ function EmployeeEditor({
           {!isCreate && selectedRole ? <div className={`${styles.fullSpan} ${styles.roleImpact}`} role="status">
             <strong>Role impact</strong>
             <p>{selectedRole === "hr"
-              ? "Legacy HR: this older profile role does not itself grant current Directory, Accounts or organisation administration. Choose a current role to replace it."
+              ? "Legacy HR: organisation chart and subscription register read access, but no current Directory or Accounts administration from this role. Switching to Team member removes those operational views."
               : selectedRole === "employee"
-              ? "Team member: own profile, leave and calendar, and a limited team directory. No organisation chart, team approvals or administration from this role."
+              ? "Team member: own profile, leave and calendar, and a limited team directory. No organisation chart, subscription register, team approvals or administration from this role."
               : selectedRole === "manager"
-                ? "Manager: organisation chart and reporting-team leave visibility, eligible leave approvals and check-in reviews. Authority follows the reporting tree."
-                : "Admin: full Directory, Accounts and organisation editing, plus operational oversight and administration."}</p>
-            <p>Separate explicit permission grants, including payroll and subscription access, are independent of this role and are not changed here. Reporting relationships are edited in the Organisation chart.</p>
+                ? "Manager: organisation chart and read-only subscription register, reporting-team leave visibility, eligible leave approvals and check-in reviews. Authority follows the reporting tree."
+                : "Admin: full Directory, Accounts and organisation editing, payroll import and subscription management, plus operational oversight and administration."}</p>
+            <p>Separate explicit permission grants provide additional access where applicable and are not changed here. Reporting relationships are edited in the Organisation chart.</p>
             {roleError ? <p role="alert">{roleError}</p> : null}
             <button type="button" className={styles.secondaryAction} onClick={() => void saveRole()} disabled={saving || roleSaving || !currentRecord?.isActive || !role || selectedRole === "hr" || selectedRole === role}>Save role</button>
           </div> : !isCreate && roleLoadError ? <p className={`${styles.fullSpan} ${styles.formError}`} role="alert">{roleLoadError}</p> : null}
