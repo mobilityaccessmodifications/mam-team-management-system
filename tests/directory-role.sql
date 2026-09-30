@@ -35,7 +35,7 @@ begin
   from public.create_employee_directory_record_with_work_schedule_times(
     p_first_name => 'Unassigned', p_last_name => 'Synthetic',
     p_work_email => 'unassigned@example.test', p_personal_email => null,
-    p_phone => null, p_position_title => 'Coordinator', p_team_name => 'MAM admin',
+    p_phone => null, p_position_title => 'Coordinator', p_team_name => 'Operation & Accounts',
     p_manager_id => null, p_country => null, p_date_of_birth => null,
     p_started_date => date '2026-10-05', p_scheduled_employment_end_date => null,
     p_company_key => 'mam', p_is_active => true, p_laptop_supplied => null,
