@@ -1,4 +1,5 @@
 import { TeamDirectoryFixture } from "./team-directory-fixture";
+import { OrganisationFixture } from "./organisation-fixture";
 import { EmployeePickerFixture } from "./employee-picker-fixture";
 import { createRoot } from "react-dom/client";
 import { fixtureBuildEvents, FixtureEventDetail, TeamCalendar } from "@/components/team-calendar";
@@ -26,7 +27,7 @@ const crowdedRequests = new URLSearchParams(location.search).has("crowded")
   }))
   : [];
 createRoot(document.getElementById("root")).render(
-  new URLSearchParams(location.search).get("fixture") === "team-directory" ? <TeamDirectoryFixture /> : new URLSearchParams(location.search).get("fixture") === "employee-picker" ? <EmployeePickerFixture /> : new URLSearchParams(location.search).get("fixture") === "staff-calendar" ? <div style={{ height: "100dvh", display: "flex", flexDirection: "column" }}><TeamCalendar
+  new URLSearchParams(location.search).get("fixture") === "organisation" ? <OrganisationFixture /> : new URLSearchParams(location.search).get("fixture") === "team-directory" ? <TeamDirectoryFixture /> : new URLSearchParams(location.search).get("fixture") === "employee-picker" ? <EmployeePickerFixture /> : new URLSearchParams(location.search).get("fixture") === "staff-calendar" ? <div style={{ height: "100dvh", display: "flex", flexDirection: "column" }}><TeamCalendar
     birthdays={[]} checkIns={[]} requests={[...staffRequests, ...crowdedRequests]} attachments={[{ id: "33333333-3333-4333-8333-333333333333", leaveRequestId: staffRequests[0].id, fileName: "sample.pdf" }]}
     subscriptionReviews={[]} payrollBalanceReminders={[]} showSubscriptionReviews={false} showPayrollBalanceReminders={false} reviewOnly={false} loading={false}
   /></div> : new URLSearchParams(location.search).get("fixture") === "employee-calendar" ? <div style={{ height: "100dvh", display: "flex", flexDirection: "column" }}><TeamCalendar
