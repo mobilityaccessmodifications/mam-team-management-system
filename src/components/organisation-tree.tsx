@@ -1510,14 +1510,11 @@ export function OrganisationTree({
 
   const fitChart = () => {
     const viewport = viewportRef.current;
-    if (!viewport) return;
-    const nextZoom = Math.max(
-      MIN_ZOOM,
-      Math.min(
-        1,
-        (viewport.clientWidth - 48) / layout.width,
-        (viewport.clientHeight - 86) / layout.height,
-      ),
+    if (!viewport || viewport.clientWidth <= 48 || viewport.clientHeight <= 86) return;
+    const nextZoom = Math.min(
+      1,
+      (viewport.clientWidth - 48) / layout.width,
+      (viewport.clientHeight - 86) / layout.height,
     );
     setZoom(nextZoom);
     window.requestAnimationFrame(() => {
@@ -2029,7 +2026,9 @@ export function OrganisationTree({
     }
 
     setDraggingNodeId(null);
-    const nextDropTarget = dropTargetRef.current;
+    const nextDropTarget = canCommit && drag.moved
+      ? detectDropTargetAt(event.clientX, event.clientY, drag.id)
+      : null;
     setCurrentDropTarget(null);
     if (drag.moved) {
       suppressCardClickRef.current = true;
@@ -2475,7 +2474,7 @@ export function OrganisationTree({
               hasRelationshipHistory={Boolean(relationshipHistory.length)}
               saving={saving}
               zoom={zoom}
-              minZoom={MIN_ZOOM}
+              minZoom={Math.min(MIN_ZOOM, zoom)}
               maxZoom={MAX_ZOOM}
               fullscreen={fullscreen}
               cleanUpChart={cleanUpChart}
