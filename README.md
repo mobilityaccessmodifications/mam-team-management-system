@@ -356,3 +356,34 @@ approval grants are inert in the effective resolver; active manager-subtree and
 global approval grants continue unchanged. The full disposable SQL replay and
 `tests/reporting-calendar-scope.sql` verify these boundaries; no staff is assigned
 to Management by this migration.
+
+### People lifecycle schema release
+
+Before merging the matching People UI, release these reviewed migrations in order:
+`20260930120000_rename_mam_admin_team`, `20260930120100_onboarding_credentials`,
+`20260930130000_directory_role_control`, then
+`20260930150000_scheduled_employee_offboarding`. Run
+`python3 -B -m unittest discover -s tests -p test_deploy_people_lifecycle.py`
+and the disposable `npm run test:sql` gate first. On the exact MAM production
+project, use only the MAM project credential helper's `exec supabase --` route
+(not a pasted token, unprofiled CLI, `supabase db push`, or another environment):
+
+```sh
+codex-project-credential exec supabase -- python3 scripts/deploy-people-lifecycle.py inspect
+# For EACH version, after reviewing its SQL and obtaining its SHA256 with shasum -a 256:
+codex-project-credential exec supabase -- python3 scripts/deploy-people-lifecycle.py apply <version> <reviewed-sha256>
+codex-project-credential exec supabase -- python3 scripts/deploy-people-lifecycle.py inspect
+```
+
+`inspect` is read-only and prints only target, ledger, hash and schema/ACL flags.
+`apply` requires separate explicit production migration approval, a pinned source
+hash, ordered predecessors, and a verified MAM organisation/project. Each apply
+uses one bounded Management API transaction for the SQL and exact-source ledger
+entry; do not run it during helper development. Verify each read-back and run
+Supabase security/performance advisors before merging the application PR. The
+onboarding credential workflow must remain disabled until its separately
+approved production environment (Auth/Outlook/n8n secrets and callback)
+configuration and release checks are complete. The scheduled offboarding
+worker/Auth ban is likewise a separate activation: do not enable its workflow
+or run it merely because the schema is present. No migration sends credentials,
+activates workflows, or performs historical offboarding.

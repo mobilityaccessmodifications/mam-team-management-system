@@ -12,6 +12,7 @@ create table private.scheduled_employee_offboarding (
   auth_ban_status text not null default 'not_started' check (auth_ban_status in ('not_started','executing','unknown','succeeded'))
 );
 alter table private.scheduled_employee_offboarding enable row level security;
+alter table private.scheduled_employee_offboarding force row level security;
 revoke all on private.scheduled_employee_offboarding from public, anon, authenticated;
 
 create function public.schedule_employee_offboarding(
@@ -69,6 +70,7 @@ begin
   end if;
   return new;
 end $$;
+revoke all on function private.sync_scheduled_employee_offboarding() from public,anon,authenticated,service_role;
 create trigger sync_scheduled_employee_offboarding after update of scheduled_employment_end_date
 on private.employee_directory_details for each row execute function private.sync_scheduled_employee_offboarding();
 
@@ -145,6 +147,7 @@ begin
   end if;
   return new;
 end $$;
+revoke all on function private.prevent_late_offboarding_account_link() from public,anon,authenticated,service_role;
 create trigger prevent_late_offboarding_account_link before update of auth_user_id
 on public.internal_org_people for each row execute function private.prevent_late_offboarding_account_link();
 

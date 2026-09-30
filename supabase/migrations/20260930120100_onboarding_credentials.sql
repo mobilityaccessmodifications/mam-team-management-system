@@ -92,6 +92,7 @@ begin
   end if;
   return case when tg_op='DELETE' then old else new end;
 end $$;
+revoke all on function private.guard_onboarding_credential_send() from public,anon,authenticated,service_role;
 create trigger guard_onboarding_person before update or delete on public.internal_org_people
   for each row execute function private.guard_onboarding_credential_send();
 create trigger guard_onboarding_contacts before update or delete on private.employee_directory_details
