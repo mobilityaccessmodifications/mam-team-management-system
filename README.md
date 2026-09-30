@@ -362,7 +362,18 @@ to Management by this migration.
 Before merging the matching People UI, release these reviewed migrations in order:
 `20260930120000_rename_mam_admin_team`, `20260930120100_onboarding_credentials`,
 `20260930130000_directory_role_control`, then
-`20260930150000_scheduled_employee_offboarding`. Run
+`20260930150000_scheduled_employee_offboarding`.
+The production default grants also require the narrow forward ACL corrections
+`20260930130001_directory_role_service_acl` after Role and
+`20260930150001_offboarding_schedule_service_acl` after offboarding. The
+hash-pinned `scripts/repair-directory-role-service-acl.py` and
+`scripts/repair-offboarding-schedule-service-acl.py` use the same approved
+credential wrapper, verify their predecessor and exact ledger, and revoke only
+the unintended service-role EXECUTE grants on administrator-facing RPCs.
+After a post-apply verification failure, inspect the committed ledger and ACLs;
+never blindly reapply a migration.
+
+Run
 `python3 -B -m unittest discover -s tests -p test_deploy_people_lifecycle.py`
 and the disposable `npm run test:sql` gate first. On the exact MAM production
 project, use only the MAM project credential helper's `exec supabase --` route
