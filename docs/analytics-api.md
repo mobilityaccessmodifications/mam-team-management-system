@@ -172,12 +172,23 @@ null `employee_id`; its `company` is then `unknown`.
 | `start_date` | date | First requested date. |
 | `end_date` | date | Last requested date. |
 | `business_days` | number | Recorded business-day duration. |
-| `hours` | number | Recorded request duration in hours. |
+| `hours` | number or null | Raw duration stored on the request; null when no explicit duration was recorded. |
+| `business_hours` | number | Complete reported leave duration in hours. Uses stored `hours` when present; otherwise `business_days × 7.6` for `full_time` or `× 7.5` for other/unknown classifications. |
 | `status` | string | Current request status. |
 | `submitted_at` | timestamp | Submission time. |
 | `decided_at` | timestamp or null | Decision time, if decided. |
 | `created_at` | timestamp | Record creation time. |
 | `updated_at` | timestamp | Record last-update time. |
+
+`business_hours` uses the request's `employment_type_snapshot` first and falls
+back to the employee's current private employment classification when the
+snapshot is absent. If neither identifies `full_time`, the existing 7.5-hour
+fallback applies. It uses the recorded `business_days` value: current leave
+duration counts Monday–Friday and does not deduct Victorian public holidays.
+Saved `working_weekdays` and `working_day_times` do not change this calculation.
+For example, a two-business-day full-time request with no recorded `hours`
+returns `hours: null` and `business_hours: 15.2`. This reporting value does not
+write to payroll or change leave balances.
 
 ### `leave_events`
 

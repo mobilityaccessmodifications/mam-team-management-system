@@ -163,6 +163,18 @@ verifies the schema, merge the reviewed PR into `main` and verify the MAM
 Vercel production deployment. Ask the Maton/Power BI owner to refresh the
 existing connection and confirm the two fields appear; do not rotate its key.
 
+### Analytics API leave business hours
+
+The `leave_requests` dataset exposes `business_hours` alongside the unchanged
+raw `hours` value. Before merging this change, run
+`scripts/deploy-analytics-leave-business-hours.py inspect`, then
+`apply <reviewed-sha256>` through the MAM Supabase credential wrapper. The
+helper verifies the exact MAM project, recorded predecessor, RPC ACL/security
+and private employee-detail boundary; it applies and records only the exact
+reviewed migration. Do not use `supabase db push` to reconcile unrelated
+production ledger drift. Merge the reviewed PR after the migration verifies,
+then verify the fixed Vercel production deployment.
+
 ### Leave request email privacy
 
 Leave request emails include dates, business days, requested hours and status,

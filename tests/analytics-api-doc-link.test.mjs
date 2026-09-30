@@ -21,7 +21,7 @@ test("both API guides document the full analytics response contract", () => {
     "subscriptions.total", "subscriptions.active", "subscriptions.paused", "subscriptions.cancelled", "subscriptions.monthly_cost_aud",
     "employee_id", "first_name", "last_name", "company", "position_title", "employment_status", "started_on", "record_created_at", "record_updated_at",
     "scheduled_employment_end_date", "team", "employment_type", "contract_type", "working_weekdays", "working_day_times",
-    "request_id", "start_date", "end_date", "business_days", "hours", "status", "submitted_at", "decided_at", "updated_at",
+    "request_id", "start_date", "end_date", "business_days", "hours", "business_hours", "status", "submitted_at", "decided_at", "updated_at",
     "event_id", "event_type", "occurred_at", "reminder_id", "milestone", "sequence", "due_date", "notify_date", "needs_review_reason", "attempt_count", "delivered_at", "completed_at",
     "error_code", "custody_id", "asset_id", "asset_code", "asset_type", "asset_status", "assigned_on", "returned_on", "recorded_at",
     "subscription_id", "subscription_code", "service_name", "plan_name", "pricing_model", "billing_cycle", "amount_cents", "currency", "renewal_date", "next_review_on", "responsible_employee_id", "member_count", "changed_fields",
@@ -37,5 +37,22 @@ test("the in-app API guide documents auth, datasets, parameters and pagination",
   const source = readFileSync("src/app/analytics-api-docs/page.tsx", "utf8");
   for (const text of ["Authorization: " + "Bearer", "overview", "employees", "leave_requests", "check_ins", "asset_custody", "subscriptions", "from", "to", "limit", "offset"]) {
     assert.ok(source.includes(text), `API guide is missing ${text}`);
+  }
+});
+
+test("both API guides distinguish recorded hours from computed business_hours", () => {
+  const sources = [
+    readFileSync("src/app/analytics-api-docs/page.tsx", "utf8"),
+    readFileSync("docs/analytics-api.md", "utf8"),
+  ];
+  for (const source of sources) {
+    const normalized = source.toLowerCase();
+    for (const phrase of ["business_hours", "7.6", "7.5", "employment_type_snapshot", "public holidays", "working_weekdays"]) {
+      assert.ok(normalized.includes(phrase), `API guide is missing business-hours rule ${phrase}`);
+    }
+    const fieldLine = source.split(/\r?\n/).find((line) => line.includes("business_hours") && line.includes("7.6"));
+    assert.ok(fieldLine, "API guide must state the business_hours conversion beside its field");
+    assert.match(fieldLine, /business_days\s*×\s*7\.6[^\n]*full_time[^\n]*×\s*7\.5[^\n]*(other|unknown)/i);
+    assert.match(normalized, /employment_type_snapshot.{0,120}(first|checked first).{0,120}(falls back|fallback|current private)/s);
   }
 });
