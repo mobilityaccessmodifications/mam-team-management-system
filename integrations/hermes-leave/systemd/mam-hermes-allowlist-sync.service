@@ -1,0 +1,7 @@
+[Unit]
+Description=Synchronize MAM Hermes WhatsApp allowlist
+
+[Service]
+Type=oneshot
+EnvironmentFile=/home/codex/.config/mam-hermes-allowlist/config.env
+ExecStart=/usr/bin/python3 /home/codex/.hermes/plugins/mam-hermes-leave/allowlist.py sync
