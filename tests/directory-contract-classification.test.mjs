@@ -53,6 +53,15 @@ const draft = {
   company: 'mam', isActive: true,
 };
 
+test('Overseas employment passes through create and update server actions unchanged', async () => {
+  const { actions, calls } = loadActions();
+  await actions.createEmployeeDirectoryRecord({ ...draft, employmentType: 'overseas' });
+  await actions.updateEmployeeDirectoryRecord({ ...draft, employmentType: 'overseas', personId, personVersion: 1, detailVersion: 1 });
+  const writes = calls.filter((call) => /^(create|update)_employee_directory_record/.test(call.name));
+  assert.equal(writes.length, 2);
+  assert.ok(writes.every((call) => call.args.p_employment_type === 'overseas'));
+});
+
 test('creating an employee without a contract type makes no second write', async () => {
   const { actions, calls } = loadActions();
   const result = await actions.createEmployeeDirectoryRecord(draft);

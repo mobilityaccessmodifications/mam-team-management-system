@@ -83,7 +83,7 @@ function laptopSupply(value: unknown): EmployeeLaptopSupply {
 
 function employmentType(value: unknown): EmployeeEmploymentType | "" {
   if (value === null || value === undefined || value === "") return "";
-  if (value === "abn" || value === "casual" || value === "full_time" || value === "part_time") {
+  if (value === "abn" || value === "casual" || value === "full_time" || value === "part_time" || value === "overseas") {
     return value;
   }
   throw new Error(GENERIC_LOAD_ERROR);

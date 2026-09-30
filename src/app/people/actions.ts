@@ -120,7 +120,7 @@ function company(value: unknown): EmployeeDirectoryCompany {
 }
 
 function employmentType(value: unknown): EmployeeEmploymentType {
-  if (value === "abn" || value === "casual" || value === "full_time" || value === "part_time") {
+  if (value === "abn" || value === "casual" || value === "full_time" || value === "part_time" || value === "overseas") {
     return value;
   }
   throw new Error("Choose an employment type.");

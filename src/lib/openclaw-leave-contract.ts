@@ -6,7 +6,7 @@ import { LEAVE_NOTICE_MESSAGE, requiresLeaveNotice } from "./leave-notice";
 // Protocol logic is shared by the route and synthetic transaction tests.
 export const LEAVE_BRIDGE_PATH = "/api/internal/integrations/openclaw/leave";
 const TYPES = ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"];
-const EMPLOYMENT_TYPES = ["abn", "casual", "full_time", "part_time"];
+const EMPLOYMENT_TYPES = ["abn", "casual", "full_time", "part_time", "overseas"];
 const ID = /^[A-Za-z0-9:_-]{1,128}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
@@ -85,7 +85,7 @@ function fields(value: unknown, employee?: Employee, now = Date.now()): LeaveFie
   let availableLeaveTypes: string[] | undefined;
   if (employee) {
     if (!EMPLOYMENT_TYPES.includes(employee.employmentType ?? "")) fail("not_available");
-    availableLeaveTypes = ["casual", "abn"].includes(employee.employmentType!) ? ["Unpaid leave"] : TYPES;
+    availableLeaveTypes = ["casual", "abn", "overseas"].includes(employee.employmentType!) ? ["Unpaid leave"] : TYPES;
     // Resolve eligibility here, without exporting a separate personal profile
     // to the model. Never silently rewrite an explicitly requested paid type.
     if ((v.leaveType === undefined || v.leaveType === "") && availableLeaveTypes.length === 1) v = { ...v, leaveType: "Unpaid leave" };

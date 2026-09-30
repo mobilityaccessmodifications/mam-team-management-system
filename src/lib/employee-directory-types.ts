@@ -1,6 +1,6 @@
 export type EmployeeDirectoryCompany = "mam" | "equipsy";
 export type EmployeeLaptopSupply = "" | "own_laptop" | "mam_laptop";
-export type EmployeeEmploymentType = "abn" | "casual" | "full_time" | "part_time";
+export type EmployeeEmploymentType = "abn" | "casual" | "full_time" | "part_time" | "overseas";
 export type EmployeeContractType = "permanent" | "fixed_term";
 export type EmployeeWorkingWeekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type EmployeeWorkingDayTime = {

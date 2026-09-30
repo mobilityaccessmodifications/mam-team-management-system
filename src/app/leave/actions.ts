@@ -156,7 +156,7 @@ export type LeaveWorkspaceData = {
   canReviewLeave: boolean;
   canViewAllLeave: boolean;
   /** Employment classification is authoritative; ABN/Casual receive Unpaid leave only. */
-  employmentType: "abn" | "casual" | "full_time" | "part_time" | null;
+  employmentType: "abn" | "casual" | "full_time" | "part_time" | "overseas" | null;
   hasPaidLeaveEntitlement: boolean;
   availableLeaveTypes: Array<{
     value: "Annual leave" | "Sick leave" | "Carer's leave" | "Unpaid leave";
