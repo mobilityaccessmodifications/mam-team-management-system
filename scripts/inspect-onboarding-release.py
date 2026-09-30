@@ -6,6 +6,7 @@ import runpy
 import subprocess
 import sys
 from urllib.error import HTTPError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,7 @@ PROJECT = 'mam-team-management-system'
 SCOPE = 'ai-7033s-projects'
 PROJECT_ID = 'prj_FRkEjfAFHj2FKfoYaowGMgicl1hu'
 WORKFLOW = 'MAM People Hub - Onboarding Credentials (Live)'
+WEBHOOK_CREDENTIAL = 'MAM People Hub - Onboarding Webhook Header'
 CREDENTIALS = {
     'vFEolsXoEOOxNyan': ('Microsoft Outlook account - hr@mobilityaccess.com.au', 'microsoftOutlookOAuth2Api'),
     'tGtpwegru8OxtdCt': ('MAM Team Management - Notification Webhook Header', 'httpHeaderAuth'),
@@ -37,20 +39,32 @@ def api(config, path):
         return json.load(response)
 
 
-def inspect_n8n(config):
-    credentials = api(config, 'credentials').get('data', [])
-    workflows = []
+def list_all(config, resource):
+    items = []
     cursor = None
+    seen = set()
     while True:
-        page = api(config, 'workflows?limit=250' + ('&cursor=' + cursor if cursor else ''))
-        workflows.extend(page.get('data', []))
+        page = api(config, resource + '?limit=250' + ('&cursor=' + quote(cursor, safe='') if cursor else ''))
+        if not isinstance(page, dict) or not isinstance(page.get('data'), list):
+            raise RuntimeError('MAM n8n list response is incomplete')
+        items.extend(page['data'])
         cursor = page.get('nextCursor')
         if not cursor:
-            break
+            return items
+        if cursor in seen:
+            raise RuntimeError('MAM n8n pagination repeated')
+        seen.add(cursor)
+
+
+def inspect_n8n(config):
+    credentials = list_all(config, 'credentials')
+    workflows = list_all(config, 'workflows')
     for ident, (name, kind) in CREDENTIALS.items():
         matches = [c for c in credentials if c.get('id') == ident]
         if len(matches) != 1 or matches[0].get('name') != name or matches[0].get('type') != kind:
             raise RuntimeError('Expected MAM n8n credential identity differs')
+    if any(c.get('name') == WEBHOOK_CREDENTIAL for c in credentials):
+        raise RuntimeError('Onboarding header credential name already exists; inspect it before staging')
     collisions = [w for w in workflows if w.get('name') == WORKFLOW]
     if collisions:
         raise RuntimeError('Onboarding workflow name already exists; inspect it before staging')
@@ -61,10 +75,16 @@ def inspect_n8n(config):
                for n in detail.get('nodes', [])):
             raise RuntimeError('Onboarding webhook path already exists; inspect it before staging')
     try:
-        projects = api(config, 'projects').get('data', [])
+        projects = list_all(config, 'projects')
     except HTTPError as error:
         if error.code == 403:
-            return 'blocked: MAM n8n project listing denied (HTTP 403); project ownership cannot be verified'
+            try:
+                message = json.loads(error.read()).get('message', '')
+            except (ValueError, OSError):
+                message = ''
+            if 'Your license does not allow for feat:projectRole:admin' in message:
+                return 'unsupported: n8n license excludes projectRole:admin; project management/listing unavailable (not an invalid API key)'
+            return 'blocked: project listing HTTP 403 (cause unverified; workflow and credential reads do not establish project permissions)'
         raise
     if not projects:
         return 'blocked: no accessible MAM n8n project returned'
@@ -104,6 +124,7 @@ if __name__ == '__main__':
     except RuntimeError as error:
         print(str(error) if str(error) in {
             'Expected MAM n8n credential identity differs',
+            'Onboarding header credential name already exists; inspect it before staging',
             'Onboarding workflow name already exists; inspect it before staging',
             'Onboarding webhook path already exists; inspect it before staging',
             'MAM Vercel project identity differs',
