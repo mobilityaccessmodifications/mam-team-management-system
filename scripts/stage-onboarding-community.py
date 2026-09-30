@@ -158,12 +158,12 @@ def vercel_state():
     return {key: group[0] for key, group in selected.items()}
 
 
-def verify_var(name, value=None, secret=False):
+def verify_var(name, secret=False):
     row = vercel_state().get(name)
-    if not row or (not secret and row.get('value') != value):
-        raise RuntimeError('Vercel production variable readback mismatch: ' + name)
-    if secret and row.get('type') not in ('encrypted', 'sensitive') and row.get('visibility') != 'sensitive':
-        raise RuntimeError('Vercel production secret type mismatch')
+    if not row or row.get('type') != ('sensitive' if secret else 'encrypted') or (
+        secret and row.get('visibility') != 'secret'
+    ):
+        raise RuntimeError('Vercel production variable metadata mismatch: ' + name)
 
 
 def workflow_payload(credential_id):
@@ -187,13 +187,15 @@ def stage():
     origin = config['N8N_BASE_URL'].rstrip('/')
     expected_vars = vercel_values(origin)
     vars_before = vercel_state()
-    for key, expected in expected_vars.items():
-        if key in vars_before and vars_before[key].get('value') != expected:
-            raise RuntimeError('existing Vercel variable differs: ' + key)
-    if 'ONBOARDING_CREDENTIAL_WEBHOOK_SECRET' in vars_before and values.get(DONE_KEY) != 'yes':
-        raise RuntimeError('unbound Vercel secret: manual investigation required')
-    if values.get(DONE_KEY) == 'yes' and 'ONBOARDING_CREDENTIAL_WEBHOOK_SECRET' not in vars_before:
-        raise RuntimeError('bound Vercel secret disappeared')
+    for key in expected_vars:
+        if key in vars_before:
+            verify_var(key)
+    name = 'ONBOARDING_CREDENTIAL_WEBHOOK_SECRET'
+    if name in vars_before:
+        verify_var(name, secret=True)
+        raise RuntimeError('existing Vercel secret value cannot be proven: manual reconciliation required')
+    if values.get(DONE_KEY):
+        raise RuntimeError('Vercel secret binding uncertain: manual reconciliation required')
     if not secret:
         secret = base64.urlsafe_b64encode(secrets.token_bytes(48)).decode().rstrip('=')
         append_env(SECRET_KEY, secret)
@@ -217,19 +219,19 @@ def stage():
     verify_workflow(expected, api(config, 'GET', 'workflows/' + workflow_id))
     for name, value in expected_vars.items():
         if name not in vercel_state():
-            vercel('env', 'add', name, 'production', '--yes', input_value=value)
-        verify_var(name, value)
+            vercel('env', 'add', name, 'production', '--no-sensitive', '--yes', input_value=value)
+        verify_var(name)
     name = 'ONBOARDING_CREDENTIAL_WEBHOOK_SECRET'
-    if name not in vercel_state():
-        vercel('env', 'add', name, 'production', '--sensitive', '--yes', input_value=secret)
-        verify_var(name, secret=True)
-        append_env(DONE_KEY, 'yes')
-    else:
-        verify_var(name, secret=True)
+    if name in vercel_state():
+        raise RuntimeError('Vercel secret appeared before add: manual reconciliation required')
+    vercel('env', 'add', name, 'production', '--sensitive', '--yes', input_value=secret)
+    verify_var(name, secret=True)
+    append_env(DONE_KEY, 'yes')
     verify_workflow(expected, api(config, 'GET', 'workflows/' + workflow_id))
-    print(json.dumps({'stage': 'verified', 'n8nProject': 'default personal', 'workflowId': workflow_id,
+    print(json.dumps({'stage': 'metadata-verified', 'vercelValueReadback': 'unverified',
+                      'n8nProject': 'default personal', 'workflowId': workflow_id,
                       'credentialId': credential_id, 'active': False, 'vercelProject': inspector.SCOPE + '/' + inspector.PROJECT,
-                      'environment': 'production', 'emailMode': 'disabled'}))
+                      'environment': 'production', 'requestedEmailMode': 'disabled'}))
 
 
 if __name__ == '__main__':

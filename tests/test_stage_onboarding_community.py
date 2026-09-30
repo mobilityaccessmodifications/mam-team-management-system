@@ -3,6 +3,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import base64
+import json
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts' / 'stage-onboarding-community.py'
 spec = importlib.util.spec_from_file_location('stage_onboarding', SCRIPT)
@@ -64,6 +66,28 @@ class StageTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'binding'):
             module.parse_secret_state({'ONBOARDING_CREDENTIAL_STAGE_SECRET': 'not-a-secret'})
 
+    def test_encrypted_envelope_is_not_compared_as_plaintext(self):
+        envelope = base64.b64encode(json.dumps({'v': 1, 'c': 'ciphertext', 'k': 'key'}).encode()).decode()
+        row = {'type': 'encrypted', 'target': ['production'], 'value': envelope}
+        with patch.object(module, 'vercel_state', return_value={'ONBOARDING_CREDENTIAL_EMAIL_MODE': row}):
+            module.verify_var('ONBOARDING_CREDENTIAL_EMAIL_MODE')
+        for invalid in ({'type': 'sensitive', 'target': ['production']}, None):
+            with self.subTest(invalid=invalid), patch.object(module, 'vercel_state', return_value={
+                'ONBOARDING_CREDENTIAL_EMAIL_MODE': invalid}):
+                with self.assertRaisesRegex(RuntimeError, 'metadata mismatch'):
+                    module.verify_var('ONBOARDING_CREDENTIAL_EMAIL_MODE')
+
+    def test_secret_requires_both_sensitive_type_and_secret_visibility(self):
+        name = 'ONBOARDING_CREDENTIAL_WEBHOOK_SECRET'
+        for row in ({'type': 'encrypted', 'visibility': 'secret'},
+                    {'type': 'sensitive', 'visibility': 'sensitive'},
+                    {'type': 'sensitive'}):
+            with self.subTest(row=row), patch.object(module, 'vercel_state', return_value={name: row}):
+                with self.assertRaisesRegex(RuntimeError, 'metadata mismatch'):
+                    module.verify_var(name, secret=True)
+        with patch.object(module, 'vercel_state', return_value={name: {'type': 'sensitive', 'visibility': 'secret'}}):
+            module.verify_var(name, secret=True)
+
     def test_staging_uses_only_personal_post_and_disabled_scoped_env(self):
         config = {'N8N_INSTANCE_LABEL': 'MAM', 'N8N_BASE_URL': 'https://synthetic.example.test',
                   'N8N_API_KEY': 'synthetic-api-key'}
@@ -84,7 +108,7 @@ class StageTests(unittest.TestCase):
         def stage_var(*args, input_value=None):
             calls.append(('VERCEL', args, input_value))
             name = args[2]
-            state[name] = {'value': input_value if name != 'ONBOARDING_CREDENTIAL_WEBHOOK_SECRET' else None,
+            state[name] = {'value': None, 'visibility': 'secret' if name.endswith('SECRET') else None,
                            'target': ['production'], 'type': 'sensitive' if name.endswith('SECRET') else 'encrypted'}
         with patch.object(module.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='')) as verifier, \
              patch.object(module.inspector.runpy, 'run_path', return_value={'load_local_env': lambda: config}), \
@@ -101,13 +125,60 @@ class StageTests(unittest.TestCase):
         self.assertEqual([p for m, p, _ in calls if m == 'POST'], ['credentials', 'workflows'])
         self.assertNotIn('projectId', calls[0][2])
         self.assertNotIn('active', calls[1][2])
-        self.assertEqual(state['ONBOARDING_CREDENTIAL_EMAIL_MODE']['value'], 'disabled')
-        self.assertEqual(state['ONBOARDING_CREDENTIAL_WEBHOOK_URL']['value'],
-                         'https://synthetic.example.test/webhook/' + module.WEBHOOK_PATH)
+        self.assertEqual(state['ONBOARDING_CREDENTIAL_EMAIL_MODE']['type'], 'encrypted')
+        self.assertEqual([input_value for method, args, input_value in calls if method == 'VERCEL' and
+                          args[2] == 'ONBOARDING_CREDENTIAL_EMAIL_MODE'], ['disabled'])
         self.assertEqual(bindings[module.DONE_KEY], 'yes')
         self.assertEqual(len(bindings[module.SECRET_KEY]), 64)
         self.assertTrue(all('production' in args and '--yes' in args
                             for method, args, _ in calls if method == 'VERCEL'))
+        self.assertTrue(all('--no-sensitive' in args for method, args, _ in calls if method == 'VERCEL' and
+                            args[2] != 'ONBOARDING_CREDENTIAL_WEBHOOK_SECRET'))
+        self.assertTrue(all('--sensitive' in args for method, args, _ in calls if method == 'VERCEL' and
+                            args[2] == 'ONBOARDING_CREDENTIAL_WEBHOOK_SECRET'))
+
+    def test_existing_secret_with_marker_stops_before_writes(self):
+        config = {'N8N_INSTANCE_LABEL': 'MAM', 'N8N_BASE_URL': 'https://synthetic.example.test',
+                  'N8N_API_KEY': 'synthetic-api-key', module.DONE_KEY: 'yes'}
+        row = {'type': 'sensitive', 'visibility': 'secret', 'target': ['production']}
+        with patch.object(module.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='')), \
+             patch.object(module.inspector.runpy, 'run_path', return_value={'load_local_env': lambda: config}), \
+             patch.object(module, 'inspect_n8n', return_value=(None, None)), \
+             patch.object(module, 'vercel_state', return_value={'ONBOARDING_CREDENTIAL_WEBHOOK_SECRET': row}), \
+             patch.object(module, 'api') as api, patch.object(module, 'vercel') as vercel, \
+             patch.object(module, 'append_env') as append:
+            with self.assertRaisesRegex(RuntimeError, 'manual reconciliation'):
+                module.stage()
+        api.assert_not_called()
+        vercel.assert_not_called()
+        append.assert_not_called()
+
+    def test_interrupted_secret_readback_never_records_marker_and_retry_stops(self):
+        config = {'N8N_INSTANCE_LABEL': 'MAM', 'N8N_BASE_URL': 'https://synthetic.example.test',
+                  'N8N_API_KEY': 'synthetic-api-key', module.SECRET_KEY: 'a' * 64}
+        state = {}
+        expected = {'name': module.inspector.WORKFLOW, 'active': False, 'nodes': [],
+                    'connections': {}, 'settings': {}}
+        def add(*args, input_value=None):
+            if args[2] == 'ONBOARDING_CREDENTIAL_WEBHOOK_SECRET':
+                state[args[2]] = {'type': 'encrypted', 'visibility': 'secret', 'target': ['production']}
+            else:
+                state[args[2]] = {'type': 'encrypted', 'target': ['production']}
+        with patch.object(module.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='')), \
+             patch.object(module.inspector.runpy, 'run_path', return_value={'load_local_env': lambda: config}), \
+             patch.object(module, 'inspect_n8n', return_value=('synthetic-id', 'synthetic-workflow')), \
+             patch.object(module, 'workflow_payload', return_value=expected), \
+             patch.object(module, 'api', return_value=dict(expected, id='synthetic-workflow')), \
+             patch.object(module, 'vercel_state', side_effect=lambda: state.copy()), \
+             patch.object(module, 'vercel', side_effect=add) as vercel, \
+             patch.object(module, 'append_env') as append:
+            with self.assertRaisesRegex(RuntimeError, 'metadata mismatch'):
+                module.stage()
+            append.assert_not_called()
+            count = vercel.call_count
+            with self.assertRaisesRegex(RuntimeError, 'metadata mismatch'):
+                module.stage()
+            self.assertEqual(vercel.call_count, count)
 
     def test_vercel_helper_explicitly_scopes_project_and_account(self):
         with patch.object(module.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='')) as run:
