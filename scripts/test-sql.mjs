@@ -11,16 +11,25 @@ console.log(`Disposable PostgreSQL socket: ${socket}`);
 try {
   const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (replay.status !== 0) throw new Error("Full migration replay failed");
+  command("createdb", ["-h", socket, "-p", "55439", "-U", "postgres", "--template=mam_test_replay", "mam_test_offboarding_admin"]);
+  const offboardingRace = spawnSync(process.execPath, [path.join(sourceRoot, "tests/run-offboarding-admin-concurrency.mjs"), socket, "mam_test_offboarding_admin"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
+  if (offboardingRace.status !== 0) throw new Error("Offboarding administrator PostgreSQL concurrency tests failed");
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/leave-register-read-grant.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/analytics-api-employees.sql")]);
   console.log("PASS: Analytics employees dataset exposes names without private contacts; RPC remains service-role-only");
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/notification-delivery-receipts.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/new-starter-day-one.sql")]);
+  command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/onboarding-credentials.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/two-week-check-in.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/check-in-review-outcomes.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/six-month-check-in-review.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/six-month-casual-check-in.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/employee-team-directory.sql")]);
+  command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/reporting-calendar-scope.sql")]);
+  command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/scheduled-offboarding.sql")]);
+  command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/directory-role.sql")]);
+  const directoryRace = spawnSync(process.execPath, [path.join(sourceRoot, "tests/run-directory-role-concurrency.mjs"), socket, "mam_test_replay"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
+  if (directoryRace.status !== 0) throw new Error("Directory role PostgreSQL concurrency tests failed");
   const receipts = spawnSync(process.execPath, [path.join(sourceRoot, "tests/run-notification-delivery-sql.mjs"),
     socket, "mam_test_notification_concurrency"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (receipts.status !== 0) throw new Error("Durable notification PostgreSQL concurrency tests failed");

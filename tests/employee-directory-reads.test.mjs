@@ -18,7 +18,7 @@ const personId = '10000000-0000-4000-8000-000000000001';
 const row = {
   person_id: personId, person_version: 3, detail_version: 4, company_key: 'mam', is_active: true,
   first_name: 'Taylor', last_name: 'Synthetic', full_name: 'Taylor Synthetic', position_title: 'Coordinator',
-  team_name: 'MAM admin', manager_id: null, manager_name: null, work_email: null, personal_email: null, phone: null,
+  team_name: 'Operation & Accounts', manager_id: null, manager_name: null, work_email: null, personal_email: null, phone: null,
   country: null, address: null, date_of_birth: null, started_date: '2026-09-01', scheduled_employment_end_date: null,
   working_weekdays: null, working_day_times: [], archive_reason: null, employment_type: 'full_time',
   has_paid_leave_entitlement: true, laptop_supplied: null, laptop_id: null, mouse_id: null, keyboard_id: null, asset_tags: [],

@@ -35,11 +35,14 @@ import {
   archiveEmployeeDirectoryRecord,
   deleteEmployeeDirectoryRecord,
   listEmployeeDirectoryRecords,
+  listEmployeeDirectoryRoles,
+  updateEmployeeDirectoryRole,
+  type DirectoryRole,
+  type DirectoryStoredRole,
   updateEmployeeDirectoryRecord,
 } from "@/app/people/actions";
 import { EmployeeDeviceAssignments } from "@/components/employee-device-assignments";
 import { EMPLOYEE_TEAMS } from "@/lib/employee-teams";
-import { EmployeePicker } from "@/components/employee-picker";
 import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/employee-directory.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
@@ -335,6 +338,8 @@ export function EmployeeDirectory({
   refreshKey,
 }: EmployeeDirectoryProps) {
   const [records, setRecords] = useState<EmployeeDirectoryRecord[]>(initialRecords ?? []);
+  const [roles, setRoles] = useState<Record<string, DirectoryStoredRole | null>>({});
+  const [roleLoadError, setRoleLoadError] = useState("");
   const [loading, setLoading] = useState(!initialRecords);
   const [loadError, setLoadError] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -428,6 +433,16 @@ export function EmployeeDirectory({
       cancelled = true;
     };
   }, [refreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listEmployeeDirectoryRoles().then((response) => {
+      if (!cancelled) { setRoles(response); setRoleLoadError(""); }
+    }).catch(() => {
+      if (!cancelled) { setRoles({}); setRoleLoadError("Roles could not be loaded. Refresh and try again."); }
+    });
+    return () => { cancelled = true; };
+  }, [loadAttempt, refreshKey]);
 
   const statusRecords = useMemo(
     () => records.filter((record) => directoryFilter === "active" ? record.isActive : !record.isActive),
@@ -571,8 +586,8 @@ export function EmployeeDirectory({
       setRecords((current) => current.map((candidate) => candidate.personId === result.record.personId ? result.record : candidate));
       setEditor(editEditor(result.record));
       setEndDatePrompt(null);
-      setNotice("Employment ended, portal account disabled and profile archived.");
-      setDirectoryFilter("archived");
+      setNotice(result.record.isActive ? "Offboarding scheduled for the day after the final working day." : "Employment ended, portal account disabled and profile archived.");
+      if (!result.record.isActive) setDirectoryFilter("archived");
       await onRecordsChanged?.();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "The employee profile could not be archived.");
@@ -735,7 +750,13 @@ export function EmployeeDirectory({
           mobileModal={isMobileSheet}
           editor={activeEditor}
           currentRecord={currentRecord}
-          records={records}
+          role={activeEditor.mode === "edit" ? roles[activeEditor.personId] : null}
+          roleLoaded={activeEditor.mode === "edit" && Object.hasOwn(roles, activeEditor.personId)}
+          roleLoadError={roleLoadError}
+          onRoleSaved={(role) => {
+            if (activeEditor.mode === "edit") setRoles((current) => ({ ...current, [activeEditor.personId]: role }));
+            setNotice("Role saved.");
+          }}
           saving={saving}
           error={saveError}
           onChange={handleDraftChange}
@@ -755,12 +776,12 @@ export function EmployeeDirectory({
             <button type="button" className={styles.modalClose} onClick={closeEndDatePrompt} disabled={archiving} aria-label="Close"><X size={17} /></button>
           </header>
           <div className={styles.modalBody}>
-            <p>This archives the employee and disables sign-in. Return their devices first.</p>
+            <p>A future end date keeps the employee and sign-in active through that day; offboarding runs after Melbourne midnight. Return their devices first.</p>
             <label className={styles.modalField}><span>Employment end date <b aria-hidden="true">*</b></span><input ref={endDateInputRef} type="date" value={endDatePrompt.date} onChange={(event) => setEndDatePrompt((current) => current ? { ...current, date: event.target.value } : current)} required /></label>
             <label className={styles.modalField}><span>Reason for leaving <b aria-hidden="true">*</b></span><select value={endDatePrompt.reason} onChange={(event) => setEndDatePrompt((current) => current ? { ...current, reason: event.target.value } : current)} required aria-required="true"><option value="" disabled>Select a reason</option>{employmentEndReasons.map((reason) => <option key={reason.value} value={reason.value}>{reason.label}</option>)}</select></label>
             {saveError ? <p className={styles.modalError} role="alert">{saveError}</p> : null}
           </div>
-          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={closeEndDatePrompt} disabled={archiving}>Cancel</button><button type="button" className={styles.dangerAction} onClick={() => void confirmEndDate()} disabled={archiving}><UserMinus size={15} />{archiving ? "Ending employment…" : "End employment & disable account"}</button></footer>
+          <footer className={styles.modalActions}><button type="button" className={styles.secondaryAction} onClick={closeEndDatePrompt} disabled={archiving}>Cancel</button><button type="button" className={styles.dangerAction} onClick={() => void confirmEndDate()} disabled={archiving}><UserMinus size={15} />{archiving ? "Saving end date…" : "Confirm end date"}</button></footer>
         </section>
       </ModalBackdrop> : null}
 
@@ -861,7 +882,10 @@ function EmployeeEditor({
   mobileModal,
   editor,
   currentRecord,
-  records,
+  role,
+  roleLoaded,
+  roleLoadError,
+  onRoleSaved,
   saving,
   error,
   onChange,
@@ -876,7 +900,10 @@ function EmployeeEditor({
   mobileModal: boolean;
   editor: EditorState;
   currentRecord: EmployeeDirectoryRecord | null;
-  records: EmployeeDirectoryRecord[];
+  role: DirectoryStoredRole | null | undefined;
+  roleLoaded: boolean;
+  roleLoadError: string;
+  onRoleSaved: (role: DirectoryRole) => void;
   saving: boolean;
   error: string;
   onChange: (key: keyof EmployeeDirectoryDraft, value: EmployeeDirectoryDraft[keyof EmployeeDirectoryDraft]) => void;
@@ -891,11 +918,26 @@ function EmployeeEditor({
   onRequestDelete?: () => void;
 }) {
   const managerInputId = useId();
-  const managerOptions = records
-    .filter((record) => record.isActive && record.personId !== currentRecord?.personId)
-    .sort((first, second) => first.fullName.localeCompare(second.fullName));
   const isCreate = editor.mode === "create";
+  const [roleSelection, setRoleSelection] = useState<{ base: DirectoryStoredRole | null; selected: DirectoryRole } | null>(null);
+  const selectedRole = roleSelection?.base === (role ?? null) ? roleSelection?.selected ?? role ?? null : role ?? null;
+  const [roleSaving, setRoleSaving] = useState(false);
+  const [roleError, setRoleError] = useState("");
   const [editingSchedule, setEditingSchedule] = useState(isCreate);
+
+  async function saveRole() {
+    if (editor.mode !== "edit" || !role || !selectedRole || selectedRole === "hr" || roleSaving || selectedRole === role) return;
+    setRoleSaving(true);
+    setRoleError("");
+    try {
+      const saved = await updateEmployeeDirectoryRole({ personId: editor.personId, role: selectedRole, expectedRole: role });
+      onRoleSaved(saved);
+    } catch (error) {
+      setRoleError(error instanceof Error ? error.message : "Role could not be saved.");
+    } finally {
+      setRoleSaving(false);
+    }
+  }
 
   return <section className={styles.editor} ref={dialogRef} role={mobileModal ? "dialog" : undefined} aria-modal={mobileModal ? "true" : undefined} aria-label={isCreate ? "Add employee" : "Edit employee"} tabIndex={-1}>
     <header className={styles.editorHeader}>
@@ -927,20 +969,29 @@ function EmployeeEditor({
               {EMPLOYEE_TEAMS.map((team) => <option key={team} value={team}>{team}</option>)}
             </select>
           </Field>
-          <div className={styles.pickerField}>
-            <label htmlFor={managerInputId}>Reports to{isCreate && editor.draft.isActive ? <b aria-hidden="true"> *</b> : null}</label>
-            <EmployeePicker
-              id={managerInputId}
-              ariaLabel="Reports to"
-              name="managerId"
-              assignees={managerOptions}
-              value={editor.draft.managerId ?? ""}
-              onValueChange={(personId) => onChange("managerId", personId || null)}
-              placeholder="No manager assigned"
-              required={isCreate && editor.draft.isActive}
-              disabled={saving}
-            />
-          </div>
+          {!isCreate ? <div className={styles.pickerField}>
+            <label htmlFor={managerInputId}>Role</label>
+            <select id={managerInputId} value={selectedRole ?? ""} disabled={!currentRecord?.isActive || !roleLoaded || !role || saving || roleSaving} onChange={(event) => { setRoleSelection({ base: role ?? null, selected: event.target.value as DirectoryRole }); setRoleError(""); }}>
+              {role === "hr" ? <option value="hr">Legacy HR</option> : null}
+              {!role ? <option value="">No active portal account</option> : null}
+              <option value="employee">Team member</option>
+              <option value="manager">Manager</option>
+              <option value="system_admin">Admin</option>
+            </select>
+          </div> : null}
+          {!isCreate && selectedRole ? <div className={`${styles.fullSpan} ${styles.roleImpact}`} role="status">
+            <strong>Role impact</strong>
+            <p>{selectedRole === "hr"
+              ? "Legacy HR: organisation chart and subscription register read access, but no current Directory or Accounts administration from this role. Switching to Team member removes those operational views."
+              : selectedRole === "employee"
+              ? "Team member: own profile, leave and calendar, and a limited team directory. No organisation chart, subscription register, team approvals or administration from this role."
+              : selectedRole === "manager"
+                ? "Manager: organisation chart and read-only subscription register, reporting-team leave visibility, eligible leave approvals and check-in reviews. Authority follows the reporting tree."
+                : "Admin: full Directory, Accounts and organisation editing, payroll import and subscription management, plus operational oversight and administration."}</p>
+            <p>Separate explicit permission grants provide additional access where applicable and are not changed here. Reporting relationships are edited in the Organisation chart.</p>
+            {roleError ? <p role="alert">{roleError}</p> : null}
+            <button type="button" className={styles.secondaryAction} onClick={() => void saveRole()} disabled={saving || roleSaving || !currentRecord?.isActive || !role || selectedRole === "hr" || selectedRole === role}>Save role</button>
+          </div> : !isCreate && roleLoadError ? <p className={`${styles.fullSpan} ${styles.formError}`} role="alert">{roleLoadError}</p> : null}
           <Field label="Company">
             <select value={editor.draft.company} onChange={(event) => onChange("company", event.target.value)}>
               <option value="mam">MAM</option>

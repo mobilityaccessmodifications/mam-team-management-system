@@ -19,7 +19,7 @@ insert into public.internal_org_people(id,full_name,company_key,position_title,a
 ('90000000-0000-4000-8000-000000000003','Synthetic Peer','mam','Synthetic role','90000000-0000-4000-8000-000000000003'),
 ('90000000-0000-4000-8000-000000000005','Synthetic Admin','mam','Synthetic role','90000000-0000-4000-8000-000000000005');
 insert into private.employee_directory_details(person_id,employment_type,work_email,first_name,last_name,team_name)
-select id,'full_time',login_name||'@example.test','Synthetic','Person','MAM admin' from public.profiles where login_name in ('viewer','owner','peer');
+select id,'full_time',login_name||'@example.test','Synthetic','Person','Operation & Accounts' from public.profiles where login_name in ('viewer','owner','peer');
 insert into private.leave_approval_grants(reviewer_user_id,scope_kind,reviewer_label,priority)
 values ('90000000-0000-4000-8000-000000000005','global','Synthetic Admin',100);
 select pg_temp.set_test_actor('90000000-0000-4000-8000-000000000002');

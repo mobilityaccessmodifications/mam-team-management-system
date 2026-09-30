@@ -1,5 +1,7 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
+import { createPortalAccount } from "@/app/accounts/actions";
 import { requireEmployeeTeam } from "@/lib/employee-teams";
 import { revalidatePath } from "next/cache";
 
@@ -327,6 +329,50 @@ export async function getOrganisationPersonWorkEmail(
   return getOrganisationPersonWorkEmailForMember(personId);
 }
 
+export type DirectoryRole = "employee" | "manager" | "system_admin";
+export type DirectoryStoredRole = DirectoryRole | "hr";
+
+export async function listEmployeeDirectoryRoles(): Promise<Record<string, DirectoryStoredRole | null>> {
+  const { supabase } = await requireEmployeeDirectoryManager();
+  const { data, error } = await supabase.rpc("list_employee_directory_roles");
+  if (error || !Array.isArray(data)) throw new Error("Employee roles could not be loaded. Refresh and try again.");
+  const roles: Record<string, DirectoryStoredRole | null> = {};
+  for (const row of data) {
+    if (!row || typeof row.person_id !== "string" || !UUID_PATTERN.test(row.person_id)) throw new Error(GENERIC_SAVE_ERROR);
+    if (row.app_role !== null && row.app_role !== "employee" && row.app_role !== "manager" && row.app_role !== "system_admin" && row.app_role !== "hr") throw new Error(GENERIC_SAVE_ERROR);
+    roles[row.person_id] = row.app_role;
+  }
+  return roles;
+}
+
+export async function updateEmployeeDirectoryRole(input: {
+  personId: string;
+  role: DirectoryRole;
+  expectedRole: DirectoryStoredRole;
+}): Promise<DirectoryRole> {
+  const value = inputObject(input);
+  if (typeof value.personId !== "string" || !UUID_PATTERN.test(value.personId)
+    || (value.role !== "employee" && value.role !== "manager" && value.role !== "system_admin")
+    || (value.expectedRole !== "employee" && value.expectedRole !== "manager" && value.expectedRole !== "system_admin" && value.expectedRole !== "hr")) {
+    throw new Error("Choose a valid role and refresh the employee record.");
+  }
+  const { supabase } = await requireEmployeeDirectoryManager();
+  const { data: allowed, error: accessError } = await supabase.rpc("can_manage_portal_accounts");
+  if (accessError || allowed !== true) throw new Error("Only a System Admin can change roles.");
+  const { data, error } = await supabase.rpc("update_employee_directory_role", {
+    p_person_id: value.personId,
+    p_role: value.role,
+    p_expected_role: value.expectedRole,
+  });
+  if (error || data !== value.role) {
+    throw new Error(error?.code === "40001"
+      ? "Role has changed. Refresh the directory and try again."
+      : "Role could not be saved. Refresh and try again.");
+  }
+  revalidatePath("/");
+  return data as DirectoryRole;
+}
+
 export async function createEmployeeDirectoryRecord(
   input: CreateEmployeeDirectoryInput,
 ): Promise<EmployeeDirectoryMutationResult> {
@@ -335,13 +381,13 @@ export async function createEmployeeDirectoryRecord(
   const { p_contract_type: selectedContractType, ...directoryValues } = values;
   if (values.p_is_active) {
     if (!values.p_started_date) throw new Error("A start date is required for a new active employee.");
-    if (!values.p_manager_id) throw new Error("A direct manager is required for a new active employee.");
     if (!values.p_work_email && !values.p_personal_email) {
       throw new Error("Enter at least one work or personal email for the new employee.");
     }
   }
   let { data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule_times", {
     ...directoryValues,
+    p_manager_id: null,
     p_sort_order: 0,
   });
   if (isMissingWorkScheduleRpc(error) && values.p_working_day_times.length === 0) {
@@ -349,12 +395,14 @@ export async function createEmployeeDirectoryRecord(
     void p_working_day_times;
     ({ data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule", {
       ...weekdayValues,
+      p_manager_id: null,
       p_sort_order: 0,
     }));
   }
   if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
     ({ data, error } = await supabase.rpc("create_employee_directory_record_with_employment_type", {
       ...legacyDraftValues({ ...directoryValues, p_contract_type: selectedContractType }),
+      p_manager_id: null,
       p_sort_order: 0,
     }));
   }
@@ -367,10 +415,22 @@ export async function createEmployeeDirectoryRecord(
   // A new person has no classification, so only an explicit choice needs the
   // second call. The employee already exists; never turn its failure into a
   // save error that invites a duplicate create.
-  const warning = selectedContractType === null
+  let warning = selectedContractType === null
     ? undefined
     : await saveContractClassification(supabase, personId, selectedContractType);
   const record = await findEmployeeDirectoryRecord(supabase, personId);
+  if (values.p_is_active) {
+    try {
+      await createPortalAccount({
+        personId,
+        accountVersion: record.personVersion,
+        loginName: values.p_work_email ?? values.p_personal_email!,
+        newPassword: `${randomBytes(24).toString("base64url")}aA1!`,
+      });
+    } catch {
+      warning = [warning, "Employee saved, but account creation needs administrator review. Do not create the employee again."].filter(Boolean).join(" ");
+    }
+  }
   revalidatePath("/");
   return warning ? { record, warning } : { record };
 }
@@ -385,6 +445,8 @@ export async function updateEmployeeDirectoryRecord(
   const { supabase } = await requireEmployeeDirectoryManager();
   const values = validateDraft(inputValue);
   const { p_contract_type: selectedContractType, ...directoryValues } = values;
+  const currentRecord = await findEmployeeDirectoryRecord(supabase, inputValue.personId);
+  directoryValues.p_manager_id = currentRecord.managerId;
   let { data, error } = await supabase.rpc("update_employee_directory_record_with_work_schedule_times", {
     ...directoryValues,
     p_person_id: inputValue.personId,
@@ -485,6 +547,21 @@ export async function archiveEmployeeDirectoryRecord(input: {
     const expectedDetailVersion = version(inputValue.detailVersion);
 
     const { supabase, actorUserId } = await requireEmployeeDirectoryManager();
+    const parts = new Intl.DateTimeFormat("en-AU", { timeZone: "Australia/Melbourne", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+    const today = (key: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === key)?.value ?? "";
+    if (endDate > `${today("year")}-${today("month")}-${today("day")}`) {
+      const { data, error } = await supabase.rpc("schedule_employee_offboarding", {
+        p_person_id: inputValue.personId,
+        p_expected_person_version: expectedPersonVersion,
+        p_expected_detail_version: expectedDetailVersion,
+        p_end_date: endDate,
+        p_reason: reason,
+      });
+      if (error || data !== inputValue.personId) return { ok: false, message: error?.message ?? "The offboarding schedule could not be saved. Refresh and try again." };
+      const record = await findEmployeeDirectoryRecord(supabase, inputValue.personId);
+      revalidatePath("/");
+      return { ok: true, record };
+    }
     admin = createAdminClient();
 
     // The database RPC owns the transactional archive and profile-status

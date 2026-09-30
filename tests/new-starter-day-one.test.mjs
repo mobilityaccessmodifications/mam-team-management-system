@@ -209,7 +209,7 @@ test('a prepared reminder that fails local validation releases its claim through
   }
 });
 
-test('new active employee creation fails before mutation without start date, direct manager or an employee email', async () => {
+test('new active employee creation fails before mutation without start date or an employee email', async () => {
   const source = ts.transpileModule(readFileSync('src/app/people/actions.ts','utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -225,6 +225,7 @@ test('new active employee creation fails before mutation without start date, dir
       listEmployeeDirectoryRecordsForManager: async () => [],
     },
     '@/lib/organisation-directory': { getOrganisationPersonWorkEmailForMember: async () => null },
+    '@/app/accounts/actions': { createPortalAccount: async () => ({}) },
     '@/lib/supabase/admin': { createAdminClient: () => ({}) },
     '@/lib/portal-account-status': {
       preparePortalAccountStatusChange: async () => ({}), finalisePortalAccountStatusChange: async () => ({}), recoverPortalAccountStatusChange: async () => ({}),
@@ -232,11 +233,11 @@ test('new active employee creation fails before mutation without start date, dir
   })[id] ?? require(id),mod,mod.exports);
   const valid = {
     firstName:'Taylor',lastName:'Starter',workEmail:'work@example.test',personalEmail:'home@example.test',phone:'',
-    positionTitle:'Coordinator',teamName:'MAM admin',managerId:reminderId,country:'',address:'',dateOfBirth:'',
+    positionTitle:'Coordinator',teamName:'Operation & Accounts',managerId:reminderId,country:'',address:'',dateOfBirth:'',
     startedDate:'2026-10-05',scheduledEmploymentEndDate:'',workingWeekdays:null,workingDayTimes:[],archiveReason:'',
     employmentType:'full_time',laptopSupplied:'',laptopId:'',mouseId:'',keyboardId:'',assetTags:[],company:'mam',isActive:true,
   };
-  for (const [patch,message] of [[{ startedDate:'' },/start date is required/i],[{ managerId:null },/direct manager is required/i],
+  for (const [patch,message] of [[{ startedDate:'' },/start date is required/i],
     [{ workEmail:'',personalEmail:'' },/at least one work or personal email/i]]) {
     await assert.rejects(mod.exports.createEmployeeDirectoryRecord({ ...valid,...patch }),message);
   }

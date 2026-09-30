@@ -23,6 +23,7 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
     providerUpdates: 0,
     providerStatus: "not_started",
     archiveCalls: 0,
+    scheduleCalls: 0,
   };
 
   const admin = {
@@ -91,6 +92,10 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
           error: null,
         };
       }
+      if (name === "schedule_employee_offboarding") {
+        state.scheduleCalls += 1;
+        return { data: personId, error: null };
+      }
       if (name === "archive_employee_directory_record") {
         state.archiveCalls += 1;
         if (archiveOutcome === "rejected") return { data: null, error: { message: "Record the return of this employee's active IT devices" } };
@@ -133,6 +138,7 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
   new Function("require", "module", "exports", source)(
     (id) => {
       if (id === "next/cache") return { revalidatePath() {} };
+      if (id === "@/app/accounts/actions") return { createPortalAccount: async () => ({}) };
       if (id === "@/lib/supabase/admin") return { createAdminClient: () => admin };
       if (id === "@/lib/employee-teams") return teamModule.exports;
       if (id === "@/lib/portal-account-status") return helper.exports;
@@ -161,6 +167,17 @@ const archiveInput = {
   endDate: "2026-09-16",
   reason: "Resigned",
 };
+
+test("future end date schedules offboarding without disabling sign-in", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed" });
+  const result = await archiveEmployeeDirectoryRecord({ ...archiveInput, endDate: "2099-01-09" });
+  assert.equal(result.ok, true);
+  assert.equal(state.scheduleCalls, 1);
+  assert.equal(state.archiveCalls, 0);
+  assert.equal(state.providerUpdates, 0);
+  assert.equal(state.accountStatus, "active");
+  assert.equal(state.personActive, true);
+});
 
 test("an archive response failure does not restore Auth after the database committed", async () => {
   const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed" });
