@@ -14,7 +14,7 @@ const managerId = '10000000-0000-4000-8000-000000000002';
 const personId = '10000000-0000-4000-8000-000000000001';
 const draft = {
   firstName: 'Taylor', lastName: 'Synthetic', workEmail: 'work@example.test', personalEmail: '', phone: '',
-  positionTitle: 'Coordinator', teamName: 'MAM admin', managerId: null, country: '', address: '', dateOfBirth: '',
+  positionTitle: 'Coordinator', teamName: 'Operation & Accounts', managerId: null, country: '', address: '', dateOfBirth: '',
   startedDate: '2026-10-05', scheduledEmploymentEndDate: '', workingWeekdays: null, workingDayTimes: [],
   employmentType: 'full_time', contractType: '', laptopSupplied: '', laptopId: '', mouseId: '', keyboardId: '', assetTags: [],
   company: 'mam', isActive: true,
@@ -43,6 +43,7 @@ function loadActions() {
     '@/lib/portal-account-status': {
       preparePortalAccountStatusChange: async () => ({}), finalisePortalAccountStatusChange: async () => ({}), recoverPortalAccountStatusChange: async () => ({}),
     },
+    '@/app/accounts/actions': { createPortalAccount: async () => ({}) },
   })[id] ?? require(id), mod, mod.exports);
   return { actions: mod.exports, calls };
 }
