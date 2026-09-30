@@ -49,6 +49,13 @@ class StageTests(unittest.TestCase):
              'credentials': {'httpHeaderAuth': {'id': 'synthetic-id', 'name': module.inspector.WEBHOOK_CREDENTIAL}}}],
              'connections': {'Hook': {'main': []}}, 'settings': {'executionOrder': 'v1'}}
         module.verify_workflow(expected, dict(expected, id='synthetic-workflow'))
+        outlook = {'name': 'Email', 'type': 'n8n-nodes-base.microsoftOutlook', 'parameters': {}}
+        with_outlook = dict(expected, nodes=[*expected['nodes'], outlook])
+        module.verify_workflow(with_outlook, dict(with_outlook, id='synthetic-workflow', nodes=[
+            *expected['nodes'], dict(outlook, webhookId='generated-id')]))
+        with self.assertRaisesRegex(RuntimeError, 'workflow readback'):
+            module.verify_workflow(with_outlook, dict(with_outlook, id='synthetic-workflow', nodes=[
+                *expected['nodes'], dict(outlook, webhookId='generated-id', parameters={'wrong': True})]))
         for change in ({'active': True}, {'connections': {}}, {'nodes': []}):
             with self.subTest(change=change), self.assertRaisesRegex(RuntimeError, 'workflow readback'):
                 module.verify_workflow(expected, dict(expected, **change))

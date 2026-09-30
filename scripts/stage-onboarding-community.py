@@ -96,6 +96,16 @@ def inspect_n8n(config, credential_id, workflow_id):
 
 
 def verify_workflow(expected, actual):
+    nodes = actual.get('nodes') if isinstance(actual, dict) else None
+    if isinstance(nodes, list) and len(nodes) == len(expected['nodes']):
+        normalized = []
+        for wanted, received in zip(expected['nodes'], nodes):
+            if (isinstance(received, dict) and wanted.get('type') == 'n8n-nodes-base.microsoftOutlook'
+                    and 'webhookId' not in wanted and isinstance(received.get('webhookId'), str)
+                    and received['webhookId']):
+                received = {key: value for key, value in received.items() if key != 'webhookId'}
+            normalized.append(received)
+        actual = dict(actual, nodes=normalized)
     if not isinstance(actual, dict) or not actual.get('id') or actual.get('active') is not False or any(
         actual.get(key) != expected[key] for key in ('name', 'nodes', 'connections', 'settings')
     ):
