@@ -15,7 +15,7 @@ function nodes(tree) {
   if (Array.isArray(tree)) return tree.flatMap(nodes);
   return [tree, ...nodes(tree.props?.children)];
 }
-function harness(canEdit = true, extraRoots = []) {
+function harness(canEdit = true, extraRoots = [], failure = null) {
   const states = [], refs = [], calls = [];
   let stateCursor = 0, refCursor = 0;
   const rectangles = { director: { left: 100, top: 100, right: 288, bottom: 164, width: 188, height: 64 }, manager: { left: 100, top: 300, right: 288, bottom: 364, width: 188, height: 64 }, starter: { left: 600, top: 100, right: 788, bottom: 164, width: 188, height: 64 } };
@@ -38,7 +38,7 @@ function harness(canEdit = true, extraRoots = []) {
     if (id.startsWith('@/')) return {};
     return require(id);
   }, mod, mod.exports, window, document);
-  const props = { profiles: [...profiles, ...extraRoots], canArrange: true, canEdit, onUpdate: async (...args) => { calls.push(args); } };
+  const props = { profiles: [...profiles, ...extraRoots], canArrange: true, canEdit, onUpdate: async (...args) => { calls.push(args); if (failure) throw new Error(failure); } };
   function render() {
     stateCursor = 0; refCursor = 0;
     const tree = mod.exports.OrganisationTree(props);
@@ -119,6 +119,81 @@ test('visual-only Arrange cannot persist a relationship', async () => {
   card.props.onPointerMove(h.event('pointermove', 194, 382));
   card.props.onPointerUp(h.event('pointerup', 194, 382));
   assert.deepEqual(h.calls, []);
+});
+
+test('protected onboarding drop restores only the dragged card and explains the unsaved reporting line', async () => {
+  const h = harness(true, [], 'Onboarding credential delivery in progress');
+  let tree = await h.arrange();
+  let card = h.card(tree, 'director');
+  card.props.onPointerDown(h.event('pointerdown', 194, 132));
+  card.props.onPointerMove(h.event('pointermove', 500, 240));
+  card.props.onPointerUp(h.event('pointerup', 500, 240));
+  tree = h.render();
+  const wrap = (value, id) => nodes(value).find(node => node.props?.['data-node-id'] === id);
+  const directorPosition = wrap(tree, 'director').props.style.transform;
+  card = h.card(tree, 'starter');
+  card.props.onPointerDown(h.event('pointerdown', 694, 132));
+  card.props.onPointerMove(h.event('pointermove', 500, 240));
+  card.props.onPointerUp(h.event('pointerup', 500, 240));
+  tree = h.render();
+  const originalPosition = wrap(tree, 'starter').props.style.transform;
+  card = h.card(tree, 'starter');
+  card.props.onPointerDown(h.event('pointerdown', 694, 132));
+  card.props.onPointerMove(h.event('pointermove', 194, 382));
+  card.props.onPointerUp(h.event('pointerup', 194, 382));
+  await new Promise(resolve => setImmediate(resolve));
+  tree = h.render();
+  assert.equal(wrap(tree, 'starter').props.style.transform, originalPosition, 'pre-drag manual position restored');
+  assert.equal(wrap(tree, 'director').props.style.transform, directorPosition, 'unrelated arrangement retained');
+  const dialog = nodes(tree).find(node => node.props?.role === 'dialog');
+  assert.ok(dialog, 'protected lock explanation popup');
+  assert.equal(dialog.props['aria-modal'], 'true');
+  assert.ok(dialog.props['aria-labelledby']);
+  assert.ok(dialog.props['aria-describedby']);
+  const allText = JSON.stringify(dialog.props.children);
+  assert.match(allText, /Connection not saved/);
+  assert.match(allText, /account-credential email is being processed or needs administrator review/);
+  assert.match(allText, /protection lock temporarily prevents reporting-line changes/);
+  assert.match(allText, /card has returned to its previous position/);
+  assert.match(allText, /No reporting relationship was changed/);
+  assert.equal(h.calls.length, 1);
+  nodes(dialog).find(node => node.type === 'button' && node.props.children === 'Got it').props.onClick();
+  assert.equal(nodes(h.render()).some(node => node.props?.role === 'dialog'), false);
+  assert.equal(h.calls.length, 1, 'acknowledgement never retries or unlocks');
+});
+
+for (const releaseY of [382, 282]) {
+  test(`protected drop at ${releaseY} removes only a newly created dragged offset`, async () => {
+    const h = harness(true, [], 'Onboarding credential delivery in progress');
+    let tree = await h.arrange();
+    const card = h.card(tree, 'starter');
+    card.props.onPointerDown(h.event('pointerdown', 694, 132));
+    card.props.onPointerMove(h.event('pointermove', 194, releaseY));
+    card.props.onPointerUp(h.event('pointerup', 194, releaseY));
+    await new Promise(resolve => setImmediate(resolve));
+    tree = h.render();
+    const wrap = nodes(tree).find(node => node.props?.['data-node-id'] === 'starter');
+    assert.equal(wrap.props['data-manual'], false);
+    assert.equal(wrap.props.style.transform, 'translate3d(0px, 0px, 0)');
+    assert.equal(h.calls[0][0], releaseY === 282 ? 'manager' : 'starter', 'both reporting intents restore dragged card');
+  });
+}
+
+test('unknown persistence errors return the card and provide a sanitized actionable reason without claiming a lock', async () => {
+  const h = harness(true, [], 'private-token-and-provider-error');
+  let tree = await h.arrange();
+  const card = h.card(tree, 'starter');
+  card.props.onPointerDown(h.event('pointerdown', 694, 132));
+  card.props.onPointerMove(h.event('pointermove', 194, 382));
+  card.props.onPointerUp(h.event('pointerup', 194, 382));
+  await new Promise(resolve => setImmediate(resolve));
+  tree = h.render();
+  const dialog = nodes(tree).find(node => node.props?.role === 'dialog');
+  assert.ok(dialog);
+  assert.equal(nodes(tree).find(node => node.props?.['data-node-id'] === 'starter').props['data-manual'], false);
+  assert.match(JSON.stringify(dialog.props.children), /Refresh the chart and try again/);
+  assert.doesNotMatch(JSON.stringify(tree.props.children), /private-token-and-provider-error|credential email|protection lock/i);
+  assert.equal(h.calls.length, 1);
 });
 
 test('root starter Add line sends the current version and only the chosen parent', async () => {

@@ -854,6 +854,7 @@ export function OrganisationTree({
   const [relationshipHistory, setRelationshipHistory] = useState<RelationshipHistoryEntry[]>([]);
   const [arranging, setArranging] = useState(false);
   const [interactionMessage, setInteractionMessage] = useState("");
+  const [relationshipFailure, setRelationshipFailure] = useState<{ reason: string; cardReturned: boolean; rejected: boolean } | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [pendingDisconnect, setPendingDisconnect] = useState<OrganisationPerson | null>(null);
   const [editor, setEditor] = useState<EditorState>(null);
@@ -873,6 +874,8 @@ export function OrganisationTree({
   const editorDialogRef = useRef<HTMLElement>(null);
   const disconnectDialogRef = useRef<HTMLDivElement>(null);
   const disconnectKeepButtonRef = useRef<HTMLButtonElement>(null);
+  const relationshipFailureDialogRef = useRef<HTMLDivElement>(null);
+  const relationshipFailureCloseButtonRef = useRef<HTMLButtonElement>(null);
   const inspectorDialogRef = useRef<HTMLElement>(null);
   const inspectorCloseButtonRef = useRef<HTMLButtonElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -916,12 +919,14 @@ export function OrganisationTree({
   const closeDisconnect = useCallback(() => {
     if (!saving) setPendingDisconnect(null);
   }, [saving]);
+  const closeRelationshipFailure = useCallback(() => setRelationshipFailure(null), []);
   const closeInspector = useCallback(() => {
     workContactRequestRef.current += 1;
     setWorkContact(null);
     setSelectedId(null);
   }, []);
   useDialogFocus(Boolean(editor), editorDialogRef, null, closeEditor);
+  useDialogFocus(Boolean(relationshipFailure), relationshipFailureDialogRef, relationshipFailureCloseButtonRef, closeRelationshipFailure);
   useDialogFocus(
     Boolean(pendingDisconnect),
     disconnectDialogRef,
@@ -953,7 +958,7 @@ export function OrganisationTree({
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented || Boolean(relationshipFailure)) return;
       if (linkGuideActive) {
         pendingLinkPointerRef.current = null;
         if (linkFrameRef.current !== null) {
@@ -1011,7 +1016,7 @@ export function OrganisationTree({
       window.removeEventListener("keydown", handleKeydown);
       document.removeEventListener("fullscreenchange", handleFullscreen);
     };
-  }, [canArrange, closeDisconnect, closeInspector, editor, linkGuideActive, openNodeActionsId, pendingDisconnect, saving, selectedId]);
+  }, [canArrange, closeDisconnect, closeInspector, relationshipFailure, editor, linkGuideActive, openNodeActionsId, pendingDisconnect, saving, selectedId]);
 
   useEffect(() => {
     return () => {
@@ -1837,6 +1842,7 @@ export function OrganisationTree({
     nextReportsTo: string | null,
     message: string,
     recordHistory = true,
+    failedDrag?: NodeDragState,
   ) => {
     if (!canUseRelationshipEditor || !onUpdate || !isPerson(person) || saving) return false;
     const descendants = getDescendantIds(person.id, orderedProfiles);
@@ -1876,18 +1882,35 @@ export function OrganisationTree({
     } catch (caught) {
       preserveArrangeAfterProfileUpdateRef.current = false;
       preserveInteractionMessageAfterProfileUpdateRef.current = false;
-      setInteractionMessage(caught instanceof Error ? caught.message : "The reporting connection could not be saved.");
+      const failureMessage = caught instanceof Error ? caught.message : "The reporting connection could not be saved.";
+      const credentialLocked = failureMessage === "Onboarding credential delivery in progress";
+      const staleVersion = failureMessage === "This org node changed since it was opened. Refresh and try again.";
+      const reason = credentialLocked
+        ? "This employee’s account-credential email is being processed or needs administrator review. The protection lock temporarily prevents reporting-line changes."
+        : staleVersion
+          ? failureMessage
+          : "The reporting change could not be confirmed. Refresh the chart and try again. If this continues, contact an administrator.";
+      if (failedDrag) {
+        setManualOffsets((current) => {
+          const next = { ...current };
+          if (failedDrag.startedWithManualOffset) next[failedDrag.id] = failedDrag.startOffset;
+          else delete next[failedDrag.id];
+          return next;
+        });
+      }
+      setRelationshipFailure({ reason, cardReturned: Boolean(failedDrag), rejected: credentialLocked || staleVersion });
+      setInteractionMessage("Connection not saved.");
       return false;
     } finally {
       setSaving(false);
     }
   };
 
-  const persistDropRelationship = async (dragged: OrganisationPerson, target: DropTarget) => {
+  const persistDropRelationship = async (dragged: OrganisationPerson, target: DropTarget, failedDrag?: NodeDragState) => {
     const targetProfile = profileById.get(target.id);
     if (!targetProfile) return false;
     if (target.intent === "target-reports-to-dragged") {
-      return persistReportsTo(targetProfile, dragged.id, `${dragged.name} is now ${targetProfile.name}'s manager.`);
+      return persistReportsTo(targetProfile, dragged.id, `${dragged.name} is now ${targetProfile.name}'s manager.`, true, failedDrag);
     }
     const nextReportsTo = target.intent === "sibling" ? targetProfile.reportsTo : targetProfile.id;
     return persistReportsTo(
@@ -1896,6 +1919,8 @@ export function OrganisationTree({
       target.intent === "sibling"
         ? `${dragged.name} is now grouped with ${targetProfile.name}.`
         : `${dragged.name} now reports to ${targetProfile.name}.`,
+      true,
+      failedDrag,
     );
   };
 
@@ -2036,7 +2061,7 @@ export function OrganisationTree({
         suppressCardClickRef.current = false;
       }, 0);
       if (canCommit && nextDropTarget && canUseRelationshipEditor) {
-        void persistDropRelationship(drag.node.node, nextDropTarget);
+        void persistDropRelationship(drag.node.node, nextDropTarget, drag);
       } else if (canCommit) {
         setInteractionMessage(`${drag.node.node.name} moved on the grid. Clean up restores the reporting layout.`);
       }
@@ -3045,6 +3070,45 @@ export function OrganisationTree({
                 type="button"
               >
                 {saving ? "Disconnecting…" : "Disconnect"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {relationshipFailure ? (
+        <div
+          aria-describedby={`${titleId}-connection-failure-description`}
+          aria-labelledby={`${titleId}-connection-failure-title`}
+          aria-modal="true"
+          className={styles.confirmationLayer}
+          ref={relationshipFailureDialogRef}
+          role="dialog"
+          tabIndex={-1}
+        >
+          <button
+            aria-label="Close connection failure message"
+            className={styles.confirmationBackdrop}
+            onClick={closeRelationshipFailure}
+            tabIndex={-1}
+            type="button"
+          />
+          <div className={styles.confirmationCard}>
+            <span className={styles.eyebrow}>Reporting line</span>
+            <h3 id={`${titleId}-connection-failure-title`}>Connection not saved</h3>
+            <p id={`${titleId}-connection-failure-description`}>
+              {relationshipFailure.reason}{" "}
+              {relationshipFailure.cardReturned ? "The card has returned to its previous position. " : ""}
+              {relationshipFailure.rejected ? "No reporting relationship was changed." : "Refresh the chart to check the saved reporting relationship."}
+            </p>
+            <div className={styles.confirmationActions}>
+              <button
+                className={styles.primaryAction}
+                onClick={closeRelationshipFailure}
+                ref={relationshipFailureCloseButtonRef}
+                type="button"
+              >
+                Got it
               </button>
             </div>
           </div>
