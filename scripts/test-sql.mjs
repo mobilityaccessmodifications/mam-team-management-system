@@ -17,6 +17,8 @@ try {
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/leave-register-read-grant.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/analytics-api-employees.sql")]);
   console.log("PASS: Analytics employees dataset exposes names without private contacts; RPC remains service-role-only");
+  command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/analytics-api-leave-business-hours.sql")]);
+  console.log("PASS: Analytics leave_requests dataset reports business_hours from recorded duration and employment classification");
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/notification-delivery-receipts.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/new-starter-day-one.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/onboarding-credentials.sql")]);

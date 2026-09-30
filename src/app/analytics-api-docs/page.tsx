@@ -72,7 +72,8 @@ const datasets = [
       ["start_date", "date", "First requested date."],
       ["end_date", "date", "Last requested date."],
       ["business_days", "number", "Recorded business-day duration."],
-      ["hours", "number", "Recorded duration in hours."],
+      ["hours", "number | null", "Raw duration stored on the request; null when no explicit duration was recorded."],
+      ["business_hours", "number", "Uses stored hours when present; otherwise business_days × 7.6 for full_time or × 7.5 for other/unknown types. Checks employment_type_snapshot first, then falls back to current private employment classification."],
       ["status", "string", "Current request status."],
       ["submitted_at", "timestamp", "Submission time."],
       ["decided_at", "timestamp | null", "Decision time, if decided."],
@@ -234,6 +235,7 @@ export default function AnalyticsApiDocsPage() {
         </tbody></table></div>
       </section>)}
       <p>For <code>employees</code>, <code>from</code>/<code>to</code> continue to filter by <code>record_created_at</code>, not start or scheduled end date. <code>working_weekdays</code> uses ISO numbering. Each <code>working_day_times</code> item is <code>{'{ "weekday": 1, "start_time": "09:00", "end_time": "17:00" }'}</code>.</p>
+      <p>For <code>leave_requests</code>, <code>business_hours</code> uses the stored <code>business_days</code>: current leave duration counts Monday–Friday and does not deduct Victorian public holidays. Saved <code>working_weekdays</code> and <code>working_day_times</code> do not change it. A two-business-day full-time request with no stored <code>hours</code> returns <code>hours: null</code> and <code>business_hours: 15.2</code>. This reporting value does not write to payroll or change balances.</p>
       <p>The API returns only eligible records present in durable system projections. It does not reconstruct history for fields that pre-date their durable register.</p>
     </section>
 
