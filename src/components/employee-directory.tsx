@@ -1011,7 +1011,7 @@ function EmployeeEditor({
           <Field label="Personal email">
             <input value={editor.draft.personalEmail} onChange={(event) => onChange("personalEmail", event.target.value)} type="email" autoComplete="email" maxLength={254} />
           </Field>
-          {isCreate && editor.draft.isActive ? <p className={`${styles.fullSpan} ${styles.fieldNote}`}>Enter at least one employee email. The Day 1 welcome email uses both work and personal addresses when both are available.</p> : null}
+          {isCreate && editor.draft.isActive ? <p className={`${styles.fullSpan} ${styles.fieldNote}`}>Add an email to create a portal login and send onboarding credentials. Without an email, the active directory record is saved without a login or email; HR can add the login later in Accounts.</p> : null}
           <Field label="Phone">
             <input value={editor.draft.phone} onChange={(event) => onChange("phone", event.target.value)} type="tel" autoComplete="tel" maxLength={60} />
           </Field>

@@ -209,7 +209,7 @@ test('a prepared reminder that fails local validation releases its claim through
   }
 });
 
-test('new active employee creation fails before mutation without start date or an employee email', async () => {
+test('new active employee creation still requires a start date before mutation', async () => {
   const source = ts.transpileModule(readFileSync('src/app/people/actions.ts','utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -237,9 +237,42 @@ test('new active employee creation fails before mutation without start date or a
     startedDate:'2026-10-05',scheduledEmploymentEndDate:'',workingWeekdays:null,workingDayTimes:[],archiveReason:'',
     employmentType:'full_time',laptopSupplied:'',laptopId:'',mouseId:'',keyboardId:'',assetTags:[],company:'mam',isActive:true,
   };
-  for (const [patch,message] of [[{ startedDate:'' },/start date is required/i],
-    [{ workEmail:'',personalEmail:'' },/at least one work or personal email/i]]) {
-    await assert.rejects(mod.exports.createEmployeeDirectoryRecord({ ...valid,...patch }),message);
-  }
+  await assert.rejects(mod.exports.createEmployeeDirectoryRecord({ ...valid,startedDate:'' }),/start date is required/i);
   assert.equal(rpcCalls,0);
+});
+
+test('active directory-only create without email skips portal-account provisioning', async () => {
+  const source = ts.transpileModule(readFileSync('src/app/people/actions.ts','utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const accountCalls = [];
+  const supabase = { rpc: async (name) => {
+    assert.equal(name,'create_employee_directory_record_with_work_schedule_times');
+    return { data:[{ person_id:reminderId }],error:null };
+  } };
+  const mod = { exports: {} };
+  new Function('require','module','exports',source)((id) => ({
+    '@/lib/employee-teams': teamModule.exports,
+    'next/cache': { revalidatePath: () => {} },
+    '@/lib/employee-directory': {
+      requireEmployeeDirectoryManager: async () => ({ supabase }),
+      findEmployeeDirectoryRecord: async () => ({ personId:reminderId,personVersion:1 }),
+      listEmployeeDirectoryRecordsForManager: async () => [],
+    },
+    '@/lib/organisation-directory': { getOrganisationPersonWorkEmailForMember: async () => null },
+    '@/app/accounts/actions': { createPortalAccount: async (input) => { accountCalls.push(input); } },
+    '@/lib/supabase/admin': { createAdminClient: () => ({}) },
+    '@/lib/portal-account-status': {
+      preparePortalAccountStatusChange: async () => ({}), finalisePortalAccountStatusChange: async () => ({}), recoverPortalAccountStatusChange: async () => ({}),
+    },
+  })[id] ?? require(id),mod,mod.exports);
+  const result = await mod.exports.createEmployeeDirectoryRecord({
+    firstName:'Taylor',lastName:'Starter',workEmail:'',personalEmail:'',phone:'',
+    positionTitle:'Coordinator',teamName:'Operation & Accounts',managerId:null,country:'',address:'',dateOfBirth:'',
+    startedDate:'2026-10-05',scheduledEmploymentEndDate:'',workingWeekdays:null,workingDayTimes:[],archiveReason:'',
+    employmentType:'full_time',laptopSupplied:'',laptopId:'',mouseId:'',keyboardId:'',assetTags:[],company:'mam',isActive:true,
+  });
+  assert.equal(result.record.personId,reminderId);
+  assert.match(result.warning,/without a portal account/i);
+  assert.equal(accountCalls.length,0);
 });
