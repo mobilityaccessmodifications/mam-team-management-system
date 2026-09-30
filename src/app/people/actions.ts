@@ -381,9 +381,6 @@ export async function createEmployeeDirectoryRecord(
   const { p_contract_type: selectedContractType, ...directoryValues } = values;
   if (values.p_is_active) {
     if (!values.p_started_date) throw new Error("A start date is required for a new active employee.");
-    if (!values.p_work_email && !values.p_personal_email) {
-      throw new Error("Enter at least one work or personal email for the new employee.");
-    }
   }
   let { data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule_times", {
     ...directoryValues,
@@ -419,7 +416,7 @@ export async function createEmployeeDirectoryRecord(
     ? undefined
     : await saveContractClassification(supabase, personId, selectedContractType);
   const record = await findEmployeeDirectoryRecord(supabase, personId);
-  if (values.p_is_active) {
+  if (values.p_is_active && (values.p_work_email || values.p_personal_email)) {
     try {
       await createPortalAccount({
         personId,
@@ -430,6 +427,8 @@ export async function createEmployeeDirectoryRecord(
     } catch {
       warning = [warning, "Employee saved, but account creation needs administrator review. Do not create the employee again."].filter(Boolean).join(" ");
     }
+  } else if (values.p_is_active) {
+    warning = [warning, "Employee saved without a portal account because no email is recorded. Add an email and create the login in Accounts when available."].filter(Boolean).join(" ");
   }
   revalidatePath("/");
   return warning ? { record, warning } : { record };

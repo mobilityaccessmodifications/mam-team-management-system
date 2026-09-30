@@ -43,6 +43,14 @@ test('personal email is the login when no work email is present', async () => {
   await f.createEmployeeDirectoryRecord(f.input);
   assert.equal(f.calls.find((call) => typeof call === 'object').loginName, 'home@example.test');
 });
+test('active directory employee can be created without email and without a portal login', async () => {
+  const f = fixture({ workEmail: '', personalEmail: '' });
+  const result = await f.createEmployeeDirectoryRecord(f.input);
+  assert.equal(result.record.personId, personId);
+  assert.ok(f.calls.includes('create_employee_directory_record_with_work_schedule_times'));
+  assert.ok(!f.calls.some((call) => typeof call === 'object'));
+  assert.match(result.warning, /without a portal account/i);
+});
 test('account provisioning failure returns a saved employee with explicit warning rather than inviting a duplicate', async () => {
   const f = fixture({ accountFails: true });
   const result = await f.createEmployeeDirectoryRecord(f.input);
