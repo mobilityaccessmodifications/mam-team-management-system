@@ -35,12 +35,27 @@ test('credential workflow validates employee-only recipients and never includes 
   const id = '10000000-0000-4000-8000-000000000004';
   const [valid] = validator({ first: () => ({ json: { body: { version: 1, deliveryId: id, login: 'work@example.test', temporaryPassword: 'synthetic-long-enough-password', workEmail: 'work@example.test', personalEmail: 'home@example.test', recipients: ['work@example.test', 'home@example.test'] } } }) });
   assert.equal(valid.json.valid, true);
-  assert.equal(valid.json.actualRecipient, 'work@example.test,home@example.test');
+  assert.equal(valid.json.actualRecipient, 'home@example.test,work@example.test');
+  assert.equal(valid.json.toRecipient, 'work@example.test');
+  assert.equal(valid.json.bccRecipient, 'home@example.test');
+  const [personalOnly] = validator({ first: () => ({ json: { body: { version: 1, deliveryId: id, login: 'home@example.test', temporaryPassword: 'synthetic-long-enough-password', workEmail: null, personalEmail: 'home@example.test', recipients: ['home@example.test'] } } }) });
+  assert.equal(personalOnly.json.toRecipient, 'home@example.test');
+  assert.equal(personalOnly.json.bccRecipient, '');
+  const [duplicate] = validator({ first: () => ({ json: { body: { version: 1, deliveryId: id, login: 'home@example.test', temporaryPassword: 'synthetic-long-enough-password', workEmail: 'home@example.test', personalEmail: 'home@example.test', recipients: ['home@example.test'] } } }) });
+  assert.equal(duplicate.json.valid, true);
+  assert.equal(duplicate.json.bccRecipient, '');
   assert.ok(typeof valid.json.temporaryPassword === 'string' && valid.json.temporaryPassword.length >= 20);
   const [bad] = validator({ first: () => ({ json: { body: { version: 1, deliveryId: id, login: 'work@example.test', temporaryPassword: 'synthetic-long-enough-password', workEmail: 'work@example.test', personalEmail: 'home@example.test', recipients: ['work@example.test', 'manager@example.test'] } } }) });
   assert.equal(bad.json.valid, false);
   const send = workflow.nodes.find((node) => node.type === 'n8n-nodes-base.microsoftOutlook');
-  assert.equal(send.parameters.toRecipients, '={{ $json.actualRecipient }}');
+  assert.equal(send.parameters.toRecipients, '={{ $json.toRecipient }}');
+  assert.equal(send.parameters.additionalFields.bccRecipients, '={{ $json.bccRecipient }}');
+  const ack = new Function('$input', '$', workflow.nodes.find(node => node.name === 'Acknowledge Credential Email').parameters.jsCode);
+  const context = { ...valid.json, deliveryToken: '20000000-0000-4000-8000-000000000001' };
+  const $ = () => ({ first: () => ({ json: context }) });
+  assert.equal(ack({ first: () => ({ json: { ok: true, sent: true, alreadySent: false,
+    eventKey: 'onboarding-credential:' + id, actualRecipient: 'home@example.test,work@example.test',
+    actualCcRecipients: '', providerReceipt: { accepted: true } } }) }, $)[0].json.sent, true);
   assert.equal(send.parameters.additionalFields.saveToSentItems, false);
   assert.equal(workflow.settings.saveDataSuccessExecution, 'none');
   assert.equal(workflow.settings.saveDataErrorExecution, 'none');

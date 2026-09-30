@@ -10,7 +10,8 @@ const login = normal(p?.login);
 const valid = p?.version === 1 && uuid.test(p?.deliveryId) && login && recipients.includes(login)
   && Array.isArray(p?.recipients) && JSON.stringify(p.recipients) === JSON.stringify(recipients)
   && typeof p?.temporaryPassword === 'string' && p.temporaryPassword.length >= 20 && p.temporaryPassword.length <= 128;
-return [{ json: valid ? { valid: true, deliveryId: p.deliveryId, login, temporaryPassword: p.temporaryPassword, actualRecipient: recipients.join(',') }
+return [{ json: valid ? { valid: true, deliveryId: p.deliveryId, login, temporaryPassword: p.temporaryPassword,
+  actualRecipient: [...recipients].sort().join(','), toRecipient: work ?? personal, bccRecipient: work && personal && work !== personal ? personal : '' }
   : { valid: false, deliveryId: 'invalid', code: 'invalid_payload' } }];`;
 const emailCode = `const source = $input.first().json;
 const escape = value => String(value).replace(/[&<>\"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot',"'":'&#39;'}[char]));
@@ -47,8 +48,8 @@ return [{ json: send ? { ...context, deliveryToken: token, shouldSend: true }
     }),
     node('c1000000-0000-4000-8000-000000000004', 'Build Credential Email', 'n8n-nodes-base.code', 2, [580,-120], { mode: 'runOnceForAllItems', jsCode: emailCode }),
     node('c1000000-0000-4000-8000-000000000005', 'Send Credential Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [220,-80], {
-      resource: 'message', operation: 'send', toRecipients: '={{ $json.actualRecipient }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
-      additionalFields: { bodyContentType: 'html', saveToSentItems: false },
+      resource: 'message', operation: 'send', toRecipients: '={{ $json.toRecipient }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
+      additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.bccRecipient }}', saveToSentItems: false },
     }, { credentials: { microsoftOutlookOAuth2Api: { id: 'vFEolsXoEOOxNyan', name: 'Microsoft Outlook account - hr@mobilityaccess.com.au' } } }),
     node('c1000000-0000-4000-8000-000000000011', 'Build Provider Receipt', 'n8n-nodes-base.code', 2, [900,-120], { jsCode: `const context = $('Build Credential Email').first().json;
 const provider = $input.first().json;
