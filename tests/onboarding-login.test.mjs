@@ -43,6 +43,10 @@ function routeFixture(options = {}) {
   return { route, calls, get payload() { return payload; }, cleanup() { globalThis.fetch = originalFetch; for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key]; Object.assign(process.env, previous); } };
 }
 const request = (secret = 'synthetic-cron') => new Request('https://people.example.test/api/cron/onboarding-credentials', { headers: { authorization: `Bearer ${secret}` } });
+test('onboarding delivery is scheduled across both Melbourne midnight UTC offsets', () => {
+  const config = JSON.parse(readFileSync('vercel.json', 'utf8'));
+  assert.ok(config.crons.some(job => job.path === '/api/cron/onboarding-credentials' && job.schedule === '0 13,14 * * *'));
+});
 test('onboarding delivery rejects unauthorised requests without claiming', async () => {
   const fixture = routeFixture();
   try { assert.equal((await fixture.route.GET(request('wrong'))).status, 401); assert.equal(fixture.calls.length, 0); } finally { fixture.cleanup(); }

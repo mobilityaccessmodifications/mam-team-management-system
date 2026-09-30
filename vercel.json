@@ -13,6 +13,10 @@
       "schedule": "0 13,14 * * *"
     },
     {
+      "path": "/api/cron/onboarding-credentials",
+      "schedule": "0 13,14 * * *"
+    },
+    {
       "path": "/api/cron/leave-attachment-cleanup",
       "schedule": "17 16 * * *"
     }
