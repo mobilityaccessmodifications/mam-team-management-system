@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ChevronDown, HeartPulse, Palmtree } from "lucide-react";
 import { LeaveAccrualControls, LeaveAccrualNotice } from "@/components/leave-accrual-controls";
 import { saveAnnualLeaveBalance, saveSickLeaveBalance } from "@/app/leave/actions";
@@ -32,6 +32,8 @@ function ApprovalBalanceCard({
   label,
   currentHours,
   approvedHours,
+  retainedHours,
+  balanceSource,
   availableHours,
   asOf,
   sick = false,
@@ -41,6 +43,8 @@ function ApprovalBalanceCard({
   label: string;
   currentHours?: number | null;
   approvedHours?: number | null;
+  retainedHours?: number | null;
+  balanceSource?: "owner_estimate" | "confirmed_usage" | null;
   availableHours?: number | null;
   asOf?: string | null;
   sick?: boolean;
@@ -55,11 +59,12 @@ function ApprovalBalanceCard({
   return <article className={`${styles.balanceCard} ${styles.balanceBreakdownCard}`} data-kind={sick ? "sick" : "annual"}>
     <header>
       <span className={styles.balanceIcon}><Icon size={21} strokeWidth={1.7} aria-hidden="true" /></span>
-      <span><strong>{label}</strong>{asOf ? <small>Xero as at {leaveDateLabel(asOf)}</small> : null}</span>
+      <span><strong>{label}</strong>{asOf ? <small>{balanceSource ? "As at" : "Xero as at"} {leaveDateLabel(asOf)}</small> : null}{balanceSource ? <small>{balanceSource === "owner_estimate" ? "Owner-approved estimate" : "Audited payroll reconciliation"}</small> : null}</span>
     </header>
     <dl className={styles.balanceBreakdown}>
-      <div><dt>Current Xero balance</dt><dd>{amount(currentHours)}</dd></div>
-      <div><dt>Approved leave in People Hub</dt><dd>{amount(approvedHours, true)}</dd></div>
+      <div><dt>{balanceSource ? "Banked balance" : "Current Xero balance"}</dt><dd>{amount(currentHours)}</dd></div>
+      <div><dt>{balanceSource ? "Approved leave after balance date" : "Approved leave in People Hub"}</dt><dd>{amount(approvedHours == null ? null : approvedHours - (retainedHours ?? 0), true)}</dd></div>
+      {retainedHours != null && retainedHours > 0 ? <div><dt>Retained unsettled commitment</dt><dd>{amount(retainedHours, true)}</dd></div> : null}
       {projection ? <>
         <div><dt>Estimated accrual before leave starts</dt><dd>{amount(projection.accruedHours)}</dd></div>
         {Boolean(projection.otherTakenHours) ? <div><dt>Other confirmed leave taken</dt><dd>{amount(projection.otherTakenHours, true)}</dd></div> : null}
@@ -99,14 +104,14 @@ export function LeaveRequestBalance({ workspace, personId, requestedHours = null
       <ChevronDown className={styles.requestBalanceChevron} size={18} aria-hidden="true" />
     </summary>
     <div className={styles.requestBalanceCalculator}>
-    <ApprovalBalanceCard label="Balance breakdown" currentHours={projection?.payrollHours ?? person.annualPayrollHours} approvedHours={projection?.approvedHours ?? person.annualApprovedHours} availableHours={availableHours} asOf={projection?.payrollDate ?? person.annualPayrollDate} requestedHours={requestedHours} projection={projection} />
+    <ApprovalBalanceCard label="Balance breakdown" currentHours={projection === undefined ? person.annualPayrollHours : projection?.payrollHours} approvedHours={projection === undefined ? person.annualApprovedHours : projection?.approvedHours} retainedHours={projection === undefined ? person.annualRetainedHours : projection?.retainedHours} balanceSource={projection === undefined ? person.annualBalanceSource : projection?.balanceSource} availableHours={availableHours} asOf={projection === undefined ? person.annualPayrollDate : projection?.payrollDate} requestedHours={requestedHours} projection={projection} />
     {loading ? <p className={styles.leavePolicyNote} role="status">Calculating projected balance…</p>
       : projection?.status === "projected" ? <>
         <p className={styles.leavePolicyNote}>Projected to the start of {leaveDateLabel(projection.projectedDate)}. Accrual stops on {leaveDateLabel(projection.throughDate!)}. This is an estimate, not a confirmed Xero balance.</p>
         {limitGuidance ? <p className={styles.leaveLimitGuidance}><strong>{limitGuidance}</strong></p> : null}
         <div className={styles.projectionExplanation}>
           <strong>How this is calculated</strong>
-          <p>Payroll balance + estimated accrual − approved People Hub leave after the payroll date − other confirmed usage. All approved commitments remain reserved, including later bookings. Pending requests are not reserved.</p>
+          <p>Banked balance + estimated accrual − approved leave after the balance date − retained unsettled commitments − other confirmed usage. All approved commitments remain reserved, including later bookings. Pending requests are not reserved.</p>
           {(projection.terms ?? []).map((term) => <p key={term.fromDate}>
             {leaveDateLabel(term.fromDate)}–{leaveDateLabel(term.throughDate)}: {balanceHours(term.weeklyHours)} ordinary hours/week across {term.weekdays.length} scheduled days. {balanceHours(term.eligibleHours)} eligible hours × {balanceHours(term.annualWeeks)} annual-leave weeks ÷ 52 = {balanceHours(term.accruedHours)} hours.
           </p>)}
@@ -125,13 +130,25 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved, pre
   const [editing, setEditing] = useState<string | null>(null);
   const [balanceType, setBalanceType] = useState<"annual" | "sick">("annual");
   const [saving, setSaving] = useState(false);
+  const [refreshRequired, setRefreshRequired] = useState(false);
+  const mutationFence = useRef(false);
   const [error, setError] = useState("");
   if (!workspace?.canManageBalances || previewPersonId || (!workspace.people.length && !workspace.payrollImports?.length)) return null;
   return <details className={styles.leaveBalances} open>
     <summary>Leave balances{workspace.people.some((p) => p.canSubmit) ? " & team requests" : ""}</summary>
     {workspace.people.map((person) => <div className={styles.leaveBalanceRow} key={person.personId}>
-      <div><strong>{person.name}</strong>{person.canViewBalance ? <small>{person.paidLeave ? `Annual: ${person.hours == null ? "Not supplied" : `${balanceHours(person.hours)} hours`}` : "Unpaid leave only"}</small> : null}
-        {person.canViewSickBalance ? <small>Sick: {person.sickHours == null ? "Not supplied" : `${balanceHours(person.sickHours)} hours`}</small> : null}
+      <div><strong>{person.name}</strong>{person.canViewBalance ? person.annualBalanceSource ? <>
+        <small>Banked annual: {person.annualPayrollHours == null ? "Unavailable" : `${balanceHours(person.annualPayrollHours)} hours`}</small>
+        {person.annualRetainedHours != null && person.annualRetainedHours > 0 ? <small>Retained unsettled annual: {balanceHours(person.annualRetainedHours)} hours</small> : null}
+        <small>Annual available after approved leave: {person.annualAvailableHours == null ? "Unavailable" : `${balanceHours(person.annualAvailableHours)} hours`}</small>
+        <small>{person.annualBalanceSource === "owner_estimate" ? "Owner-approved estimate" : "Audited payroll reconciliation"}</small>
+      </> : <small>{person.paidLeave ? `Annual: ${person.hours == null ? "Not supplied" : `${balanceHours(person.hours)} hours`}` : "Unpaid leave only"}</small> : null}
+        {person.canViewSickBalance ? person.sickBalanceSource ? <>
+          <small>Banked sick: {person.sickPayrollHours == null ? "Unavailable" : `${balanceHours(person.sickPayrollHours)} hours`}</small>
+          {person.sickRetainedHours != null && person.sickRetainedHours > 0 ? <small>Retained unsettled sick: {balanceHours(person.sickRetainedHours)} hours</small> : null}
+          <small>Sick available after approved leave: {person.sickAvailableHours == null ? "Unavailable" : `${balanceHours(person.sickAvailableHours)} hours`}</small>
+          <small>{person.sickBalanceSource === "owner_estimate" ? "Owner-approved estimate" : "Audited payroll reconciliation"}</small>
+        </> : <small>Sick: {person.sickHours == null ? "Not supplied" : `${balanceHours(person.sickHours)} hours`}</small> : null}
         <LeaveAccrualNotice person={person} />
       </div>
       <div className={styles.leaveBalanceActions}>
@@ -140,21 +157,22 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved, pre
         {person.canViewSickBalance && workspace.canManageBalances ? <button type="button" className={styles.secondaryButton} disabled={busy || saving} onClick={() => { setEditing(person.personId); setBalanceType("sick"); setError(""); }}>Edit sick</button> : null}
       </div>
       {editing === person.personId && person.canViewBalance && workspace.canManageBalances ? <form key={balanceType} className={styles.leaveBalanceEditor} onSubmit={async (event) => {
-        event.preventDefault(); if (saving) return;
+        event.preventDefault(); if (saving || mutationFence.current) return;
         const data = new FormData(event.currentTarget);
         setSaving(true); setError("");
         try {
           const result = balanceType === "annual"
             ? await saveAnnualLeaveBalance(person.personId, Number(data.get("hours")), String(data.get("asOf")), false)
             : await saveSickLeaveBalance(person.personId, Number(data.get("hours")), String(data.get("asOf")));
+          if (result.committed !== false) { mutationFence.current = true; setRefreshRequired(true); }
           if (!result.ok) { setError(result.message ?? "Balance could not be saved."); return; }
-          await onSaved(); setEditing(null);
-        } catch { setError("Balance could not be saved. Please try again."); }
+          await onSaved(); mutationFence.current = false; setRefreshRequired(false); setEditing(null);
+        } catch { mutationFence.current = true; setRefreshRequired(true); setError("Balance result could not be confirmed. Refresh before trying again."); }
         finally { setSaving(false); }
       }}>
         <label>{balanceType === "annual" ? "Annual" : "Sick"} payroll hours<input name="hours" type="number" step="0.0001" min="-10000" max="100000" defaultValue={(balanceType === "annual" ? (person.annualPayrollHours ?? person.hours) : (person.sickPayrollHours ?? person.sickHours)) ?? ""} required /></label>
         <label>Balance date<input name="asOf" type="date" defaultValue={(balanceType === "annual" ? (person.annualPayrollDate ?? person.asOf) : (person.sickPayrollDate ?? person.sickAsOf)) ?? melbourneToday()} max={melbourneToday()} required /></label>
-        <button className={styles.primaryButton} disabled={saving} type="submit">{saving ? "Saving…" : "Save"}</button>
+        <button className={styles.primaryButton} disabled={saving || refreshRequired} type="submit">{saving ? "Saving…" : "Save"}</button>
         <button className={styles.secondaryButton} disabled={saving} type="button" onClick={() => setEditing(null)}>Cancel</button>
         {error ? <p role="alert" className={styles.formError}>{error}</p> : null}
       </form> : null}
@@ -184,10 +202,10 @@ export function ApprovalLeaveBalances({ workspace, personId, requestId }: {
     <strong>Leave balances</strong>
     <div className={styles.balanceCards}>
       {annualBreakdown
-        ? <ApprovalBalanceCard label="Annual leave" currentHours={person.canViewBalance ? person.annualPayrollHours ?? person.hours : null} approvedHours={person.canViewBalance ? person.annualApprovedHours : null} availableHours={person.canViewBalance ? person.annualAvailableHours : null} asOf={person.canViewBalance ? person.annualPayrollDate ?? person.asOf : null} />
+        ? <ApprovalBalanceCard label="Annual leave" currentHours={person.canViewBalance ? person.annualPayrollHours : null} approvedHours={person.canViewBalance ? person.annualApprovedHours : null} retainedHours={person.canViewBalance ? person.annualRetainedHours : null} balanceSource={person.canViewBalance ? person.annualBalanceSource : null} availableHours={person.canViewBalance ? person.annualAvailableHours : null} asOf={person.canViewBalance ? person.annualPayrollDate : null} />
         : <BalanceCard label="Annual leave" hours={person?.canViewBalance ? person.hours : null} />}
       {person?.canViewSickBalance ? sickBreakdown
-        ? <ApprovalBalanceCard label="Sick leave" currentHours={person.sickPayrollHours ?? person.sickHours} approvedHours={person.sickApprovedHours} availableHours={person.sickAvailableHours} asOf={person.sickPayrollDate ?? person.sickAsOf} sick />
+        ? <ApprovalBalanceCard label="Sick leave" currentHours={person.sickPayrollHours} approvedHours={person.sickApprovedHours} retainedHours={person.sickRetainedHours} balanceSource={person.sickBalanceSource} availableHours={person.sickAvailableHours} asOf={person.sickPayrollDate} sick />
         : <BalanceCard label="Sick leave" hours={person.sickHours} sick /> : null}
     </div>
     {person && !annualBreakdown && !sickBreakdown ? <LeaveAccrualNotice person={person} /> : null}
@@ -195,7 +213,7 @@ export function ApprovalLeaveBalances({ workspace, personId, requestId }: {
       ? "Balance sufficient — ready for review."
       : coverage !== "Not enough balance" ? "Check balance — refresh the request to confirm current coverage."
       : `Waiting for enough leave${request.requiredHours == null ? "" : ` to cover ${balanceHours(request.requiredHours)} hours`}. You’ll be notified when the balance is sufficient.`}</p> : null}
-    {request?.pendingBalance ? <p>Conditional approval checks the current balance, including eligible accrued leave, after other approved commitments. The Xero breakdown above shows the payroll snapshot.</p> : null}
+    {request?.pendingBalance ? <p>Conditional approval checks the current balance, including eligible accrued leave, after other approved commitments. {person?.annualBalanceSource ? "The breakdown above separates the banked estimate from unsettled commitments." : "The Xero breakdown above shows the payroll snapshot."}</p> : null}
   </section>;
 }
 

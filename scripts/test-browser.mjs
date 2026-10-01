@@ -36,7 +36,7 @@ try {
   await build({
     entryPoints: ["tests/browser/fixture.jsx"], bundle: true, outdir: scratch,
     platform: "browser", jsx: "automatic", sourcemap: false, minify: false,
-    alias: { "@/app/people/actions": path.join(sourceRoot, "tests/browser/directory-actions.jsx"), "@/components/employee-device-assignments": path.join(sourceRoot, "tests/browser/directory-fixture.jsx"), "@/app/people/team-directory-actions": path.join(sourceRoot, "tests/browser/team-directory-actions.jsx"), "@": path.join(sourceRoot, "src"), react: path.resolve("node_modules/react"), "react-dom": path.resolve("node_modules/react-dom") },
+    alias: { "@/app/leave/actions": path.join(sourceRoot, "tests/browser/payroll-display-actions.jsx"), "@/app/people/actions": path.join(sourceRoot, "tests/browser/directory-actions.jsx"), "@/components/employee-device-assignments": path.join(sourceRoot, "tests/browser/directory-fixture.jsx"), "@/app/people/team-directory-actions": path.join(sourceRoot, "tests/browser/team-directory-actions.jsx"), "@": path.join(sourceRoot, "src"), react: path.resolve("node_modules/react"), "react-dom": path.resolve("node_modules/react-dom") },
     define: { "process.env.NODE_ENV": '"production"', DIRECTORY_FIXTURE_RESULTS: JSON.stringify(directoryResults) },
     plugins: [{ name: "test-presentation-exports", setup(builder) {
       // Test-only exports of existing local presentation functions; no copied UI.

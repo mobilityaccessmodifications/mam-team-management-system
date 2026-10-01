@@ -15,6 +15,15 @@ try {
   const offboardingRace = spawnSync(process.execPath, [path.join(sourceRoot, "tests/run-offboarding-admin-concurrency.mjs"), socket, "mam_test_offboarding_admin"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (offboardingRace.status !== 0) throw new Error("Offboarding administrator PostgreSQL concurrency tests failed");
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/leave-register-read-grant.sql")]);
+  for (const regression of ['payroll-closing-contract.sql', 'payroll-closing.sql', 'payroll-carryforward-lifecycle.sql', 'payroll-closing-privacy.sql', 'payroll-closing-mutation-guards.sql', 'payroll-closing-security.sql', 'payroll-closing-legacy-drift.sql', 'payroll-carryforward-import.sql', 'payroll-carryforward-cutoff.sql']) {
+    command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests', regression)]);
+    console.log(`PASS: payroll closing ${regression}`);
+  }
+  command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', '--template=mam_test_replay', 'mam_test_payroll_closing_race']);
+  const closingRace = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/run-payroll-closing-concurrency.mjs'), socket, 'mam_test_payroll_closing_race'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (closingRace.status !== 0) throw new Error('Payroll closing PostgreSQL concurrency tests failed');
+  const closingRelease = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/run-payroll-closing-release.mjs'), socket, 'mam_test_payroll_closing_release'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (closingRelease.status !== 0) throw new Error('Payroll closing hash-pinned transaction tests failed');
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/analytics-api-employees.sql")]);
   console.log("PASS: Analytics employees dataset exposes names without private contacts; RPC remains service-role-only");
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/analytics-api-leave-business-hours.sql")]);

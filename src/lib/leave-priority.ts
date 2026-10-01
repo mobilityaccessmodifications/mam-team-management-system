@@ -18,10 +18,14 @@ export type LeaveBalancePerson = {
   annualPayrollDate?: string | null;
   annualApprovedHours?: number | null;
   annualAvailableHours?: number | null;
+  annualRetainedHours?: number | null;
+  annualBalanceSource?: "owner_estimate" | "confirmed_usage" | null;
   sickPayrollHours?: number | null;
   sickPayrollDate?: string | null;
   sickApprovedHours?: number | null;
   sickAvailableHours?: number | null;
+  sickRetainedHours?: number | null;
+  sickBalanceSource?: "owner_estimate" | "confirmed_usage" | null;
   accrualStatus?: "current" | "needs_review" | "not_configured";
   accrualReviewDate?: string | null;
   accrualPolicy?: {

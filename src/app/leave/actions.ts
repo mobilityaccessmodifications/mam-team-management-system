@@ -1080,26 +1080,36 @@ export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<L
   };
 }
 
+async function savePayrollBalance(kind: "annual" | "personal", personId: string, hours: number, asOf: string, isExample = false) {
+  let committed = false;
+  let attempted = false;
+  try {
+    const supabase = await requireLeaveSession();
+    if (!Number.isFinite(hours) || hours < -10000 || hours > 100000 || !/^\d{4}-\d{2}-\d{2}$/.test(asOf) || typeof isExample !== "boolean") return { ok: false, committed: false, message: "Enter a valid balance and date." };
+    const id = selectedPersonId(personId);
+    attempted = true;
+    const { error } = kind === "annual"
+      ? await supabase.rpc("set_employee_annual_leave_balance", { p_person_id: id, p_hours: hours, p_as_of: asOf, p_is_example: isExample })
+      : await supabase.rpc("set_employee_sick_leave_balance", { p_person_id: id, p_hours: hours, p_as_of: asOf });
+    if (error) return { ok: false, committed: false, message: error.code === "55000" && error.message === "Use audited payroll reconciliation for retained commitments."
+      ? "This balance has retained payroll commitments. Use the audited closing reconciliation or settlement operation."
+      : "Balance could not be saved. Check your access and balance date." };
+    committed = true;
+    revalidatePath("/");
+    return { ok: true, committed: true };
+  } catch {
+    return { ok: false, committed: committed ? true : attempted ? null : false, message: committed
+      ? "Balance was saved. Refresh before trying again."
+      : attempted ? "Balance result could not be confirmed. Refresh before trying again." : "Balance could not be saved. Sign in and check your access." };
+  }
+}
+
 export async function saveAnnualLeaveBalance(personId: string, hours: number, asOf: string, isExample: boolean) {
-  const supabase = await requireLeaveSession();
-  if (!Number.isFinite(hours) || hours < -10000 || hours > 100000 || !/^\d{4}-\d{2}-\d{2}$/.test(asOf) || typeof isExample !== "boolean") return { ok: false, message: "Enter a valid balance and date." };
-  const { error } = await supabase.rpc("set_employee_annual_leave_balance", {
-    p_person_id: selectedPersonId(personId), p_hours: hours, p_as_of: asOf, p_is_example: isExample,
-  });
-  if (error) return { ok: false, message: "Balance could not be saved. Check your access and balance date." };
-  revalidatePath("/");
-  return { ok: true };
+  return savePayrollBalance("annual", personId, hours, asOf, isExample);
 }
 
 export async function saveSickLeaveBalance(personId: string, hours: number, asOf: string) {
-  const supabase = await requireLeaveSession();
-  if (!Number.isFinite(hours) || hours < -10000 || hours > 100000 || !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) return { ok: false, message: "Enter a valid balance and date." };
-  const { error } = await supabase.rpc("set_employee_sick_leave_balance", {
-    p_person_id: selectedPersonId(personId), p_hours: hours, p_as_of: asOf,
-  });
-  if (error) return { ok: false, message: "Balance could not be saved. Check your access and balance date." };
-  revalidatePath("/");
-  return { ok: true };
+  return savePayrollBalance("personal", personId, hours, asOf);
 }
 
 export async function saveLeaveAccrualPolicy(personId: string, input: {
