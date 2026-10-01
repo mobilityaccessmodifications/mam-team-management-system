@@ -96,7 +96,7 @@ begin
   if exists(select 1 from auth.users u where u.id is distinct from p_user and private.confirmed_test_has_reference(to_jsonb(u),ids)) then raise exception 'purge_blocked: shared metadata reference in auth.users' using errcode='23503'; end if;
   for r in select n.nspname,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
     where n.nspname in ('public','private','storage') and c.relkind in ('r','p','m')
-      and c.relname not in ('confirmed_test_identity_purges','confirmed_test_purge_schema') order by n.nspname,c.relname loop
+      and (n.nspname,c.relname) not in (('private','confirmed_test_identity_purges'),('private','confirmed_test_purge_schema')) order by n.nspname,c.relname loop
     for document in execute format('select to_jsonb(t) from %I.%I t',r.nspname,r.relname) loop
       if private.confirmed_test_has_reference(document,ids) then
         candidate:=rows->(r.nspname||'.'||r.relname);
@@ -144,12 +144,15 @@ begin
   if not pg_try_advisory_xact_lock(hashtextextended('confirmed-test-purge',0)) then raise exception 'purge_blocked: concurrent purge; refresh preview' using errcode='55P03'; end if;
   lock table auth.users in share row exclusive mode nowait;
   for r in select n.nspname,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','storage') and c.relkind in ('r','p') order by n.nspname,c.relname loop
-    execute format('lock table %I.%I in share row exclusive mode nowait',r.nspname,r.relname);
+    execute format('lock table %I.%I in %s mode nowait',r.nspname,r.relname,case when (r.nspname,r.relname) in (('storage','migrations'),('storage','buckets_vectors'),('storage','vector_indexes')) then 'access share' else 'share row exclusive' end);
   end loop;
   reviewed:=public.preview_confirmed_test_identity_purge(p_person_id,p_auth_user_id,p_company_key,p_full_name,p_login_name,p_person_version,p_account_version);
   if p_manifest_hash is distinct from reviewed->>'manifest_hash' then raise exception 'Manifest changed; review again' using errcode='40001'; end if;
   if p_auth_user_id is not null and not exists(select 1 from auth.users where id=p_auth_user_id and banned_until>clock_timestamp()) then raise exception 'Exact linked Auth account must already be banned before business destruction.' using errcode='23514'; end if;
   census:=private.confirmed_test_purge_census(p_person_id,p_auth_user_id);
+  for r in select key,value from jsonb_each(census->'rows') order by key loop
+    execute format('select 1 from %s t where $1 @> jsonb_build_array(to_jsonb(t)) for update nowait',r.key) using r.value;
+  end loop;
   for r in select key,value from jsonb_each(census->'rows') where key like '%events' loop audit:=audit||jsonb_build_object(r.key,r.value); end loop;
   insert into private.confirmed_test_identity_purges(person_id,auth_user_id,actor_user_id,company_key,manifest_hash,manifest,retained_audit,retired_identifiers,phase,completed_at)
     values(p_person_id,p_auth_user_id,auth.uid(),p_company_key,p_manifest_hash,census->'manifest',audit,array(select jsonb_array_elements_text(census->'identifiers')::uuid),
@@ -166,7 +169,7 @@ begin
     get diagnostics deleted=row_count;
     if deleted<>jsonb_array_length(census->'rows'->tbl) then raise exception 'Manifest deletion mismatch (%)',tbl using errcode='40001'; end if;
   end loop;
-  for r in select n.nspname,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','storage') and c.relkind in ('r','p','m') and c.relname not in ('confirmed_test_identity_purges','confirmed_test_purge_schema') loop
+  for r in select n.nspname,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','storage') and c.relkind in ('r','p','m') and (n.nspname,c.relname) not in (('private','confirmed_test_identity_purges'),('private','confirmed_test_purge_schema')) loop
     execute format('select count(*) from %I.%I t where private.confirmed_test_has_reference(to_jsonb(t),array(select jsonb_array_elements_text($1)::uuid))',r.nspname,r.relname) into deleted using census->'identifiers';
     if deleted<>0 then raise exception 'Post-purge reference remains in %.%',r.nspname,r.relname using errcode='23503'; end if;
   end loop;
@@ -192,7 +195,7 @@ end $$;
 revoke all on function private.reject_retired_test_identity_reference() from public,anon,authenticated,service_role;
 create trigger reject_retired_test_identity_reference before insert or update on auth.users for each row execute function private.reject_retired_test_identity_reference();
 do $$ declare r record; begin
-  for r in select n.nspname,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','storage') and c.relkind in ('r','p') and c.relname not in ('confirmed_test_identity_purges','confirmed_test_purge_schema') loop
+  for r in select n.nspname,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','storage') and c.relkind in ('r','p') and (n.nspname,c.relname) not in (('private','confirmed_test_identity_purges'),('private','confirmed_test_purge_schema'),('storage','migrations'),('storage','buckets_vectors'),('storage','vector_indexes')) loop
     execute format('create trigger reject_retired_test_identity_reference before insert or update on %I.%I for each row execute function private.reject_retired_test_identity_reference()',r.nspname,r.relname);
   end loop;
 end $$;
@@ -231,7 +234,7 @@ begin
   select * into receipt from private.confirmed_test_identity_purges where id=p_receipt_id and actor_user_id=auth.uid() for update nowait;
   if receipt.id is null then raise exception 'Unknown owned purge receipt' using errcode='42501'; end if;
   if receipt.auth_user_id is not null and (receipt.phase='business_purged' or exists(select 1 from auth.users where id=receipt.auth_user_id)) then raise exception 'Auth deletion remains unconfirmed; reconcile' using errcode='55000'; end if;
-  for r in select n.nspname,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','storage') and c.relkind in ('r','p','m') and c.relname not in ('confirmed_test_identity_purges','confirmed_test_purge_schema') loop
+  for r in select n.nspname,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','storage') and c.relkind in ('r','p','m') and (n.nspname,c.relname) not in (('private','confirmed_test_identity_purges'),('private','confirmed_test_purge_schema')) loop
     execute format('select count(*) from %I.%I t where private.confirmed_test_has_reference(to_jsonb(t),$1)',r.nspname,r.relname) into remaining using receipt.retired_identifiers;
     if remaining<>0 then raise exception 'Operational reference remains in %.%',r.nspname,r.relname using errcode='23503'; end if;
   end loop;

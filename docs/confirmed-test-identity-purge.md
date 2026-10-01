@@ -57,8 +57,9 @@ test target has those dependencies.
 2. Apply requires that exact preview hash plus both literal `true` confirmations:
    `confirmTestOnly` and `destroyExclusiveHistory`. It serializes purge operations,
    checks administrator authority before any global/table locks, acquires
-   advisory/table locks without waiting (ordinary writers are never sacrificed
-   to a purge deadlock), and repeats administrator and
+   advisory/table locks without waiting, locks each reviewed owned row with
+   `FOR UPDATE NOWAIT` before destruction (including ordinary writers that first
+   take a row lock), and repeats administrator and
    the census/version/hash checks, archives provenance, explicitly deletes each
    reviewed rowset in dependency order, checks exact deletion counts, and asserts
    operational reference absence before committing. It does not invoke a generic
@@ -69,13 +70,19 @@ test target has those dependencies.
    reviewed forward migration; do not reset its fingerprint to silence a blocker.
    Installation also rejects unreviewed external-schema FK dependencies.
 4. Retired-reference guards prevent stale workers, re-imports and new actor/JSON
-   references from recreating removed stable IDs in application/Storage tables or
-   Auth users. Existing unresolved Auth targets permit only a non-shortening
+   references from recreating removed stable IDs in application tables, supported
+   Storage tables and Auth users. Exactly `storage.migrations`,
+   `storage.buckets_vectors` and `storage.vector_indexes` are excluded from new
+   retirement triggers and receive only `ACCESS SHARE NOWAIT` table locks. The
+   remaining tables retain `SHARE ROW EXCLUSIVE NOWAIT` locks and all existing
+   source/provider triggers stay enabled. Existing unresolved Auth targets permit only a non-shortening
    future ban and its monotonic update timestamp. Every other live non-generated
    Auth user column is compared using the catalog; stored generated values are
    computed after BEFORE triggers, while their writable source fields remain
    protected. Unbanning, shorter bans, decreasing timestamps, identity recreation
-   and new references remain prohibited. The receipt is excluded from the guards.
+   and new references in guarded tables remain prohibited. Only the two qualified
+   private receipt/schema tables are excluded from the census and final absence
+   checks; a same-named table in another supported schema is not excluded.
 5. For linked targets only, a compare-and-set moves `business_purged` to
    `auth_delete_started`, rechecking the actual Auth ban under a row lock,
    before one server-only
@@ -97,6 +104,27 @@ Completed business purge removes test leave/check-in/person rows from their
 source reporting datasets. Disabling a login alone does not do that. Verify live
 source datasets and any independent dashboard caches after an authorized release;
 no live dashboard verification is claimed here.
+
+## Authorized reduced provider boundary
+
+The user explicitly accepts practical confirmed-test deletion using the available
+approved tools rather than universal provider-metadata protection. The exact
+three provider-owned Storage tables above allow the migration execution role
+`SELECT` but not `UPDATE`, `DELETE`, `TRUNCATE` or `TRIGGER`. This candidate neither
+grants those privileges nor changes provider ownership or switches execution
+roles. Missing privileges on any other table still fail the migration atomically;
+there is no privilege-based catch-and-skip behavior.
+
+All three tables remain in the broad UUID/JSON/text/key/path reference census,
+post-business-deletion checks, completion checks and full schema/ACL/trigger
+fingerprint. Any observed reference still blocks preview/prepare/completion; the
+operator must read back exact reference absence before reporting cleanup complete.
+Read-only locks do **not** serialize concurrent provider metadata writes. A provider
+writer can commit a reference after a scan, including during the cleanup operation,
+and can insert a new retired-ID reference afterward. No concurrent or future-write
+guarantee is claimed for these three tables. Schema fingerprints detect schema
+drift, not those later row writes. Existing-reference checks are point-in-time
+evidence, not a universal retirement prohibition.
 
 ## Supported operator entry point
 
@@ -144,6 +172,7 @@ node tests/run-confirmed-test-purge.mjs tests/confirmed-test-purge.sql \
   tests/confirmed-test-purge-security.sql tests/confirmed-test-purge-permissions.sql \
   tests/core-review-safety.sql tests/analytics-api-employees.sql \
   tests/notification-delivery-receipts.sql tests/scheduled-offboarding.sql --concurrency
+node tests/run-confirmed-test-purge-provider-storage.mjs --concurrency
 npm run lint
 npm run typecheck
 npm test
@@ -160,6 +189,18 @@ actual analytics dataset absence, claims/provider/indirect/shared/immutable
 blockers, schema/ACL drift, an interleaved Auth metadata writer, unauthorized
 lock rejection, reverse-order ordinary writers, direct-RPC ban enforcement,
 expired claim bans, supported rebanning and legitimate name/email reuse.
+
+The separate provider-ownership fixture bootstraps under `fixture_bootstrap`,
+replays unchanged predecessors, then runs this entire transactional migration
+and actual authenticated purge RPCs with a non-superuser `postgres` execution role
+that has only `SELECT` on the exact three provider-owned synthetic tables and no
+provider-role membership. It checks every eligible guard, unchanged provider
+ownership/ACL/existing triggers, unknown-table atomic rollback, excluded-table
+reference blockers and zero-reference readback, exact lock modes, qualified
+receipt exclusions, schema drift and reverse-order `SELECT FOR UPDATE` writers.
+Its SQL-only Auth removal is a disposable fixture action, not the production Auth
+Admin path. Storage HTTP and universal provider-write prevention remain untested
+and are not promised.
 
 Node orchestration tests explicitly mock the Auth Admin boundary. They prove exact
 hard-delete invocation, durable grant ordering, no blind retries, uncertain receipt
@@ -180,8 +221,9 @@ The initial operator scope is the two separately confirmed test identities;
 real employee consolidation remains deferred.
 
 The purge-only branch starts from `origin/main` at
-`dcd6281800df9bdd70c498f01b5a9a76a12036cd`. Application and migration bytes match
-the supplied purge candidate. The shared disposable Auth platform fixture now
+`dcd6281800df9bdd70c498f01b5a9a76a12036cd`. The original application and migration
+bytes matched the supplied purge candidate; the reduced Storage correction changes
+only the unapplied purge migration and its tests/documentation. The shared disposable Auth platform fixture now
 includes the real `banned_until` column; the purge runner uses that prerequisite
 instead of adding it a second time. This is a test-only platform correction,
 not a production schema change.
@@ -194,3 +236,17 @@ all ten behavioral checks on this purge-only tree; see the integration document
 for its limitations. No production change or merge is performed by this release
 preparation. Live migration, operator manifests, target-specific destruction
 and deployment verification remain separately controlled release operations.
+
+The reduced Storage correction also passed the 164-migration SELECT-only
+provider-ownership fixture, all seven focused SQL suites with the strengthened
+reverse-order row-lock regression, 22 purge Node tests, `npm run check` (859 Node
+tests and production build), the standard SQL gate, 36 browser component tests
+and the bundle budget (1,178,595 raw / 345,399 gzip bytes). The actual dedicated
+GoTrue/PostgREST integration passed all ten checks again and verified resource
+cleanup. Logs are in the MAM scratch directory as
+`purge-storage-correction-{provider-sql,focused-sql,node,check,standard-sql-rerun,browser,auth}.log`.
+The standard SQL gate used a scratch-only infrastructure path adapter for its
+temporary cluster and matching path validators; application migrations and
+behavior assertions were unchanged. The corrected source remains local and
+uncommitted pending independent parent review; no production mutation, privilege
+change, merge or push is performed by this correction.

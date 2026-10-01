@@ -49,9 +49,29 @@ The prior failure evidence remains in `/Users/nixon/.hermes/profiles/mam/cache/s
 
 TDD reproduced the rejection in `tests/confirmed-test-purge-security.sql` with a populated stored generated confirmation field before the migration fix, then passed after it. The focused disposable SQL suite passed purge, security, permissions, core-review safety, analytics, notification receipts, scheduled offboarding and both concurrency checks. All 22 purge Node tests passed; their separately labelled mocked orchestration boundary is not substituted for the real-provider result.
 
+The reduced Storage correction was rerun through this same dedicated real-provider
+runner with exit 0. `purge-storage-correction-auth.log` in the MAM scratch directory
+records unchanged replay of all 164 current application migration files, all ten
+behavioral checks and successful exact task-resource cleanup. Its separate
+SELECT-only provider-ownership fixture also passed; neither result asserts
+concurrent/future metadata protection for the three expressly excluded tables.
+
 ## Explicitly unverified
 
 There is **no Storage API server** in this integration. Storage table shapes are migration prerequisites only: uploads, storage ownership rejection, actual object deletion, bucket behavior and Storage HTTP are not tested. No email, SMS, external OAuth, hosted gateway, production setting, real staff account or remote migration ledger is exercised. These pins demonstrate the named self-hosted versions, not the hosted project's exact provider version/configuration. Existing JWTs are not claimed globally revoked for stateless third-party consumers merely because Auth users/sessions are absent.
+
+The separately authorized reduced Storage boundary exempts exactly
+`storage.migrations`, `storage.buckets_vectors` and `storage.vector_indexes` from
+new retirement triggers and uses only read-only `ACCESS SHARE NOWAIT` locks there.
+Their observed UUID/JSON/text references still block cleanup and their schema
+remains fingerprinted, but concurrent or future provider writes are not prevented.
+`node tests/run-confirmed-test-purge-provider-storage.mjs --concurrency` separately
+reproduces those provider-owned tables under a non-superuser execution role with
+`SELECT` only. It exercises actual authenticated preview/prepare/claim/completion,
+unknown privilege failures with atomic rollback, unchanged provider guards,
+reference blockers/readback and schema drift. This synthetic ownership fixture
+does not convert the real Auth integration into a Storage HTTP test or a universal
+provider-metadata guarantee.
 
 ## Official sources consulted
 

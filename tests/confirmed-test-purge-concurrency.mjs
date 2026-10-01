@@ -9,7 +9,8 @@ export async function testPurgeConcurrency(args, env) {
  };
  query(`insert into auth.users(id,email,email_confirmed_at) values ('95000000-0000-4000-8000-000000000001','race-admin@example.test',now()),('95000000-0000-4000-8000-000000000003','race-real@example.test',now());
  insert into public.profiles(id,full_name,app_role,login_name,credentials_valid_after) values ('95000000-0000-4000-8000-000000000001','Race Admin Synthetic','system_admin','race-admin@example.test',now()-interval '1 day');
- insert into public.internal_org_people(id,full_name,company_key,position_title,is_active) values ('95000000-0000-4000-8000-000000000002','Race Fake Synthetic','mam','Synthetic',false);`);
+ insert into public.internal_org_people(id,full_name,company_key,position_title,is_active) values ('95000000-0000-4000-8000-000000000002','Race Fake Synthetic','mam','Synthetic',false);
+ insert into private.annual_leave_balance_history(person_id,hours,as_of,is_example,actor_user_id) values ('95000000-0000-4000-8000-000000000002',0,date '2026-01-01',false,'95000000-0000-4000-8000-000000000001');`);
  const actor=`select set_config('request.jwt.claims',jsonb_build_object('sub','95000000-0000-4000-8000-000000000001','role','authenticated','iat',extract(epoch from now())::bigint,'is_anonymous',false)::text,false);`;
  const preview=`public.preview_confirmed_test_identity_purge('95000000-0000-4000-8000-000000000002',null,'mam','Race Fake Synthetic',null,1,null)`;
  const hash=query(`${actor} select ${preview}->>'manifest_hash';`).split('\n').at(-1);
@@ -27,8 +28,9 @@ export async function testPurgeConcurrency(args, env) {
  assert.equal(query("select count(*) from private.confirmed_test_identity_purges where person_id='95000000-0000-4000-8000-000000000002'"),'0');
  console.log('PASS: concurrent Auth actor/metadata write excludes purge; target and receipt unchanged');
  query("update auth.users set raw_user_meta_data='{}' where id='95000000-0000-4000-8000-000000000003'");
- for (const unauthorized of [true,false]) {
-  const blocker=launch(`set application_name='purge-reverse-writer'; begin; lock table private.annual_leave_balance_history in row exclusive mode; select pg_sleep(0.8); update auth.users set raw_user_meta_data='{}' where id='95000000-0000-4000-8000-000000000003'; commit;`);
+ for (const [unauthorized,rowLock] of [[true,false],[false,false],[false,true]]) {
+  const lock=rowLock?"select id from private.annual_leave_balance_history where person_id='95000000-0000-4000-8000-000000000002' for update;":"lock table private.annual_leave_balance_history in row exclusive mode;";
+  const blocker=launch(`set application_name='purge-reverse-writer'; begin; ${lock} select pg_sleep(0.8); update auth.users set raw_user_meta_data='{}' where id='95000000-0000-4000-8000-000000000003'; commit;`);
   for(let n=0;n<100;n++) {if(query("select count(*) from pg_stat_activity where application_name='purge-reverse-writer' and wait_event='PgSleep'")==='1')break;await new Promise(r=>setTimeout(r,10));}
   const claims=unauthorized?actor.replaceAll('95000000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000003'):actor;
   const started=Date.now();
@@ -40,5 +42,8 @@ export async function testPurgeConcurrency(args, env) {
   assert.match(purge.stderr,unauthorized?/Active System Admin required/:/could not obtain lock/);
   assert.ok(elapsed<500,`Purge blocked ordinary writer for ${elapsed}ms`);
  }
- console.log('PASS: unauthorized RPC never locks; reverse-order ordinary writer survives fail-fast purge');
+ assert.equal(query("select count(*) from public.internal_org_people where id='95000000-0000-4000-8000-000000000002'"),'1');
+ assert.equal(query("select count(*) from private.annual_leave_balance_history where person_id='95000000-0000-4000-8000-000000000002'"),'1');
+ assert.equal(query("select count(*) from private.confirmed_test_identity_purges where person_id='95000000-0000-4000-8000-000000000002'"),'0');
+ console.log('PASS: unauthorized RPC never locks; reverse-order ROW EXCLUSIVE and SELECT FOR UPDATE ordinary writers survive fail-fast purge');
 }
