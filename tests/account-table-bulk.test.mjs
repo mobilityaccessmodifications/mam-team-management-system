@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { fixture as resetFixture, input as resetInput, lockMessage } from './helpers/password-reset-action-harness.mjs';
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -153,4 +154,24 @@ test("batch keeps server rejections and missing confirmations unresolved without
   assert.deepEqual(result.confirmed.map((saved) => saved.personId), ["ok"]);
   assert.deepEqual(result.failures.map((failure) => failure.personId), ["self", "missing", "none"]);
   assert.match(result.failures[1].message, /not confirmed/);
+});
+
+test('locked reset retains the password draft and never displays a false one-time success', async () => {
+  const action = resetFixture();
+  const changes = [];
+  const record = { ...account(resetInput.personId), userId: resetInput.userId, accountVersion: resetInput.accountVersion };
+  const h = harness([record], { onResetPassword: action.resetPortalPassword, onAccountChanged: saved => changes.push(saved) });
+  button(h.render(), 'Reset password').props.onClick({ currentTarget: { closest: () => ({ querySelector: () => ({ focus() {} }), removeAttribute() {} }) } });
+  let tree = h.render();
+  find(tree, node => node.type?.name === 'PasswordField').props.onChange(resetInput.newPassword);
+  tree = h.render();
+  await find(tree, node => node.type === 'form').props.onSubmit({ preventDefault() {} });
+  tree = h.render();
+  const footer = find(tree, node => node.type?.name === 'FormFooter');
+  assert.ok(footer, 'reset editor stays open');
+  assert.equal(footer.props.error, lockMessage);
+  assert.equal(find(tree, node => node.type?.name === 'PasswordField').props.newPassword, resetInput.newPassword);
+  assert.deepEqual(changes, []);
+  assert.deepEqual(action.calls, ['can_manage_portal_accounts','begin_portal_password_reset']);
+  assert.doesNotMatch(text(tree), /Password reset for|Copy password/);
 });

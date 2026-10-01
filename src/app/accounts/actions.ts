@@ -345,17 +345,19 @@ export async function resetPortalPassword(input: ResetPasswordInput): Promise<Ac
     p_auth_user_id: input.userId,
     p_expected_account_version: input.accountVersion,
   });
+  if (claimError?.code === "55000" && claimError.message === "Onboarding credential delivery in progress") {
+    return { error: "The password was not changed. Onboarding credential delivery is in progress or awaiting administrator review." };
+  }
   if (claimError) throw new Error(GENERIC_ERROR);
   const claim = mapPasswordResetClaim(claimed);
 
   const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.updateUserById(input.userId, { password: input.newPassword });
-  if (error || !data.user) {
-    await supabase.rpc("cancel_portal_password_reset", {
-      p_auth_user_id: input.userId,
-      p_reset_token: claim.reset_token,
-    });
-    throw new Error("The password could not be reset.");
+  const unconfirmedReset = { error: "The password-reset result could not be confirmed. Administrator reconciliation is required before trying again." };
+  try {
+    const { data, error } = await admin.auth.admin.updateUserById(input.userId, { password: input.newPassword });
+    if (error || !data.user) return unconfirmedReset;
+  } catch {
+    return unconfirmedReset;
   }
 
   let finalised = await supabase.rpc("finalise_portal_password_reset", {
