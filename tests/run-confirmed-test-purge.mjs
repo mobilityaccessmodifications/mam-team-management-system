@@ -3,6 +3,9 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { homedir } from 'node:os';
 import { testPurgeConcurrency } from './confirmed-test-purge-concurrency.mjs';
+import { testDeliveredHistoryMigration } from './confirmed-test-purge-delivered-migration.mjs';
+import { testDeliveredHistoryConcurrency } from './confirmed-test-purge-delivered-concurrency.mjs';
+import { testDeliveredHistoryProducer } from './confirmed-test-purge-delivered-producer.mjs';
 const scratch = process.env.MAM_TEST_SCRATCH_DIR ?? path.join(homedir(), '.hermes/profiles/mam/cache/scratch');
 const socket = mkdtempSync(path.join(scratch, 'purge-pg-'));
 const env = { PATH: process.env.PATH, LANG: 'C', LC_ALL: 'C', PGPASSFILE: path.join(socket, 'no-password-file'), PGSERVICEFILE: '/dev/null' };
@@ -22,16 +25,19 @@ try {
   const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
   for (const file of migrations) {
     if(file==='20261001130000_confirmed_test_identity_cleanup.sql') run('psql',args,"alter default privileges in schema public, private grant execute on functions to anon, authenticated, service_role; alter default privileges in schema private grant all on tables to anon, authenticated, service_role;");
+    if (file === '20261001140000_confirmed_test_purge_delivered_leave_history.sql' && process.argv.includes('--migration-guards')) testDeliveredHistoryMigration(args, env, readFileSync(path.join('supabase/migrations', file), 'utf8'));
     run('psql', args, readFileSync(path.join('supabase/migrations', file), 'utf8'));
   }
   console.log(`PASS: full disposable replay (${migrations.length} migrations)`);
   run('psql',args,readFileSync('tests/migrations/effective-contract.sql','utf8'));
   console.log('PASS: effective schema/RLS/ACL contract');
-  for(const regression of process.argv.slice(2).filter(a=>a!=='--concurrency')) {
+  for(const regression of process.argv.slice(2).filter(a=>!['--concurrency','--migration-guards','--delivered-concurrency','--delivered-producer'].includes(a))) {
     console.log(run('psql', [...args, '-f', regression]));
     console.log(`PASS: full-schema ${regression}`);
   }
+  if(process.argv.includes('--delivered-producer')) await testDeliveredHistoryProducer(args,env);
   if(process.argv.includes('--concurrency')) await testPurgeConcurrency(args,env);
+  if(process.argv.includes('--delivered-concurrency')) await testDeliveredHistoryConcurrency(args,env);
 } finally {
   if (started) run('pg_ctl', ['-D', path.join(socket, 'data'), '-m', 'fast', '-w', 'stop']);
   rmSync(socket, { recursive: true, force: true });

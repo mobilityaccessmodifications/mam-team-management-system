@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { testPurgeConcurrency } from './confirmed-test-purge-concurrency.mjs';
+import { testDeliveredHistoryConcurrency } from './confirmed-test-purge-delivered-concurrency.mjs';
 
 const scratch = process.env.MAM_TEST_SCRATCH_DIR ?? path.join(homedir(), '.hermes/profiles/mam/cache/scratch');
 const socket = mkdtempSync(path.join(scratch, 'spg-'));
@@ -28,8 +29,10 @@ try {
   run('createdb', ['-h', socket, '-p', '55442', '-U', 'fixture_bootstrap', '-O', 'postgres', database]);
   sql(readFileSync('tests/migrations/0001-supabase-platform.sql', 'utf8'));
   const migrations = readdirSync('supabase/migrations').filter(file => file.endsWith('.sql')).sort();
-  assert.equal(migrations.at(-1), migration);
-  for (const file of migrations.filter(file => file !== migration)) sql(readFileSync(path.join('supabase/migrations', file), 'utf8'));
+  assert.ok(migrations.includes(migration));
+  const forwards = migrations.filter(file => file > migration);
+  assert.deepEqual(forwards, ['20261001140000_confirmed_test_purge_delivered_leave_history.sql']);
+  for (const file of migrations.filter(file => file < migration)) sql(readFileSync(path.join('supabase/migrations', file), 'utf8'));
   sql(`create table storage.confirmed_test_identity_purges (id text primary key, metadata jsonb not null default '{}');
     create table storage.confirmed_test_purge_schema (id text primary key, metadata jsonb not null default '{}');`);
   sql(`
@@ -49,7 +52,7 @@ try {
   `, database, 'fixture_bootstrap');
   run('createdb', ['-h', socket, '-p', '55442', '-U', 'fixture_bootstrap', '-O', 'postgres', `--template=${database}`, deniedDatabase]);
   sql('create table storage.unknown_provider_metadata (id text primary key, metadata jsonb); alter table storage.unknown_provider_metadata owner to fixture_storage_owner; grant select on storage.unknown_provider_metadata to postgres;', deniedDatabase, 'fixture_bootstrap');
-  sql('grant authenticated to postgres; alter role postgres nosuperuser bypassrls;', database, 'fixture_bootstrap');
+  sql('grant authenticated, service_role to postgres; alter role postgres nosuperuser bypassrls;', database, 'fixture_bootstrap');
   assert.equal(sql("select rolsuper from pg_roles where rolname=current_user;"), 'f');
   assert.equal(sql(`select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='storage' and c.relname in ('migrations','buckets_vectors','vector_indexes')
@@ -71,6 +74,7 @@ try {
     and not exists(select 1 from pg_trigger where tgname='reject_retired_test_identity_reference');`, deniedDatabase), 't');
   console.log('PASS unknown provider table without TRIGGER fails closed; whole migration rolled back');
   sql(source);
+  for (const file of forwards) sql(readFileSync(path.join('supabase/migrations', file), 'utf8'));
   assert.equal(sql(providerCatalog), providerSnapshot, 'Provider ownership/ACL/existing triggers changed');
   assert.equal(sql(`select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='storage' and c.relname in ('migrations','buckets_vectors','vector_indexes')
@@ -83,6 +87,10 @@ try {
   console.log(`PASS non-superuser unchanged replay (${migrations.length} migrations): SELECT-only provider tables excluded exactly; every eligible guard installed`);
   run('psql', [...target(), '-f', 'tests/confirmed-test-purge-provider-storage.sql']);
   console.log('PASS actual authenticated preview/prepare/claim/completion with SELECT-only provider Storage');
+  for (const regression of ['history', 'blockers', 'envelope', 'address-items', 'retention', 'manager-only', 'timezone']) {
+    run('psql', [...target(), '-f', `tests/confirmed-test-purge-delivered-${regression}.sql`]);
+  }
+  console.log('PASS delivered-history purge, private provenance, fail-closed receipts and monotonic retention with SELECT-only provider Storage');
   const person = '98abcdef-0000-4000-8000-000000000002';
   const actor = '98abcdef-0000-4000-8000-000000000001';
   sql(`insert into auth.users(id,email,email_confirmed_at,banned_until) values
@@ -139,7 +147,10 @@ try {
   }
   assert.equal(sql(providerCatalog), providerSnapshot, 'Provider fixture was not restored exactly');
   console.log('PASS excluded Storage tables remain in column/trigger/ACL schema fingerprint; provider guards and SELECT-only grants preserved');
-  if (process.argv.includes('--concurrency')) await testPurgeConcurrency(target(), env);
+  if (process.argv.includes('--concurrency')) {
+    await testPurgeConcurrency(target(), env);
+    await testDeliveredHistoryConcurrency(target(), env, { databaseCreator: 'fixture_bootstrap' });
+  }
 } finally {
   if (started) run('pg_ctl', ['-D', path.join(socket, 'data'), '-m', 'fast', '-w', 'stop']);
   rmSync(socket, { recursive: true, force: true });
