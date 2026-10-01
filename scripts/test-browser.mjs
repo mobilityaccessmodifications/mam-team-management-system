@@ -1,4 +1,5 @@
 import { build } from "esbuild";
+import { draft, personId, loadActions } from "../tests/helpers/directory-action-harness.mjs";
 import { createServer } from "node:http";
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,6 +9,22 @@ import { spawn } from "node:child_process";
 // This harness does not start Next or read a .env. Production components are
 // compiled unchanged; only server-action boundaries receive synthetic data.
 const sourceRoot = realpathSync(process.argv[2] ?? process.cwd());
+const directoryInput = { ...draft, personId, personVersion: 1, detailVersion: 1 };
+const directoryResults = {};
+for (const [name, dbError] of Object.entries({
+  lock: { code: "55000", message: "Onboarding credential delivery in progress" },
+  stale: { code: "40001", message: "synthetic private detail" },
+  unknown: { code: "XX000", message: "synthetic private provider detail" },
+})) directoryResults[name] = await loadActions({ dbError, sourceRoot }).actions.updateEmployeeDirectoryRecord(directoryInput);
+directoryResults.role = await loadActions({ dbError: { code: "40001" }, sourceRoot }).actions.updateEmployeeDirectoryRole({ personId, role: "manager", expectedRole: "employee" });
+directoryResults.auth = await loadActions({ authError: new Error("Your session has expired. Sign in again."), sourceRoot }).actions.updateEmployeeDirectoryRecord(directoryInput);
+directoryResults.validation = await loadActions({ sourceRoot }).actions.updateEmployeeDirectoryRecord({ ...directoryInput, workEmail: "invalid" });
+directoryResults.create = await loadActions({ dbError: { code: "55000", message: "Onboarding credential delivery in progress" }, sourceRoot }).actions.createEmployeeDirectoryRecord(draft);
+
+directoryResults.partialRole = await loadActions({ revalidateError: new Error("private fixture revalidation failure"), sourceRoot }).actions.updateEmployeeDirectoryRole({ personId, role: "manager", expectedRole: "employee" });
+directoryResults.partialCreate = await loadActions({ readErrorAt: 1, sourceRoot }).actions.createEmployeeDirectoryRecord(draft);
+directoryResults.partialUpdate = await loadActions({ readErrorAt: 2, sourceRoot }).actions.updateEmployeeDirectoryRecord(directoryInput);
+
 const scratch = mkdtempSync(path.join(tmpdir(), "mam-browser-test-"));
 const server = createServer((request, response) => {
   const name = request.url === "/fixture.js" ? "fixture.js" : request.url === "/fixture.css" ? "fixture.css" : null;
@@ -19,8 +36,8 @@ try {
   await build({
     entryPoints: ["tests/browser/fixture.jsx"], bundle: true, outdir: scratch,
     platform: "browser", jsx: "automatic", sourcemap: false, minify: false,
-    alias: { "@/app/people/team-directory-actions": path.join(sourceRoot, "tests/browser/team-directory-actions.jsx"), "@": path.join(sourceRoot, "src"), react: path.resolve("node_modules/react"), "react-dom": path.resolve("node_modules/react-dom") },
-    define: { "process.env.NODE_ENV": '"production"' },
+    alias: { "@/app/people/actions": path.join(sourceRoot, "tests/browser/directory-actions.jsx"), "@/components/employee-device-assignments": path.join(sourceRoot, "tests/browser/directory-fixture.jsx"), "@/app/people/team-directory-actions": path.join(sourceRoot, "tests/browser/team-directory-actions.jsx"), "@": path.join(sourceRoot, "src"), react: path.resolve("node_modules/react"), "react-dom": path.resolve("node_modules/react-dom") },
+    define: { "process.env.NODE_ENV": '"production"', DIRECTORY_FIXTURE_RESULTS: JSON.stringify(directoryResults) },
     plugins: [{ name: "test-presentation-exports", setup(builder) {
       // Test-only exports of existing local presentation functions; no copied UI.
       builder.onLoad({ filter: /[/\\]team-calendar\.tsx$/ }, ({ path: filename }) => ({

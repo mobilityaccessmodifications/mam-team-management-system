@@ -87,7 +87,7 @@ export type EmployeeDirectoryMutationResult = {
   record: EmployeeDirectoryRecord;
   /** The directory change was saved, but a follow-up setting was not. */
   warning?: string;
-};
+} | { error: string; committed?: false } | { error: string; committed: true; personId: string };
 
 /**
  * Work-directory record available to a manager for their own active team

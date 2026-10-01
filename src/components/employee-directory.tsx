@@ -348,6 +348,7 @@ export function EmployeeDirectory({
   const [sort, setSort] = useState<DirectorySort>("name");
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [committedPersonId, setCommittedPersonId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState("");
   const [notice, setNotice] = useState("");
   const [endDatePrompt, setEndDatePrompt] = useState<{ date: string; reason: string } | null>(null);
@@ -510,6 +511,7 @@ export function EmployeeDirectory({
   }
 
   function openCreate() {
+    if (committedPersonId) return;
     setEditor({ mode: "create", draft: { ...emptyDraft } });
     setSaveError("");
     setNotice("");
@@ -625,7 +627,7 @@ export function EmployeeDirectory({
   async function saveRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const editorToSave = editor ?? activeEditor;
-    if (!editorToSave || saving) return;
+    if (!editorToSave || saving || committedPersonId) return;
 
     setSaving(true);
     setSaveError("");
@@ -634,11 +636,19 @@ export function EmployeeDirectory({
       let warning: string | undefined;
       if (editorToSave.mode === "create") {
         const result = await createEmployeeDirectoryRecord(editorToSave.draft as CreateEmployeeDirectoryInput);
+        if ("error" in result) {
+          if (result.committed) setCommittedPersonId(result.personId);
+          setSaveError(result.error);
+          return;
+        }
         saved = result.record;
         warning = result.warning;
       } else {
         const record = selectedRecord(records, editorToSave);
-        if (!record) throw new Error("This record is no longer available. Refresh the directory and try again.");
+        if (!record) {
+          setSaveError("This record is no longer available. Refresh the directory and try again.");
+          return;
+        }
         const input: UpdateEmployeeDirectoryInput = {
           ...editorToSave.draft,
           personId: record.personId,
@@ -646,6 +656,11 @@ export function EmployeeDirectory({
           detailVersion: editorToSave.detailVersion,
         };
         const result = await updateEmployeeDirectoryRecord(input);
+        if ("error" in result) {
+          if (result.committed) setCommittedPersonId(result.personId);
+          setSaveError(result.error);
+          return;
+        }
         saved = result.record;
         warning = result.warning;
       }
@@ -662,8 +677,8 @@ export function EmployeeDirectory({
       else setNotice(editorToSave.mode === "create" ? "Employee record created." : "Employee record saved.");
       onSelectedPersonId?.(saved.personId);
       await onRecordsChanged?.();
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Employee details could not be saved.");
+    } catch {
+      setSaveError("Employee details could not be saved. Refresh and try again.");
     } finally {
       setSaving(false);
     }
@@ -719,7 +734,7 @@ export function EmployeeDirectory({
             <Download size={16} aria-hidden="true" />
             <span className={styles.visuallyHidden}>Export employees</span>
           </a>
-          <button className={toolbar.primary} type="button" onClick={openCreate}>
+          <button className={toolbar.primary} type="button" onClick={openCreate} disabled={Boolean(committedPersonId)}>
             <UserPlus size={16} /> Add employee
           </button>
         </div>
@@ -758,6 +773,8 @@ export function EmployeeDirectory({
             setNotice("Role saved.");
           }}
           saving={saving}
+          refreshRequired={Boolean(committedPersonId)}
+          onCommitted={setCommittedPersonId}
           error={saveError}
           onChange={handleDraftChange}
           onScheduleChange={handleScheduleChange}
@@ -887,6 +904,8 @@ function EmployeeEditor({
   roleLoadError,
   onRoleSaved,
   saving,
+  refreshRequired,
+  onCommitted,
   error,
   onChange,
   onScheduleChange,
@@ -905,6 +924,8 @@ function EmployeeEditor({
   roleLoadError: string;
   onRoleSaved: (role: DirectoryRole) => void;
   saving: boolean;
+  refreshRequired: boolean;
+  onCommitted: (personId: string) => void;
   error: string;
   onChange: (key: keyof EmployeeDirectoryDraft, value: EmployeeDirectoryDraft[keyof EmployeeDirectoryDraft]) => void;
   onScheduleChange: (
@@ -927,14 +948,19 @@ function EmployeeEditor({
   const [editingSchedule, setEditingSchedule] = useState(isCreate);
 
   async function saveRole() {
-    if (editor.mode !== "edit" || !role || !selectedRole || selectedRole === "hr" || roleSaving || selectedRole === role) return;
+    if (editor.mode !== "edit" || !role || !selectedRole || selectedRole === "hr" || roleSaving || refreshRequired || selectedRole === role) return;
     setRoleSaving(true);
     setRoleError("");
     try {
       const saved = await updateEmployeeDirectoryRole({ personId: editor.personId, role: selectedRole, expectedRole: role });
+      if (typeof saved !== "string") {
+        if (saved.committed) onCommitted(saved.personId);
+        setRoleError(saved.error);
+        return;
+      }
       onRoleSaved(saved);
-    } catch (error) {
-      setRoleError(error instanceof Error ? error.message : "Role could not be saved.");
+    } catch {
+      setRoleError("Role could not be saved. Refresh and try again.");
     } finally {
       setRoleSaving(false);
     }
@@ -991,7 +1017,7 @@ function EmployeeEditor({
                 : "Admin: full Directory, Accounts and organisation editing, payroll import and subscription management, plus operational oversight and administration."}</p>
             <p>Separate explicit permission grants provide additional access where applicable and are not changed here. Reporting relationships are edited in the Organisation chart.</p>
             {roleError ? <p role="alert">{roleError}</p> : null}
-            <button type="button" className={styles.secondaryAction} onClick={() => void saveRole()} disabled={saving || roleSaving || !currentRecord?.isActive || !role || selectedRole === "hr" || selectedRole === role}>Save role</button>
+            <button type="button" className={styles.secondaryAction} onClick={() => void saveRole()} disabled={saving || roleSaving || refreshRequired || !currentRecord?.isActive || !role || selectedRole === "hr" || selectedRole === role}>Save role</button>
           </div> : !isCreate && roleLoadError ? <p className={`${styles.fullSpan} ${styles.formError}`} role="alert">{roleLoadError}</p> : null}
           <Field label="Company">
             <select value={editor.draft.company} onChange={(event) => onChange("company", event.target.value)}>
@@ -1153,7 +1179,7 @@ function EmployeeEditor({
           {onRequestArchive ? <button type="button" className={styles.dangerAction} onClick={onRequestArchive} disabled={saving || archiveDisabled} aria-describedby={archiveDisabled ? "save-before-ending-employment" : undefined}><UserMinus size={14} /> End employment</button> : null}
           {onRequestDelete ? <button type="button" className={styles.dangerAction} onClick={onRequestDelete} disabled={saving}><Trash2 size={14} /> Delete archived profile</button> : null}
           <button type="button" className={styles.secondaryAction} onClick={onClose} disabled={saving}>Cancel</button>
-          <button type="submit" className={styles.primaryAction} disabled={saving}>{saving ? "Saving…" : isCreate ? "Create employee" : "Save changes"}</button>
+          <button type="submit" className={styles.primaryAction} disabled={saving || refreshRequired}>{saving ? "Saving…" : isCreate ? "Create employee" : "Save changes"}</button>
         </div>
       </footer>
     </form>
