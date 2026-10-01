@@ -20,6 +20,7 @@ create table auth.users (
   raw_user_meta_data jsonb default '{}'::jsonb,
   is_anonymous boolean default false,
   encrypted_password text,
+  banned_until timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
