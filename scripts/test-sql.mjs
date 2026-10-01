@@ -22,6 +22,15 @@ try {
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/notification-delivery-receipts.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/new-starter-day-one.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/onboarding-credentials.sql")]);
+  for (const regression of ['password-reset-credential-lock.sql', 'password-reset-pending-credentials.sql', 'password-reset-no-reclaim.sql', 'password-reset-credential-contract.sql']) {
+    command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests', regression)]);
+  }
+  for (const [database, mode] of [['mam_test_reset_credentials', []], ['mam_test_reset_profile_lock', ['--profile-lock']]]) {
+    command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', '--template=mam_test_replay', database]);
+    const resetRace = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/run-password-reset-credential-concurrency.mjs'), socket, database, ...mode], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+    if (resetRace.status !== 0) throw new Error('Password reset credential PostgreSQL concurrency tests failed');
+  }
+  console.log('PASS: password reset preflight, durable pending fences, ACLs, audit and PostgreSQL concurrency');
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/two-week-check-in.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/check-in-review-outcomes.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/six-month-check-in-review.sql")]);

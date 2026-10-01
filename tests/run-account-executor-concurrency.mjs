@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import { target as verifyDisposableTarget } from "../scripts/local-test-postgres.mjs";
 
 const args = new Map();
@@ -13,7 +14,7 @@ const host = args.get("--host");
 const port = args.get("--port") ?? "5432";
 const user = args.get("--user");
 const database = args.get("--database");
-const sharedLocalCluster = /^(?:\/private)?\/tmp\/mam-openclaw-pg\.[A-Za-z0-9]+$/.test(host ?? "");
+const sharedLocalCluster = /^mam-openclaw-pg\.[A-Za-z0-9]+$/.test(path.basename(host ?? ""));
 if (sharedLocalCluster) {
   verifyDisposableTarget(host, database);
   assert.equal(port, "55439");

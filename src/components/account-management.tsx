@@ -39,6 +39,7 @@ export type AccountDto = {
 };
 
 export type AccountMutationResult = {
+  error?: string;
   account?: AccountDto;
   oneTimePassword?: string;
 };
@@ -608,6 +609,10 @@ export function AccountManagement({
         newPassword,
         accountVersion: account.accountVersion,
       });
+      if (result?.error) {
+        setError(result.error);
+        return;
+      }
       const oneTimeValue = result?.oneTimePassword ?? newPassword;
       applyResult(result);
       setNewPassword("");

@@ -1,11 +1,12 @@
 // Disposable PostgreSQL only: no URLs, .env files, inherited PG settings or TCP.
 import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export const postgresEnv = {
-  PATH: process.env.PATH, LANG: "C", LC_ALL: "C",
+  PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, LANG: "C", LC_ALL: "C",
   PGPASSFILE: "/dev/null", PGSERVICEFILE: "/dev/null", PGCONNECT_TIMEOUT: "5",
   PGPASSWORD: "synthetic-local-unused",
 };
@@ -18,7 +19,9 @@ export function command(binary, args, options = {}) {
 }
 
 export function target(socket, database) {
-  if (!/^(?:\/private)?\/tmp\/mam-openclaw-pg\.[A-Za-z0-9]+$/.test(socket ?? "")) {
+  if (!/^(?:\/private)?\/tmp\/mam-openclaw-pg\.[A-Za-z0-9]+$/.test(socket ?? "")
+    && (!/^mam-openclaw-pg\.[A-Za-z0-9]+$/.test(path.basename(socket ?? ""))
+      || path.dirname(socket ?? "") !== realpathSync(os.tmpdir()))) {
     throw new Error("A task-owned local PostgreSQL socket is required");
   }
   if (!/^(?:mam_test_[a-z0-9_]+|openclaw_leave_test(?:_[0-9]+)?|portal_account_executor_test)$/.test(database ?? "")) {
@@ -36,8 +39,7 @@ export function sql(socket, database, query) {
 }
 
 export function startCluster() {
-  // /tmp has a short enough pathname for PostgreSQL's Unix socket on macOS.
-  const socket = realpathSync(mkdtempSync(path.join(realpathSync("/tmp"), "mam-openclaw-pg.")));
+  const socket = realpathSync(mkdtempSync(path.join(realpathSync(os.tmpdir()), "mam-openclaw-pg.")));
   const data = path.join(socket, "data");
   command("initdb", ["-D", data, "-U", "postgres", "--auth-local=trust", "--auth-host=reject", "--no-locale", "--encoding=UTF8"]);
   writeFileSync(path.join(socket, "mam-test-cluster.json"), JSON.stringify({ owner: "mam-local-tests-v1", socket, port: 55439 }));
