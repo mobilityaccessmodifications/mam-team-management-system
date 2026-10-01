@@ -237,7 +237,7 @@ test('new active employee creation still requires a start date before mutation',
     startedDate:'2026-10-05',scheduledEmploymentEndDate:'',workingWeekdays:null,workingDayTimes:[],archiveReason:'',
     employmentType:'full_time',laptopSupplied:'',laptopId:'',mouseId:'',keyboardId:'',assetTags:[],company:'mam',isActive:true,
   };
-  await assert.rejects(mod.exports.createEmployeeDirectoryRecord({ ...valid,startedDate:'' }),/start date is required/i);
+  assert.deepEqual(await mod.exports.createEmployeeDirectoryRecord({ ...valid,startedDate:'' }), { error: 'A start date is required for a new active employee.' });
   assert.equal(rpcCalls,0);
 });
 

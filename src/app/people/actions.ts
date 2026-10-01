@@ -61,14 +61,42 @@ type ArchiveCommitPersonRow = {
   is_active: boolean;
 };
 
+class DirectoryInputError extends Error {}
+
+class DirectoryCommittedReadError extends DirectoryInputError {
+  constructor(readonly personId: string) {
+    super("Employee details were saved, but the saved record could not be loaded. Refresh the directory before trying again. Do not create the employee again.");
+  }
+}
+
+async function requireDirectoryMutationManager() {
+  try {
+    return await requireEmployeeDirectoryManager();
+  } catch (error) {
+    if (error instanceof Error && (
+      error.message === "Your session has expired. Sign in again."
+      || error.message === "You do not have permission to manage employee records."
+    )) throw new DirectoryInputError(error.message);
+    throw error;
+  }
+}
+
+function validatedTeam(value: unknown) {
+  try {
+    return requireEmployeeTeam(value);
+  } catch {
+    throw new DirectoryInputError("Choose a team from the list.");
+  }
+}
+
 function textValue(value: unknown, label: string) {
-  if (typeof value !== "string") throw new Error(`${label} is invalid.`);
+  if (typeof value !== "string") throw new DirectoryInputError(`${label} is invalid.`);
   return value;
 }
 
 function requiredText(value: unknown, label: string, maximum = 120) {
   const cleaned = textValue(value, label).trim();
-  if (!cleaned || cleaned.length > maximum) throw new Error(`${label} is required and must be ${maximum} characters or fewer.`);
+  if (!cleaned || cleaned.length > maximum) throw new DirectoryInputError(`${label} is required and must be ${maximum} characters or fewer.`);
   return cleaned;
 }
 
@@ -82,20 +110,20 @@ function employmentEndReason(value: unknown) {
 
 function optionalText(value: unknown, label: string, maximum = 254) {
   const cleaned = textValue(value, label).trim();
-  if (cleaned.length > maximum) throw new Error(`${label} must be ${maximum} characters or fewer.`);
+  if (cleaned.length > maximum) throw new DirectoryInputError(`${label} must be ${maximum} characters or fewer.`);
   return cleaned || null;
 }
 
 function optionalEmail(value: unknown, label: string) {
   const cleaned = optionalText(value, label, 254);
-  if (cleaned && !EMAIL_PATTERN.test(cleaned)) throw new Error(`Enter a valid ${label.toLocaleLowerCase()}.`);
+  if (cleaned && !EMAIL_PATTERN.test(cleaned)) throw new DirectoryInputError(`Enter a valid ${label.toLocaleLowerCase()}.`);
   return cleaned;
 }
 
 function optionalDate(value: unknown, label: string) {
   const cleaned = textValue(value, label).trim();
   if (!cleaned) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) throw new Error(`${label} must be a valid date.`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) throw new DirectoryInputError(`${label} must be a valid date.`);
   const [year, month, day] = cleaned.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   if (
@@ -103,19 +131,19 @@ function optionalDate(value: unknown, label: string) {
     || date.getUTCMonth() !== month - 1
     || date.getUTCDate() !== day
   ) {
-    throw new Error(`${label} must be a valid date.`);
+    throw new DirectoryInputError(`${label} must be a valid date.`);
   }
   return cleaned;
 }
 
 function optionalUuid(value: unknown, label: string) {
   if (!value) return null;
-  if (typeof value !== "string" || !UUID_PATTERN.test(value)) throw new Error(`${label} is invalid.`);
+  if (typeof value !== "string" || !UUID_PATTERN.test(value)) throw new DirectoryInputError(`${label} is invalid.`);
   return value;
 }
 
 function company(value: unknown): EmployeeDirectoryCompany {
-  if (value !== "mam" && value !== "equipsy") throw new Error(GENERIC_SAVE_ERROR);
+  if (value !== "mam" && value !== "equipsy") throw new DirectoryInputError(GENERIC_SAVE_ERROR);
   return value;
 }
 
@@ -123,13 +151,13 @@ function employmentType(value: unknown): EmployeeEmploymentType {
   if (value === "abn" || value === "casual" || value === "full_time" || value === "part_time" || value === "overseas") {
     return value;
   }
-  throw new Error("Choose an employment type.");
+  throw new DirectoryInputError("Choose an employment type.");
 }
 
 function contractType(value: unknown): EmployeeContractType | null {
   if (value === "" || value === null || value === undefined) return null;
   if (value === "permanent" || value === "fixed_term") return value;
-  throw new Error("Choose Permanent or Fixed-Term, or leave contract type unset.");
+  throw new DirectoryInputError("Choose Permanent or Fixed-Term, or leave contract type unset.");
 }
 
 function workingWeekdays(value: unknown) {
@@ -140,21 +168,21 @@ function workingWeekdays(value: unknown) {
     || value.some((day) => !Number.isInteger(day) || day < 1 || day > 7)
     || new Set(value).size !== value.length
   ) {
-    throw new Error("Choose valid, non-repeating work days.");
+    throw new DirectoryInputError("Choose valid, non-repeating work days.");
   }
   return [...value].sort((first, second) => first - second);
 }
 
 function workingDayTimes(value: unknown, selectedWeekdays: number[] | null) {
   if (!Array.isArray(value) || value.length > 7) {
-    throw new Error("Work times are invalid.");
+    throw new DirectoryInputError("Work times are invalid.");
   }
   const selected = new Set(selectedWeekdays ?? []);
   const seen = new Set<number>();
   const timePattern = /^(?:[01]\d|2[0-3]):(?:00|15|30|45)$/;
   return value.map((candidate) => {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
-      throw new Error("Work times are invalid.");
+      throw new DirectoryInputError("Work times are invalid.");
     }
     const row = candidate as Record<string, unknown>;
     const weekday = Number(row.weekday);
@@ -168,7 +196,7 @@ function workingDayTimes(value: unknown, selectedWeekdays: number[] | null) {
       || !timePattern.test(endTime)
       || endTime <= startTime
     ) {
-      throw new Error("Choose valid start and finish times in 15-minute intervals.");
+      throw new DirectoryInputError("Choose valid start and finish times in 15-minute intervals.");
     }
     seen.add(weekday);
     return { weekday, start_time: startTime, end_time: endTime };
@@ -179,21 +207,21 @@ function laptopSupplied(value: unknown) {
   const cleaned = optionalText(value, "Laptop supplied", 32);
   if (cleaned === null) return null;
   if (cleaned !== "own_laptop" && cleaned !== "mam_laptop") {
-    throw new Error("Choose Own laptop or MAM laptop.");
+    throw new DirectoryInputError("Choose Own laptop or MAM laptop.");
   }
   return cleaned;
 }
 
 function assetTags(value: unknown) {
   if (!Array.isArray(value) || value.length > 24) {
-    throw new Error("Asset tags must contain 24 values or fewer.");
+    throw new DirectoryInputError("Asset tags must contain 24 values or fewer.");
   }
 
   const tags = value.map((tag) => {
-    if (typeof tag !== "string") throw new Error("Asset tags are invalid.");
+    if (typeof tag !== "string") throw new DirectoryInputError("Asset tags are invalid.");
     const cleaned = tag.trim();
     if (!cleaned || cleaned.length > 80) {
-      throw new Error("Each asset tag must be between 1 and 80 characters.");
+      throw new DirectoryInputError("Each asset tag must be between 1 and 80 characters.");
     }
     return cleaned;
   });
@@ -201,7 +229,7 @@ function assetTags(value: unknown) {
   const tagKeys = new Set<string>();
   for (const tag of tags) {
     const key = tag.toLocaleLowerCase();
-    if (tagKeys.has(key)) throw new Error("Asset tags must be unique.");
+    if (tagKeys.has(key)) throw new DirectoryInputError("Asset tags must be unique.");
     tagKeys.add(key);
   }
   return tags;
@@ -209,13 +237,13 @@ function assetTags(value: unknown) {
 
 function version(value: unknown) {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-    throw new Error(GENERIC_SAVE_ERROR);
+    throw new DirectoryInputError(GENERIC_SAVE_ERROR);
   }
   return value;
 }
 
 function inputObject(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(GENERIC_SAVE_ERROR);
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new DirectoryInputError(GENERIC_SAVE_ERROR);
   return value as Record<string, unknown>;
 }
 
@@ -226,7 +254,7 @@ function validateDraft(input: unknown) {
   const p_working_weekdays = workingWeekdays(value.workingWeekdays);
 
   if (p_laptop_supplied === "mam_laptop" && !p_laptop_id) {
-    throw new Error("A Laptop ID is required for a MAM laptop.");
+    throw new DirectoryInputError("A Laptop ID is required for a MAM laptop.");
   }
 
   return {
@@ -236,7 +264,7 @@ function validateDraft(input: unknown) {
     p_personal_email: optionalEmail(value.personalEmail, "Personal email"),
     p_phone: optionalText(value.phone, "Phone", 60),
     p_position_title: requiredText(value.positionTitle, "Job title"),
-    p_team_name: requireEmployeeTeam(value.teamName),
+    p_team_name: validatedTeam(value.teamName),
     p_manager_id: optionalUuid(value.managerId, "Manager"),
     p_country: optionalText(value.country, "Country", 100),
     p_address: optionalText(value.address, "Address", 500),
@@ -265,35 +293,49 @@ function legacyDraftValues(values: ReturnType<typeof validateDraft>) {
   void p_working_day_times;
   void p_contract_type;
   if (p_working_weekdays !== null) {
-    throw new Error("Work schedule storage is not ready. Refresh and try again.");
+    throw new DirectoryInputError("Work schedule storage is not ready. Refresh and try again.");
   }
   return legacyValues;
 }
 
 function returnedPersonId(data: unknown) {
   const row = (Array.isArray(data) ? data[0] : null) as MutationRpcRow | undefined;
-  if (!row || !UUID_PATTERN.test(row.person_id)) throw new Error(GENERIC_SAVE_ERROR);
+  if (!row || !UUID_PATTERN.test(row.person_id)) throw new DirectoryInputError(GENERIC_SAVE_ERROR);
   return row.person_id;
 }
 
-function mutationError(error: { message?: string } | null) {
+function mutationErrorMessage(error: { code?: string; message?: string } | null) {
+  if (error?.code === "55000" && error.message === "Onboarding credential delivery in progress") {
+    return "This employee record is protected while onboarding credential delivery is in progress or awaiting administrator review. No changes were saved.";
+  }
   const message = error?.message?.toLocaleLowerCase() ?? "";
-  if (message.includes("laptop_id_unique")) {
-    return new Error("That Laptop ID is already assigned to another employee.");
+  if (error?.code === "23505" && message.includes("employee_directory_details_laptop_id_unique_idx")) {
+    return "That Laptop ID is already assigned to another employee.";
   }
-  if (message.includes("mouse_id_unique")) {
-    return new Error("That Mouse ID is already assigned to another employee.");
+  if (error?.code === "23505" && message.includes("employee_directory_details_mouse_id_unique_idx")) {
+    return "That Mouse ID is already assigned to another employee.";
   }
-  if (message.includes("keyboard_id_unique")) {
-    return new Error("That Keyboard ID is already assigned to another employee.");
+  if (error?.code === "23505" && message.includes("employee_directory_details_keyboard_id_unique_idx")) {
+    return "That Keyboard ID is already assigned to another employee.";
   }
-  if (message.includes("version") || message.includes("changed")) {
-    return new Error("This record has changed. Refresh it, then try again.");
+  if (error?.code === "40001") {
+    return "This record has changed. Refresh it, then try again.";
   }
-  if (message.includes("manager") || message.includes("parent") || message.includes("cycle")) {
-    return new Error("Choose a valid manager and try again.");
+  if (error?.message === "Choose an active employee as the manager." || error?.message === "This reporting link would create a cycle." || error?.message === "The selected parent org node does not exist.") {
+    return "Choose a valid manager and try again.";
   }
-  return new Error(GENERIC_SAVE_ERROR);
+  return GENERIC_SAVE_ERROR;
+}
+
+async function readSavedDirectoryRecord(
+  supabase: Awaited<ReturnType<typeof requireEmployeeDirectoryManager>>["supabase"],
+  personId: string,
+) {
+  try {
+    return await findEmployeeDirectoryRecord(supabase, personId);
+  } catch {
+    throw new DirectoryCommittedReadError(personId);
+  }
 }
 
 const CONTRACT_TYPE_NOT_SAVED = "Employee details were saved, but the contract type was not. Choose it again and save.";
@@ -349,139 +391,162 @@ export async function updateEmployeeDirectoryRole(input: {
   personId: string;
   role: DirectoryRole;
   expectedRole: DirectoryStoredRole;
-}): Promise<DirectoryRole> {
-  const value = inputObject(input);
-  if (typeof value.personId !== "string" || !UUID_PATTERN.test(value.personId)
-    || (value.role !== "employee" && value.role !== "manager" && value.role !== "system_admin")
-    || (value.expectedRole !== "employee" && value.expectedRole !== "manager" && value.expectedRole !== "system_admin" && value.expectedRole !== "hr")) {
-    throw new Error("Choose a valid role and refresh the employee record.");
+}): Promise<DirectoryRole | { error: string; committed?: false } | { error: string; committed: true; personId: string }> {
+  let committedPersonId: string | null = null;
+  try {
+    const value = inputObject(input);
+    if (typeof value.personId !== "string" || !UUID_PATTERN.test(value.personId)
+      || (value.role !== "employee" && value.role !== "manager" && value.role !== "system_admin")
+      || (value.expectedRole !== "employee" && value.expectedRole !== "manager" && value.expectedRole !== "system_admin" && value.expectedRole !== "hr")) {
+      throw new DirectoryInputError("Choose a valid role and refresh the employee record.");
+    }
+    const { supabase } = await requireDirectoryMutationManager();
+    const { data: allowed, error: accessError } = await supabase.rpc("can_manage_portal_accounts");
+    if (accessError || allowed !== true) throw new DirectoryInputError("Only a System Admin can change roles.");
+    const { data, error } = await supabase.rpc("update_employee_directory_role", {
+      p_person_id: value.personId,
+      p_role: value.role,
+      p_expected_role: value.expectedRole,
+    });
+    if (error || data !== value.role) {
+      throw new DirectoryInputError(error?.code === "40001"
+        ? "Role has changed. Refresh the directory and try again."
+        : "Role could not be saved. Refresh and try again.");
+    }
+    committedPersonId = value.personId;
+    revalidatePath("/");
+    return data as DirectoryRole;
+  } catch (error) {
+    if (committedPersonId) return { committed: true, personId: committedPersonId, error: "Role was saved, but the directory could not be refreshed. Refresh the directory before trying again." };
+    return { error: error instanceof DirectoryInputError ? error.message : "Role could not be saved. Refresh and try again." };
   }
-  const { supabase } = await requireEmployeeDirectoryManager();
-  const { data: allowed, error: accessError } = await supabase.rpc("can_manage_portal_accounts");
-  if (accessError || allowed !== true) throw new Error("Only a System Admin can change roles.");
-  const { data, error } = await supabase.rpc("update_employee_directory_role", {
-    p_person_id: value.personId,
-    p_role: value.role,
-    p_expected_role: value.expectedRole,
-  });
-  if (error || data !== value.role) {
-    throw new Error(error?.code === "40001"
-      ? "Role has changed. Refresh the directory and try again."
-      : "Role could not be saved. Refresh and try again.");
-  }
-  revalidatePath("/");
-  return data as DirectoryRole;
 }
 
 export async function createEmployeeDirectoryRecord(
   input: CreateEmployeeDirectoryInput,
 ): Promise<EmployeeDirectoryMutationResult> {
-  const { supabase } = await requireEmployeeDirectoryManager();
-  const values = validateDraft(input);
-  const { p_contract_type: selectedContractType, ...directoryValues } = values;
-  if (values.p_is_active) {
-    if (!values.p_started_date) throw new Error("A start date is required for a new active employee.");
-  }
-  let { data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule_times", {
-    ...directoryValues,
-    p_manager_id: null,
-    p_sort_order: 0,
-  });
-  if (isMissingWorkScheduleRpc(error) && values.p_working_day_times.length === 0) {
-    const { p_working_day_times, ...weekdayValues } = directoryValues;
-    void p_working_day_times;
-    ({ data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule", {
-      ...weekdayValues,
-      p_manager_id: null,
-      p_sort_order: 0,
-    }));
-  }
-  if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
-    ({ data, error } = await supabase.rpc("create_employee_directory_record_with_employment_type", {
-      ...legacyDraftValues({ ...directoryValues, p_contract_type: selectedContractType }),
-      p_manager_id: null,
-      p_sort_order: 0,
-    }));
-  }
-  if (isMissingWorkScheduleRpc(error)) {
-    throw new Error("Work schedule storage is not ready. Refresh and try again.");
-  }
-  if (error) throw mutationError(error);
-
-  const personId = returnedPersonId(data);
-  // A new person has no classification, so only an explicit choice needs the
-  // second call. The employee already exists; never turn its failure into a
-  // save error that invites a duplicate create.
-  let warning = selectedContractType === null
-    ? undefined
-    : await saveContractClassification(supabase, personId, selectedContractType);
-  const record = await findEmployeeDirectoryRecord(supabase, personId);
-  if (values.p_is_active && (values.p_work_email || values.p_personal_email)) {
-    try {
-      await createPortalAccount({
-        personId,
-        accountVersion: record.personVersion,
-        loginName: values.p_work_email ?? values.p_personal_email!,
-        newPassword: `${randomBytes(24).toString("base64url")}aA1!`,
-      });
-    } catch {
-      warning = [warning, "Employee saved, but account creation needs administrator review. Do not create the employee again."].filter(Boolean).join(" ");
+  let committedPersonId: string | null = null;
+  try {
+    const { supabase } = await requireDirectoryMutationManager();
+    const values = validateDraft(input);
+    const { p_contract_type: selectedContractType, ...directoryValues } = values;
+    if (values.p_is_active) {
+      if (!values.p_started_date) throw new DirectoryInputError("A start date is required for a new active employee.");
     }
-  } else if (values.p_is_active) {
-    warning = [warning, "Employee saved without a portal account because no email is recorded. Add an email and create the login in Accounts when available."].filter(Boolean).join(" ");
+    let { data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule_times", {
+      ...directoryValues,
+      p_manager_id: null,
+      p_sort_order: 0,
+    });
+    if (isMissingWorkScheduleRpc(error) && values.p_working_day_times.length === 0) {
+      const { p_working_day_times, ...weekdayValues } = directoryValues;
+      void p_working_day_times;
+      ({ data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule", {
+        ...weekdayValues,
+        p_manager_id: null,
+        p_sort_order: 0,
+      }));
+    }
+    if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
+      ({ data, error } = await supabase.rpc("create_employee_directory_record_with_employment_type", {
+        ...legacyDraftValues({ ...directoryValues, p_contract_type: selectedContractType }),
+        p_manager_id: null,
+        p_sort_order: 0,
+      }));
+    }
+    if (isMissingWorkScheduleRpc(error)) {
+      throw new DirectoryInputError("Work schedule storage is not ready. Refresh and try again.");
+    }
+    if (error) return { error: mutationErrorMessage(error) };
+
+    const personId = returnedPersonId(data);
+    committedPersonId = personId;
+    // A new person has no classification, so only an explicit choice needs the
+    // second call. The employee already exists; never turn its failure into a
+    // save error that invites a duplicate create.
+    let warning = selectedContractType === null
+      ? undefined
+      : await saveContractClassification(supabase, personId, selectedContractType);
+    const record = await readSavedDirectoryRecord(supabase, personId);
+    if (values.p_is_active && (values.p_work_email || values.p_personal_email)) {
+      try {
+        await createPortalAccount({
+          personId,
+          accountVersion: record.personVersion,
+          loginName: values.p_work_email ?? values.p_personal_email!,
+          newPassword: `${randomBytes(24).toString("base64url")}aA1!`,
+        });
+      } catch {
+        warning = [warning, "Employee saved, but account creation needs administrator review. Do not create the employee again."].filter(Boolean).join(" ");
+      }
+    } else if (values.p_is_active) {
+      warning = [warning, "Employee saved without a portal account because no email is recorded. Add an email and create the login in Accounts when available."].filter(Boolean).join(" ");
+    }
+    revalidatePath("/");
+    return warning ? { record, warning } : { record };
+  } catch (error) {
+    if (error instanceof DirectoryCommittedReadError) return { committed: true, personId: error.personId, error: error.message };
+    if (committedPersonId) return { committed: true, personId: committedPersonId, error: "Employee details were saved, but the directory could not be refreshed. Refresh the directory before trying again. Do not create the employee again." };
+    return { error: error instanceof DirectoryInputError ? error.message : GENERIC_SAVE_ERROR };
   }
-  revalidatePath("/");
-  return warning ? { record, warning } : { record };
 }
 
 export async function updateEmployeeDirectoryRecord(
   input: UpdateEmployeeDirectoryInput,
 ): Promise<EmployeeDirectoryMutationResult> {
-  const inputValue = inputObject(input);
-  if (typeof inputValue.personId !== "string" || !UUID_PATTERN.test(inputValue.personId)) {
-    throw new Error(GENERIC_SAVE_ERROR);
-  }
-  const { supabase } = await requireEmployeeDirectoryManager();
-  const values = validateDraft(inputValue);
-  const { p_contract_type: selectedContractType, ...directoryValues } = values;
-  const currentRecord = await findEmployeeDirectoryRecord(supabase, inputValue.personId);
-  directoryValues.p_manager_id = currentRecord.managerId;
-  let { data, error } = await supabase.rpc("update_employee_directory_record_with_work_schedule_times", {
-    ...directoryValues,
-    p_person_id: inputValue.personId,
-    p_expected_person_version: version(inputValue.personVersion),
-    p_expected_detail_version: version(inputValue.detailVersion),
-  });
-  if (isMissingWorkScheduleRpc(error) && values.p_working_day_times.length === 0) {
-    const { p_working_day_times, ...weekdayValues } = directoryValues;
-    void p_working_day_times;
-    ({ data, error } = await supabase.rpc("update_employee_directory_record_with_work_schedule", {
-      ...weekdayValues,
+  let committedPersonId: string | null = null;
+  try {
+    const inputValue = inputObject(input);
+    if (typeof inputValue.personId !== "string" || !UUID_PATTERN.test(inputValue.personId)) {
+      throw new DirectoryInputError(GENERIC_SAVE_ERROR);
+    }
+    const { supabase } = await requireDirectoryMutationManager();
+    const values = validateDraft(inputValue);
+    const { p_contract_type: selectedContractType, ...directoryValues } = values;
+    const currentRecord = await findEmployeeDirectoryRecord(supabase, inputValue.personId);
+    directoryValues.p_manager_id = currentRecord.managerId;
+    let { data, error } = await supabase.rpc("update_employee_directory_record_with_work_schedule_times", {
+      ...directoryValues,
       p_person_id: inputValue.personId,
       p_expected_person_version: version(inputValue.personVersion),
       p_expected_detail_version: version(inputValue.detailVersion),
-    }));
-  }
-  if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
-    ({ data, error } = await supabase.rpc("update_employee_directory_record_with_employment_type", {
-      ...legacyDraftValues({ ...directoryValues, p_contract_type: selectedContractType }),
-      p_person_id: inputValue.personId,
-      p_expected_person_version: version(inputValue.personVersion),
-      p_expected_detail_version: version(inputValue.detailVersion),
-    }));
-  }
-  if (isMissingWorkScheduleRpc(error)) {
-    throw new Error("Work schedule storage is not ready. Refresh and try again.");
-  }
-  if (error) throw mutationError(error);
+    });
+    if (isMissingWorkScheduleRpc(error) && values.p_working_day_times.length === 0) {
+      const { p_working_day_times, ...weekdayValues } = directoryValues;
+      void p_working_day_times;
+      ({ data, error } = await supabase.rpc("update_employee_directory_record_with_work_schedule", {
+        ...weekdayValues,
+        p_person_id: inputValue.personId,
+        p_expected_person_version: version(inputValue.personVersion),
+        p_expected_detail_version: version(inputValue.detailVersion),
+      }));
+    }
+    if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
+      ({ data, error } = await supabase.rpc("update_employee_directory_record_with_employment_type", {
+        ...legacyDraftValues({ ...directoryValues, p_contract_type: selectedContractType }),
+        p_person_id: inputValue.personId,
+        p_expected_person_version: version(inputValue.personVersion),
+        p_expected_detail_version: version(inputValue.detailVersion),
+      }));
+    }
+    if (isMissingWorkScheduleRpc(error)) {
+      throw new DirectoryInputError("Work schedule storage is not ready. Refresh and try again.");
+    }
+    if (error) return { error: mutationErrorMessage(error) };
 
-  const personId = returnedPersonId(data);
-  // The directory change is already committed; report a classification
-  // failure against the fresh record instead of failing the whole save.
-  const warning = await saveContractClassification(supabase, personId, selectedContractType);
-  const record = await findEmployeeDirectoryRecord(supabase, personId);
-  revalidatePath("/");
-  return warning ? { record, warning } : { record };
+    const personId = returnedPersonId(data);
+    committedPersonId = personId;
+    // The directory change is already committed; report a classification
+    // failure against the fresh record instead of failing the whole save.
+    const warning = await saveContractClassification(supabase, personId, selectedContractType);
+    const record = await readSavedDirectoryRecord(supabase, personId);
+    revalidatePath("/");
+    return warning ? { record, warning } : { record };
+  } catch (error) {
+    if (error instanceof DirectoryCommittedReadError) return { committed: true, personId: error.personId, error: error.message };
+    if (committedPersonId) return { committed: true, personId: committedPersonId, error: "Employee details were saved, but the directory could not be refreshed. Refresh the directory before trying again. Do not create the employee again." };
+    return { error: error instanceof DirectoryInputError ? error.message : GENERIC_SAVE_ERROR };
+  }
 }
 
 export type ArchiveEmployeeDirectoryResult =
