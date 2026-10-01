@@ -18,7 +18,7 @@ function session(statement, role = 'authenticated', hold = false) {
   child.stderr.on('data', chunk => { error += chunk; });
   const done = new Promise((resolve, reject) => {
     child.on('error', reject);
-    child.on('exit', code => { sessions.delete(child); resolve({ code, output, error }); });
+    child.on('close', code => { sessions.delete(child); resolve({ code, output, error }); });
   });
   child.stdin.write(`\\set VERBOSITY verbose\nbegin; set statement_timeout='2s'; set local role ${role};
     select set_config('request.jwt.claim.sub','${admin}',true);

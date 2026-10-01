@@ -19,7 +19,7 @@ function session(actor, statement, hold = false) {
   child.stderr.on("data", (chunk) => { error += chunk; });
   const done = new Promise((resolve, reject) => {
     child.on("error", reject);
-    child.on("exit", (code) => {
+    child.on("close", (code) => {
       sessions.delete(child);
       resolve({ code, output, error });
     });

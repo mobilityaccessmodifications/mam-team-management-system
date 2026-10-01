@@ -13,7 +13,7 @@ function session(statement, { hold = false, actor = admin } = {}) {
   const child = spawn('psql', [...target(socket, database), '-Atq', '-v', 'VERBOSITY=verbose'], { env: { ...postgresEnv, PGAPPNAME: app }, stdio: ['pipe', 'pipe', 'pipe'] });
   children.add(child); let output = '', error = '';
   child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { error += chunk; });
-  const done = new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', code => { children.delete(child); resolve({ code, output, error }); }); });
+  const done = new Promise((resolve, reject) => { child.on('error', reject); child.on('close', code => { children.delete(child); resolve({ code, output, error }); }); });
   child.stdin.write(`begin; set local statement_timeout='5s';
     select set_config('request.jwt.claim.sub','${actor}',true);
     select set_config('request.jwt.claims',jsonb_build_object('sub','${actor}','iat',extract(epoch from clock_timestamp())::bigint,'is_anonymous',false)::text,true);

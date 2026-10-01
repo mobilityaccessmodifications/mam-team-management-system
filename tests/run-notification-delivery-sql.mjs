@@ -42,7 +42,7 @@ function session(query, { hold = false, role = "service_role" } = {}) {
   child.stderr.on("data", (data) => { stderr += data; });
   const done = new Promise((resolve, reject) => {
     child.on("error", reject);
-    child.on("exit", (code) => {
+    child.on("close", (code) => {
       active.delete(child);
       if (code !== 0) reject(new Error(`Synthetic psql failed (${code}): ${stderr}`));
       else resolve(stdout);
