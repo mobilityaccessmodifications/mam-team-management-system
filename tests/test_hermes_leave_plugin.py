@@ -128,6 +128,8 @@ class HermesLeaveTests(unittest.IsolatedAsyncioTestCase):
         output = await self.prepare()
         self.assertEqual(output["code"], "prepared")
         self.assertNotIn("synthetic-token", json.dumps(output))
+        self.assertNotIn("summary", output)
+        self.assertEqual(output["instruction"], "Reply only: Reply Confirm within 10 minutes to submit. Do not repeat the summary or claim submission.")
         self.assertNotIn("leaveType", self.requests[0][1])
         self.assertIsNone(self.requests[0][1]["startTime"])
         self.assertEqual(self.gateway.adapter.sent[0][1], f"```\n{self.summary}\n```")
