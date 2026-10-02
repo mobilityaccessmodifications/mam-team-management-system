@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import ssl
@@ -17,6 +18,7 @@ from pathlib import Path
 
 
 PATH = "/api/internal/integrations/openclaw/leave"
+LOGGER = logging.getLogger("mam_hermes_leave")
 PHONE = re.compile(r"^([1-9][0-9]{7,14})@s\.whatsapp\.net$")
 LID = re.compile(r"^([1-9][0-9]{7,14})@lid$")
 SAFE_ID = re.compile(r"^[A-Za-z0-9:_-]{1,128}$")
@@ -276,6 +278,8 @@ def _bridge(identity, operation, payload, inbound_id=None):
         result = json.loads(data)
         return result if isinstance(result, dict) and isinstance(result.get("code"), str) else {"code": "unavailable"}
     except urllib.error.HTTPError as error:
+        if error.code == 401:
+            LOGGER.error("MAM leave bridge rejected authentication (HTTP 401)")
         if error.code == 409:
             try:
                 data = json.loads(error.read(4096))
