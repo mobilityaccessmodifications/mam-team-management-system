@@ -72,13 +72,14 @@ export type SelfProfileMenuProps = {
    * Persist only the editable contact fields. The caller must still check the
    * signed-in identity or HR capability and authorise the update on the server.
    */
-  onSave: (changes: SelfProfileChanges) => Promise<SelfProfileSaveResult>;
+  onSave: (changes: SelfProfileChanges, isCurrent?: () => boolean) => Promise<SelfProfileSaveResult>;
   /** Use while the profile record is initially loading. */
   disabled?: boolean;
   /** Distinguishes an employee's self-service card from an HR-selected card. */
   mode?: SelfProfileMenuMode;
   /** Included in HR context copy only; it must be the authenticated HR viewer. */
   viewerName?: string;
+  scopeKey?: string;
 };
 
 type Feedback =
@@ -117,6 +118,7 @@ export function SelfProfileMenu({
   disabled = false,
   mode = "self",
   viewerName,
+  scopeKey,
 }: SelfProfileMenuProps) {
   const panelId = useId();
   const titleId = useId();
@@ -129,6 +131,7 @@ export function SelfProfileMenu({
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   const profileKey = [
+    scopeKey ?? "",
     mode,
     profile.name,
     profile.title,
@@ -149,16 +152,28 @@ export function SelfProfileMenu({
     profileKey: string;
     values: SelfProfileChanges;
   } | null>(null);
+  const selectionKey = scopeKey ?? profileKey;
   const [draftState, setDraftState] = useState(() => ({
+    selectionKey,
     profileKey,
     values: profileValues,
   }));
   const [isOpen, setIsOpen] = useState(false);
   const [anchor, setAnchor] = useState({ top: 72, right: 16 });
-  const [isSaving, setIsSaving] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(idleFeedback);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [feedbackState, setFeedbackState] = useState({ selectionKey, value: idleFeedback });
+  const isSaving = savingKey === selectionKey;
+  const feedback = feedbackState.selectionKey === selectionKey ? feedbackState.value : idleFeedback;
+  const setFeedback = useCallback((value: Feedback) => setFeedbackState({ selectionKey, value }), [selectionKey]);
+  const saveOwner = useRef<object | null>(null);
+  const pendingMutation = useRef<object | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState<string | null>(null);
+  const requiresRefresh = refreshKey === selectionKey;
+  const mutationPending = pendingKey === selectionKey;
+  useEffect(() => () => { saveOwner.current = null; pendingMutation.current = null; }, [selectionKey]);
   const savedValues = savedLocally?.profileKey === profileKey ? savedLocally.values : profileValues;
-  const draft = draftState.profileKey === profileKey ? draftState.values : profileValues;
+  const draft = (isOpen && draftState.selectionKey === selectionKey) || draftState.profileKey === profileKey ? draftState.values : profileValues;
   const displayName = profile.name.trim() || "My profile";
   const displayTitle = profile.title.trim() || "Team member";
   const organisation = companyName(profile.company);
@@ -171,14 +186,16 @@ export function SelfProfileMenu({
     : "Your profile changes are saved.";
 
   const closeMenu = useCallback((restoreFocus = false) => {
+    saveOwner.current = null;
+    setSavingKey(null);
     setIsOpen(false);
-    setDraftState({ profileKey, values: savedValues });
+    setDraftState({ selectionKey, profileKey, values: savedValues });
     setFeedback(idleFeedback);
 
     if (restoreFocus) {
       requestAnimationFrame(() => triggerRef.current?.focus());
     }
-  }, [profileKey, savedValues]);
+  }, [selectionKey, profileKey, savedValues, setFeedback]);
 
   useDialogFocus(isOpen, panelRef, canEditProfile ? firstInputRef : null, () => closeMenu(true));
 
@@ -201,22 +218,22 @@ export function SelfProfileMenu({
     if (!canEditProfile) return;
     const bounds = triggerRef.current?.getBoundingClientRect();
     if (bounds) setAnchor({ top: bounds.bottom + 9, right: Math.max(14, window.innerWidth - bounds.right) });
-    setDraftState({ profileKey, values: savedValues });
+    setDraftState({ selectionKey, profileKey, values: savedValues });
     setFeedback(idleFeedback);
     setIsOpen(true);
   }
 
   function updateDraft(field: keyof SelfProfileChanges, value: string) {
     setDraftState((current) => {
-      const currentValues = current.profileKey === profileKey ? current.values : profileValues;
-      return { profileKey, values: { ...currentValues, [field]: value } };
+      const currentValues = current.selectionKey === selectionKey ? current.values : profileValues;
+      return { selectionKey, profileKey, values: { ...currentValues, [field]: value } };
     });
     if (feedback.tone !== "idle") setFeedback(idleFeedback);
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canEditProfile || isSaving) return;
+    if (!canEditProfile || mutationPending || requiresRefresh || pendingMutation.current) return;
     const form = event.currentTarget;
     if (!form.checkValidity()) {
       form.reportValidity();
@@ -234,14 +251,20 @@ export function SelfProfileMenu({
       dateOfBirth: draft.dateOfBirth,
     };
 
-    setIsSaving(true);
+    const owner = {};
+    saveOwner.current = owner;
+    pendingMutation.current = owner;
+    setPendingKey(selectionKey);
+    setSavingKey(selectionKey);
     setFeedback(idleFeedback);
     try {
-      const result = await onSave(changes);
+      const result = await onSave(changes, () => saveOwner.current === owner);
+      if (saveOwner.current !== owner) return;
       setSavedLocally({ profileKey, values: changes });
-      setDraftState({ profileKey, values: changes });
+      setDraftState({ selectionKey, profileKey, values: changes });
       setFeedback({ tone: "success", message: result?.message ?? saveDefaultMessage });
     } catch (error) {
+      if (saveOwner.current !== owner) return;
       // Server Actions deliberately return generic errors except for this
       // optimistic-concurrency case. Keep arbitrary server messages out of
       // the profile UI while still telling the employee what to do next.
@@ -250,7 +273,15 @@ export function SelfProfileMenu({
         : "Your profile changes could not be saved. Check the details and try again.";
       setFeedback({ tone: "error", message });
     } finally {
-      setIsSaving(false);
+      if (pendingMutation.current === owner) {
+        pendingMutation.current = null;
+        setPendingKey(null);
+        if (saveOwner.current !== owner) setRefreshKey(selectionKey);
+      }
+      if (saveOwner.current === owner) {
+        saveOwner.current = null;
+        setSavingKey(null);
+      }
     }
   }
 
@@ -390,9 +421,9 @@ export function SelfProfileMenu({
 
               <footer className={styles.footer}>
                 <button className={styles.cancelButton} disabled={isSaving} onClick={() => closeMenu(true)} type="button">Cancel</button>
-                <button className={styles.saveButton} disabled={isSaving || !isDirty} type="submit">
+                {requiresRefresh ? <button className={styles.saveButton} onClick={() => window.location.reload()} type="button">Refresh profile</button> : <button className={styles.saveButton} disabled={mutationPending || !isDirty} type="submit">
                   {isSaving ? "Saving…" : "Save changes"}
-                </button>
+                </button>}
               </footer>
             </form>
           </>}
