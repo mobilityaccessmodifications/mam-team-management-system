@@ -10,8 +10,8 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PATH = ROOT / 'scripts/deploy-payroll-closing-diagnostic.py'
-CORE = '686ad41be98237ed7da92d46a9c476877c65d67aae96964100017ead684a0e2c'
-PINS = '715b38257e974f02ed8abae37df969b42091c8c11d3c1120a801bd0da2de09ea'
+CORE = 'c0662cadbc822ef759b9088b1fd39b777cbab09bb27a2bda024b4cd033de6143'
+PINS = '07e59e20dbeb3943e8f3e3942c895ead83e8937166b432f1eb85e3f436913e3d'
 
 
 def load():

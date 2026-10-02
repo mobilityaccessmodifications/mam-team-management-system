@@ -20,7 +20,7 @@ spec.loader.exec_module(m)
 
 class ReleaseHelperTests(unittest.TestCase):
     def test_full_security_query_is_exact_reviewed_core_expression(self):
-        raw = m.load_candidate('686ad41be98237ed7da92d46a9c476877c65d67aae96964100017ead684a0e2c')
+        raw = m.load_candidate('c0662cadbc822ef759b9088b1fd39b777cbab09bb27a2bda024b4cd033de6143')
         expression = '(select jsonb_build_object(\n'+raw.split('      (select jsonb_build_object(\n',1)[1].split(' as extra_catalog;',1)[0]
         self.assertEqual(raw.count(expression),3)
         self.assertEqual(m.full_security_query(raw),'SELECT '+expression+' AS metadata;')
@@ -39,7 +39,7 @@ class ReleaseHelperTests(unittest.TestCase):
                     m.full_security_query()
 
     def test_purge_contract_is_certified_without_oid_pins(self):
-        reviewed = '686ad41be98237ed7da92d46a9c476877c65d67aae96964100017ead684a0e2c'
+        reviewed = 'c0662cadbc822ef759b9088b1fd39b777cbab09bb27a2bda024b4cd033de6143'
         m.load_candidate(reviewed)
         query = m.catalog_query()
         self.assertIn("'purgeGuard'", query)
@@ -51,7 +51,7 @@ class ReleaseHelperTests(unittest.TestCase):
 
 
     def test_transaction_rechecks_purge_receipts(self):
-        reviewed = '686ad41be98237ed7da92d46a9c476877c65d67aae96964100017ead684a0e2c'
+        reviewed = 'c0662cadbc822ef759b9088b1fd39b777cbab09bb27a2bda024b4cd033de6143'
         raw = m.load_candidate(reviewed)
         ledger = [dict(version='20261001140000',name='synthetic',sourceHash='0'*64)]
         before = dict(ledger=ledger,functions=json.loads(m.PINS.read_bytes())['before']['functions'],tables={})
@@ -66,7 +66,7 @@ class ReleaseHelperTests(unittest.TestCase):
         self.assertGreater(transaction.rindex('do $closing_release_purge$'),transaction.rindex('insert into supabase_migrations.schema_migrations'))
 
     def test_deferred_effects_run_before_all_final_assertions(self):
-        raw = m.load_candidate('686ad41be98237ed7da92d46a9c476877c65d67aae96964100017ead684a0e2c')
+        raw = m.load_candidate('c0662cadbc822ef759b9088b1fd39b777cbab09bb27a2bda024b4cd033de6143')
         pins = json.loads(m.PINS.read_bytes())
         transaction = m.build_transaction(raw,pins['before'],pins['after'])
         boundary = transaction.rindex('insert into supabase_migrations.schema_migrations')
@@ -79,7 +79,7 @@ class ReleaseHelperTests(unittest.TestCase):
 
     def test_inspect_rejects_adopted_core_predecessor_mismatch(self):
         import re
-        raw = m.load_candidate('686ad41be98237ed7da92d46a9c476877c65d67aae96964100017ead684a0e2c')
+        raw = m.load_candidate('c0662cadbc822ef759b9088b1fd39b777cbab09bb27a2bda024b4cd033de6143')
         block = raw.split('do $payroll_purge_before$',1)[1].split('end $payroll_purge_before$;',1)[0]
         signatures = [signature for signature,_ in re.findall(r"\('([^']+)','([0-9a-f]{64})'\)",block)]
         self.assertEqual(len(signatures),14)
@@ -95,7 +95,7 @@ class ReleaseHelperTests(unittest.TestCase):
                             m.main()
 
     def test_candidate_requires_exact_raw_bytes(self):
-        reviewed = '686ad41be98237ed7da92d46a9c476877c65d67aae96964100017ead684a0e2c'
+        reviewed = 'c0662cadbc822ef759b9088b1fd39b777cbab09bb27a2bda024b4cd033de6143'
         raw = m.MIGRATION.read_bytes()
         self.assertEqual(hashlib.sha256(raw).hexdigest(), reviewed)
         self.assertEqual(m.load_candidate(reviewed).encode(), raw)

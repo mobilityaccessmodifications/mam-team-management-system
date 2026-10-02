@@ -720,7 +720,7 @@ begin
   if exists(select unnest(reviewed_metadata||reviewed_functions) except all select unnest(current_definitions)) then
     raise exception 'Reviewed payroll catalog delta is missing' using errcode='55000';
   end if;
-  select array_agg(definition order by definition),encode(extensions.digest(coalesce(string_agg(definition,E'\n' order by definition),''),'sha256'),'hex')
+  select array_agg(definition order by definition collate "C"),encode(extensions.digest(coalesce(string_agg(definition,E'\n' order by definition collate "C"),''),'sha256'),'hex')
     into normalized_definitions,normalized_hash from (
     (select unnest(current_definitions) as definition except all select unnest(reviewed_metadata||reviewed_functions))
     union all select unnest(baseline.functions)

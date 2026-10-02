@@ -85,7 +85,7 @@ def load_candidate(reviewed_sha):
 
 
 def full_security_query(sql=None):
-    reviewed = '686ad41be98237ed7da92d46a9c476877c65d67aae96964100017ead684a0e2c'
+    reviewed = 'c0662cadbc822ef759b9088b1fd39b777cbab09bb27a2bda024b4cd033de6143'
     if sql is None:
         pins = json.loads(PINS.read_bytes())
         require(pins['migrationSha256'] == reviewed, 'Unreviewed full security metadata source')

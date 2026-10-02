@@ -19,7 +19,7 @@ query=m['catalog_query']()
 for key in ['columnAcl','policies','roles','schemas','defaultAcl']:
     assert "'"+key+"'" in query, 'Security catalog omits '+key
 assert 'private.is_active_portal_account(uuid)' in m['BEFORE_FUNCTIONS']
-metadata=m['full_security_query'](m['load_candidate']('686ad41be98237ed7da92d46a9c476877c65d67aae96964100017ead684a0e2c'))
+metadata=m['full_security_query'](m['load_candidate']('c0662cadbc822ef759b9088b1fd39b777cbab09bb27a2bda024b4cd033de6143'))
 assert metadata.startswith('SELECT (select jsonb_build_object(') and metadata.endswith(' AS metadata;')
 for key in ['column_acls','schema_acls','default_acls','roles']:
     assert "'"+key+"'" in metadata

@@ -3,7 +3,7 @@
   "organization": "fwlmbmospuwoaosffvmw",
   "version": "20261001150000",
   "baseHead": "827171257eccbd810de9e8c33bd7e587d519ac2c",
-  "migrationSha256": "686ad41be98237ed7da92d46a9c476877c65d67aae96964100017ead684a0e2c",
+  "migrationSha256": "c0662cadbc822ef759b9088b1fd39b777cbab09bb27a2bda024b4cd033de6143",
   "localPredecessors": [
     {
       "file": "20260803070713_initial_team_management.sql",
@@ -6184,7 +6184,7 @@
       {
         "name": "payroll_closing_carryforward",
         "version": "20261001150000",
-        "sourceHash": "83709308a8bcf4c305f62b2ec0d29565e414378bbae6cf64ee11323fb34e08a2"
+        "sourceHash": "8a19304b1ebd25bf8ada2a03b618ab52e58a3ff3c0207b510ba50d22024b513e"
       }
     ],
     "tables": {
