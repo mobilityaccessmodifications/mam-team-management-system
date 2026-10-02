@@ -299,9 +299,8 @@ def _visible(result, shown):
         return {"code": "unavailable"}
     return {
         "code": "prepared",
-        "summary": result["summary"],
         "delivery": "The exact summary has a verified delivery receipt. Do not send another copy." if shown else "The summary has no verified delivery receipt. Do not claim delivery or submission.",
-        "instruction": "Do not claim submission. In one short follow-up say: Send Confirm within 10 minutes to submit your latest summary for manager approval, or tell me what to change. Do not send another summary.",
+        "instruction": "Reply only: Reply Confirm within 10 minutes to submit. Do not repeat the summary or claim submission.",
     }
 
 
