@@ -19,7 +19,7 @@ function session(statement, actor, hold = false) {
   child.stderr.on("data", (chunk) => { error += chunk; });
   const done = new Promise((resolve, reject) => {
     child.on("error", reject);
-    child.on("exit", (code) => { sessions.delete(child); resolve({ code, output, error }); });
+    child.on("close", (code) => { sessions.delete(child); resolve({ code, output, error }); });
   });
   child.stdin.write(`begin; set statement_timeout='10s'; ${actor ? `set local role authenticated;
     select set_config('request.jwt.claim.sub','${actor}',true);

@@ -10,6 +10,8 @@ export type AnnualLeaveProjection = {
   payrollDate?: string;
   payrollHours?: number;
   approvedHours?: number;
+  retainedHours?: number;
+  balanceSource?: "owner_estimate" | "confirmed_usage" | null;
   accruedHours?: number;
   otherTakenHours?: number;
   availableHours?: number;
