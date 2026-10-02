@@ -57,6 +57,13 @@ try {
   });
   const code = await new Promise((resolve, reject) => { child.on("error", reject); child.on("exit", resolve); });
   process.exitCode = code ?? 1;
+  if (process.exitCode === 0) {
+    const contact = spawn(process.execPath, ["tests/browser/contact-lifetime-runner.mjs", ...process.argv.slice(3)], {
+      env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, MAM_BROWSER_SOURCE_ROOT: sourceRoot },
+      stdio: "inherit",
+    });
+    process.exitCode = await new Promise((resolve, reject) => { contact.on("error", reject); contact.on("exit", resolve); }) ?? 1;
+  }
 } finally {
   await new Promise((resolve) => server.close(resolve));
   rmSync(scratch, { recursive: true, force: true });
