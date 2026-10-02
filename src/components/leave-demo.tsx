@@ -636,6 +636,7 @@ export function LeaveDemo({
   // This is intentionally UI-only. It never changes the authenticated user or
   // the capability checks that protect HR records and organisation writes.
   const [previewPersonId, setPreviewPersonId] = useState("");
+  const [contactScopeEpoch, setContactScopeEpoch] = useState(0);
   // The preview loader is a stable no-argument callback for the employee
   // directory component. It carries only the selected preview id; the server
   // action rechecks the real System Admin capability and active target.
@@ -1129,6 +1130,7 @@ export function LeaveDemo({
     if (organisationState !== "live" || !previewPersonId || selectedPreviewCandidate) return;
     const timer = window.setTimeout(() => {
       profileScopeEpoch.current += 1;
+      setContactScopeEpoch(profileScopeEpoch.current);
       workScheduleRefreshSequence.current += 1;
       leaveRefreshSequence.current += 1;
       setPreviewPersonId("");
@@ -1455,12 +1457,14 @@ export function LeaveDemo({
     });
   }
 
-  async function saveMyProfile(changes: SelfProfileChanges) {
+  async function saveMyProfile(changes: SelfProfileChanges, isCurrent?: () => boolean) {
+    const actionEpoch = profileScopeEpoch.current;
     if (!selfProfile) throw new Error("Your profile is still loading.");
     const updated = await updateCurrentEmployeeSelfProfile({
       ...changes,
       detailVersion: selfProfile.detailVersion,
     });
+    if (actionEpoch !== profileScopeEpoch.current || (isCurrent && !isCurrent())) return;
     setSelfProfile(updated);
     // A self-service edit deliberately triggers the same public-row realtime
     // refresh used by HR. Update the local HR directory immediately too.
@@ -1471,7 +1475,8 @@ export function LeaveDemo({
     return { message: "Your contact details are saved." };
   }
 
-  async function saveSelectedEmployeeProfile(changes: SelfProfileChanges) {
+  async function saveSelectedEmployeeProfile(changes: SelfProfileChanges, isCurrent?: () => boolean) {
+    const actionEpoch = profileScopeEpoch.current;
     if (!canPreviewEmployeeAccess || !previewProfile || !selectedEmployeeProfile || selectedEmployeeProfile.personId !== previewProfile.id) {
       throw new Error("The selected employee profile is still loading.");
     }
@@ -1480,6 +1485,7 @@ export function LeaveDemo({
       personId: selectedEmployeeProfile.personId,
       detailVersion: selectedEmployeeProfile.detailVersion,
     });
+    if (actionEpoch !== profileScopeEpoch.current || (isCurrent && !isCurrent())) return;
     setSelectedEmployeeProfile(updated);
     if (updated.personId === currentPersonId) setSelfProfile(updated);
     // Keep the HR directory and the public organisation tree in step with the
@@ -1508,6 +1514,7 @@ export function LeaveDemo({
     }
 
     profileScopeEpoch.current += 1;
+    setContactScopeEpoch(profileScopeEpoch.current);
     leaveRefreshSequence.current += 1;
     workScheduleRefreshSequence.current += 1;
     workScheduleWorkspaceRef.current = null;
@@ -1991,6 +1998,7 @@ export function LeaveDemo({
                 mode={isPreviewingEmployeeAccess ? "hr-preview" : "self"}
                 onSave={isPreviewingEmployeeAccess ? saveSelectedEmployeeProfile : saveMyProfile}
                 profile={topbarProfile}
+                scopeKey={`${isPreviewingEmployeeAccess ? selectedPreviewPersonId : currentPersonId ?? "self"}:${contactScopeEpoch}:${selectedEmployeeProfileReloadKey}`}
                 viewerName={isPreviewingEmployeeAccess ? signedInProfile.name : undefined}
               />}
           </div>
