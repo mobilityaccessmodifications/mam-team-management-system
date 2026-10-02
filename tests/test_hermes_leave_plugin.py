@@ -11,6 +11,7 @@ import threading
 import time
 import types
 import unittest
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -446,6 +447,21 @@ class HermesLeaveTests(unittest.IsolatedAsyncioTestCase):
         timestamp = request.get_header("X-mam-timestamp")
         signature = hmac.new(b"a" * 43, b"POST\n" + plugin.PATH.encode() + b"\n" + timestamp.encode() + b"\n" + request.data, hashlib.sha256).hexdigest()
         self.assertEqual(request.get_header("X-mam-signature"), signature)
+
+    async def test_bridge_auth_rejection_is_logged_without_identity_or_secret(self):
+        identity = plugin._identity(self.source, self.gateway)
+        error = urllib.error.HTTPError("https://example.invalid", 401, "Unauthorized", {}, None)
+        self.addCleanup(error.close)
+        class Opener:
+            def open(self, request, timeout):
+                raise error
+        with patch.object(urllib.request, "build_opener", return_value=Opener()):
+            with self.assertLogs("mam_hermes_leave", level="ERROR") as captured:
+                result = self.real_bridge(identity, "prepare", {"employeeNote": ""})
+        self.assertEqual(result, {"code": "unavailable"})
+        self.assertIn("HTTP 401", captured.output[0])
+        self.assertNotIn(identity["sender"], captured.output[0])
+        self.assertNotIn("a" * 43, captured.output[0])
 
     async def test_new_message_invalidates_unsubmitted_draft(self):
         await self.prepare()
