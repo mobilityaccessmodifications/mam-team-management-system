@@ -762,6 +762,7 @@ function leaveEntitlementPolicy(
     && employmentType !== "casual"
     && employmentType !== "full_time"
     && employmentType !== "part_time"
+    && employmentType !== "overseas"
   ) throw new Error(LOAD_ERROR);
 
   const hasPaidLeaveEntitlement = employmentType === "full_time" || employmentType === "part_time";
