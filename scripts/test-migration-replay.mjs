@@ -8,6 +8,10 @@ sql(socket, database, readFileSync(new URL("../tests/migrations/0001-supabase-pl
 const files = readdirSync("supabase/migrations").filter((file) => file.endsWith(".sql")).sort();
 for (const file of files) {
   console.log(`Replay ${file}`);
+  if (file === "20261003090000_payroll_operator_session_proof.sql") {
+    sql(socket, database, readFileSync(new URL("../tests/migrations/operator-session-platform.sql", import.meta.url), "utf8"));
+    sql(socket, database, "update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;");
+  }
   sql(socket, database, readFileSync(path.join("supabase/migrations", file), "utf8"));
 }
 console.log(`PASS: executed all ${files.length} ordered migrations without changing their bytes`);

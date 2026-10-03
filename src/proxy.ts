@@ -6,6 +6,11 @@ import { isSupabaseConfigured, requireSupabaseConfig } from "@/lib/supabase/conf
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  // This exact endpoint authenticates the existing bearer through its own
+  // read-only RPC. Ordinary session loading/refresh must not precede it.
+  if (pathname === "/api/internal/payroll/session-proof") {
+    return NextResponse.next({ request });
+  }
   // This exact server-to-server route authenticates its own dedicated secret.
   // No cookie refresh/network dependency or browser redirect may precede it.
   if (pathname === "/api/internal/integrations/openclaw/whatsapp-allowlist"

@@ -20,7 +20,7 @@ createDatabase(socket, database);
 sql(socket, database, readFileSync('tests/migrations/0001-supabase-platform.sql', 'utf8'));
 sql(socket, database, 'create schema supabase_migrations; create table supabase_migrations.schema_migrations(version text primary key,name text,statements text[]);');
 const literal = value => `'${value.replaceAll("'", "''")}'`;
-for (const file of readdirSync('supabase/migrations').filter(file => file.endsWith('.sql') && !file.startsWith(candidate.version)).sort()) {
+for (const file of readdirSync('supabase/migrations').filter(file => file.endsWith('.sql') && file.split('_')[0] < candidate.version).sort()) {
   const raw = readFileSync(path.join('supabase/migrations', file), 'utf8');
   sql(socket, database, raw);
   const [version, ...name] = file.replace(/\.sql$/, '').split('_');
