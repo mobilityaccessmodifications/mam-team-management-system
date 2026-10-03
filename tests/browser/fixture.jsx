@@ -1,3 +1,4 @@
+import "@/app/globals.css";
 import { PayrollCarryforwardFixture } from "./payroll-carryforward-fixture";
 import { DirectoryFixture } from "./directory-fixture";
 import { TeamDirectoryFixture } from "./team-directory-fixture";

@@ -159,6 +159,9 @@ test("employee calendar keeps generic leave and no staff-only details or legend"
   await page.getByText(/Other Staff · Approved leave/).first().evaluate((node) => node.click());
   await expect(page.getByText("Documents uploaded: 1")).toHaveCount(0);
   await expect(page.getByText("Approved by: Sample Reviewer")).toHaveCount(0);
+  await page.getByRole("button", { name: "Close event details" }).click();
+  await expect(page.locator(".df-event-detail-panel")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Close event details" })).toHaveCount(0);
   await page.getByText("Filters", { exact: true }).click();
   await expect(page.getByRole("group", { name: "Leave by type" })).toHaveCount(0);
 });

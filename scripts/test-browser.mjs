@@ -1,4 +1,7 @@
 import { build } from "esbuild";
+import postcss from "postcss";
+import tailwindcss from "@tailwindcss/postcss";
+import postcssConfig from "../postcss.config.mjs";
 import { draft, personId, loadActions } from "../tests/helpers/directory-action-harness.mjs";
 import { createServer } from "node:http";
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
@@ -38,7 +41,15 @@ try {
     platform: "browser", jsx: "automatic", sourcemap: false, minify: false,
     alias: { "@/app/leave/actions": path.join(sourceRoot, "tests/browser/payroll-display-actions.jsx"), "@/app/people/actions": path.join(sourceRoot, "tests/browser/directory-actions.jsx"), "@/components/employee-device-assignments": path.join(sourceRoot, "tests/browser/directory-fixture.jsx"), "@/app/people/team-directory-actions": path.join(sourceRoot, "tests/browser/team-directory-actions.jsx"), "@": path.join(sourceRoot, "src"), react: path.resolve("node_modules/react"), "react-dom": path.resolve("node_modules/react-dom") },
     define: { "process.env.NODE_ENV": '"production"', DIRECTORY_FIXTURE_RESULTS: JSON.stringify(directoryResults) },
-    plugins: [{ name: "test-presentation-exports", setup(builder) {
+    plugins: [{ name: "production-global-styles", setup(builder) {
+      // Use the real global source and existing PostCSS configuration, not a
+      // copied portal rule or a stale Next build artifact.
+      builder.onLoad({ filter: /[/\\]src[/\\]app[/\\]globals\.css$/ }, async ({ path: filename }) => {
+        const result = await postcss([tailwindcss({ ...postcssConfig.plugins["@tailwindcss/postcss"], base: sourceRoot })])
+          .process(readFileSync(filename, "utf8"), { from: filename, map: false });
+        return { contents: result.css, loader: "css", resolveDir: path.dirname(filename) };
+      });
+    } }, { name: "test-presentation-exports", setup(builder) {
       // Test-only exports of existing local presentation functions; no copied UI.
       builder.onLoad({ filter: /[/\\]team-calendar\.tsx$/ }, ({ path: filename }) => ({
         contents: readFileSync(filename, "utf8") + "\nexport { buildEvents as fixtureBuildEvents, EventDetail as FixtureEventDetail };",
