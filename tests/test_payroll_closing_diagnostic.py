@@ -22,6 +22,16 @@ def load():
     return module
 
 
+@contextlib.contextmanager
+def reviewed_predecessor_files(original):
+    pins = json.loads(original['PINS'].read_bytes())
+    directory = original['MIGRATION'].parent
+    files = [directory / row['file'] for row in pins['localPredecessors']] + [original['MIGRATION']]
+    glob = Path.glob
+    with patch.object(Path, 'glob', lambda self, pattern: iter(files) if self == directory and pattern == '*.sql' else glob(self, pattern)):
+        yield
+
+
 class DiagnosticTests(unittest.TestCase):
     def test_additive_diagnostic_preserves_entire_reviewed_transaction(self):
         self.assertTrue(PATH.exists(), 'Failing release has no guarded schema-difference diagnostic')
@@ -64,6 +74,9 @@ class DiagnosticTests(unittest.TestCase):
         argv = ['diagnostic', 'apply', head, CORE, PINS, sha]
         builder = scope['build_transaction']
         query = Mock(return_value=[])
+        frozen = reviewed_predecessor_files(original)
+        frozen.__enter__()
+        self.addCleanup(frozen.__exit__, None, None, None)
         with patch.object(module, 'load_original', return_value=original), patch.dict(scope, api=Mock(return_value={'id': original['PROJECT'], 'organization_id': original['ORG']}), query=query, read_catalog=Mock(side_effect=[pins['before'], pins['after']])), patch.object(scope['subprocess'], 'check_output', side_effect=[head + '\n', '']), patch.object(scope['subprocess'], 'run', return_value=Mock(returncode=0)), patch.object(sys, 'argv', argv), contextlib.redirect_stdout(io.StringIO()) as output:
             module.main()
             self.assertIs(scope['build_transaction'], builder)
@@ -85,6 +98,9 @@ class DiagnosticTests(unittest.TestCase):
         argv = ['diagnostic', 'apply', head, CORE, PINS, sha]
         builder = scope['build_transaction']
         query = Mock(side_effect=[[], OSError('Synthetic lost response')])
+        frozen = reviewed_predecessor_files(original)
+        frozen.__enter__()
+        self.addCleanup(frozen.__exit__, None, None, None)
         with patch.object(module, 'load_original', return_value=original), patch.dict(scope, api=Mock(return_value={'id': original['PROJECT'], 'organization_id': original['ORG']}), query=query, read_catalog=Mock(return_value=pins['before'])), patch.object(scope['subprocess'], 'check_output', side_effect=[head + '\n', '']), patch.object(scope['subprocess'], 'run', return_value=Mock(returncode=0)), patch.object(sys, 'argv', argv):
             with self.assertRaisesRegex(OSError, 'Synthetic lost response'):
                 module.main()

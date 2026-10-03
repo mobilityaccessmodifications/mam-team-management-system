@@ -68,7 +68,7 @@ let result = { sourcePath, migrationSha256: sourceSha, hosted, baseline, passed:
 try {
   createDatabase(socket, base);
   sql(socket, base, readFileSync('tests/migrations/0001-supabase-platform.sql', 'utf8'));
-  const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql') && !f.startsWith('20261001150000')).sort();
+  const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql') && f.split('_')[0] < '20261001150000').sort();
   for (const file of migrations) sql(socket, base, readFileSync(path.join('supabase/migrations', file), 'utf8'));
   assert.equal(migrations.length, 166);
   console.log(`PASS: full predecessor replay ${migrations.length} unchanged migrations`);
