@@ -45,10 +45,8 @@ import { listSubscriptionCredentialCatalogue } from "@/app/subscription-credenti
 import { EmployeePicker } from "@/components/employee-picker";
 import { subscriptionReviewWindow } from "@/lib/subscription-review-date";
 import { subscriptionEditorSnapshot, unavailableSubscriptionMemberIds } from "@/lib/subscription-editor-state";
-import {
-  SubscriptionCredentialAccessDialog,
-  SubscriptionCredentialEditor,
-} from "@/components/subscription-credential-vault";
+import { SubscriptionCredentialEditor } from "@/components/subscription-credential-vault";
+import { SubscriptionDelegationDialog } from "@/components/subscription-delegation-dialog";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/subscription-register.module.css";
@@ -255,6 +253,7 @@ export function SubscriptionRegister({
   readOnly = false,
   canManageCredentials = false,
   canManageCredentialGrants = false,
+  canManageManagementGrants = false,
   onRecordsChanged,
 }: {
   readOnly?: boolean;
@@ -262,6 +261,7 @@ export function SubscriptionRegister({
   canManageCredentials?: boolean;
   /** System Admin-only capability to choose credential delegates. */
   canManageCredentialGrants?: boolean;
+  canManageManagementGrants?: boolean;
   /** Refreshes dependent calendar data after an owner, status or review changes. */
   onRecordsChanged?: () => void;
 }) {
@@ -530,7 +530,7 @@ export function SubscriptionRegister({
         </div> : null}
       </div>
       <div className={toolbar.actions}>
-        {canManageCredentialGrants ? <button className={toolbar.button} type="button" onClick={() => setShowCredentialAccess(true)} aria-label="Manage credential access" title="Credential access"><UsersRound size={16} aria-hidden="true" /></button> : null}
+        {canManageCredentialGrants || canManageManagementGrants ? <button className={toolbar.button} type="button" onClick={() => setShowCredentialAccess(true)} aria-label="Manage subscription access" title="Subscription access"><UsersRound size={16} aria-hidden="true" /></button> : null}
         {!readOnly ? <button className={toolbar.primary} type="button" onClick={() => { subscriptionDialogReturnFocusRef.current = addSubscriptionButtonRef.current; setShowAdd(true); }} ref={addSubscriptionButtonRef}><Plus size={16} /> Add</button> : <div className={styles.readOnlyBadge}><ShieldCheck size={15} /> Read only</div>}
       </div>
     </header>
@@ -623,7 +623,7 @@ export function SubscriptionRegister({
       onSaved={() => setCredentialStates((current) => ({ ...current, [credentialTarget.id]: true }))}
       onRemoved={() => setCredentialStates((current) => ({ ...current, [credentialTarget.id]: false }))}
     /> : null}
-    {showCredentialAccess ? <SubscriptionCredentialAccessDialog onClose={() => setShowCredentialAccess(false)} /> : null}
+    {showCredentialAccess && canManageCredentialGrants && canManageManagementGrants ? <SubscriptionDelegationDialog onSaved={onRecordsChanged} onClose={() => setShowCredentialAccess(false)} /> : null}
   </section>;
 }
 

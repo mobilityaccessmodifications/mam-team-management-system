@@ -61,7 +61,7 @@ test('leave links show an honest loading state before their authorised workspace
 test('payroll import preview is target-capability scoped while reminders stay in the signed-in workspace', () => {
   assert.match(
     source,
-    /canAccessBalance = canImportPayrollBalances\s*\|\| \(!isPreviewingEmployeeAccess && leavePriority\?\.canManageBalances === true\);/,
+    /canAccessBalance = Boolean\(activeCapabilities\?\.can_import_payroll_balances && canImportPayrollBalances\)[\s\S]*?Boolean\(activeCapabilities\?\.can_manage_leave_balances && leavePriority\?\.canManageBalances === true\)/,
   );
   assert.match(
     source,

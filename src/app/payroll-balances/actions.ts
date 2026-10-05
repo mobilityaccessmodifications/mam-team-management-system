@@ -1,4 +1,6 @@
 "use server";
+import { requirePortalRoleActor } from "@/lib/portal-role-access";
+import { parsePortalRoleCapabilities } from "@/lib/portal-role-capabilities";
 
 import "server-only";
 
@@ -14,8 +16,6 @@ import {
   markPayrollBalanceSourceArchivesFailed,
 } from "@/lib/payroll-balance-source-archive";
 import type {
-  PayrollImportAccessPerson,
-  PayrollImportAccessWorkspace,
   PayrollImportBatch,
   PayrollImportBatchSummary,
   PayrollImportFile,
@@ -165,15 +165,6 @@ function mapBatchSummary(value: unknown): PayrollImportBatchSummary {
   return { batchId, status, files, rowCount: positiveInteger(row.rowCount), createdAt, committedAt };
 }
 
-function mapAccessPerson(value: unknown): PayrollImportAccessPerson {
-  const row = record(value);
-  const personId = text(row.person_id);
-  const fullName = text(row.full_name);
-  const positionTitle = text(row.position_title);
-  if (!UUID_PATTERN.test(personId) || !fullName || !positionTitle) throw new Error(LOAD_ERROR);
-  return { personId, fullName, positionTitle };
-}
-
 async function requireSession() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
@@ -181,18 +172,17 @@ async function requireSession() {
   return { supabase, actorUserId: data.user.id };
 }
 
-async function requireImporter() {
-  const { supabase, actorUserId } = await requireSession();
-  const { data, error } = await supabase.rpc("can_import_payroll_balances");
-  if (error || data !== true) throw new Error("You do not have permission to import payroll balances.");
-  return { supabase, actorUserId };
-}
-
-async function requireAccessAdministrator() {
-  const { supabase } = await requireSession();
-  const { data, error } = await supabase.rpc("can_manage_payroll_balance_import_grants");
-  if (error || data !== true) throw new Error("Only a Super Admin can manage payroll import access.");
-  return supabase;
+async function requireImporter(previewPersonId?: string) {
+  const { supabase, actorUserId, capabilities: actor } = await requirePortalRoleActor();
+  let capabilities = actor;
+  if (previewPersonId !== undefined) {
+    if (!UUID_PATTERN.test(previewPersonId) || !actor.is_super_admin || !actor.can_change_employee_view) throw new Error("Payroll preview access could not be confirmed.");
+    const { data, error } = await supabase.rpc("get_portal_role_capabilities", { p_person_id: previewPersonId });
+    if (error) throw new Error("Payroll preview access could not be confirmed.");
+    capabilities = parsePortalRoleCapabilities(data, previewPersonId);
+  }
+  if (!actor.can_import_payroll_balances || !capabilities.can_import_payroll_balances) throw new Error("You do not have permission to import payroll balances.");
+  return { supabase, actorUserId, capabilities };
 }
 
 export type PayrollImportWorkspaceResult =
@@ -200,10 +190,12 @@ export type PayrollImportWorkspaceResult =
   | { status: "forbidden" }
   | { status: "error"; message: string };
 
-export async function getPayrollBalanceImportWorkspace(): Promise<PayrollImportWorkspaceResult> {
+export async function getPayrollBalanceImportWorkspace(previewPersonId?: string): Promise<PayrollImportWorkspaceResult> {
   try {
-    const { supabase } = await requireSession();
-    const { data, error } = await supabase.rpc("get_payroll_balance_import_workspace");
+    const { supabase } = previewPersonId ? await requireImporter(previewPersonId) : await requireSession();
+    const { data, error } = previewPersonId
+      ? await supabase.rpc("get_payroll_balance_import_workspace_for_preview", { p_person_id: previewPersonId })
+      : await supabase.rpc("get_payroll_balance_import_workspace");
     if (error || !data) return { status: "error", message: LOAD_ERROR };
     const row = record(data);
     // Only an explicit capability denial means the feature is unavailable.
@@ -214,7 +206,7 @@ export async function getPayrollBalanceImportWorkspace(): Promise<PayrollImportW
       status: "ready",
       workspace: {
         canImport: true,
-        canManageAccess: boolean(row.canManageAccess),
+        canManageAccess: !previewPersonId && boolean(row.canManageAccess),
         reminder: mapReminder(row.reminder),
         recentBatches: row.recentBatches.map(mapBatchSummary),
       },
@@ -224,11 +216,11 @@ export async function getPayrollBalanceImportWorkspace(): Promise<PayrollImportW
   }
 }
 
-export async function stagePayrollBalanceFiles(formData: FormData): Promise<
+export async function stagePayrollBalanceFiles(formData: FormData, previewPersonId?: string): Promise<
   { ok: true; batch: PayrollImportBatch } | { ok: false; message: string }
 > {
   try {
-    const { actorUserId } = await requireImporter();
+    const { actorUserId, capabilities } = await requireImporter(previewPersonId);
     const files = formData.getAll("files");
     if (!files.length || files.some((file) => !(file instanceof File))) {
       return { ok: false, message: "Choose CSV or Excel leave-balance files." };
@@ -249,8 +241,9 @@ export async function stagePayrollBalanceFiles(formData: FormData): Promise<
     if (!SHA256_PATTERN.test(parsed.sourceDigest)) throw new Error("The upload digest is invalid.");
     let data: unknown;
     try {
-      const result = await createAdminClient().rpc("stage_payroll_balance_import", {
+      const result = await createAdminClient().rpc(previewPersonId ? "stage_payroll_balance_import_for_preview" : "stage_payroll_balance_import", {
         p_actor_user_id: actorUserId,
+        ...(previewPersonId ? { p_person_id: previewPersonId } : {}),
         p_source_digest: parsed.sourceDigest,
         p_files: parsed.files,
         p_rows: parsed.rows,
@@ -263,6 +256,7 @@ export async function stagePayrollBalanceFiles(formData: FormData): Promise<
       return { ok: false, message: "The files could not be staged. Check the format and try again." };
     }
     const batch = mapBatch(data);
+    if (capabilities.payroll_comparison_only && !batch.comparisonOnly) return { ok: false, message: "The comparison result could not be confirmed. Refresh before trying again." };
     await linkPayrollBalanceSourceArchives(actorUserId, archiveIds, batch.batchId);
     return { ok: true, batch };
   } catch (reason) {
@@ -270,14 +264,16 @@ export async function stagePayrollBalanceFiles(formData: FormData): Promise<
   }
 }
 
-export async function commitPayrollBalanceImport(batchId: string, version: number): Promise<
+export async function commitPayrollBalanceImport(batchId: string, version: number, previewPersonId?: string): Promise<
   { ok: true; batch: PayrollImportBatch } | { ok: false; message: string }
 > {
   try {
-    const { supabase } = await requireImporter();
+    const { supabase, capabilities } = await requireImporter(previewPersonId);
+    if (capabilities.payroll_comparison_only || !capabilities.can_manage_leave_balances) return { ok: false, message: "Comparison-only access cannot apply payroll balances." };
     if (!UUID_PATTERN.test(batchId) || !Number.isSafeInteger(version) || version < 1) {
       return { ok: false, message: "The payroll import is invalid. Upload the files again." };
     }
+    if (previewPersonId) await requirePreviewBatchAccess(supabase, batchId, previewPersonId, true);
     const { data, error } = await supabase.rpc("commit_payroll_balance_import", {
       p_batch_id: batchId,
       p_expected_version: version,
@@ -287,44 +283,52 @@ export async function commitPayrollBalanceImport(batchId: string, version: numbe
     revalidatePath("/");
     return { ok: true, batch };
   } catch (reason) {
-    return { ok: false, message: reason instanceof Error ? reason.message : "The payroll balances could not be applied." };
+    return { ok: false, message: previewPersonId !== undefined ? LOAD_ERROR : reason instanceof Error ? reason.message : "The payroll balances could not be applied." };
   }
 }
 
-export async function getPayrollBalanceImportAccessWorkspace(): Promise<PayrollImportAccessWorkspace> {
-  const supabase = await requireAccessAdministrator();
-  const [candidateResult, grantResult] = await Promise.all([
-    supabase.rpc("list_payroll_balance_import_grant_candidates"),
-    supabase.rpc("list_payroll_balance_import_grants"),
-  ]);
-  if (candidateResult.error || grantResult.error || !Array.isArray(candidateResult.data) || !Array.isArray(grantResult.data)) {
-    throw new Error("Payroll import access could not be loaded.");
-  }
-  return {
-    people: candidateResult.data.map(mapAccessPerson),
-    grantedPersonIds: grantResult.data.map(mapAccessPerson).map((person) => person.personId),
-  };
-}
-
-export async function replacePayrollBalanceImportGrants(personIds: string[]): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function replacePayrollBalanceImportGrants(personIds: string[]): Promise<{ ok: false; message: string }> {
   try {
-    const supabase = await requireAccessAdministrator();
-    if (!Array.isArray(personIds) || personIds.length > 25 || new Set(personIds).size !== personIds.length || personIds.some((id) => !UUID_PATTERN.test(id))) {
+    const { capabilities } = await requirePortalRoleActor();
+    if (!capabilities.is_super_admin) return { ok: false, message: "Only a Super Admin can manage payroll import access." };
+    if (!Array.isArray(personIds) || personIds.length > 25 || new Set(personIds).size !== personIds.length || personIds.some((id) => typeof id !== "string" || !UUID_PATTERN.test(id))) {
       return { ok: false, message: "Choose a valid unique payroll importer list." };
     }
-    const { error } = await supabase.rpc("replace_payroll_balance_import_grants", { p_person_ids: personIds });
-    if (error) return { ok: false, message: "Payroll import access could not be saved. Refresh and try again." };
-    revalidatePath("/");
-    return { ok: true };
-  } catch (reason) {
-    return { ok: false, message: reason instanceof Error ? reason.message : "Payroll import access could not be saved." };
+    return { ok: false, message: "Payroll import access is controlled by portal roles." };
+  } catch {
+    return { ok: false, message: "Payroll import access could not be confirmed. Refresh and try again." };
   }
 }
 
-export async function getPayrollBalanceImportBatch(batchId: string): Promise<PayrollImportBatch> {
-  const { supabase } = await requireImporter();
-  if (!UUID_PATTERN.test(batchId)) throw new Error(LOAD_ERROR);
-  const { data, error } = await supabase.rpc("get_payroll_balance_import_batch", { p_batch_id: batchId });
-  if (error || !data) throw new Error(LOAD_ERROR);
-  return mapBatch(data);
+async function requirePreviewBatchAccess(supabase: Awaited<ReturnType<typeof createClient>>, batchId: string, previewPersonId: string, canCommit = false) {
+  try {
+    const { data, error } = await supabase.rpc("get_payroll_balance_import_workspace_for_preview", { p_person_id: previewPersonId });
+    if (error || !data) throw new Error(LOAD_ERROR);
+    const workspace = record(data);
+    if (workspace.canImport !== true || !Array.isArray(workspace.recentBatches)) throw new Error(LOAD_ERROR);
+    const comparisonOnly = boolean(workspace.comparisonOnly);
+    const canManageBalances = boolean(workspace.canManageBalances);
+    boolean(workspace.canManageAccess);
+    mapReminder(workspace.reminder);
+    const batches = workspace.recentBatches.map(mapBatchSummary);
+    if (!batches.some(batch => batch.batchId === batchId) || (canCommit && (comparisonOnly || !canManageBalances))) throw new Error(LOAD_ERROR);
+  } catch {
+    throw new Error(LOAD_ERROR);
+  }
+}
+
+export async function getPayrollBalanceImportBatch(batchId: string, previewPersonId?: string): Promise<PayrollImportBatch> {
+  try {
+    const { supabase, capabilities } = await requireImporter(previewPersonId);
+    if (!UUID_PATTERN.test(batchId)) throw new Error(LOAD_ERROR);
+    if (previewPersonId) await requirePreviewBatchAccess(supabase, batchId, previewPersonId);
+    const { data, error } = await supabase.rpc("get_payroll_balance_import_batch", { p_batch_id: batchId });
+    if (error || !data) throw new Error(LOAD_ERROR);
+    const batch = mapBatch(data);
+    if (previewPersonId && (batch.batchId !== batchId || (capabilities.payroll_comparison_only && !batch.comparisonOnly))) throw new Error(LOAD_ERROR);
+    return batch;
+  } catch (reason) {
+    if (previewPersonId === undefined) throw reason;
+    throw new Error(LOAD_ERROR);
+  }
 }

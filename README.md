@@ -2,6 +2,10 @@
 
 Safer People System is the private people portal for Mobility Access Modifications (MAM) and Equipsy. It combines the live organisation directory, account administration, leave visibility and essential people workflows in one minimal workspace. Recruitment is excluded.
 
+## Canonical permissions
+
+The ordinary roles are **Team member**, **Manager**, **Account** and **Admin**. Standalone **Super Admin / P0** is separate and is not assignable in the employee Role editor. [Role permissions](docs/role-permissions.md) is the authoritative current matrix and supersedes historical combined System Admin/HR and named leave/payroll-grant descriptions below. Account can inspect the approved all-status leave/evidence scope and upload payroll comparisons, but cannot approve leave or write balances. Subscription register management and credential-vault delegation remain independent, explicit P0-controlled permissions on the Subscriptions page.
+
 ## Current status
 
 - Frontend: Next.js 16 App Router, React 19 and TypeScript

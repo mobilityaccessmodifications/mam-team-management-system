@@ -1,6 +1,8 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
+import { requirePortalRoleActor } from "@/lib/portal-role-access";
+import { ORDINARY_PORTAL_ROLES, type OrdinaryPortalRole, type PortalRole } from "@/lib/portal-role-capabilities";
 import { createPortalAccount } from "@/app/accounts/actions";
 import { requireEmployeeTeam } from "@/lib/employee-teams";
 import { revalidatePath } from "next/cache";
@@ -327,6 +329,19 @@ function mutationErrorMessage(error: { code?: string; message?: string } | null)
   return GENERIC_SAVE_ERROR;
 }
 
+function safeRoleErrorMessage(error: { code?: string; message?: string } | null) {
+  if (error?.code === "40001" || (error?.code === "PT409" && error.message === "Role has changed. Refresh and try again.")) {
+    return "Role has changed. Refresh the directory and try again.";
+  }
+  if (error?.code === "55000" && error.message === "A password reset is in progress. Resolve it before changing this role.") {
+    return "A password reset is in progress. Resolve it before changing this role.";
+  }
+  if (error?.code === "55000" && error.message === "Onboarding credential delivery in progress") {
+    return mutationErrorMessage(error);
+  }
+  return "Role could not be saved. Refresh and try again.";
+}
+
 async function readSavedDirectoryRecord(
   supabase: Awaited<ReturnType<typeof requireEmployeeDirectoryManager>>["supabase"],
   personId: string,
@@ -371,17 +386,18 @@ export async function getOrganisationPersonWorkEmail(
   return getOrganisationPersonWorkEmailForMember(personId);
 }
 
-export type DirectoryRole = "employee" | "manager" | "system_admin";
-export type DirectoryStoredRole = DirectoryRole | "hr";
+export type DirectoryRole = OrdinaryPortalRole;
+export type DirectoryStoredRole = PortalRole;
 
 export async function listEmployeeDirectoryRoles(): Promise<Record<string, DirectoryStoredRole | null>> {
-  const { supabase } = await requireEmployeeDirectoryManager();
+  const { supabase, capabilities } = await requirePortalRoleActor();
+  if (!capabilities.is_super_admin || !capabilities.can_manage_roles) throw new Error("Only a Super Admin can manage roles.");
   const { data, error } = await supabase.rpc("list_employee_directory_roles");
   if (error || !Array.isArray(data)) throw new Error("Employee roles could not be loaded. Refresh and try again.");
   const roles: Record<string, DirectoryStoredRole | null> = {};
   for (const row of data) {
     if (!row || typeof row.person_id !== "string" || !UUID_PATTERN.test(row.person_id)) throw new Error(GENERIC_SAVE_ERROR);
-    if (row.app_role !== null && row.app_role !== "employee" && row.app_role !== "manager" && row.app_role !== "system_admin" && row.app_role !== "hr") throw new Error(GENERIC_SAVE_ERROR);
+    if (row.app_role !== null && ![...ORDINARY_PORTAL_ROLES, "system_admin"].includes(row.app_role)) throw new Error(GENERIC_SAVE_ERROR);
     roles[row.person_id] = row.app_role;
   }
   return roles;
@@ -396,22 +412,19 @@ export async function updateEmployeeDirectoryRole(input: {
   try {
     const value = inputObject(input);
     if (typeof value.personId !== "string" || !UUID_PATTERN.test(value.personId)
-      || (value.role !== "employee" && value.role !== "manager" && value.role !== "system_admin")
-      || (value.expectedRole !== "employee" && value.expectedRole !== "manager" && value.expectedRole !== "system_admin" && value.expectedRole !== "hr")) {
+      || !ORDINARY_PORTAL_ROLES.includes(value.role as DirectoryRole)
+      || !ORDINARY_PORTAL_ROLES.includes(value.expectedRole as DirectoryRole)) {
       throw new DirectoryInputError("Choose a valid role and refresh the employee record.");
     }
-    const { supabase } = await requireDirectoryMutationManager();
-    const { data: allowed, error: accessError } = await supabase.rpc("can_manage_portal_accounts");
-    if (accessError || allowed !== true) throw new DirectoryInputError("Only a System Admin can change roles.");
+    const { supabase, capabilities } = await requirePortalRoleActor();
+    if (!capabilities.is_super_admin || !capabilities.can_manage_roles) throw new DirectoryInputError("Only a Super Admin can change roles.");
     const { data, error } = await supabase.rpc("update_employee_directory_role", {
       p_person_id: value.personId,
       p_role: value.role,
       p_expected_role: value.expectedRole,
     });
     if (error || data !== value.role) {
-      throw new DirectoryInputError(error?.code === "40001"
-        ? "Role has changed. Refresh the directory and try again."
-        : "Role could not be saved. Refresh and try again.");
+      throw new DirectoryInputError(safeRoleErrorMessage(error));
     }
     committedPersonId = value.personId;
     revalidatePath("/");

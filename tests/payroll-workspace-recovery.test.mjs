@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import * as React from "react";
 import ts from "typescript";
+import { portalRoleDependencies } from "./helpers/unified-role-harness.mjs";
 
 const require = createRequire(import.meta.url);
 function load(file, overrides) {
@@ -33,6 +34,7 @@ const loadError = { status: "error", message: "Payroll balance import could not 
 function action({ data = workspace, error = null, sessionError = null, throwRpc = false } = {}) {
   const rpcCalls = [];
   const loaded = load("src/app/payroll-balances/actions.ts", {
+    ...portalRoleDependencies({}),
     "next/cache": {}, "@/lib/payroll-balance-import": {}, "@/lib/payroll-balance-source-archive": {},
     "@/lib/supabase/admin": { createAdminClient() { assert.fail("workspace reads must not use an admin client"); } },
     "@/lib/supabase/server": { createClient: async () => ({

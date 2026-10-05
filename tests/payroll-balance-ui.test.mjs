@@ -31,8 +31,14 @@ new Function('require', 'module', 'exports', code)(resolveImport, loaded, loaded
 const person = { personId: 'employee', name: 'Test Employee', canSubmit: false, paidLeave: true, canViewBalance: true, hours: 60, asOf: '2026-09-10', isExample: false };
 const workspace = (people, requests = []) => ({ people, requests, canManageBalances: false, pendingBalanceCalendarIds: [] });
 
-test('balance management section is hidden from staff, reviewers and employee previews', () => {
-  for (const [canManageBalances, previewPersonId] of [[false, undefined], [false, 'reviewer'], [true, 'reviewer']]) {
+test('Admin preview can edit payroll balances after the target management capability is established', () => {
+  const html = renderToStaticMarkup(createElement(loaded.exports.LeavePriorityControls, {
+    workspace:{...workspace([person]),canManageBalances:true}, previewPersonId:'synthetic-admin',busy:false,onRequest(){},async onSaved(){},
+  }));
+  assert.match(html,/Edit annual/);
+});
+test('balance management section is hidden from staff and reviewers in current and preview scope', () => {
+  for (const [canManageBalances, previewPersonId] of [[false, undefined], [false, 'reviewer']]) {
     const html = renderToStaticMarkup(createElement(loaded.exports.LeavePriorityControls, {
       workspace: {...workspace([{...person, canSubmit:true, canViewSickBalance:true, sickHours:25}]), canManageBalances},
       previewPersonId, busy:false, onRequest() {}, async onSaved() {},

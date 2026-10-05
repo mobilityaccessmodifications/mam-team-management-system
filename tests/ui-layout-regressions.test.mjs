@@ -112,7 +112,7 @@ test("calendar polish owns the final cascade after its full-viewport layout", ()
 });
 
 test("Calendar remains available to every active employee and trusts server-scoped event projections", () => {
-  assert.match(pageSource, /canViewTeamCalendar = Boolean\(currentPersonId\) \|\| isNonRosterSystemAdmin/);
+  assert.match(pageSource, /canViewTeamCalendar=\{Boolean\(actor.person_id\) \|\| actor.is_super_admin\}/);
   assert.match(leaveSource, /canViewTeamCalendarForActiveProfile = canViewTeamCalendar;/);
   assert.match(leaveActionsSource, /supabase\.rpc\("list_leave_calendar_entries_with_teams"\)/);
   assert.match(leaveActionsSource, /supabase\.rpc\("list_employee_check_in_calendar_entries"\)/);

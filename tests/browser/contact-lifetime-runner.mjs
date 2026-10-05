@@ -6,12 +6,18 @@ import path from 'node:path';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { loadModule } from '../helpers/contact-lifetime-harness.mjs';
+import { actorId, capabilities } from '../helpers/unified-role-harness.mjs';
 const root = process.cwd(), sourceRoot = process.env.MAM_BROWSER_SOURCE_ROOT ?? root;
 const boundary = path.join(root, 'tests/browser/contact-lifetime-boundary.mjs');
 const people = ['A', 'B'].map((letter, i) => ({ id: `11000000-0000-4000-8000-00000000000${i + 2}`, name: `Synthetic ${letter}` }));
 const contacts = {};
+const roleResults = {};
 for (const person of people) {
-  const client = { auth: { getUser: async () => ({ data: { user: { id: person.id } }, error: null }) }, async rpc(name) {
+  const client = { auth: { getUser: async () => ({ data: { user: { id: actorId } }, error: null }) }, async rpc(name, args) {
+    if (name === 'get_portal_role_capabilities') {
+      if (args?.p_person_id && !people.some(p => p.id === args.p_person_id)) throw new Error('Unknown synthetic role target');
+      return { data: [capabilities(args?.p_person_id ? 'employee' : 'system_admin', args?.p_person_id ?? null)], error: null };
+    }
     if (name === 'can_change_employee_view') return { data: true, error: null };
     if (name === 'get_selected_employee_profile_access_role_for_preview') return { data: 'employee', error: null };
     if (name === 'get_selected_employee_profile_for_hr') return { data: [{ person_id: person.id, full_name: person.name, position_title: 'Tester', company_key: 'mam', team_name: 'Synthetic team', phone: '111', work_email: 'synthetic@example.test', detail_version: 1, has_detail: true }], error: null };
@@ -19,6 +25,10 @@ for (const person of people) {
   } };
   const actions = loadModule(path.join(sourceRoot, 'src/app/profile/actions.ts'), { 'next/cache': { revalidatePath() {} }, '@/lib/employee-directory': { requireEmployeeDirectoryManager: async () => ({ supabase: client }) }, '@/lib/supabase/server': { createClient: async () => client } });
   contacts[person.id] = await actions.getSelectedEmployeeProfile(person.id);
+  const roleActions = loadModule(path.join(sourceRoot, 'src/app/roles/actions.ts'), { '@/lib/supabase/server': { createClient: async () => client } });
+  roleResults[person.id] = await roleActions.getPortalRoleCapabilities(person.id);
+  roleResults.self = await roleActions.getPortalRoleCapabilities();
+  if (!roleResults[person.id].ok || !roleResults.self.ok) throw new Error('Canonical synthetic contact capabilities rejected');
 }
 const scratch = mkdtempSync(path.join(tmpdir(), 'mam-contact-browser-'));
 const server = createServer((request, response) => {
@@ -28,7 +38,7 @@ const server = createServer((request, response) => {
   response.end(file ? readFileSync(path.join(scratch, file)) : '<!doctype html><html lang="en"><meta charset="utf-8"><link rel="stylesheet" href="/contact-lifetime-fixture.css"><body><div id="root"></div><script src="/contact-lifetime-fixture.js"></script></body></html>');
 });
 try {
-  await build({ entryPoints: ['tests/browser/contact-lifetime-fixture.jsx'], bundle: true, outdir: scratch, platform: 'browser', jsx: 'automatic', alias: { '@/lib/supabase/client': boundary, '@': path.join(sourceRoot, 'src'), react: path.join(root, 'node_modules/react'), 'react-dom': path.join(root, 'node_modules/react-dom') }, define: { 'process.env.NODE_ENV': '"production"', 'process.env': '{}', 'process.env.NEXT_PUBLIC_SUPABASE_URL': '"http://127.0.0.1:1"', 'process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY': '"synthetic-unused-key"', CONTACT_FIXTURE_RESULTS: JSON.stringify(contacts) }, plugins: [{ name: 'real-action-exports', setup(builder) {
+  await build({ entryPoints: ['tests/browser/contact-lifetime-fixture.jsx'], bundle: true, outdir: scratch, platform: 'browser', jsx: 'automatic', alias: { '@/lib/supabase/client': boundary, '@': path.join(sourceRoot, 'src'), react: path.join(root, 'node_modules/react'), 'react-dom': path.join(root, 'node_modules/react-dom') }, define: { 'process.env.NODE_ENV': '"production"', 'process.env': '{}', 'process.env.NEXT_PUBLIC_SUPABASE_URL': '"http://127.0.0.1:1"', 'process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY': '"synthetic-unused-key"', CONTACT_FIXTURE_RESULTS: JSON.stringify(contacts), CONTACT_ROLE_RESULTS: JSON.stringify(roleResults) }, plugins: [{ name: 'real-action-exports', setup(builder) {
     builder.onResolve({ filter: /^@\/app\/.*actions$/ }, ({ path: id }) => ({ path: id, namespace: 'synthetic-action' }));
     builder.onLoad({ filter: /.*/, namespace: 'synthetic-action' }, ({ path: id }) => {
       const file = path.join(sourceRoot, 'src', id.slice(2) + '.ts');

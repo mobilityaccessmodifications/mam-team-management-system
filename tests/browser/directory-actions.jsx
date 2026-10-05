@@ -7,8 +7,12 @@ export const record = {
   laptopSupplied: '', laptopId: '', mouseId: '', keyboardId: '', assetTags: [], company: 'mam', isActive: true,
 };
 window.directoryCalls = [];
+window.directoryRoleReads = 0;
 export async function listEmployeeDirectoryRecords() { return [record]; }
-export async function listEmployeeDirectoryRoles() { return { [record.personId]: 'employee' }; }
+export async function listEmployeeDirectoryRoles() {
+  window.directoryRoleReads++;
+  return { [record.personId]: new URLSearchParams(location.search).get('storedRole') ?? 'employee' };
+}
 async function mutate(method, input) {
   window.directoryCalls.push({ method, input });
   const outcome = new URLSearchParams(location.search).get('outcome') ?? 'lock';
@@ -18,6 +22,11 @@ async function mutate(method, input) {
 }
 export async function createEmployeeDirectoryRecord(input) { return mutate('create', input); }
 export async function updateEmployeeDirectoryRecord(input) { return mutate('update', input); }
-export async function updateEmployeeDirectoryRole(input) { window.directoryCalls.push({ method: 'role', input }); return DIRECTORY_FIXTURE_RESULTS[new URLSearchParams(location.search).get('outcome') === 'partialRole' ? 'partialRole' : 'role']; }
+export async function updateEmployeeDirectoryRole(input) {
+  window.directoryCalls.push({ method: 'role', input });
+  const outcome = new URLSearchParams(location.search).get('outcome');
+  if (outcome === 'roleSuccess') return DIRECTORY_FIXTURE_RESULTS.roleSuccess[input.role];
+  return DIRECTORY_FIXTURE_RESULTS[outcome === 'partialRole' ? 'partialRole' : 'role'];
+}
 export async function archiveEmployeeDirectoryRecord() { throw new Error('Unexpected archive'); }
 export async function deleteEmployeeDirectoryRecord() { throw new Error('Unexpected delete'); }

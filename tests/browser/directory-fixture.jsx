@@ -5,7 +5,7 @@ window.directoryRefreshes = 0;
 window.directorySelections = [];
 export function DirectoryFixture() {
   const [selectedPersonId, setSelectedPersonId] = useState(record.personId);
-  return <EmployeeDirectory initialRecords={[record]} selectedPersonId={selectedPersonId}
+  return <EmployeeDirectory initialRecords={[record]} selectedPersonId={selectedPersonId} canManageRoles={new URLSearchParams(location.search).get('viewer') !== 'admin'}
     onSelectedPersonId={id => { window.directorySelections.push(id); setSelectedPersonId(id); }} onRecordsChanged={() => { window.directoryRefreshes++; }} />;
 }
 export function EmployeeDeviceAssignments() { return null; }

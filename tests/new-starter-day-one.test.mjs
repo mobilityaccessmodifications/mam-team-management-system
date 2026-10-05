@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import ts from 'typescript';
+import { loadModule } from './helpers/unified-role-harness.mjs';
 
 import {
   buildNewStarterDayOneWorkflow,
@@ -83,6 +84,11 @@ test('live workflow includes both employee addresses once and the direct manager
   payload.employee.personalEmail = 'personal@example.test';
   const [both] = validator({ first: () => ({ json: payload }) });
   assert.equal(both.json.actualRecipient,'manager@example.test,personal@example.test,same@example.test');
+  assert.equal(both.json.deliveryTo,'manager@example.test,same@example.test');
+  assert.equal(both.json.deliveryBcc,'personal@example.test');
+  const send = workflow.nodes.find((node) => node.name === 'Send Day 1 Email from HR');
+  assert.equal(send.parameters.toRecipients,'={{ $json.deliveryTo }}');
+  assert.equal(send.parameters.additionalFields.bccRecipients,'={{ $json.deliveryBcc }}');
 });
 
 test('Day 1 dispatcher stays inert for unsupported or disabled modes', async () => {
@@ -217,6 +223,8 @@ test('new active employee creation still requires a start date before mutation',
   const supabase = { rpc: async () => { rpcCalls += 1; throw new Error('must not mutate'); } };
   const mod = { exports: {} };
   new Function('require','module','exports',source)((id) => ({
+    '@/lib/portal-role-capabilities': loadModule('src/lib/portal-role-capabilities.ts'),
+    '@/lib/portal-role-access': loadModule('src/lib/portal-role-access.ts', { '@/lib/supabase/server': { createClient: async () => supabase } }),
     '@/lib/employee-teams': teamModule.exports,
     'next/cache': { revalidatePath: () => {} },
     '@/lib/employee-directory': {
@@ -252,6 +260,8 @@ test('active directory-only create without email skips portal-account provisioni
   } };
   const mod = { exports: {} };
   new Function('require','module','exports',source)((id) => ({
+    '@/lib/portal-role-capabilities': loadModule('src/lib/portal-role-capabilities.ts'),
+    '@/lib/portal-role-access': loadModule('src/lib/portal-role-access.ts', { '@/lib/supabase/server': { createClient: async () => supabase } }),
     '@/lib/employee-teams': teamModule.exports,
     'next/cache': { revalidatePath: () => {} },
     '@/lib/employee-directory': {

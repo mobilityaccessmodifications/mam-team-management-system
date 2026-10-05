@@ -55,7 +55,9 @@ do $$ begin
   begin
     perform public.update_employee_directory_role('92000000-0000-4000-8000-000000000003','manager','system_admin');
     raise exception 'Stale role accepted';
-  exception when serialization_failure then null; end;
+  exception when sqlstate 'PT409' then
+    assert sqlerrm='Role has changed. Refresh and try again.', 'Stale role has the documented nonretry conflict';
+  end;
   begin
     perform public.update_employee_directory_role('92000000-0000-4000-8000-000000000001','employee','system_admin');
     raise exception 'Self-demotion accepted';

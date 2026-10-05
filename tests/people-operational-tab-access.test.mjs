@@ -12,9 +12,9 @@ const migrationSource = readFileSync(
 );
 
 test("Organisation and the company subscription register are selected from server capabilities", () => {
-  assert.match(pageSource, /canViewOrganisation = current\?\.can_view_organisation_chart === true/);
-  assert.match(pageSource, /canViewSubscriptions = current\?\.can_view_subscription_register === true/);
-  assert.match(pageSource, /canViewOrganisation=\{canViewOrganisation\}/);
+  assert.match(pageSource, /getPortalRoleCapabilities\(\)/);
+  assert.match(pageSource, /if \(!result.ok\) return <RolePermissionRecovery/);
+  assert.match(pageSource, /actorCapabilities=\{actor\}/);
   assert.match(leaveSource, /showOrganisation=\{showOrganisationChart\}/);
   assert.match(peopleSource, /\.\.\.\(showOrganisation \? \["organisation" as const\] : \[\]\)/);
   assert.match(peopleSource, /visibleSection === "organisation" && showOrganisation/);
@@ -24,11 +24,11 @@ test("Organisation and the company subscription register are selected from serve
 test("employee previews hide operational tabs while authorised roles retain them", () => {
   assert.match(
     leaveSource,
-    /showOrganisationChart = canViewOrganisation[\s\S]*?!isPreviewingEmployeeAccess \|\| activeProfile\.accessRole !== "employee"/,
+    /showOrganisationChart = activeCapabilities\?\.can_view_organisation_chart === true/,
   );
   assert.match(
     leaveSource,
-    /showSubscriptionRegister = isPreviewingEmployeeAccess[\s\S]*?activeProfile\.accessRole !== "employee" && canViewSubscriptions[\s\S]*?: canViewSubscriptions \|\| canManageSubscriptionCredentials/,
+    /showSubscriptionRegister = activeCapabilities\?\.can_view_subscription_register === true[\s\S]*?activeCapabilities\?\.can_manage_subscription_credentials === true/,
   );
   assert.match(leaveSource, /canAccessOwnSubscriptions[\s\S]*?listMySubscriptions/);
 });

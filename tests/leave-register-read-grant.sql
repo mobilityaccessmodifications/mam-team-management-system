@@ -23,7 +23,7 @@ select id,'full_time',login_name||'@example.test','Synthetic','Person','Operatio
 insert into private.leave_approval_grants(reviewer_user_id,scope_kind,reviewer_label,priority)
 values ('90000000-0000-4000-8000-000000000005','global','Synthetic Admin',100);
 select pg_temp.set_test_actor('90000000-0000-4000-8000-000000000002');
-create temp table read_grant_request as select id from public.submit_my_leave_request('Unpaid leave','2030-12-09','2030-12-13');
+create temp table read_grant_request as select id from public.submit_my_leave_request('Unpaid leave','2030-12-09','2030-12-13',null,null,'Synthetic Account-visible note');
 insert into public.leave_request_attachments(id,leave_request_id,uploaded_by,storage_path,file_name,mime_type,size_bytes)
 select '90000000-0000-4000-8000-000000000004',id,'90000000-0000-4000-8000-000000000002',id::text||'/90000000-0000-4000-8000-000000000004.pdf','fixture.pdf','application/pdf',123 from read_grant_request;
 select pg_temp.set_test_actor('90000000-0000-4000-8000-000000000001');
