@@ -6,6 +6,9 @@ import { isSupabaseConfigured, requireSupabaseConfig } from "@/lib/supabase/conf
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  if (pathname === "/api/internal/payroll/runtime-capability") {
+    return NextResponse.next({ request });
+  }
   // This exact endpoint authenticates the existing bearer through its own
   // read-only RPC. Ordinary session loading/refresh must not precede it.
   if (pathname === "/api/internal/payroll/session-proof") {

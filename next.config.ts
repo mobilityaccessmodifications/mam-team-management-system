@@ -9,6 +9,9 @@ const projectRoot = dirname(fileURLToPath(import.meta.url));
 assertSandboxEnvironment();
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    "/api/internal/payroll/runtime-capability": ["./src/server/payroll/runtime-capability/assets/*"],
+  },
   async headers() {
     return [{
       source: "/:path*",
