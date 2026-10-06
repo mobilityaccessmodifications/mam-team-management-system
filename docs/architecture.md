@@ -1,5 +1,9 @@
 # Architecture
 
+## Canonical authorization model
+
+[Role permissions](role-permissions.md) is the current authority: four ordinary application roles (`employee`, `manager`, `account`, `admin`) and an independent standalone P0 (`system_admin`). Historical combined System Admin/HR labels and person-specific payroll/leave grants below are superseded by that policy. The database-owned role capability projection is used for both the actual authenticated account and P0-authorized target preview. Actor authority, target capability and record scope remain separate; private contact-profile failures cannot silently downgrade a successfully loaded role. Account payroll staging is comparison-only, and every commit path must reject it in the database. Subscription register management and vault access remain distinct, audited P0-controlled Manager delegations, not implied by each other or by the default Manager role.
+
 ## System boundary
 
 ```text

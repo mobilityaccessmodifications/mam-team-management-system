@@ -18,6 +18,7 @@ export async function installResourcesFixture(page) {
   })) modules[id] = readFileSync(new URL(`node_modules/${file}`, root), "utf8");
   for (const path of [
     "components/subscription-register.tsx", "components/subscription-credential-vault.tsx",
+    "components/subscription-delegation-dialog.tsx",
     "components/employee-picker.tsx", "components/ui/use-dialog-focus.ts",
     "components/ui/modal-backdrop.tsx", "components/ui/mobile-register-tools.tsx",
     "lib/subscription-types.ts", "lib/subscription-bulk.ts",

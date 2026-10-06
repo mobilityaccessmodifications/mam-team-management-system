@@ -30,6 +30,8 @@ import {
 import { FormEvent, type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
+import { getPortalRoleCapabilities } from "@/app/roles/actions";
+import { ROLE_CAPABILITY_ERROR, type PortalRole, type PortalRoleCapabilities } from "@/lib/portal-role-capabilities";
 import registerToolbar from "@/components/people-toolbar.module.css";
 import { ApprovalBalancePill, ApprovalLeaveBalances, LeavePriorityControls, SickEvidenceNotice } from "@/components/leave-priority-controls";
 import { BALANCE_PENDING_STATUS, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
@@ -160,7 +162,7 @@ function revealSelectedLeaveTab(node: HTMLButtonElement | null) {
 }
 
 type RequestStatus = "Pending" | "Approved" | "Declined" | "Cancelled" | typeof BALANCE_PENDING_STATUS;
-type AccessRole = "hr" | "manager" | "employee";
+type AccessRole = PortalRole;
 
 type LeaveRequest = {
   id: string;
@@ -519,20 +521,18 @@ export function LeaveDemo({
   isAdmin = false,
   currentPersonId,
   isNonRosterSystemAdmin = false,
-  canViewEmployeeDirectory = false,
-  canViewOrganisation = false,
+
   canChangeEmployeeView = false,
   canViewSubscriptions = false,
-  canManageSubscriptions = false,
-  canManageSubscriptionCredentials = false,
-  canManageSubscriptionCredentialGrants = false,
-  canManageAnalyticsApi = false,
+
   canAccessOwnSubscriptions = false,
-  canViewOwnTasks = false,
+
   canViewTeamCalendar = false,
   canViewSubscriptionReviewCalendar = false,
   checkInResources,
+  actorCapabilities,
 }: {
+  actorCapabilities?: PortalRoleCapabilities;
   initialNavigation?: InitialNavigation;
   isAdmin?: boolean;
   currentPersonId?: string;
@@ -566,6 +566,12 @@ export function LeaveDemo({
   canViewSubscriptionReviewCalendar?: boolean;
   checkInResources?: CheckInResourceLinks;
 }) {
+  const [ownCapabilities, setOwnCapabilities] = useState<PortalRoleCapabilities | null>(actorCapabilities ?? null);
+  isAdmin = ownCapabilities?.can_manage_employee_directory === true;
+  canChangeEmployeeView = ownCapabilities?.can_change_employee_view === true;
+
+  canViewSubscriptions = ownCapabilities?.can_view_subscription_register === true;
+
   const directorySupabase = isSupabaseConfigured() ? createClient() : null;
   const isNonRosterSystemAdminWorkspace = isNonRosterSystemAdmin && !currentPersonId;
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -633,6 +639,8 @@ export function LeaveDemo({
     message: string;
   } | null>(null);
   const [selectedEmployeeProfileReloadKey, setSelectedEmployeeProfileReloadKey] = useState(0);
+  const [selectedRoleState, setSelectedRoleState] = useState<{ personId: string; capabilities: PortalRoleCapabilities | null; error: string } | null>(null);
+  const [selectedRoleReloadKey, setSelectedRoleReloadKey] = useState(0);
   // This is intentionally UI-only. It never changes the authenticated user or
   // the capability checks that protect HR records and organisation writes.
   const [previewPersonId, setPreviewPersonId] = useState("");
@@ -661,6 +669,14 @@ export function LeaveDemo({
   const closeLeaveRequestForm = useCallback(() => setShowRequestForm(false), []);
   const closeMobileRequestDetail = useCallback(() => setMobileRequestDetailOpen(false), []);
 
+  // Initial self capabilities were parsed on the server. Every later scope
+  // must complete its own capability load before protected reads can start.
+  const dataRoleCapabilities = previewPersonId || contactScopeEpoch !== 0 || selectedRoleReloadKey !== 0
+    ? selectedRoleState?.personId === previewPersonId && selectedRoleState.error === ""
+      ? selectedRoleState.capabilities
+      : null
+    : ownCapabilities;
+
   useDialogFocus(
     profilePickerOpen,
     profilePickerDialogRef,
@@ -686,8 +702,9 @@ export function LeaveDemo({
   }, [directorySupabase, isSigningOut]);
 
   const refreshLeaveWorkspace = useCallback(async () => {
+    if (contactScopeEpoch !== profileScopeEpoch.current || dataRoleCapabilities?.account_status !== "active") return;
     const requestSequence = leaveRefreshSequence.current + 1;
-    const requestEpoch = profileScopeEpoch.current;
+    const requestEpoch = contactScopeEpoch;
     leaveRefreshSequence.current = requestSequence;
     setLeaveDataLoading(true);
     try {
@@ -752,11 +769,12 @@ export function LeaveDemo({
         && requestEpoch === profileScopeEpoch.current
       ) setLeaveDataLoading(false);
     }
-  }, [previewPersonId]);
+  }, [contactScopeEpoch, dataRoleCapabilities, previewPersonId]);
 
   const refreshWorkScheduleWorkspace = useCallback(async () => {
+    if (contactScopeEpoch !== profileScopeEpoch.current || dataRoleCapabilities?.account_status !== "active") return;
     const requestSequence = workScheduleRefreshSequence.current + 1;
-    const requestEpoch = profileScopeEpoch.current;
+    const requestEpoch = contactScopeEpoch;
     const hadWorkspace = workScheduleWorkspaceRef.current !== null;
     workScheduleRefreshSequence.current = requestSequence;
     if (!hadWorkspace) setWorkScheduleLoading(true);
@@ -799,14 +817,15 @@ export function LeaveDemo({
         && requestEpoch === profileScopeEpoch.current
       ) setWorkScheduleLoading(false);
     }
-  }, [previewPersonId]);
+  }, [contactScopeEpoch, dataRoleCapabilities, previewPersonId]);
 
   const submitWorkScheduleRequest = useCallback(async (
     workingWeekdays: EmployeeWorkingWeekday[],
     workingDayTimes: EmployeeWorkingDayTime[],
     reason: string,
   ): Promise<WorkScheduleMutationResult> => {
-    const actionEpoch = profileScopeEpoch.current;
+    const actionEpoch = contactScopeEpoch;
+    if (actionEpoch !== profileScopeEpoch.current) return { ok: false, message: "The active profile changed. Open the schedule again." };
     const result = await requestEmployeeWorkScheduleChange({
       workingWeekdays,
       workingDayTimes,
@@ -818,9 +837,10 @@ export function LeaveDemo({
     }
     if (result.ok) void refreshWorkScheduleWorkspace();
     return result;
-  }, [previewPersonId, refreshWorkScheduleWorkspace]);
+  }, [contactScopeEpoch, previewPersonId, refreshWorkScheduleWorkspace]);
 
   const loadAccounts = useCallback(async () => {
+    const epoch = profileScopeEpoch.current;
     if (!isAdmin || !canManageEmployeeDirectory) {
       setAccounts([]);
       setAccountsError("");
@@ -829,17 +849,20 @@ export function LeaveDemo({
     }
     setAccountsLoading(true);
     try {
-      setAccounts(await listPortalAccounts());
+      const nextAccounts = await listPortalAccounts();
+      if (epoch !== profileScopeEpoch.current) return;
+      setAccounts(nextAccounts);
       setAccountsError("");
     } catch (error) {
-      setAccountsError(error instanceof Error ? error.message : "Accounts could not be loaded.");
+      if (epoch === profileScopeEpoch.current) setAccountsError(error instanceof Error ? error.message : "Accounts could not be loaded.");
     } finally {
-      setAccountsLoading(false);
+      if (epoch === profileScopeEpoch.current) setAccountsLoading(false);
     }
   }, [canManageEmployeeDirectory, isAdmin]);
 
   const loadOrganisation = useCallback(async () => {
     if (!directorySupabase) return;
+    const epoch = profileScopeEpoch.current;
     const [
       { data: rows, error },
       { data: canEdit, error: canEditError },
@@ -853,6 +876,8 @@ export function LeaveDemo({
       directorySupabase.rpc("can_edit_internal_org"),
       directorySupabase.rpc("can_manage_employee_directory"),
     ]);
+
+    if (epoch !== profileScopeEpoch.current) return;
 
     if (error) {
       setOrganisationState("error");
@@ -873,7 +898,8 @@ export function LeaveDemo({
     decision: "approved" | "declined",
     reason: string,
   ): Promise<WorkScheduleMutationResult> => {
-    const actionEpoch = profileScopeEpoch.current;
+    const actionEpoch = contactScopeEpoch;
+    if (actionEpoch !== profileScopeEpoch.current) return { ok: false, message: "The active profile changed. Open the request again." };
     const result = await reviewEmployeeWorkScheduleChange({ requestId, decision, reason });
     if (actionEpoch !== profileScopeEpoch.current) {
       return { ok: false, message: "The active profile changed. Open the request again." };
@@ -885,7 +911,7 @@ export function LeaveDemo({
       ]);
     }
     return result;
-  }, [loadOrganisation, refreshWorkScheduleWorkspace]);
+  }, [contactScopeEpoch, loadOrganisation, refreshWorkScheduleWorkspace]);
 
   const loadSelfProfile = useCallback(async () => {
     if (!currentPersonId) {
@@ -958,7 +984,7 @@ export function LeaveDemo({
     if (!isAdmin || !canManageEmployeeDirectory) return;
     const timer = window.setTimeout(() => void loadAccounts(), 0);
     return () => window.clearTimeout(timer);
-  }, [canManageEmployeeDirectory, isAdmin, loadAccounts]);
+  }, [canManageEmployeeDirectory, contactScopeEpoch, isAdmin, loadAccounts]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadSelfProfile(), 0);
@@ -1127,11 +1153,30 @@ export function LeaveDemo({
   }, [employeeDirectoryRefreshKey, selectedEmployeeProfileReloadKey, selectedPreviewPersonId]);
 
   useEffect(() => {
+    if (!selectedPreviewPersonId && contactScopeEpoch === 0 && selectedRoleReloadKey === 0) return;
+    let cancelled = false;
+    const epoch = profileScopeEpoch.current;
+    void getPortalRoleCapabilities(selectedPreviewPersonId || undefined).then((result) => {
+      if (cancelled || epoch !== profileScopeEpoch.current) return;
+      if (!selectedPreviewPersonId) setOwnCapabilities(result.ok ? result.capabilities : null);
+      setSelectedRoleState({ personId: selectedPreviewPersonId ?? "", capabilities: result.ok ? result.capabilities : null, error: result.ok ? "" : ROLE_CAPABILITY_ERROR });
+    }).catch(() => {
+      if (!cancelled && epoch === profileScopeEpoch.current) {
+        if (!selectedPreviewPersonId) setOwnCapabilities(null);
+        setSelectedRoleState({ personId: selectedPreviewPersonId ?? "", capabilities: null, error: ROLE_CAPABILITY_ERROR });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [contactScopeEpoch, employeeDirectoryRefreshKey, selectedRoleReloadKey, selectedPreviewPersonId]);
+
+  useEffect(() => {
     if (organisationState !== "live" || !previewPersonId || selectedPreviewCandidate) return;
     const timer = window.setTimeout(() => {
       profileScopeEpoch.current += 1;
       setContactScopeEpoch(profileScopeEpoch.current);
       workScheduleRefreshSequence.current += 1;
+      setIsMutating(false);
+      setSelectedRoleState(null);
       leaveRefreshSequence.current += 1;
       setPreviewPersonId("");
       setSelectedEmployeeProfile(null);
@@ -1189,7 +1234,7 @@ export function LeaveDemo({
       id: "platform-system-administrator",
       name: "System administrator",
       initials: "SA",
-      accessRole: "hr" as const,
+      accessRole: "system_admin" as const,
       roleLabel: "Platform administrator",
       team: "Platform administration",
       manager: "",
@@ -1210,23 +1255,18 @@ export function LeaveDemo({
   // data-dependent Check-in scope. A valid manager with no current reports
   // must still receive the manager workspace (with empty Check-ins/Tasks),
   // instead of being presented as an employee.
-  const controlledAccessRole: AccessRole = isAdmin
-    ? "hr"
-    : canViewEmployeeDirectory
-      ? "manager"
-      : "employee";
+  const controlledAccessRole: AccessRole = ownCapabilities?.app_role ?? "employee";
   const adminProfile: Profile = { ...signedInProfile, accessRole: controlledAccessRole };
-  // The selected role comes from a Super Admin-only server projection. Until
-  // it arrives, Change profile fails closed as an employee presentation.
-  // Reporting lines and job titles are never authority grants.
+
+  const selectedCapabilities = selectedRoleState?.personId === selectedPreviewPersonId ? selectedRoleState.capabilities : null;
+  const activeCapabilities = selectedPreviewCandidate ? selectedCapabilities : ownCapabilities;
+  const rolePermissionsError = selectedRoleState?.personId === (selectedPreviewPersonId ?? "") ? selectedRoleState.error : "";
+  const scopeIsCurrent = () => contactScopeEpoch === profileScopeEpoch.current;
+  const scopedCheckInResources = checkInResources ? { ...checkInResources, canApproveEmploymentDecisions: activeCapabilities?.can_approve_employment_decisions === true } : undefined;
   const previewProfile: Profile | undefined = selectedPreviewCandidate
     ? {
         ...selectedPreviewCandidate,
-        accessRole: selectedEmployeeProfile?.personId === selectedPreviewCandidate.id
-          ? selectedEmployeeProfile.accessRole === "system_admin"
-            ? "hr"
-            : selectedEmployeeProfile.accessRole
-          : "employee",
+        accessRole: selectedCapabilities?.app_role ?? "employee",
       }
     : undefined;
   const isPreviewingEmployeeAccess = Boolean(previewProfile);
@@ -1236,7 +1276,7 @@ export function LeaveDemo({
   // target action that checks the Change profile capability and returns the
   // same safe DTO the selected employee would see.
   const hasSelfResourceDirectory = activeProfile.accessRole === "employee"
-    || activeProfile.accessRole === "manager";
+    || activeProfile.accessRole === "manager" || activeProfile.accessRole === "account";
   const canLoadOwnDevices = !isPreviewingEmployeeAccess
     && hasSelfResourceDirectory
     && Boolean(currentPersonId && activeProfile.id === currentPersonId);
@@ -1262,35 +1302,29 @@ export function LeaveDemo({
   const canViewTeamCalendarForActiveProfile = canViewTeamCalendar;
   const canViewPayrollBalanceReminderForActiveProfile = canViewPayrollBalanceReminderCalendar
     && !isPreviewingEmployeeAccess;
-  const canViewActiveWorkspaceCalendar = canViewTeamCalendarForActiveProfile
+  const canViewActiveWorkspaceCalendar = Boolean(activeCapabilities) && (canViewTeamCalendarForActiveProfile
     || canViewSubscriptionReviewCalendarForProfile
-    || canViewPayrollBalanceReminderForActiveProfile;
+    || canViewPayrollBalanceReminderForActiveProfile);
   const calendarHidesTeamEvents = !canViewTeamCalendarForActiveProfile
     && (canViewSubscriptionReviewCalendarForProfile || canViewPayrollBalanceReminderForActiveProfile);
   // Change profile changes what the System Admin sees, not their real server
   // authority. Returning to their own profile restores the complete admin
   // workspace. Server Actions and RPCs still re-authorise the real session.
-  const showHrWorkspace = isAdmin
-    && canManageEmployeeDirectory
-    && activeProfile.accessRole === "hr";
-  const hasManagerPeopleWorkspace = canViewEmployeeDirectory
-    || (isPreviewingEmployeeAccess && isAdmin);
+  const showHrWorkspace = activeCapabilities?.can_manage_employee_directory === true;
+  const hasManagerPeopleWorkspace = activeCapabilities?.can_view_employee_directory === true;
   const showManagerDirectory = activeProfile.accessRole === "manager"
     && hasManagerPeopleWorkspace;
   const showManagerCheckIns = activeProfile.accessRole === "manager"
     && hasManagerPeopleWorkspace;
-  const showManagerTasks = activeProfile.accessRole === "manager"
-    && hasManagerPeopleWorkspace;
+
   // Change profile mirrors the selected employee's role-level tabs. The real
   // session still authorises every RPC, but an employee preview must not show
   // Organisation or the company-wide subscription register merely because
   // the signed-in System Admin can access them. Explicit credential delegates
   // retain their deliberately smaller vault surface in their own workspace.
-  const showOrganisationChart = canViewOrganisation
-    && (!isPreviewingEmployeeAccess || activeProfile.accessRole !== "employee");
-  const showSubscriptionRegister = isPreviewingEmployeeAccess
-    ? activeProfile.accessRole !== "employee" && canViewSubscriptions
-    : canViewSubscriptions || canManageSubscriptionCredentials;
+  const showOrganisationChart = activeCapabilities?.can_view_organisation_chart === true;
+  const showSubscriptionRegister = activeCapabilities?.can_view_subscription_register === true
+    || activeCapabilities?.can_manage_subscription_credentials === true;
   const previewScopedManagerPersonId = isPreviewingEmployeeAccess
     && activeProfile.accessRole === "manager"
     ? previewProfile?.id
@@ -1333,11 +1367,11 @@ export function LeaveDemo({
   // The capability is issued by the server-side leave policy. Change profile
   // only narrows the displayed employee; it never changes the Super Admin's
   // reviewer authority.
-  const canReviewLeave = canReviewLeaveWorkspace;
+  const canReviewLeave = Boolean(activeCapabilities?.can_review_leave_workspace && canReviewLeaveWorkspace);
   // Super Admin keeps full operational access while Change Profile is active.
   // The selected target is passed only to the guarded Server Action; auth and
   // audit authority remain with the real Super Admin account.
-  const canApplyForLeave = availableLeaveTypes.length > 0
+  const canApplyForLeave = Boolean(activeCapabilities) && availableLeaveTypes.length > 0
     && (!isNonRosterSystemAdminWorkspace || isPreviewingEmployeeAccess);
   const teamRequestPeople = leavePriority?.people.filter((person) => person.canSubmit) ?? [];
   const requestedTeamMember = requestForPersonId
@@ -1379,8 +1413,8 @@ export function LeaveDemo({
   const approvalQueue = canReviewLeave
     ? visibleRequests.filter((request) => request.canDecide)
     : [];
-  const canAccessBalance = canImportPayrollBalances
-    || (!isPreviewingEmployeeAccess && leavePriority?.canManageBalances === true);
+  const canAccessBalance = Boolean(activeCapabilities?.can_import_payroll_balances && canImportPayrollBalances)
+    || Boolean(activeCapabilities?.can_manage_leave_balances && leavePriority?.canManageBalances === true);
   const myRequests = requests.filter((request) => request.personId === activeProfile.id);
   const filteredRequests = visibleRequests.filter((request) => {
     return statusFilter === "All" || request.status === statusFilter;
@@ -1405,6 +1439,8 @@ export function LeaveDemo({
   });
 
   async function createOrganisationPerson(person: OrganisationPersonDraft) {
+    if (!scopeIsCurrent()) throw new Error("The active profile changed. Refresh before editing.");
+    const epoch = contactScopeEpoch;
     if (!directorySupabase) throw new Error("The directory is not connected.");
     const { error } = await directorySupabase.rpc("create_internal_org_node", {
       p_company_key: person.company,
@@ -1415,12 +1451,16 @@ export function LeaveDemo({
       p_started_date: null,
       p_sort_order: organisationRows.length + 1,
     });
+    if (epoch !== profileScopeEpoch.current) return;
     if (error) throw new Error(error.message);
     await Promise.all([loadOrganisation(), loadAccounts()]);
+    if (epoch !== profileScopeEpoch.current) return;
     announce(`${person.name} added to the organisation.`);
   }
 
   async function updateOrganisationPerson(id: string, person: OrganisationPersonDraft) {
+    if (!scopeIsCurrent()) throw new Error("The active profile changed. Refresh before editing.");
+    const epoch = contactScopeEpoch;
     if (!directorySupabase) throw new Error("The directory is not connected.");
     const current = organisationRows.find((row) => row.id === id);
     if (!current) throw new Error("This person is no longer in the directory.");
@@ -1441,11 +1481,13 @@ export function LeaveDemo({
       p_is_active: true,
       p_expected_version: person.expectedVersion ?? current.version,
     });
+    if (epoch !== profileScopeEpoch.current) return;
     if (error) throw new Error(error.message);
     const hiddenParent = nextHiddenOrganisationParent(current.parent_id, visibleParentId, parentId, movedFromHiddenParent);
     if (hiddenParent) hiddenOrganisationParentsRef.current.set(id, hiddenParent);
     else hiddenOrganisationParentsRef.current.delete(id);
     await Promise.all([loadOrganisation(), loadAccounts()]);
+    if (epoch !== profileScopeEpoch.current) return;
     announce(`${person.name}'s profile was updated.`);
   }
 
@@ -1476,7 +1518,8 @@ export function LeaveDemo({
   }
 
   async function saveSelectedEmployeeProfile(changes: SelfProfileChanges, isCurrent?: () => boolean) {
-    const actionEpoch = profileScopeEpoch.current;
+    const actionEpoch = contactScopeEpoch;
+    if (!scopeIsCurrent() || (isCurrent && !isCurrent())) throw new Error("The active profile changed. Refresh before editing.");
     if (!canPreviewEmployeeAccess || !previewProfile || !selectedEmployeeProfile || selectedEmployeeProfile.personId !== previewProfile.id) {
       throw new Error("The selected employee profile is still loading.");
     }
@@ -1485,7 +1528,7 @@ export function LeaveDemo({
       personId: selectedEmployeeProfile.personId,
       detailVersion: selectedEmployeeProfile.detailVersion,
     });
-    if (actionEpoch !== profileScopeEpoch.current || (isCurrent && !isCurrent())) return;
+    if (actionEpoch !== profileScopeEpoch.current || (isCurrent && !isCurrent())) throw new Error("The active profile changed. Refresh before editing.");
     setSelectedEmployeeProfile(updated);
     if (updated.personId === currentPersonId) setSelfProfile(updated);
     // Keep the HR directory and the public organisation tree in step with the
@@ -1506,16 +1549,17 @@ export function LeaveDemo({
     const nextProfile = directoryProfiles.find((profile) => profile.id === personId);
     if (personId && !nextProfile) return;
     const nextProfileId = nextProfile?.id ?? "";
+    if (!nextProfileId) setOwnCapabilities(null);
 
     if (nextProfileId === previewPersonId) {
-      setProfilePickerOpen(false);
-      setProfilePickerQuery("");
-      return;
+      setSelectedEmployeeProfileReloadKey((key) => key + 1);
     }
 
     profileScopeEpoch.current += 1;
     setContactScopeEpoch(profileScopeEpoch.current);
     leaveRefreshSequence.current += 1;
+    setSelectedRoleState(null);
+    setIsMutating(false);
     workScheduleRefreshSequence.current += 1;
     workScheduleWorkspaceRef.current = null;
     setWorkScheduleWorkspace(null);
@@ -1800,7 +1844,8 @@ export function LeaveDemo({
   }
 
   async function decideRequest(status: LeaveDecision) {
-    if (!selectedRequest || isMutating || !canReviewLeave) return;
+    if (!scopeIsCurrent() || !selectedRequest || isMutating || !canReviewLeave) return;
+    const actionEpoch = contactScopeEpoch;
     if (status === "Declined" && !managerNote.trim()) {
       announce("Add a decision note before declining this request.");
       return;
@@ -1812,15 +1857,17 @@ export function LeaveDemo({
         status,
         managerNote,
       });
+      if (actionEpoch !== profileScopeEpoch.current) return;
       await refreshLeaveWorkspace();
+      if (actionEpoch !== profileScopeEpoch.current) return;
       const nextApproval = approvalQueue.find((request) => request.id !== selectedRequest.id);
       setSelectedRequestId(status === BALANCE_PENDING_STATUS ? decided.id : nextApproval?.id ?? decided.id);
       setManagerNote("");
       announce(`Leave request was ${status.toLowerCase()}.`);
     } catch (error) {
-      announce(error instanceof Error ? error.message : "The leave decision could not be saved. Refresh and try again.");
+      if (actionEpoch === profileScopeEpoch.current) announce(error instanceof Error ? error.message : "The leave decision could not be saved. Refresh and try again.");
     } finally {
-      setIsMutating(false);
+      if (actionEpoch === profileScopeEpoch.current) setIsMutating(false);
     }
   }
 
@@ -2009,7 +2056,8 @@ export function LeaveDemo({
           {selfProfileError && !isPreviewingEmployeeAccess && !isNonRosterSystemAdminWorkspace ? <div className={styles.loadErrorAction} role="alert"><span>{selfProfileError}</span><button type="button" onClick={() => void loadSelfProfile()} disabled={selfProfileLoading}>{selfProfileLoading ? "Retrying…" : "Retry profile"}</button></div> : null}
           {selectedEmployeeProfileError && isPreviewingEmployeeAccess ? <div className={styles.loadErrorAction} role="alert"><span>{selectedEmployeeProfileError}</span><button type="button" onClick={() => setSelectedEmployeeProfileReloadKey((current) => current + 1)}>Retry profile</button></div> : null}
           {organisationAccessError && activeView === "people" ? <div className={styles.loadErrorAction} role="alert"><span>{organisationAccessError}</span><button type="button" onClick={() => void loadOrganisation()}>Retry permissions</button></div> : null}
-          {activeView === "home" ? <HomeView
+          {!activeCapabilities ? rolePermissionsError ? <div role="alert"><span>{ROLE_CAPABILITY_ERROR}</span><button type="button" onClick={() => { setSelectedRoleState(null); setSelectedRoleReloadKey((key) => key + 1); }}>Retry permissions</button></div> : <p role="status">Loading role permissions…</p> : null}
+          {activeCapabilities && activeView === "home" ? <HomeView
             profile={activeProfile}
             requests={calendarRequests}
             myRequests={myRequests}
@@ -2027,8 +2075,8 @@ export function LeaveDemo({
               onReview={reviewWorkScheduleRequest}
             />}
           /> : null}
-          {activeView === "leave" ? <LeaveWorkspaceLoadBoundary loading={leaveDataLoading}>
-            <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} canViewAllLeave={canViewAllLeave} canAccessBalance={canAccessBalance} balanceContent={<><PayrollBalanceImporter hideManagementControls={isPreviewingEmployeeAccess} onSaved={refreshLeaveWorkspace} /><LeavePriorityControls key={previewPersonId || "self"} previewPersonId={previewPersonId} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /></>} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onDeleteSupportingFile={deleteSupportingFile} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} />
+          {activeCapabilities && activeView === "leave" ? <LeaveWorkspaceLoadBoundary loading={leaveDataLoading}>
+            <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} canViewAllLeave={canViewAllLeave} canAccessBalance={canAccessBalance} balanceContent={<><PayrollBalanceImporter previewPersonId={previewPersonId || undefined} comparisonOnly={activeCapabilities?.payroll_comparison_only === true} hideManagementControls={!activeCapabilities?.can_manage_leave_balances} onSaved={refreshLeaveWorkspace} />{activeCapabilities?.can_manage_leave_balances ? <LeavePriorityControls key={previewPersonId || "self"} previewPersonId={previewPersonId} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /> : null}</>} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onDeleteSupportingFile={deleteSupportingFile} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} />
           </LeaveWorkspaceLoadBoundary> : null}
           {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <TeamCalendar
             key={isPreviewingEmployeeAccess ? activeProfile.id : "signed-in"}
@@ -2043,7 +2091,8 @@ export function LeaveDemo({
             loading={leaveDataLoading}
           /> : null}
           <div hidden={activeView !== "people"}>
-            <PeopleOperationsDemo
+
+            {activeCapabilities ? <PeopleOperationsDemo
               initialSection={initialNavigation?.peopleSection}
               key={`${activeProfile.accessRole}:${isPreviewingEmployeeAccess ? activeProfile.id : "signed-in"}`}
               activeProfile={activeProfile}
@@ -2052,21 +2101,28 @@ export function LeaveDemo({
               canArrangeOrganisation={canEditOrganisation && showHrWorkspace}
               showOrganisation={showOrganisationChart}
               showProfile={false}
-              showTasks={canViewOwnTasks || showHrWorkspace || showManagerTasks || (isPreviewingEmployeeAccess && activeProfile.accessRole === "employee")}
+              showTasks={Boolean(activeCapabilities)}
               isAccessPreview={isPreviewingEmployeeAccess}
               legacyCheckInFormsUrl={checkInResources?.legacyFormsFolderUrl}
               onCreateOrganisationPerson={createOrganisationPerson}
               onUpdateOrganisationPerson={updateOrganisationPerson}
-              onOpenEmployeeDirectoryRecord={showHrWorkspace ? setEmployeeDirectorySelectedPersonId : undefined}
+              onOpenEmployeeDirectoryRecord={showHrWorkspace ? (id) => { if (scopeIsCurrent()) setEmployeeDirectorySelectedPersonId(id); } : undefined}
               renderEmployeeDirectory={showHrWorkspace ? <EmployeeDirectory
                 onRecordsChanged={async () => {
+                  if (!scopeIsCurrent()) return;
+                  profileScopeEpoch.current += 1;
+                  setContactScopeEpoch(profileScopeEpoch.current);
+                  setIsMutating(false);
+                  setSelectedRoleState(null);
+                  setSelectedEmployeeProfileReloadKey((key) => key + 1);
                   // The directory save may have added or changed a birthday.
                   // Reload through the narrow calendar RPC, not from directory
                   // records or a Realtime payload containing private fields.
                   void refreshLeaveWorkspace();
                   await Promise.all([loadOrganisation(), loadAccounts()]);
                 }}
-                onSelectedPersonId={setEmployeeDirectorySelectedPersonId}
+                canManageRoles={activeCapabilities?.can_manage_roles === true}
+                onSelectedPersonId={(id) => { if (scopeIsCurrent()) setEmployeeDirectorySelectedPersonId(id); }}
                 refreshKey={employeeDirectoryRefreshKey}
                 selectedPersonId={employeeDirectorySelectedPersonId}
               /> : showManagerDirectory ? <ManagerEmployeeDirectory
@@ -2075,13 +2131,14 @@ export function LeaveDemo({
                 onLoadMyDevices={employeeDirectoryDeviceLoader}
                 onLoadMySubscriptions={employeeDirectorySubscriptionLoader}
                 onRecordsChanged={async () => {
+                  if (!scopeIsCurrent()) return;
                   // Refresh public organisation data after the manager-safe
                   // record mutation. The manager directory itself never
                   // receives HR-private detail rows.
                   await loadOrganisation();
                 }}
                 refreshKey={employeeDirectoryRefreshKey}
-              /> : activeProfile.accessRole === "employee" ? <EmployeeTeamDirectory
+              /> : activeProfile.accessRole === "employee" || activeProfile.accessRole === "account" ? <EmployeeTeamDirectory
                 key={activeProfile.id}
                 previewPersonId={isPreviewingEmployeeAccess ? activeProfile.id : undefined}
                 currentPersonId={activeProfile.id}
@@ -2092,23 +2149,23 @@ export function LeaveDemo({
               renderCheckInRegister={showHrWorkspace
                 ? <CheckInRegister
                     onRecordsChanged={() => void refreshLeaveWorkspace()}
-                    readOnly={isPreviewingEmployeeAccess}
-                    resources={checkInResources}
+                    readOnly={false}
+                    resources={scopedCheckInResources}
                   />
                 : showManagerCheckIns
                   ? <CheckInWorkspace
                       previewPersonId={previewScopedManagerPersonId}
-                      readOnly={isPreviewingEmployeeAccess}
+                      readOnly={false}
                       onRecordsChanged={() => void refreshLeaveWorkspace()}
-                      resources={checkInResources}
+                      resources={scopedCheckInResources}
                     />
                   : undefined}
-              renderCheckInTasks={showHrWorkspace || showManagerTasks || canViewOwnTasks || (isPreviewingEmployeeAccess && activeProfile.accessRole === "employee")
+              renderCheckInTasks={activeCapabilities
                 ? (toolbarAction) => <CheckInTasks
-                    previewPersonId={previewScopedManagerPersonId}
+                    previewPersonId={isPreviewingEmployeeAccess ? activeProfile.id : undefined}
                     readOnly={false}
                     toolbarAction={toolbarAction}
-                    showCheckInTasks={showHrWorkspace || showManagerTasks}
+                    showCheckInTasks={true}
                     scheduleContent={<WorkScheduleTasks
                       workspace={visibleWorkScheduleWorkspace}
                       loading={workScheduleLoading}
@@ -2122,7 +2179,7 @@ export function LeaveDemo({
               renderAccounts={showHrWorkspace ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
                 : accountsError
-                ? <div className={styles.emptyState}><ShieldCheck size={24} /><strong>Accounts could not be loaded</strong><span>{accountsError}</span><button className={styles.primaryButton} type="button" onClick={() => void loadAccounts()}>Retry accounts</button></div>
+                ? <div className={styles.emptyState}><ShieldCheck size={24} /><strong>Accounts could not be loaded</strong><span>{accountsError}</span><button className={styles.primaryButton} type="button" onClick={() => { if (scopeIsCurrent()) void loadAccounts(); }}>Retry accounts</button></div>
                 : <AccountManagement
                     accounts={accounts}
                     onAccountChanged={updateAccountRecord}
@@ -2132,25 +2189,26 @@ export function LeaveDemo({
                     onToggleEnabled={togglePortalAccount}
                   />
                 : undefined}
-              renderAssetRegister={showHrWorkspace && !isPreviewingEmployeeAccess
+              renderAssetRegister={activeCapabilities?.can_manage_assets
                 ? <AssetRegister />
                 : undefined}
               renderSubscriptionRegister={showSubscriptionRegister
-                ? canViewSubscriptions
+                ? activeCapabilities?.can_view_subscription_register
                   ? <SubscriptionRegister
-                      readOnly={!canManageSubscriptions || isPreviewingEmployeeAccess}
-                      canManageCredentials={canManageSubscriptionCredentials}
-                      canManageCredentialGrants={canManageSubscriptionCredentialGrants}
+                      readOnly={!activeCapabilities?.can_manage_subscriptions}
+                      canManageCredentials={activeCapabilities?.can_manage_subscription_credentials}
+                      canManageCredentialGrants={activeCapabilities?.can_manage_subscription_credential_grants}
+                      canManageManagementGrants={activeCapabilities?.can_manage_subscription_management_grants}
                       onRecordsChanged={() => void refreshLeaveWorkspace()}
                     />
                   : <SubscriptionCredentialVault
-                      canManageCredentialGrants={canManageSubscriptionCredentialGrants}
+                      canManageCredentialGrants={activeCapabilities?.can_manage_subscription_credential_grants}
                     />
                 : undefined}
-              renderAnalyticsApiManagement={canManageAnalyticsApi && !isPreviewingEmployeeAccess
+              renderAnalyticsApiManagement={activeCapabilities?.can_manage_analytics_api
                 ? <AnalyticsApiManagement />
                 : undefined}
-            />
+            /> : null}
           </div>
         </main>
       </div>

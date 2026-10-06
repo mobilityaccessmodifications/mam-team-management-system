@@ -90,7 +90,7 @@ test('Directory committed role change blocks stale retries until refresh', async
   await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Save role', exact: true }).evaluate(button => button.click());
   expect(await page.evaluate(() => directoryCalls.map(call => call.method))).toEqual(['role']);
-  expect(await page.evaluate(() => directoryRefreshes)).toBe(0);
+  expect(await page.evaluate(() => directoryRefreshes)).toBe(1);
   await expect(page.locator('body')).not.toContainText('Role saved.');
 });
 

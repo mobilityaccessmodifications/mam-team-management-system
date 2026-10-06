@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   LoaderCircle,
-  Settings2,
   Upload,
   X,
 } from "lucide-react";
@@ -14,16 +13,13 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState } fr
 
 import {
   commitPayrollBalanceImport,
-  getPayrollBalanceImportAccessWorkspace,
   getPayrollBalanceImportWorkspace,
   getPayrollBalanceImportBatch,
-  replacePayrollBalanceImportGrants,
   stagePayrollBalanceFiles,
 } from "@/app/payroll-balances/actions";
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import type {
-  PayrollImportAccessPerson,
   PayrollImportBatch,
   PayrollImportMatchStatus,
   PayrollImportWorkspace,
@@ -69,28 +65,25 @@ function fileSizeLabel(bytes: number) {
 }
 
 export function PayrollBalanceImporter({
+  comparisonOnly = false,
+  previewPersonId,
   onSaved,
-  hideManagementControls = false,
 }: {
   onSaved: () => Promise<void>;
+  comparisonOnly?: boolean;
+  previewPersonId?: string;
   hideManagementControls?: boolean;
 }) {
   const [workspace, setWorkspace] = useState<PayrollImportWorkspace | null>(null);
   const [workspaceStatus, setWorkspaceStatus] = useState<"loading" | "forbidden" | "error" | "ready">("loading");
   const [workspaceError, setWorkspaceError] = useState("");
   const [batch, setBatch] = useState<PayrollImportBatch | null>(null);
-  const [busy, setBusy] = useState<"staging" | "committing" | "access" | null>(null);
+  const [busy, setBusy] = useState<"staging" | "committing" | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [accessOpen, setAccessOpen] = useState(false);
-  const [accessPeople, setAccessPeople] = useState<PayrollImportAccessPerson[]>([]);
-  const [selectedAccess, setSelectedAccess] = useState<Set<string>>(new Set());
-  const [accessQuery, setAccessQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewDialogRef = useRef<HTMLElement>(null);
   const previewInitialFocusRef = useRef<HTMLButtonElement>(null);
-  const accessDialogRef = useRef<HTMLElement>(null);
-  const accessInitialFocusRef = useRef<HTMLInputElement>(null);
   const workspaceLoadVersion = useRef(0);
 
   const loadWorkspace = useCallback(async () => {
@@ -98,21 +91,20 @@ export function PayrollBalanceImporter({
     setWorkspaceStatus("loading");
     setWorkspaceError("");
     try {
-      const next = await getPayrollBalanceImportWorkspace();
+      const next = await getPayrollBalanceImportWorkspace(previewPersonId);
       if (version !== workspaceLoadVersion.current) return;
       setWorkspaceStatus(next.status);
       if (next.status === "ready") setWorkspace(next.workspace);
       else if (next.status === "forbidden") {
         setWorkspace(null);
         setBatch(null);
-        setAccessOpen(false);
       } else setWorkspaceError(next.message);
     } catch {
       if (version !== workspaceLoadVersion.current) return;
       setWorkspaceStatus("error");
       setWorkspaceError("Payroll balance import could not be loaded. Check your connection and try again.");
     }
-  }, []);
+  }, [previewPersonId]);
 
   useEffect(() => {
     startTransition(() => { void loadWorkspace(); });
@@ -124,14 +116,9 @@ export function PayrollBalanceImporter({
   const closePreview = useCallback(() => {
     if (busy !== "committing") setBatch(null);
   }, [busy]);
-  const closeAccess = useCallback(() => {
-    if (busy !== "access") setAccessOpen(false);
-  }, [busy]);
 
   const previewOpen = Boolean(batch) && workspaceStatus !== "forbidden";
-  const accessVisible = accessOpen && workspaceStatus !== "forbidden";
   useDialogFocus(previewOpen, previewDialogRef, previewInitialFocusRef, closePreview, fileInputRef);
-  useDialogFocus(accessVisible, accessDialogRef, accessInitialFocusRef, closeAccess);
 
   const stageFiles = async (files: FileList | null) => {
     if (!files?.length || busy) return;
@@ -141,7 +128,7 @@ export function PayrollBalanceImporter({
     setError("");
     setNotice("");
     try {
-      const result = await stagePayrollBalanceFiles(formData);
+      const result = await stagePayrollBalanceFiles(formData, previewPersonId);
       if (!result.ok) {
         setError(result.message);
         return;
@@ -157,11 +144,11 @@ export function PayrollBalanceImporter({
   };
 
   const commitBatch = async () => {
-    if (!batch || batch.status !== "staged" || busy) return;
+    if (comparisonOnly || batch?.comparisonOnly || !batch || batch.status !== "staged" || busy) return;
     setBusy("committing");
     setError("");
     try {
-      const result = await commitPayrollBalanceImport(batch.batchId, batch.version);
+      const result = await commitPayrollBalanceImport(batch.batchId, batch.version, previewPersonId);
       if (!result.ok) {
         setError(result.message);
         return;
@@ -176,50 +163,6 @@ export function PayrollBalanceImporter({
       setBusy(null);
     }
   };
-
-  const openAccess = async () => {
-    if (busy) return;
-    setAccessOpen(true);
-    setBusy("access");
-    setError("");
-    setAccessPeople([]);
-    setAccessQuery("");
-    try {
-      const accessWorkspace = await getPayrollBalanceImportAccessWorkspace();
-      setAccessPeople(accessWorkspace.people);
-      setSelectedAccess(new Set(accessWorkspace.grantedPersonIds));
-    } catch {
-      setError("Payroll import access could not be loaded. Refresh and try again.");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const saveAccess = async () => {
-    if (busy) return;
-    setBusy("access");
-    setError("");
-    try {
-      const result = await replacePayrollBalanceImportGrants(Array.from(selectedAccess));
-      if (!result.ok) {
-        setError(result.message);
-        return;
-      }
-      setAccessOpen(false);
-      setNotice("Payroll import access updated.");
-      await loadWorkspace();
-    } catch {
-      setError("Payroll import access could not be saved. Refresh and try again.");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const filteredAccessPeople = useMemo(() => {
-    const query = accessQuery.trim().toLocaleLowerCase();
-    if (!query) return accessPeople;
-    return accessPeople.filter((person) => `${person.fullName} ${person.positionTitle}`.toLocaleLowerCase().includes(query));
-  }, [accessPeople, accessQuery]);
 
   const batchSummary = useMemo(() => {
     const rows = batch?.rows ?? [];
@@ -242,7 +185,7 @@ export function PayrollBalanceImporter({
       <span>Checking payroll import access…</span>
     </section> : null}
     {workspaceStatus === "forbidden" ? <section className={styles.workspace} aria-label="Payroll balance import"><p role="status">You do not have permission to import payroll balances.</p></section> : null}
-    {!previewOpen && !accessVisible && workspaceStatus === "error" ? workspaceFeedback : null}
+    {!previewOpen && workspaceStatus === "error" ? workspaceFeedback : null}
     {workspace && reminder ? <section className={styles.workspace} aria-label="Payroll leave balance update" aria-busy={workspaceStatus === "loading"}>
       <div className={styles.heading}>
         <span className={styles.headingIcon}><FileSpreadsheet size={21} aria-hidden="true" /></span>
@@ -251,9 +194,6 @@ export function PayrollBalanceImporter({
           <h2>Leave balance upload</h2>
         </div>
         <div className={styles.actions}>
-          {workspace.canManageAccess && !hideManagementControls ? <button className={styles.secondaryButton} type="button" onClick={() => void openAccess()} disabled={Boolean(busy) || workspaceStatus !== "ready"}>
-            <Settings2 size={16} aria-hidden="true" />Manage access
-          </button> : null}
           <button className={styles.primaryButton} type="button" onClick={() => fileInputRef.current?.click()} disabled={Boolean(busy) || workspaceStatus !== "ready"}>
             {busy === "staging" ? <LoaderCircle className={styles.spinner} size={16} aria-hidden="true" /> : <Upload size={16} aria-hidden="true" />}
             {busy === "staging" ? "Reading files…" : "Upload CSV or Excel"}
@@ -289,13 +229,13 @@ export function PayrollBalanceImporter({
             <strong>{item.files.map((file) => file.name).join(", ")}</strong>
             <small>{item.rowCount} people · {dateTimeLabel(item.committedAt ?? item.createdAt)}</small>
             <button type="button" className={styles.secondaryButton} onClick={() => {
-              void getPayrollBalanceImportBatch(item.batchId).then(setBatch).catch(() => setError("The comparison could not be loaded."));
+              void getPayrollBalanceImportBatch(item.batchId, previewPersonId).then(setBatch).catch(() => setError("The comparison could not be loaded."));
             }}>View</button>
           </article>)}
         </div>
       </details> : null}
-      {error && !batch && !accessOpen ? <p className={styles.error} role="alert">{error}</p> : null}
-      {notice && !batch && !accessOpen ? <p className={styles.notice} role="status">{notice}</p> : null}
+      {error && !batch ? <p className={styles.error} role="alert">{error}</p> : null}
+      {notice && !batch ? <p className={styles.notice} role="status">{notice}</p> : null}
     </section> : null}
 
     {batch && previewOpen ? <ModalBackdrop className={styles.modalBackdrop} onClick={closePreview} role="presentation">
@@ -346,48 +286,10 @@ export function PayrollBalanceImporter({
         </div>
         <footer>
           <button className={styles.secondaryButton} type="button" onClick={closePreview} disabled={busy === "committing"}>{batch.status === "committed" ? "Done" : "Cancel"}</button>
-          {batch.status === "staged" && !batch.comparisonOnly ? <button className={styles.primaryButton} type="button" onClick={() => void commitBatch()} disabled={Boolean(busy) || workspaceStatus !== "ready"}>
+          {batch.status === "staged" && !batch.comparisonOnly && !comparisonOnly ? <button className={styles.primaryButton} type="button" onClick={() => void commitBatch()} disabled={Boolean(busy) || workspaceStatus !== "ready"}>
             {busy === "committing" ? <LoaderCircle className={styles.spinner} size={16} aria-hidden="true" /> : <CheckCircle2 size={16} aria-hidden="true" />}
             {busy === "committing" ? "Applying…" : "Apply matched balances"}
           </button> : null}
-        </footer>
-      </section>
-    </ModalBackdrop> : null}
-
-    {accessVisible ? <ModalBackdrop className={styles.modalBackdrop} onClick={closeAccess} role="presentation">
-      <section className={styles.accessModal} role="dialog" aria-modal="true" aria-labelledby="payroll-access-title" ref={accessDialogRef} onClick={(event) => event.stopPropagation()}>
-        <header>
-          <div><span className={styles.eyebrow}>Super Admin</span><h2 id="payroll-access-title">Payroll import access</h2><p>Selected active employees can upload and apply leave balance files.</p></div>
-          <button className={styles.iconButton} type="button" aria-label="Close payroll import access" onClick={closeAccess} disabled={busy === "access"}><X size={18} /></button>
-        </header>
-        <div className={styles.accessBody}>
-          {workspaceFeedback}
-          {busy === "access" && !accessPeople.length ? <p className={styles.dialogLoading}><LoaderCircle className={styles.spinner} size={18} aria-hidden="true" />Loading employees…</p> : <>
-            <label className={styles.searchLabel}>Find employee<input ref={accessInitialFocusRef} type="search" value={accessQuery} onChange={(event) => setAccessQuery(event.currentTarget.value)} placeholder="Name or position" /></label>
-            <p className={styles.selectionCount}>{selectedAccess.size} selected</p>
-            <div className={styles.accessList}>
-              {filteredAccessPeople.map((person) => <label className={styles.accessOption} key={person.personId}>
-                <input type="checkbox" checked={selectedAccess.has(person.personId)} disabled={busy === "access"} onChange={(event) => {
-                  // React clears currentTarget once this handler returns, but a
-                  // queued updater can run later during render.
-                  const checked = event.currentTarget.checked;
-                  setSelectedAccess((current) => {
-                    const next = new Set(current);
-                    if (checked) next.add(person.personId);
-                    else next.delete(person.personId);
-                    return next;
-                  });
-                }} />
-                <span><strong>{person.fullName}</strong><small>{person.positionTitle}</small></span>
-              </label>)}
-              {!filteredAccessPeople.length ? <p className={styles.empty}>No active employees match that search.</p> : null}
-            </div>
-          </>}
-          {error ? <p className={styles.error} role="alert">{error}</p> : null}
-        </div>
-        <footer>
-          <button className={styles.secondaryButton} type="button" onClick={closeAccess} disabled={busy === "access"}>Cancel</button>
-          <button className={styles.primaryButton} type="button" onClick={() => void saveAccess()} disabled={busy === "access" || !accessPeople.length}>{busy === "access" ? "Saving…" : "Save access"}</button>
         </footer>
       </section>
     </ModalBackdrop> : null}

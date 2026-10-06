@@ -17,6 +17,7 @@ window.contactFixture = {
 const workspace = id => ({ requests: [], attachments: [], calendarEntries: [], birthdayEntries: [], checkInEntries: [], subscriptionReviewEntries: [], payrollBalanceReminderEntries: [], canViewSubscriptionReviewCalendar: false, canViewPayrollBalanceReminderCalendar: false, canImportPayrollBalances: false, canReviewLeave: false, canViewAllLeave: false, employmentType: null, hasPaidLeaveEntitlement: false, availableLeaveTypes: [], isProfilePreview: Boolean(id), priority: { people: [], requests: [], pendingBalanceCalendarIds: [], canManageBalances: false } });
 export async function invokeServerAction(module, name, args) {
   calls.push({ module, name, args });
+  if (name === 'getPortalRoleCapabilities') return CONTACT_ROLE_RESULTS[args[0] || 'self'];
   if (name === 'getSelectedEmployeeProfile') return contacts[args[0]];
   if (name === 'getCurrentEmployeeSelfProfile') return contacts[people[0].personId];
   if (name === 'updateSelectedEmployeeProfile' || name === 'updateCurrentEmployeeSelfProfile') {

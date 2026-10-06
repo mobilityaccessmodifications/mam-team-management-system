@@ -41,7 +41,7 @@ import {
 } from "@/components/organisation-tree";
 import styles from "@/components/people-operations-demo.module.css";
 
-type AccessRole = "hr" | "manager" | "employee";
+type AccessRole = "employee" | "manager" | "account" | "admin" | "system_admin" | null;
 type PeopleSection = "profile" | "directory" | "organisation" | "tasks" | "checkins" | "accounts" | "assets" | "subscriptions" | "analytics";
 type PeopleTaskSection = "onboarding" | "offboarding" | "checkins";
 type WorkflowKind = "onboarding" | "offboarding";
@@ -363,15 +363,15 @@ export function PeopleOperationsDemo({
     ? section
     : availableSections[0] ?? "profile";
 
-  const canManage = !isAccessPreview && (activeProfile.accessRole === "hr" || activeProfile.accessRole === "manager");
+  const canManage = !isAccessPreview && ((activeProfile.accessRole === "admin" || activeProfile.accessRole === "system_admin") || activeProfile.accessRole === "manager");
   const isEmployee = activeProfile.accessRole === "employee";
   const accessibleWorkflows = useMemo(() => workflows.filter((workflow) => {
-    if (activeProfile.accessRole === "hr" && !isAccessPreview) return true;
+    if ((activeProfile.accessRole === "admin" || activeProfile.accessRole === "system_admin") && !isAccessPreview) return true;
     if (activeProfile.accessRole === "manager") return workflow.manager === activeProfile.name;
     return workflow.employee === activeProfile.name;
   }), [activeProfile, isAccessPreview, workflows]);
   const visiblePeople = useMemo(() => people.filter((person) => {
-    if (activeProfile.accessRole === "hr" && !isAccessPreview) return true;
+    if ((activeProfile.accessRole === "admin" || activeProfile.accessRole === "system_admin") && !isAccessPreview) return true;
     if (activeProfile.accessRole === "manager") return person.manager === activeProfile.name;
     return person.name === activeProfile.name;
   }), [activeProfile, isAccessPreview, people]);
@@ -598,11 +598,11 @@ function WorkflowsView({ workflows, selected, selectedId, activeProfile, onSelec
   const visibleOverdue = isEmployee ? visibleTasks.filter((task) => task.status === "Overdue").length : workflowOverdueCount(selected);
   const status = isEmployee ? progress === 100 ? "Complete" : visibleOverdue ? "Needs attention" : "In progress" : workflowStatus(selected);
   const showWorkflowList = !isEmployee && workflows.length > 1;
-  const canActionTask = (task: WorkflowTask) => !isAccessPreview && (activeProfile.accessRole === "hr" || (activeProfile.accessRole === "manager" && selected.manager === activeProfile.name && task.owner === "Team Leader") || (isEmployee && selected.employee === activeProfile.name && task.owner === "Employee"));
-  const canActionRecord = (owner: string) => !isAccessPreview && (activeProfile.accessRole === "hr" || (activeProfile.accessRole === "manager" && selected.manager === activeProfile.name && owner === "Team Leader"));
-  const visibleAssets = activeProfile.accessRole === "hr" ? selected.assets : selected.assets.filter((asset) => asset.owner === "Team Leader");
-  const visibleAccess = activeProfile.accessRole === "hr" ? selected.access : selected.access.filter((request) => request.owner === "Team Leader");
-  const showSupporting = !isEmployee && (activeProfile.accessRole === "hr" || visibleAssets.length > 0 || visibleAccess.length > 0);
+  const canActionTask = (task: WorkflowTask) => !isAccessPreview && ((activeProfile.accessRole === "admin" || activeProfile.accessRole === "system_admin") || (activeProfile.accessRole === "manager" && selected.manager === activeProfile.name && task.owner === "Team Leader") || (isEmployee && selected.employee === activeProfile.name && task.owner === "Employee"));
+  const canActionRecord = (owner: string) => !isAccessPreview && ((activeProfile.accessRole === "admin" || activeProfile.accessRole === "system_admin") || (activeProfile.accessRole === "manager" && selected.manager === activeProfile.name && owner === "Team Leader"));
+  const visibleAssets = (activeProfile.accessRole === "admin" || activeProfile.accessRole === "system_admin") ? selected.assets : selected.assets.filter((asset) => asset.owner === "Team Leader");
+  const visibleAccess = (activeProfile.accessRole === "admin" || activeProfile.accessRole === "system_admin") ? selected.access : selected.access.filter((request) => request.owner === "Team Leader");
+  const showSupporting = !isEmployee && ((activeProfile.accessRole === "admin" || activeProfile.accessRole === "system_admin") || visibleAssets.length > 0 || visibleAccess.length > 0);
 
   return <div className={`${styles.workflowDesk} ${!showWorkflowList ? styles.workflowDeskSingle : ""}`}>
     {showWorkflowList ? <aside className={styles.workflowList} aria-label="People workflow records"><header><span>{workflows.length} open</span><h2>{selected.kind === "onboarding" ? "New starters" : "Departures"}</h2></header>{workflows.map((workflow) => <button type="button" key={workflow.id} className={workflow.id === selectedId ? styles.workflowSelected : undefined} onClick={() => onSelect(workflow.id)}><span className={styles.caseAvatar}>{workflow.initials}</span><span><strong>{workflow.employee}</strong><em>{workflow.role} · {workflow.department}</em></span><span className={`${styles.statusPill} ${statusClass(workflowStatus(workflow))}`}>{workflowProgress(workflow)}%</span><ChevronRight size={15} /></button>)}</aside> : null}
@@ -610,10 +610,10 @@ function WorkflowsView({ workflows, selected, selectedId, activeProfile, onSelec
       <header className={styles.detailHeader}><div>{!isEmployee ? <span className={styles.caseAvatar}>{selected.initials}</span> : null}<span><small>{selected.kind === "onboarding" ? "Onboarding" : "Offboarding"}</small><h2>{isEmployee ? selected.kind === "onboarding" ? "My onboarding" : "My offboarding" : selected.employee}</h2><p>{selected.role}{selected.manager ? ` · Manager: ${selected.manager}` : ""}</p></span></div><span className={`${styles.statusPill} ${statusClass(status)}`}>{status}</span></header>
       <div className={styles.readiness}><div><span>{selected.kind === "onboarding" ? "Start date" : "Final working day"}</span><strong>{formatDate(selected.date)}</strong></div><div><span>Checklist progress</span><strong>{progress}%</strong><i><b style={{ width: `${progress}%` }} /></i></div><div><span>Overdue actions</span><strong>{visibleOverdue}</strong></div></div>
       <section className={styles.taskBoard} aria-label="Assigned checklist"><header><h3>{selected.kind === "onboarding" ? "Onboarding tasks" : "Offboarding tasks"}</h3></header>{groups.map((group) => <div className={styles.taskGroup} key={group}><h4>{group}</h4>{visibleTasks.filter((task) => task.group === group).map((task) => <div className={styles.taskRow} key={task.id}><span className={`${styles.taskMark} ${task.status === "Complete" ? styles.taskComplete : ""}`}>{task.status === "Complete" ? <Check size={14} /> : <CircleDot size={13} />}</span><span><strong>{task.title}</strong><small>{task.owner} · Due {formatDate(task.due)}{task.evidence ? " · Attachment added" : ""}</small></span><span className={`${styles.statusPill} ${statusClass(task.status)}`}>{task.status}</span>{canActionTask(task) ? <span className={styles.taskActions}><label title="Attach confirmation"><Paperclip size={14} /> Attach<input type="file" accept="application/pdf,image/*" onChange={(event) => onAttach(event, selected.id, task.id)} /></label><button type="button" onClick={() => onTaskUpdate(selected.id, task.id, task.status === "Complete" ? "In Progress" : "Complete")}>{task.status === "Complete" ? "Reopen" : "Confirm"}</button></span> : null}</div>)}</div>)}</section>
-      {showSupporting ? <details className={styles.supportingDetails}><summary><span>{activeProfile.accessRole === "hr" ? "Assets, access and activity" : "Assets and access"}</span></summary><div className={styles.supportingContent}><div className={`${styles.detailGrid} ${visibleAssets.length && !visibleAccess.length ? styles.detailGridSingle : ""}`}>
+      {showSupporting ? <details className={styles.supportingDetails}><summary><span>{(activeProfile.accessRole === "admin" || activeProfile.accessRole === "system_admin") ? "Assets, access and activity" : "Assets and access"}</span></summary><div className={styles.supportingContent}><div className={`${styles.detailGrid} ${visibleAssets.length && !visibleAccess.length ? styles.detailGridSingle : ""}`}>
         {visibleAssets.length ? <section><header><Laptop size={16} /><span><h3>Assets</h3></span></header>{visibleAssets.map((asset) => <div className={styles.assetRow} key={asset.id}><span><strong>{asset.item}</strong><small>{asset.owner}</small></span><span className={`${styles.statusPill} ${statusClass(asset.status)}`}>{asset.status}</span>{canActionRecord(asset.owner) && asset.status !== (selected.kind === "onboarding" ? "Issued" : "Returned") ? <button type="button" onClick={() => onAssetUpdate(selected.id, asset.id)}>{selected.kind === "onboarding" ? "Mark issued" : "Mark returned"}</button> : null}</div>)}</section> : null}
         {visibleAccess.length ? <section><header><ShieldCheck size={16} /><span><h3>Access</h3></span></header>{visibleAccess.map((request) => <div className={styles.accessRow} key={request.id}><span><strong>{request.service}</strong><small>{request.owner} · {request.businessNeed}</small><em>{request.renewal}</em></span><span className={`${styles.statusPill} ${statusClass(request.status)}`}>{request.status}</span>{canActionRecord(request.owner) && !["Active", "Revoked"].includes(request.status) ? <button type="button" onClick={() => onAccessUpdate(selected.id, request.id)}>{selected.kind === "offboarding" ? "Confirm revoked" : request.status === "Requested" ? "Approve" : "Advance"}</button> : null}</div>)}</section> : null}
-      </div>{activeProfile.accessRole === "hr" ? <section className={styles.audit}><header><FileCheck2 size={16} /><span><h3>Activity</h3></span></header>{selected.audit.slice(0, 5).map((entry) => <div key={entry.id}><span /><p><strong>{entry.actor}</strong> {entry.action}<small>{entry.time}</small></p></div>)}</section> : null}</div></details> : null}
+      </div>{(activeProfile.accessRole === "admin" || activeProfile.accessRole === "system_admin") ? <section className={styles.audit}><header><FileCheck2 size={16} /><span><h3>Activity</h3></span></header>{selected.audit.slice(0, 5).map((entry) => <div key={entry.id}><span /><p><strong>{entry.actor}</strong> {entry.action}<small>{entry.time}</small></p></div>)}</section> : null}</div></details> : null}
     </article>
   </div>;
 }

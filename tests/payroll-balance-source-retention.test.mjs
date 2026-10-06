@@ -128,11 +128,10 @@ test("daily private-file maintenance deletes only database-expired payroll archi
   });
 });
 
-test("Balance UI hides access management during employee preview and removes explanatory copy", () => {
+test("Balance UI retires personal payroll grants in every scope and removes explanatory copy", () => {
   const importer = readFileSync("src/components/payroll-balance-importer.tsx", "utf8");
-  const leave = readFileSync("src/components/leave-demo.tsx", "utf8");
-  assert.match(importer, /workspace\.canManageAccess && !hideManagementControls/);
-  assert.match(leave, /hideManagementControls=\{isPreviewingEmployeeAccess\}/);
+  assert.doesNotMatch(importer, /Manage access|Save access|Payroll import access updated|Selected active employees can upload and apply/);
+  assert.doesNotMatch(importer, /getPayrollBalanceImportAccessWorkspace|replacePayrollBalanceImportGrants/);
   for (const removed of [
     "Upload CSV or Excel exports. Every row is previewed before any balance changes.",
     "The reminder renews on the first of every month",

@@ -1,0 +1,171 @@
+import { syntheticRolePeople, syntheticRoleOrgRows, syntheticRoleDirectoryRecord, syntheticRoleSubscription } from './unified-role-data.mjs';
+
+const calls = [], unexpected = [];
+const roleById = Object.fromEntries(syntheticRolePeople.map(person => [person.id, person.role]));
+const personFor = id => syntheticRolePeople.find(person => person.id === id);
+const grantsById = {};
+const outcomeFor = id => {
+  const result = UNIFIED_ROLE_FIXTURE_RESULTS.roles[id][roleById[id]];
+  if (roleById[id] !== 'manager' || !grantsById[id]) return result;
+  return { ...result, capabilities: { ...result.capabilities, ...grantsById[id] } };
+};
+export const actorCapabilities = UNIFIED_ROLE_FIXTURE_RESULTS.actor.capabilities;
+const failures = new Map(), held = new Set(), pending = new Map(), responses = [];
+window.unifiedRoleFixture = {
+  calls, unexpected, responses,
+  setRole(id, role) {
+    if (!Object.hasOwn(UNIFIED_ROLE_FIXTURE_RESULTS.roles[id], role)) throw new Error('Invalid synthetic role');
+    roleById[id] = role;
+  },
+  setContact(id, sourceId) { UNIFIED_ROLE_FIXTURE_RESULTS.contacts[id] = { ...UNIFIED_ROLE_FIXTURE_RESULTS.contacts[sourceId], personId: id }; },
+  holdNext(name, id) { held.add(`${name}:${id ?? ''}`); },
+  pendingKeys: () => [...pending.keys()],
+  finish(name, id) {
+    const key = `${name}:${id ?? ''}`;
+    const queue = pending.get(key);
+    const request = queue?.shift();
+    if (!request) throw new Error(`No synthetic pending request ${key}`);
+    if (!queue.length) pending.delete(key);
+    request.resolve(request.result);
+  },
+  rejectPending(name, id) {
+    const key = `${name}:${id ?? ''}`;
+    const queue = pending.get(key);
+    const request = queue?.shift();
+    if (!request) throw new Error(`No synthetic pending request ${key}`);
+    if (!queue.length) pending.delete(key);
+    request.resolve(Promise.reject(new Error('synthetic uncertain save outcome')));
+  },
+  failNext(name, id, kind) { failures.set(`${name}:${id ?? ''}`, kind); },
+  setSubscriptionGrants(id, management, vault) {
+    grantsById[id] = { can_manage_subscriptions: management, can_manage_subscription_credentials: vault };
+  },
+};
+
+function leaveWorkspace(id) {
+  const role = id ? roleById[id] : 'system_admin';
+  const people = role === 'manager' ? syntheticRolePeople.filter(person => person.id === id || person.role === 'employee')
+    : role === 'employee' ? [personFor(id)] : syntheticRolePeople;
+  const requests = people.map(person => ({
+    id: person.id.replace(/^11/, '22'), personId: person.id, employee: person.name, company: person.company,
+    leaveType: 'Annual leave', startDate: '2026-10-12', endDate: '2026-10-12', days: 1, hours: 7.6,
+    fullDayHours: 7.6, approvalRequired: true, status: 'Pending', submittedAt: '2026-10-01T00:00:00Z',
+    assignedReviewerLabel: 'Synthetic reviewer',
+    canDecide: person.id !== id && (role === 'manager' || role === 'admin' || role === 'system_admin'),
+    canCancel: person.id === id, canAttach: person.id === id, employeeNote: 'Synthetic retained employee note',
+  }));
+  if (role === 'account') for (const [index, status] of ['Approved', 'Declined', 'Cancelled'].entries()) {
+    const request = requests.find(request => request.personId === syntheticRolePeople[3].id);
+    requests.push({ ...request, id: `23000000-0000-4000-8000-00000000000${index}`, status });
+  }
+  const attachments = requests.some(request => request.id === syntheticRolePeople[3].id.replace(/^11/, '22')) ? [{
+    id: '44000000-0000-4000-8000-000000000001', leaveRequestId: syntheticRolePeople[3].id.replace(/^11/, '22'),
+    fileName: 'synthetic-evidence.pdf', mimeType: 'application/pdf', sizeBytes: 128, createdAt: '2026-10-01T00:00:00Z', canDelete: role === 'employee',
+  }] : [];
+  return {
+    requests, attachments, calendarEntries: requests.filter(request => request.status === 'Pending' || request.status === 'Approved').map(request => ({ ...request, teamName: 'Operation & Accounts' })), birthdayEntries: [], checkInEntries: [],
+    subscriptionReviewEntries: [], payrollBalanceReminderEntries: [],
+    canViewSubscriptionReviewCalendar: false, canViewPayrollBalanceReminderCalendar: false,
+    canImportPayrollBalances: role === 'account' || role === 'admin' || role === 'system_admin',
+    canReviewLeave: role === 'manager' || role === 'admin' || role === 'system_admin',
+    canViewAllLeave: role === 'account' || role === 'admin' || role === 'system_admin',
+    employmentType: id ? 'full_time' : null, hasPaidLeaveEntitlement: Boolean(id),
+    availableLeaveTypes: id ? [{ value: 'Annual leave', label: 'Annual leave' }] : [],
+    isProfilePreview: Boolean(id),
+    priority: { people: [], requests: [], pendingBalanceCalendarIds: [], canManageBalances: role === 'admin' || role === 'system_admin' },
+  };
+}
+
+const handlers = {
+  '@/app/roles/actions': { getPortalRoleCapabilities: id => id ? outcomeFor(id) : UNIFIED_ROLE_FIXTURE_RESULTS.actor },
+  '@/app/profile/actions': { getSelectedEmployeeProfile: id => UNIFIED_ROLE_FIXTURE_RESULTS.contacts[id], updateSelectedEmployeeProfile: input => ({ ...UNIFIED_ROLE_FIXTURE_RESULTS.contactMutations[input.personId], phone: input.phone, personalEmail: input.personalEmail, dateOfBirth: input.dateOfBirth }) },
+  '@/app/people/actions': {
+    listEmployeeDirectoryRecords: () => syntheticRolePeople.map(syntheticRoleDirectoryRecord),
+    listEmployeeDirectoryRoles: () => ({ ...roleById }), getOrganisationPersonWorkEmail: id => `${personFor(id).role}@example.test`,
+  },
+  '@/app/accounts/actions': { listPortalAccounts: () => [] },
+  '@/app/leave/actions': { getLeaveWorkspaceData: leaveWorkspace },
+  '@/app/work-schedule/actions': { loadEmployeeWorkScheduleWorkspace: id => ({ ok: true, workspace: {
+    activePersonId: id ?? null, activePersonName: personFor(id)?.name ?? null, workingWeekdays: id ? [1, 2, 3, 4, 5] : null,
+    workingDayTimes: [], initialSetupAvailable: false, canRequestChange: Boolean(id), isProfilePreview: Boolean(id), history: [], reviews: [],
+  } }) },
+  '@/app/people/team-directory-actions': { listEmployeeTeamDirectory: id => [personFor(id)].filter(Boolean).map(person => ({
+    id: person.id, name: person.name, position: person.title, company: person.company,
+    reportsTo: null, managerName: '', kind: 'person', isActive: true, version: 1,
+  })) },
+  '@/app/people/manager-actions': { listManagedEmployeeDirectoryRecordsAction: id => ({ ok: true, records: syntheticRolePeople.filter(person => person.id === id || person.role === 'employee').map(person => {
+    const record = syntheticRoleDirectoryRecord(person);
+    return Object.fromEntries(['personId', 'personVersion', 'detailVersion', 'company', 'isActive', 'firstName', 'lastName', 'fullName', 'positionTitle', 'teamName', 'managerName', 'workEmail'].map(key => [key, record[key]]));
+  }) }) },
+  '@/app/payroll-balances/actions': {
+    getPayrollBalanceImportWorkspace: () => ({ status: 'ready', workspace: {
+      canImport: true, canManageAccess: false, recentBatches: [],
+      reminder: { dueOn: '2026-10-01', mamAsOf: null, equipsyAsOf: null, mamComplete: false, equipsyComplete: false, complete: false },
+    } }),
+    stagePayrollBalanceFiles: (formData, id) => ({ ok: true, batch: {
+      batchId: '55000000-0000-4000-8000-000000000001', version: 1, status: 'staged', comparisonOnly: roleById[id] === 'account',
+      differenceCount: 0, createdAt: '2026-10-01T00:00:00Z', committedAt: null,
+      files: formData.getAll('files').map(file => ({ name: file.name, sizeBytes: file.size, companies: ['mam'], asOfDates: ['2026-10-01'], employeeRows: 1 })),
+      rows: [{ rowId: 1, employeeName: 'Synthetic Employee', company: 'mam', annualHours: 16, sickHours: null, asOf: '2026-10-01', status: 'linked', linkedName: 'Synthetic Employee', willApplyAnnual: false, willApplySick: false }],
+      comparisonRows: [{ rowId: 1, employeeName: 'Synthetic Employee', company: 'mam', kind: 'annual', uploadedHours: 16, systemHours: 16, fileAsOf: '2026-10-01', systemAsOf: '2026-10-01', different: false }],
+    } }),
+  },
+  '@/app/assets/employee-actions': { listItAssetsForEmployeePreview: () => [], listMyItAssets: () => [] },
+  '@/app/assets/actions': { listItAssetsForEmployee: () => [], listItAssets: () => [], listItAssetAssignees: () => [] },
+  '@/app/subscriptions/actions': {
+    listSubscriptions: () => [syntheticRoleSubscription],
+    listSubscriptionPeople: () => syntheticRolePeople.map(person => ({ personId: person.id, fullName: person.name, positionTitle: person.title, teamName: 'Operation & Accounts', company: person.company })),
+  },
+  '@/app/subscription-credentials/actions': { listSubscriptionCredentialCatalogue: () => [{ subscriptionId: syntheticRoleSubscription.id, credentialsSaved: false }] },
+  '@/app/subscriptions/employee-actions': { listEmployeeSubscriptionsForPreview: () => [], listMySubscriptions: () => [] },
+};
+
+export async function invokeServerAction(module, name, args) {
+  calls.push({ module, name, args: args.map(arg => arg instanceof FormData ? { files: arg.getAll('files').map(file => ({ name: file.name, type: file.type, size: file.size })) } : arg) });
+  const key = `${name}:${args[0]?.personId ?? args[0] ?? ''}`;
+  const failure = failures.get(key);
+  if (failure) {
+    failures.delete(key);
+    if (failure === 'contact') throw new Error(UNIFIED_ROLE_FIXTURE_RESULTS.contactError);
+    if (name === 'getPortalRoleCapabilities' && (failure === 'denied' || failure === 'malformed')) return UNIFIED_ROLE_FIXTURE_RESULTS[failure];
+    if (failure === 'transport') throw new Error('private synthetic provider permission detail');
+    throw new Error(`Unexpected synthetic failure ${failure}`);
+  }
+  const handler = handlers[module]?.[name];
+  if (!handler) {
+    unexpected.push({ module, name });
+    throw new Error(`Unexpected synthetic action ${module}:${name}`);
+  }
+  const result = await handler(...args);
+  if (held.delete(key)) {
+    const delayed = await new Promise(resolve => {
+      const queue = pending.get(key) ?? [];
+      queue.push({ resolve, result });
+      pending.set(key, queue);
+    });
+    responses.push({ key });
+    return delayed;
+  }
+  responses.push({ key });
+  return result;
+}
+
+const client = {
+  from(table) {
+    if (table !== 'internal_org_people') throw new Error(`Unexpected synthetic table ${table}`);
+    const query = { select: () => query, order: () => query, then: done => Promise.resolve({ data: syntheticRoleOrgRows, error: null }).then(done) };
+    return query;
+  },
+  async rpc(name, args) {
+    calls.push({ module: 'supabase', name, args: [args] });
+    if (name === 'can_edit_internal_org' || name === 'can_manage_employee_directory') return { data: true, error: null };
+    unexpected.push({ module: 'supabase', name });
+    throw new Error(`Unexpected synthetic RPC ${name}`);
+  },
+  channel() {
+    const channel = { on: () => channel, subscribe: () => channel };
+    return channel;
+  },
+  async removeChannel() {},
+};
+export function createClient() { return client; }

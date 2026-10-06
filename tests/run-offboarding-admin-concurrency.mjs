@@ -40,22 +40,22 @@ function activity(app) {
   return sql(socket, database, `select coalesce(wait_event_type,'')||':'||coalesce(wait_event,'') from pg_stat_activity where application_name='${app}' and state='active';`).trim();
 }
 try {
-  const demotion = session(`select public.update_employee_directory_role('${ids[1]}','employee','system_admin'); select 'DEMOTION_HELD';`, ids[0], true);
-  await until(() => demotion.output().includes("DEMOTION_HELD"), "held role change");
-  const offboard = session(`select public.run_scheduled_employee_offboarding('${ids[0]}','2020-01-02 00:00:00+00');`, null);
-  await until(() => activity(offboard.app).startsWith("Lock:"), "concurrent offboarding lock wait");
-  try {
-    assert.equal(activity(offboard.app), "Lock:advisory", "offboarding must acquire the role-control lock before inspecting the target profile");
-  } finally {
-    demotion.child.stdin.end("commit;\n");
+  const holder = session(`select pg_advisory_xact_lock(hashtextextended('mam:directory-role-control',0)); select 'CONTROL_HELD';`, null, true);
+  await until(() => holder.output().includes('CONTROL_HELD'), 'held role authority');
+  const offboards = ids.map(id => session(`select public.run_scheduled_employee_offboarding('${id}','2020-01-02 00:00:00+00');`, null));
+  await until(() => offboards.every(s => activity(s.app).startsWith('Lock:')), 'concurrent P0 service offboarding waits');
+  for (const queued of offboards) assert.equal(activity(queued.app), 'Lock:advisory', 'worker authority fence precedes target locks');
+  holder.child.stdin.end('commit;\n');
+  assert.equal((await holder.done).code, 0);
+  for (const queued of offboards) {
+    const result = await queued.done;
+    assert.notEqual(result.code, 0, 'Unattributed service offboarding must reject a current System Admin');
+    assert.match(result.error, /System Admin account access denied/);
   }
-  assert.equal((await demotion.done).code, 0);
-  const result = await offboard.done;
-  assert.notEqual(result.code, 0, `offboarding must reject the remaining administrator: ${JSON.stringify(result)}`);
-  assert.match(result.error, /last active account administrator cannot be disabled/);
-  assert.equal(sql(socket, database, `select count(*) from public.profiles where id in ('${ids[0]}','${ids[1]}') and app_role='system_admin' and account_status='active';`).trim(), "1");
-  assert.equal(sql(socket, database, `select is_active from public.internal_org_people where id='${ids[0]}';`).trim(), "t");
-  console.log("PASS: role change and offboarding share advisory serialization; last administrator survives");
+  assert.equal(sql(socket, database, `select count(*) from public.profiles where id in ('${ids[0]}','${ids[1]}') and app_role='system_admin' and account_status='active';`).trim(), '2');
+  assert.equal(sql(socket, database, `select count(*) from public.internal_org_people where id in ('${ids[0]}','${ids[1]}') and is_active;`).trim(), '2');
+  assert.equal(sql(socket, database, `select count(*) from private.portal_account_admin_events where target_user_id in ('${ids[0]}','${ids[1]}');`).trim(), '0');
+  console.log('PASS: queued service offboarding cannot disable either current P0 without actual P0 authority');
 } finally {
   for (const child of sessions) { child.stdin.end("rollback;\n"); child.kill("SIGTERM"); }
 }

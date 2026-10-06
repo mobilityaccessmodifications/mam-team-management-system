@@ -31,6 +31,8 @@ const personalEmail = normalEmail(employee.personalEmail);
 const managerEmail = normalEmail(manager.email);
 const employeeRecipients = [...new Set([workEmail, personalEmail].filter(Boolean))].sort();
 const liveRecipients = [...new Set([...employeeRecipients, managerEmail].filter(Boolean))].sort();
+const visibleRecipients = [...new Set([workEmail, managerEmail].filter(Boolean))].sort();
+const blindRecipients = personalEmail && !visibleRecipients.includes(personalEmail) ? [personalEmail] : [];
 const valid = payload?.version === 1 && payload?.event === 'new-starter-day-one' && payload?.mode === MODE
   && payload?.deliveryId === expectedId && clean(employee.firstName) && clean(employee.role)
   && (employee.company === 'mam' || employee.company === 'equipsy') && employeeRecipients.length > 0
@@ -39,6 +41,8 @@ if (!valid) return [{ json: { valid: false, deliveryId: expectedId || 'invalid',
 return [{ json: {
   valid: true, deliveryId: expectedId,
   actualRecipient: MODE === 'test' ? TEST_RECIPIENT : liveRecipients.join(','), ccRecipients: '',
+  deliveryTo: MODE === 'test' ? TEST_RECIPIENT : visibleRecipients.join(','),
+  deliveryBcc: MODE === 'test' ? '' : blindRecipients.join(','),
   employeeFirstName: clean(employee.firstName), managerFirstName: clean(manager.firstName),
   role: clean(employee.role), companyName: employee.company === 'mam' ? 'MAM' : 'Equipsy',
   commencementDate: clean(payload.commencementDate),
@@ -118,8 +122,8 @@ export function buildNewStarterDayOneWorkflow({
       mode: 'runOnceForAllItems', jsCode: emailCode(checklistBase64),
     }),
     node('d1000000-0000-4000-8000-000000000008', 'Send Day 1 Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [660, -180], {
-      resource: 'message', operation: 'send', toRecipients: '={{ $json.actualRecipient }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
-      additionalFields: { bodyContentType: 'html', saveToSentItems: true,
+      resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
+      additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true,
         attachments: { attachments: [{ binaryPropertyName: 'checklist' }] } },
     }, { credentials: { microsoftOutlookOAuth2Api: HR_OUTLOOK_CREDENTIAL } }),
     node('d1000000-0000-4000-8000-000000000009', 'Build Durable Day 1 Confirmation', 'n8n-nodes-base.code', 2, [900, -180], {

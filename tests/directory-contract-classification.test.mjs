@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import ts from 'typescript';
+import { loadModule } from './helpers/unified-role-harness.mjs';
 
 const require = createRequire(import.meta.url);
 const teamModule = { exports: {} };
@@ -29,6 +30,8 @@ function loadActions({ classificationError = null } = {}) {
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', source)((id) => ({
     '@/lib/employee-teams': teamModule.exports,
+    '@/lib/portal-role-capabilities': loadModule('src/lib/portal-role-capabilities.ts'),
+    '@/lib/portal-role-access': loadModule('src/lib/portal-role-access.ts', { '@/lib/supabase/server': { createClient: async () => supabase } }),
     'next/cache': { revalidatePath: () => {} },
     '@/lib/employee-directory': {
       requireEmployeeDirectoryManager: async () => ({ supabase }),

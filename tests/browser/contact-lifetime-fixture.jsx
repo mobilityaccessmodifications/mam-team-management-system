@@ -16,6 +16,7 @@ function NativeHost() {
   }} />;
 }
 createRoot(document.getElementById('root')).render(new URLSearchParams(location.search).has('native') ? <NativeHost /> : <LeaveDemo
+  actorCapabilities={CONTACT_ROLE_RESULTS.self.capabilities}
   isAdmin={true} isNonRosterSystemAdmin={true} canViewEmployeeDirectory={true}
   canChangeEmployeeView={true} canViewTeamCalendar={true}
 />);

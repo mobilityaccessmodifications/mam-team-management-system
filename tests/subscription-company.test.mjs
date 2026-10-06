@@ -54,8 +54,9 @@ test("subscription actions use company-aware RPCs and validate enum", () => {
   assert.match(source, /rpc\("create_subscription_v4"/);
   assert.match(source, /rpc\("update_subscription_v4"/);
 });
-test("management UI uses a separate capability and makes preview read-only", () => {
+test("management UI uses the canonical target capability, independently from vault delegation", () => {
   const source = readFileSync("src/components/leave-demo.tsx", "utf8");
-  assert.match(source, /readOnly=\{!canManageSubscriptions \|\| isPreviewingEmployeeAccess\}/);
-  assert.match(readFileSync("src/app/page.tsx", "utf8"), /rpc\("can_manage_subscriptions"\)/);
+  assert.match(source, /readOnly=\{!activeCapabilities\?\.can_manage_subscriptions\}/);
+  assert.match(source, /canManageCredentials=\{activeCapabilities\?\.can_manage_subscription_credentials\}/);
+  assert.match(readFileSync("src/app/page.tsx", "utf8"), /actorCapabilities=\{actor\}/);
 });

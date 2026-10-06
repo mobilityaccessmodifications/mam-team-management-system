@@ -1,4 +1,4 @@
--- Full-schema, synthetic access-control regression for a view-only Leave register grant.
+-- Full-schema synthetic regression: legacy grants are inert; Account provides canonical read-only leave access.
 \set ON_ERROR_STOP on
 begin;
 set local statement_timeout = '10s';
@@ -23,7 +23,7 @@ select id,'full_time',login_name||'@example.test','Synthetic','Person','Operatio
 insert into private.leave_approval_grants(reviewer_user_id,scope_kind,reviewer_label,priority)
 values ('90000000-0000-4000-8000-000000000005','global','Synthetic Admin',100);
 select pg_temp.set_test_actor('90000000-0000-4000-8000-000000000002');
-create temp table read_grant_request as select id from public.submit_my_leave_request('Unpaid leave','2030-12-09','2030-12-13');
+create temp table read_grant_request as select id from public.submit_my_leave_request('Unpaid leave','2030-12-09','2030-12-13',null,null,'Synthetic Account-visible note');
 insert into public.leave_request_attachments(id,leave_request_id,uploaded_by,storage_path,file_name,mime_type,size_bytes)
 select '90000000-0000-4000-8000-000000000004',id,'90000000-0000-4000-8000-000000000002',id::text||'/90000000-0000-4000-8000-000000000004.pdf','fixture.pdf','application/pdf',123 from read_grant_request;
 select pg_temp.set_test_actor('90000000-0000-4000-8000-000000000001');
@@ -47,10 +47,17 @@ with candidates as materialized (
 )
 insert into private.leave_register_read_grants(person_id)
 select id from sole;
+set local role authenticated;
+do $$ begin
+  assert (select count(*)=0 from public.list_leave_workspace_requests()), 'Legacy grant cannot override Employee scope';
+  assert not public.can_view_all_leave_requests(), 'Legacy grant is not canonical read authority';
+end $$;
+reset role;
+update public.profiles set app_role='account' where id='90000000-0000-4000-8000-000000000001';
 select pg_temp.set_test_actor('90000000-0000-4000-8000-000000000001');
 set local role authenticated;
 do $$ begin
-  assert (select count(*)=1 from public.list_leave_workspace_requests() where status='Pending' and can_decide=false and can_cancel=false and can_attach=false and employee_note is null), 'Viewer receives all-company pending record without actions';
+  assert (select count(*)=1 from public.list_leave_workspace_requests() where status='Pending' and can_decide=false and can_cancel=false and can_attach=false and employee_note='Synthetic Account-visible note'), 'Account receives all-company pending record and notes without actions';
   assert (select count(*)=1 from public.list_leave_workspace_attachments() where file_name='fixture.pdf' and can_delete=false), 'Viewer can inspect evidence metadata without deletion';
   assert public.can_download_leave_request_attachment('90000000-0000-4000-8000-000000000004'), 'Viewer can download authorised evidence';
   assert public.can_view_all_leave_requests(), 'Viewer has explicit all-staff read capability';
@@ -90,6 +97,12 @@ end $$;
 reset role;
 update public.profiles set account_status='active', disabled_at=null where login_name='viewer';
 delete from private.leave_register_read_grants where person_id='90000000-0000-4000-8000-000000000001';
+set local role authenticated;
+do $$ begin
+  assert public.can_view_all_leave_requests(), 'Removing inert legacy grant cannot revoke canonical Account access';
+end $$;
+reset role;
+update public.profiles set app_role='employee' where id='90000000-0000-4000-8000-000000000001';
 set local role authenticated;
 do $$ begin
   assert (select count(*)=0 from public.list_leave_workspace_requests()), 'Revoked viewer loses peer records';

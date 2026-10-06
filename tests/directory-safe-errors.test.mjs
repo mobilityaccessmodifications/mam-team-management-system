@@ -27,6 +27,9 @@ if (process.env.MAM_FLIGHT_FIXTURE === '1') {
     validation: loadActions().actions.createEmployeeDirectoryRecord({ ...draft, workEmail: 'invalid' }),
     unknown: loadActions({ dbError: { code: 'XX000', message: 'private fixture database detail' } }).actions.updateEmployeeDirectoryRecord(updateInput),
     role: loadActions({ dbError: { code: '40001' } }).actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }),
+    roleConflict: loadActions({ dbError: { code: 'PT409', message: 'Role has changed. Refresh and try again.', details: 'private role fixture detail' } }).actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }),
+    roleReset: loadActions({ dbError: { code: '55000', message: 'A password reset is in progress. Resolve it before changing this role.', hint: 'private role fixture hint' } }).actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }),
+    roleOnboarding: loadActions({ dbError: lockError }).actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }),
     partialCreate: loadActions({ readErrorAt: 1 }).actions.createEmployeeDirectoryRecord(draft),
     partialUpdate: loadActions({ readErrorAt: 2 }).actions.updateEmployeeDirectoryRecord(updateInput),
     partialRole: loadActions({ revalidateError: new Error('private fixture revalidation failure') }).actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }),
@@ -60,7 +63,7 @@ if (process.env.MAM_FLIGHT_FIXTURE === '1') {
       const input = method === 'updateEmployeeDirectoryRole' ? { personId, role: 'manager', expectedRole: 'employee' } : updateInput;
       for (const message of ['Your session has expired. Sign in again.', 'You do not have permission to manage employee records.']) {
         const { actions, calls } = loadActions({ authError: new Error(message) });
-        assert.deepEqual(await actions[method](input), { error: message });
+        assert.deepEqual(await actions[method](input), { error: method === 'updateEmployeeDirectoryRole' ? 'Role could not be saved. Refresh and try again.' : message });
         assert.equal(calls.length, 0);
       }
       const unauthorized = loadActions({ authError: new Error('private fixture token=synthetic-secret') });
@@ -87,11 +90,32 @@ if (process.env.MAM_FLIGHT_FIXTURE === '1') {
       assert.equal(unknown.calls.length, 1);
     }
     const roleDenied = loadActions({ roleAccess: false });
-    assert.deepEqual(await roleDenied.actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }), { error: 'Only a System Admin can change roles.' });
-    assert.deepEqual(roleDenied.calls.map(call => call.name), ['can_manage_portal_accounts']);
+    assert.deepEqual(await roleDenied.actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }), { error: 'Only a Super Admin can change roles.' });
+    assert.deepEqual(roleDenied.calls.map(call => call.name), ['get_portal_role_capabilities']);
     const role = loadActions({ dbError: { code: '40001', message: 'private role detail' } });
     assert.deepEqual(await role.actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }), { error: 'Role has changed. Refresh the directory and try again.' });
     assert.deepEqual(await role.actions.updateEmployeeDirectoryRole({ personId, role: 'invalid', expectedRole: 'employee' }), { error: 'Choose a valid role and refresh the employee record.' });
+  });
+  test('role CAS action allows the documented nonretry PT409 and predecessor 40001 as safe data', async () => {
+    for (const dbError of [{ code: 'PT409', message: 'Role has changed. Refresh and try again.', details: 'private synthetic role detail' }, { code: '40001', message: 'private predecessor role detail' }]) {
+      const { actions, calls } = loadActions({ dbError });
+      assert.deepEqual(await actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }), { error: 'Role has changed. Refresh the directory and try again.' });
+      assert.deepEqual(calls.map(call => call.name), ['get_portal_role_capabilities', 'update_employee_directory_role']);
+    }
+    const unknown = loadActions({ dbError: { code: 'PT409', message: 'private unrelated conflict', details: 'synthetic-secret' } });
+    assert.deepEqual(await unknown.actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }), { error: 'Role could not be saved. Refresh and try again.' });
+  });
+  test('role pending-reset rejection uses its exact actionable allowlist without follow-up writes', async () => {
+    const { actions, calls } = loadActions({ dbError: { code: '55000', message: 'A password reset is in progress. Resolve it before changing this role.', details: 'private reset fixture detail' } });
+    assert.deepEqual(await actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }), { error: 'A password reset is in progress. Resolve it before changing this role.' });
+    assert.deepEqual(calls.map(call => call.name), ['get_portal_role_capabilities', 'update_employee_directory_role']);
+    const unknown = loadActions({ dbError: { code: '55000', message: 'private unrelated reset guard', details: 'synthetic-secret' } });
+    assert.deepEqual(await unknown.actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }), { error: 'Role could not be saved. Refresh and try again.' });
+  });
+  test('role onboarding rejection retains the existing safe delivery-review explanation', async () => {
+    const { actions, calls } = loadActions({ dbError: lockError });
+    assert.deepEqual(await actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }), { error: lockMessage });
+    assert.deepEqual(calls.map(call => call.name), ['get_portal_role_capabilities', 'update_employee_directory_role']);
   });
   test('production Flight Server Action result transports the reason as data, not a redacted RSC exception', async () => {
     const encoded = spawnSync(process.execPath, ['--conditions=react-server', '--input-type=module', '-e', `await import('./tests/directory-safe-errors.test.mjs')`], {
@@ -106,6 +130,9 @@ if (process.env.MAM_FLIGHT_FIXTURE === '1') {
     assert.deepEqual(await result.validation, { error: 'Enter a valid work email.' });
     assert.deepEqual(await result.unknown, { error: 'Employee details could not be saved. Refresh and try again.' });
     assert.deepEqual(await result.role, { error: 'Role has changed. Refresh the directory and try again.' });
+    assert.deepEqual(await result.roleConflict, { error: 'Role has changed. Refresh the directory and try again.' });
+    assert.deepEqual(await result.roleReset, { error: 'A password reset is in progress. Resolve it before changing this role.' });
+    assert.deepEqual(await result.roleOnboarding, { error: lockMessage });
     for (const key of ['partialCreate', 'partialUpdate', 'partialRole']) {
       const partial = await result[key];
       assert.equal(partial.committed, true);

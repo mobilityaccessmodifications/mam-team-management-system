@@ -123,7 +123,7 @@ export function LeaveRequestBalance({ workspace, personId, requestedHours = null
   </details>;
 }
 
-export function LeavePriorityControls({ workspace, busy, onRequest, onSaved, previewPersonId }: {
+export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
   workspace?: LeavePriorityWorkspace; busy: boolean; previewPersonId?: string;
   onRequest: (personId: string) => void; onSaved: () => Promise<void>;
 }) {
@@ -133,7 +133,7 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved, pre
   const [refreshRequired, setRefreshRequired] = useState(false);
   const mutationFence = useRef(false);
   const [error, setError] = useState("");
-  if (!workspace?.canManageBalances || previewPersonId || (!workspace.people.length && !workspace.payrollImports?.length)) return null;
+  if (!workspace?.canManageBalances || (!workspace.people.length && !workspace.payrollImports?.length)) return null;
   return <details className={styles.leaveBalances} open>
     <summary>Leave balances{workspace.people.some((p) => p.canSubmit) ? " & team requests" : ""}</summary>
     {workspace.people.map((person) => <div className={styles.leaveBalanceRow} key={person.personId}>

@@ -8,6 +8,7 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { buildUnifiedRoleFixture } from "../tests/browser/unified-role-build.mjs";
 
 // This harness does not start Next or read a .env. Production components are
 // compiled unchanged; only server-action boundaries receive synthetic data.
@@ -27,13 +28,20 @@ directoryResults.create = await loadActions({ dbError: { code: "55000", message:
 directoryResults.partialRole = await loadActions({ revalidateError: new Error("private fixture revalidation failure"), sourceRoot }).actions.updateEmployeeDirectoryRole({ personId, role: "manager", expectedRole: "employee" });
 directoryResults.partialCreate = await loadActions({ readErrorAt: 1, sourceRoot }).actions.createEmployeeDirectoryRecord(draft);
 directoryResults.partialUpdate = await loadActions({ readErrorAt: 2, sourceRoot }).actions.updateEmployeeDirectoryRecord(directoryInput);
+directoryResults.roleSuccess = {};
+for (const role of ["employee", "manager", "account", "admin"]) {
+  directoryResults.roleSuccess[role] = await loadActions({ sourceRoot }).actions.updateEmployeeDirectoryRole({
+    personId, role, expectedRole: role === "employee" ? "manager" : "employee",
+  });
+}
 
 const scratch = mkdtempSync(path.join(tmpdir(), "mam-browser-test-"));
 const server = createServer((request, response) => {
-  const name = request.url === "/fixture.js" ? "fixture.js" : request.url === "/fixture.css" ? "fixture.css" : null;
+  const name = /^\/(?:fixture|unified-role-fixture)\.(?:js|css)$/.test(request.url ?? "") ? request.url.slice(1) : null;
+  const fixture = new URL(request.url ?? "/", "http://127.0.0.1").searchParams.get("fixture") === "unified-roles" ? "unified-role-fixture" : "fixture";
   response.setHeader("Content-Security-Policy", "default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'");
   response.setHeader("Content-Type", name?.endsWith(".js") ? "text/javascript" : name ? "text/css" : "text/html");
-  response.end(name ? readFileSync(path.join(scratch, name)) : '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic component tests</title><link rel="stylesheet" href="/fixture.css"><body><div id="root"></div><script src="/fixture.js"></script></body></html>');
+  response.end(name ? readFileSync(path.join(scratch, name)) : `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic component tests</title><link rel="stylesheet" href="/${fixture}.css"><body><div id="root"></div><script src="/${fixture}.js"></script></body></html>`);
 });
 try {
   await build({
@@ -57,6 +65,7 @@ try {
       }));
     } }],
   });
+  await buildUnifiedRoleFixture(sourceRoot, scratch);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   const child = spawn(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "--config=tests/browser/playwright.config.mjs", ...process.argv.slice(3)], {
@@ -64,7 +73,7 @@ try {
       CI: process.env.CI ?? "", PLAYWRIGHT_BROWSERS_PATH: path.resolve("node_modules/.cache/ms-playwright"),
       MAM_BROWSER_SOURCE_ROOT: sourceRoot,
       MAM_BROWSER_ORIGIN: `http://127.0.0.1:${address.port}`, MAM_BROWSER_RESULTS: path.join(scratch, "results") },
-    stdio: "inherit",
+    stdio: "inherit", timeout: 180_000, killSignal: "SIGTERM",
   });
   const code = await new Promise((resolve, reject) => { child.on("error", reject); child.on("exit", resolve); });
   process.exitCode = code ?? 1;

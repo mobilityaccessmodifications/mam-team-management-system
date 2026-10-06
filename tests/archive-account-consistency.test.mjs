@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { loadModule } from './helpers/unified-role-harness.mjs';
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -137,6 +138,8 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
   const moduleUnderTest = { exports: {} };
   new Function("require", "module", "exports", source)(
     (id) => {
+      if (id === '@/lib/portal-role-capabilities') return loadModule('src/lib/portal-role-capabilities.ts');
+      if (id === '@/lib/portal-role-access') return loadModule('src/lib/portal-role-access.ts', { '@/lib/supabase/server': { createClient: async () => supabase } });
       if (id === "next/cache") return { revalidatePath() {} };
       if (id === "@/app/accounts/actions") return { createPortalAccount: async () => ({}) };
       if (id === "@/lib/supabase/admin") return { createAdminClient: () => admin };

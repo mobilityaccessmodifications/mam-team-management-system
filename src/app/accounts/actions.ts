@@ -93,7 +93,7 @@ function toAccount(row: DirectoryRow, profile?: ProfileRow, lastSignInAt?: strin
   };
 }
 
-async function loadAccountByPerson(personId: string): Promise<AccountDto> {
+async function loadAccountByPerson(personId: string, includeLastSignIn = true): Promise<AccountDto> {
   const admin = createAdminClient();
   const { data: person, error: personError } = await admin
     .from("internal_org_people")
@@ -112,11 +112,11 @@ async function loadAccountByPerson(personId: string): Promise<AccountDto> {
       .select("id,login_name,account_status,account_version")
       .eq("id", person.auth_user_id)
       .single<ProfileRow>(),
-    admin.auth.admin.getUserById(person.auth_user_id),
+    includeLastSignIn ? admin.auth.admin.getUserById(person.auth_user_id) : null,
   ]);
 
-  if (profileError || !profile || userResult.error) throw new Error(GENERIC_ERROR);
-  return toAccount(person, profile, userResult.data.user.last_sign_in_at);
+  if (profileError || !profile || userResult?.error) throw new Error(GENERIC_ERROR);
+  return toAccount(person, profile, userResult?.data.user.last_sign_in_at);
 }
 
 function mapRpcAccount(data: unknown) {
@@ -144,7 +144,7 @@ async function requireLinkedAccount(
   userId: string,
   expectedVersion: number,
 ) {
-  const account = await loadAccountByPerson(personId);
+  const account = await loadAccountByPerson(personId, false);
   if (
     account.userId !== userId
     || account.status === "unlinked"
