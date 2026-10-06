@@ -1,5 +1,5 @@
 // Disposable PostgreSQL only: no URLs, .env files, inherited PG settings or TCP.
-import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
@@ -13,6 +13,9 @@ export const postgresEnv = {
 export function command(binary, args, options = {}) {
   const result = spawnSync(binary, args, { env: postgresEnv, encoding: "utf8", ...options });
   if (result.error || result.status !== 0) {
+    if (binary === "psql") {
+      throw new Error(`psql failed: exit=${result.status} signal=${result.signal ?? "none"} spawn=${result.error?.message ?? "none"}\nstderr:\n${result.stderr ?? ""}`);
+    }
     throw new Error(`${binary} failed: ${result.error?.message ?? result.stderr ?? result.status}`);
   }
   return result.stdout;
@@ -35,7 +38,15 @@ export function target(socket, database) {
 }
 
 export function sql(socket, database, query) {
-  return command("psql", [...target(socket, database), "-Atq"], { input: query });
+  const args = target(socket, database);
+  const directory = mkdtempSync(path.join(socket, "mam-query-"));
+  const file = path.join(directory, "query.sql");
+  try {
+    writeFileSync(file, query, { mode: 0o600 });
+    return command("psql", [...args, "-Atq", "-f", file]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 export function startCluster() {

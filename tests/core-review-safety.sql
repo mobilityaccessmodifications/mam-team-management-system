@@ -29,7 +29,8 @@ select id,full_name,'mam','Synthetic role',id,
     else '10000000-0000-4000-8000-000000000005'::uuid end
 from public.profiles where login_name in ('coreemployee','coreotheremployee');
 insert into private.employee_directory_details(person_id,employment_type,work_email,first_name,last_name,team_name)
-select id,'full_time',login_name||'@example.test','Synthetic','Person',case when login_name='coreotheremployee' then 'Minor' else 'Major' end from public.profiles;
+select id,'full_time',login_name||'@example.test','Synthetic','Person',case when login_name='coreotheremployee' then 'Minor' else 'Major' end from public.profiles
+where id in (select ('10000000-0000-4000-8000-00000000000'||n)::uuid from generate_series(1,6) n);
 insert into private.leave_approval_grants(reviewer_user_id,scope_kind,reviewer_label,priority)
 values ('10000000-0000-4000-8000-000000000001','global','Synthetic Admin',100);
 insert into private.manager_leave_reviewers values ('10000000-0000-4000-8000-000000000001',1);
