@@ -174,7 +174,7 @@ $$;
 create or replace function private.enforce_banked_annual_leave_request()
 returns trigger language plpgsql volatile security definer set search_path = '' as $$
 declare projection jsonb; required numeric; available numeric; own_hours numeric := 0;
-  bank_date date; classification text; changed boolean := true; timed_hours numeric; days integer;
+  bank_date date; classification text; budget_classification text; changed boolean := true; timed_hours numeric; days integer;
 begin
   if tg_op='UPDATE' then
     changed := row(new.employee_person_id,new.leave_type,new.request_type_label,new.start_date,new.end_date,
@@ -196,13 +196,14 @@ begin
   end if;
   perform private.assert_leave_date_range(new.start_date,new.end_date);
   select employment_type into classification from private.employee_directory_details where person_id=new.employee_person_id;
-  if new.employment_type_snapshot is null then new.employment_type_snapshot:=classification; end if;
-  if new.employment_type_snapshot not in ('full_time','part_time')
-    or new.employment_type_snapshot is null
+  if tg_op='INSERT' and new.employment_type_snapshot is null then new.employment_type_snapshot:=classification; end if;
+  budget_classification:=coalesce(new.employment_type_snapshot,classification);
+  if budget_classification not in ('full_time','part_time')
+    or budget_classification is null
     or (tg_op='INSERT' and new.employment_type_snapshot is distinct from classification)
     or (tg_op='UPDATE' and (new.employment_type_snapshot is distinct from old.employment_type_snapshot
       or new.employee_person_id is distinct from old.employee_person_id)
-      and new.employment_type_snapshot is distinct from classification) then
+      and budget_classification is distinct from classification) then
     raise exception 'Annual leave employment snapshot is inconsistent.' using errcode='22023';
   end if;
   select count(*)::integer into days from generate_series(new.start_date,new.end_date,interval '1 day') day
@@ -221,7 +222,7 @@ begin
     end if;
   end if;
   projection := private.project_annual_leave_balance(new.employee_person_id,new.start_date);
-  required := coalesce(new.hours,new.business_days*case when new.employment_type_snapshot='full_time' then 7.6 else 7.5 end);
+  required := coalesce(new.hours,new.business_days*case when budget_classification='full_time' then 7.6 else 7.5 end);
   if tg_op='UPDATE' and old.status='approved' and old.request_type_label='Annual leave'
     and old.employee_person_id=new.employee_person_id then
     select as_of into bank_date from private.employee_annual_leave_balances where person_id=new.employee_person_id;
@@ -287,7 +288,9 @@ begin
   if (new.employment_type='full_time') is distinct from (old.employment_type='full_time')
     and exists(select 1 from public.leave_requests r where r.employee_person_id=old.person_id
       and r.request_type_label='Annual leave' and r.status not in ('cancelled','rejected')
-      and r.hours is null and r.employment_type_snapshot is null) then
+      and r.hours is null and r.employment_type_snapshot is null
+      and not (r.status='approved' and exists(select 1 from private.payroll_carryforward_events e
+        where e.request_id=r.id and e.person_id=r.employee_person_id and e.leave_kind='annual'))) then
     raise exception 'Legacy annual leave hours require review before changing employment classification.' using errcode='55000';
   end if;
   return new;

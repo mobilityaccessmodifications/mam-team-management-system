@@ -15,8 +15,12 @@ function run(binary,args){
 try{
   run(process.execPath,['scripts/test-migration-replay.mjs',socket,prefix,'--annual-legacy-fixture']);
   run('psql',[...target(socket,prefix),'-v','annual_gate_current=1','-f','tests/banked-leave-request.sql']);
-  for(const regression of ['core-review-safety.sql','payroll-carryforward-cutoff.sql']){
+  for(const regression of ['core-review-safety.sql','payroll-closing-contract.sql','payroll-closing.sql',
+    'payroll-carryforward-lifecycle.sql','payroll-closing-privacy.sql','payroll-closing-mutation-guards.sql',
+    'payroll-closing-security.sql','payroll-closing-legacy-drift.sql','payroll-carryforward-import.sql',
+    'payroll-carryforward-cutoff.sql','annual-leave-legacy-provenance.sql']){
     run('psql',[...target(socket,prefix),'-f',`tests/${regression}`]);
+    console.log(`PASS: annual-leave regression ${regression}`);
   }
   for(const mode of ['bridge','bulk','concurrency']){
     const db=`${prefix}_${mode}`;
