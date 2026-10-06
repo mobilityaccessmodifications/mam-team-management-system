@@ -578,6 +578,11 @@ declare person uuid; receipt uuid; actor uuid;
 begin
   person:=case when tg_op='DELETE' then old.person_id else new.person_id end;
   if tg_op='UPDATE' and new.person_id is distinct from old.person_id then
+    if tg_table_schema='private' and tg_table_name in ('employee_annual_leave_balances','employee_sick_leave_balances') then
+      if old.closing_receipt_id is not null then
+        raise exception 'Payroll snapshot identity cannot change.' using errcode='55000';
+      end if;
+    end if;
     actor:=private.assert_employee_identity_actor();
     if tg_table_schema='private' and tg_table_name in ('employee_annual_leave_balances','employee_sick_leave_balances')
       and to_jsonb(new)-'person_id'=to_jsonb(old)-'person_id'
@@ -631,7 +636,7 @@ do $identity_guard$ declare query text; validation_sql text; previous_hash text:
           ('private.assert_employee_identity_actor()','8e210d842b4457e5b02d1efd36643ceb9afe284f91b019aa1c0bebef15028104'),
           ('private.assert_employee_identity_dependencies(uuid,uuid,boolean)','9e8666e76deea33134ac45d16c6499a49a08ac39a86c04243f4606343f019085'),
           ('private.employee_identity_dependency_manifest()','5701b1565e2cd2bb3a0b97e977ce3052ce555f728fa0345aa0fb3fffa4fef1ff'),
-          ('private.payroll_closing_snapshot_guard()','dc309ea22ba3734e5b31b8d75957fdd30140dceb924e441774aa952cbd589894'),
+          ('private.payroll_closing_snapshot_guard()','cfa2d5e78095d24027a37c973d3b895f93edc2dfa22fb8b1dee1303544fb8512'),
           ('private.employee_identity_retained_account_audit(jsonb)','ad9e5612401900344dce730830970b2179c6c73a41f5f5b9b39b895bfc759ac4'),
           ('private.employee_identity_snapshot(uuid[])','73d74ae4b31ba2751405c42ed5b604793dc7d8d103dcc97587777b56e235ee58'),
           ('private.prevent_retired_employee_identity_recreation()','c91e18d7657ff3cdf5859e531c912b39bfefc65f8466470c60c81f1204dbb84f'),
