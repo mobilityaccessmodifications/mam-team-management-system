@@ -28,7 +28,9 @@ test('role action validates ordinary roles and rechecks actual P0', async () => 
 });
 test('role control remains edit-only with four permission cards, never P0 or legacy HR', () => {
   assert.doesNotMatch(ui, /<EmployeePicker\b/);
-  assert.match(ui, /!isCreate && canManageRoles && role !== "system_admin"/);
+  assert.match(ui, /const roleEditable = canManageRoles && role !== "system_admin";/);
+  assert.match(ui, /!isCreate && roleEditable \? <div className=\{styles\.pickerField\}/);
+  assert.match(ui, /if \(!roleEditable \|\| editor\.mode !== "edit"/);
   assert.match(ui, /updateEmployeeDirectoryRole/);
   assert.match(ui, /listEmployeeDirectoryRoles/);
   assert.match(ui, /Save role/);
