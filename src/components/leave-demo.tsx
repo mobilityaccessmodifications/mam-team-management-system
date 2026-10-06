@@ -669,6 +669,14 @@ export function LeaveDemo({
   const closeLeaveRequestForm = useCallback(() => setShowRequestForm(false), []);
   const closeMobileRequestDetail = useCallback(() => setMobileRequestDetailOpen(false), []);
 
+  // Initial self capabilities were parsed on the server. Every later scope
+  // must complete its own capability load before protected reads can start.
+  const dataRoleCapabilities = previewPersonId || contactScopeEpoch !== 0 || selectedRoleReloadKey !== 0
+    ? selectedRoleState?.personId === previewPersonId && selectedRoleState.error === ""
+      ? selectedRoleState.capabilities
+      : null
+    : ownCapabilities;
+
   useDialogFocus(
     profilePickerOpen,
     profilePickerDialogRef,
@@ -694,7 +702,7 @@ export function LeaveDemo({
   }, [directorySupabase, isSigningOut]);
 
   const refreshLeaveWorkspace = useCallback(async () => {
-    if (contactScopeEpoch !== profileScopeEpoch.current) return;
+    if (contactScopeEpoch !== profileScopeEpoch.current || dataRoleCapabilities?.account_status !== "active") return;
     const requestSequence = leaveRefreshSequence.current + 1;
     const requestEpoch = contactScopeEpoch;
     leaveRefreshSequence.current = requestSequence;
@@ -761,10 +769,10 @@ export function LeaveDemo({
         && requestEpoch === profileScopeEpoch.current
       ) setLeaveDataLoading(false);
     }
-  }, [contactScopeEpoch, previewPersonId]);
+  }, [contactScopeEpoch, dataRoleCapabilities, previewPersonId]);
 
   const refreshWorkScheduleWorkspace = useCallback(async () => {
-    if (contactScopeEpoch !== profileScopeEpoch.current) return;
+    if (contactScopeEpoch !== profileScopeEpoch.current || dataRoleCapabilities?.account_status !== "active") return;
     const requestSequence = workScheduleRefreshSequence.current + 1;
     const requestEpoch = contactScopeEpoch;
     const hadWorkspace = workScheduleWorkspaceRef.current !== null;
@@ -809,7 +817,7 @@ export function LeaveDemo({
         && requestEpoch === profileScopeEpoch.current
       ) setWorkScheduleLoading(false);
     }
-  }, [contactScopeEpoch, previewPersonId]);
+  }, [contactScopeEpoch, dataRoleCapabilities, previewPersonId]);
 
   const submitWorkScheduleRequest = useCallback(async (
     workingWeekdays: EmployeeWorkingWeekday[],
