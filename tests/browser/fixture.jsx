@@ -16,10 +16,14 @@ const events = fixtureBuildEvents([], [], [{
 }], [], [], [2026]);
 const today = new Date();
 const calendarDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+const spanning = new URLSearchParams(location.search).has("calendar-span");
+const nextDay = new Date(today);
+nextDay.setDate(nextDay.getDate() + 1);
+const calendarEnd = spanning ? `${nextDay.getFullYear()}-${String(nextDay.getMonth() + 1).padStart(2, "0")}-${String(nextDay.getDate()).padStart(2, "0")}` : calendarDate;
 const firstFriday = 1 + (5 - new Date(today.getFullYear(), today.getMonth(), 1).getDay() + 7) % 7;
 const crowdedDate = `${calendarDate.slice(0, 8)}${String(firstFriday).padStart(2, "0")}`;
 const staffRequests = [
-  { id: "11111111-1111-4111-8111-111111111111", employee: "Sample Staff", initials: "SS", team: "Minor", leaveType: "Sick leave", startDate: calendarDate, endDate: calendarDate, days: 1, status: "Approved", requestedAt: "2026-09-01T12:00:00Z", approvedBy: "Sample Reviewer", documentCount: 1 },
+  { id: "11111111-1111-4111-8111-111111111111", employee: "Sample Staff", initials: "SS", team: "Minor", leaveType: "Sick leave", startDate: calendarDate, endDate: calendarEnd, days: spanning ? 2 : 1, status: "Approved", requestedAt: "2026-09-01T12:00:00Z", approvedBy: "Sample Reviewer", documentCount: 1 },
   { id: "22222222-2222-4222-8222-222222222222", employee: "Other Staff", initials: "OS", team: "Major", leaveType: "Annual leave", startDate: calendarDate, endDate: calendarDate, days: 1, status: "Pending", requestedAt: "2026-09-02T12:00:00Z", documentCount: 0 },
 ];
 const crowdedRequests = new URLSearchParams(location.search).has("crowded")

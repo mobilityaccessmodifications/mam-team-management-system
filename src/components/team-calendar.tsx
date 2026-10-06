@@ -85,7 +85,7 @@ type TeamCalendarProps = {
 
 const timeZone = "Australia/Melbourne";
 const subscribeToClient = () => () => undefined;
-const views = [createDayView(), createWeekView(), createMonthView(), createYearView(), createAgendaView()];
+const views = [createDayView(), createWeekView({ allDayHeight: 48 }), createMonthView(), createYearView(), createAgendaView()];
 
 const calendars: CalendarType[] = [
   { id: "balance-pending", name: "Approved – pending leave balance", icon: "◷", isVisible: true, readOnly: true, colors: { eventColor: "#fff2b3", eventSelectedColor: "#a17b00", lineColor: "#c79a12", textColor: "#604800" } },

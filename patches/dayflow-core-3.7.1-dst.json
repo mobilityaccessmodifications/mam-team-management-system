@@ -1,0 +1,33 @@
+{
+  "package": "@dayflow/core",
+  "version": "3.7.1",
+  "file": "dist/index.esm.js",
+  "beforeSHA256": "fa15be2e7ec08f2aa9e73ca488cb472566f34407fc8ae764b57dc9c222114a11",
+  "afterSHA256": "f9dc52d43c9192b8a77bacb9810b2916397526e20bd159f1969d904ca8b6b2b3",
+  "edits": [
+    {
+      "before": "function B(e,t){",
+      "after": "function mamCivilDayIndex(e,t){const n=new Date(0),a=new Date(0);return n.setUTCFullYear(e.getFullYear(),e.getMonth(),e.getDate()),a.setUTCFullYear(t.getFullYear(),t.getMonth(),t.getDate()),(a.getTime()-n.getTime())/864e5}function B(e,t){"
+    },
+    {
+      "before": "const a=Math.floor((g.getTime()-t.getTime())/864e5);return a>=0",
+      "after": "const a=mamCivilDayIndex(t,g);return a>=0"
+    },
+    {
+      "before": "b=Math.max(0,Math.floor((D.getTime()-t.getTime())/864e5))",
+      "after": "b=Math.max(0,mamCivilDayIndex(t,D))"
+    },
+    {
+      "before": "E=Math.min(n-1,Math.floor((w.getTime()-t.getTime())/864e5))",
+      "after": "E=Math.min(n-1,mamCivilDayIndex(t,w))"
+    },
+    {
+      "before": "g=Math.floor((c-n)/864e5),m={inWeek:h",
+      "after": "g=mamCivilDayIndex(new Date(n),new Date(c)),m={inWeek:h"
+    },
+    {
+      "before": "const r=Math.floor((a.getTime()-t.getTime())/864e5);if(r<0||r>n-1)continue;",
+      "after": "const r=mamCivilDayIndex(t,a);if(r<0||r>n-1)continue;"
+    }
+  ]
+}

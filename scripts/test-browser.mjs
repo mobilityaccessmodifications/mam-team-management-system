@@ -9,10 +9,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { buildUnifiedRoleFixture } from "../tests/browser/unified-role-build.mjs";
+import { applyDayflowDstPatch } from "./apply-dayflow-dst-patch.mjs";
 
 // This harness does not start Next or read a .env. Production components are
 // compiled unchanged; only server-action boundaries receive synthetic data.
 const sourceRoot = realpathSync(process.argv[2] ?? process.cwd());
+applyDayflowDstPatch(path.join(sourceRoot, "node_modules/@dayflow/core"));
 const directoryInput = { ...draft, personId, personVersion: 1, detailVersion: 1 };
 const directoryResults = {};
 for (const [name, dbError] of Object.entries({
