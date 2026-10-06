@@ -10,6 +10,8 @@ end $$;
 create schema supabase_migrations;
 create table supabase_migrations.schema_migrations(version text primary key,name text,statements text[]);
 set local search_path = '';
+alter table storage.buckets owner to supabase_storage_admin;
+alter table storage.objects owner to supabase_storage_admin;
 create type storage.buckettype as enum ('STANDARD', 'ANALYTICS', 'VECTOR');
 alter type storage.buckettype owner to supabase_storage_admin;
 create table storage."buckets_analytics" (

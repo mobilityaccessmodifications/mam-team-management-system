@@ -2,7 +2,37 @@
   "coordination": "COORD-20261006-ROLES-REPIN-PLATFORM-STORAGE-1",
   "old_migration_sha256": "904f82d215e655485090f54ccf60af08cebb3432cb4058344cdfa7c1d3e67a67",
   "new_migration": "supabase/migrations/20261006104000_unified_portal_roles.sql",
-  "new_migration_sha256": "d49e3f6d7d200ea6de325dc74b6a8b1c5f9c715a312da30fdeabf41ca3ea25e0",
+  "new_migration_sha256": "a7d020292da9ffc3019b82d668c65597cbe7bb58731b12a70d88e2a12cae7ff0",
+  "live_guard_decision": {
+    "approval": "COORD-20261006-ROLES-LIVE-GUARD-DECISION-1",
+    "previous_candidate_sha256": "d49e3f6d7d200ea6de325dc74b6a8b1c5f9c715a312da30fdeabf41ca3ea25e0",
+    "source_evidence": "roles-live-type-member-readonly.private.json",
+    "source_evidence_sha256": "730525a40f27bd38f80f5dbdb34afd81c58f03a3818b83cbfff5ebd7cd18e733",
+    "aggregate_before": "0830e83e54e5b78db5cdcfed915e37d8bd1415a5b7acfdfbb7de76604f645909",
+    "aggregate_after": "7c277ee9a4eb9d70ec6edfcb4210ef17680bf26870490b7dbc64e375c068abbe",
+    "only_aggregate_changes": [
+      {"object_key":"type|storage._buckets","owner_before":"postgres","owner_after":"supabase_storage_admin","old_sha256":"4b4ffe9cb652140894ec28d64849a4ad912b4aae1cf5461993f3ab7f3e224750","new_sha256":"e72c31b7ef460ed1e9ac42acc874d5d3f100d3361560c017f3d4e9b6bf6d56d3"},
+      {"object_key":"type|storage._objects","owner_before":"postgres","owner_after":"supabase_storage_admin","old_sha256":"1d6f8bb81af9366534adf4fb2f8d5f2d5012b9ef6ecda62ad1de00e9b1729f7e","new_sha256":"ac91556bb138c027c7d242de54c88b3cb02df8f4bef5d08f86d5695af39fb6f5"},
+      {"object_key":"type|storage.buckets","owner_before":"postgres","owner_after":"supabase_storage_admin","old_sha256":"a9cc4f8d774dc84b0a05bbacd377eacfcc3acb48e9410db02d9bcd7929aff786","new_sha256":"add4bdd166bb6d0f342177b8038c1ed6148b6c4b29ec2ad15682f8e2a3c1daac"},
+      {"object_key":"type|storage.objects","owner_before":"postgres","owner_after":"supabase_storage_admin","old_sha256":"00f98f49c76b686bbf08d51007a639957b5d377b40c128d1b70cc0f971953c0a","new_sha256":"f1ebccbfb428641dbc0d1278d73b9fdbfc134392af06ee1e35b462a12a5d675f"}
+    ],
+    "counterfactual_verified": "Restoring only these four type owners in the read-only captured inventory reproduces the entire old aggregate exactly",
+    "member_predecessor": {
+      "signature": "private.is_internal_org_member()",
+      "old_pin": "625491f78599364a5cdd8cb08644b32f5fbce82f91cf323b234d7798db943731",
+      "new_pin": "0496a059f56d903a49a384fd2c2f1c94d71d75b119e22fd3b75d44545520bf7e",
+      "unchanged_resulting_definition_sha256": "1cb0fa099eea93c21bda7734b097d930096a8dd1af6ca087bf9e2da8bc490cbb",
+      "disposition": "Unrecorded hosted modification replaced by the reviewed 104000 canonical policy; no production rollback to old source",
+      "unrecorded_semantics": "Removed portal_accounts_enforced/is_active outer fence and added confirmed-email active System Admin fallback; retained role metadata and member/domain allowlists",
+      "reviewed_replacement_semantics": "Canonical policy requires an active non-anonymous account, active linked person for ordinary roles, and preserves standalone active P0; no role-name allowlist bypass",
+      "potential_access_loss_count": 0,
+      "includes_p0": false,
+      "includes_six_targets": false,
+      "impact_evidence": "roles-live-member-replacement-impact.private.json",
+      "impact_evidence_sha256": "98b1c5d5f23574472a67973cf5034ffe6b3dfe46d0bd227b13548aafcdb60a66",
+      "impact_model": "Read-only account eligibility with current stored metadata and fresh sessions, projecting six approved roles; no Auth/JWT impersonation"
+    }
+  },
   "old_storage_ref": [
     {
       "line": 1445,
@@ -265,7 +295,8 @@
     }
   ],
   "guard_algorithm_unchanged": true,
-  "non_storage_pins_unchanged": true,
+  "non_storage_pins_unchanged": false,
+  "only_non_storage_pin_change": "private.is_internal_org_member() predecessor as explicitly approved above; resulting definition unchanged",
   "unchanged_enum_count": 3,
   "changed_type_count": 14,
   "removed_absent_count": 4,

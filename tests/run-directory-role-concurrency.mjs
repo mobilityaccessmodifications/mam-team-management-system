@@ -59,7 +59,12 @@ try {
     assert.match(protectedResult.error, /System Admin accounts cannot be changed/);
   }
   assert.equal(sql(socket, database, `select count(*) from public.profiles where id in ('${ids[0]}','${ids[1]}') and app_role='system_admin';`).trim(), "2");
-  sql(socket, database, `update public.profiles set account_status='disabled',disabled_at=now() where id='${ids[1]}';`);
+  sql(socket, database, `begin;
+    select set_config('request.jwt.claim.sub','${ids[0]}',true);
+    select set_config('request.jwt.claims',jsonb_build_object('sub','${ids[0]}',
+      'iat',extract(epoch from clock_timestamp())::bigint,'is_anonymous',false)::text,true);
+    update public.profiles set account_status='disabled',disabled_at=now() where id='${ids[1]}';
+    commit;`);
   const stale = session(ids[1], `select public.update_employee_directory_role('${ids[2]}','manager','account');`);
   const staleResult = await stale.done;
   assert.notEqual(staleResult.code, 0, "disabled P0 cannot modify other roles");

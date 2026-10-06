@@ -15,6 +15,7 @@ for (const file of files) {
   if (file === "20261006104000_unified_portal_roles.sql") {
     console.log("CI platform baseline: approved Storage structure only; exact migration guards unchanged");
     sql(socket, database, readFileSync(new URL("../tests/migrations/canonical-roles-storage-platform.sql", import.meta.url), "utf8"));
+    sql(socket, database, readFileSync(new URL("../tests/migrations/canonical-roles-hosted-member-predecessor.sql", import.meta.url), "utf8"));
     sql(socket, database, "update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;");
     command("psql", [...target(socket, database),
       "-f", path.resolve("tests/migrations/canonical-roles-release-plan.sql"),

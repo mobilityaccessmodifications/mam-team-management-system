@@ -3,6 +3,8 @@ begin;
 select public.reconcile_payroll_closing('synthetic-closing-one',pg_temp.closing_payload());
 insert into private.payroll_balance_import_grants(person_id,granted_by) values('96000000-0000-4000-8000-000000000003','96000000-0000-4000-8000-000000000001');
 insert into private.payroll_comparison_only_importers values('96000000-0000-4000-8000-000000000003');
+-- Legacy importer grants are inert after canonical roles; Account owns comparison-only upload.
+update public.profiles set app_role='account' where id='96000000-0000-4000-8000-000000000003';
 create temporary table staged_result(result jsonb);
 grant all on staged_result to service_role;
 set local role service_role;

@@ -173,7 +173,7 @@ begin
     from pg_temp.unified_role_transition_catalog() c
     where kind in ('type','enum','range','rewrite')
       and not (reviewed_catalog_additions ? (kind||'|'||object_identity)))
-    is distinct from '0830e83e54e5b78db5cdcfed915e37d8bd1415a5b7acfdfbb7de76604f645909' then
+    is distinct from '7c277ee9a4eb9d70ec6edfcb4210ef17680bf26870490b7dbc64e375c068abbe' then
     raise exception 'Unified role migration requires the reviewed type and rewrite baseline.' using errcode='55000';
   end if;
 end $storage_type_compatibility$;
@@ -226,7 +226,7 @@ insert into pg_temp.unified_role_catalog_delta(kind,object_identity,before_sha25
 ('function','private.is_current_leave_request_reviewer(uuid, uuid)','4f56712eb8073104454f77c7712a98812168ee8a29d453131f256da5318b9f26','c3457b896737a2dbc75155c208a1206b05b4c3167748b35b9e638e2b490ecd73'),
 ('function','private.is_current_subscription_credential_manager()','5c1fb3f32f90c1e349ff91695a2956040cf4d4314ab8dfbdbac0a65dad00fdc0','dc08b444994613cfd36b36f3cb0975434807fa5dc24ea6c96664a4640566d15c'),
 ('function','private.is_internal_org_hr()','83b6c7a49760ff22ee3c453e1b300d623247af3d42707b21d09822356805838c','08b024626a122d3a2190afd6f86f8c770a256f498536d52ca57829539a068605'),
-('function','private.is_internal_org_member()','625491f78599364a5cdd8cb08644b32f5fbce82f91cf323b234d7798db943731','1cb0fa099eea93c21bda7734b097d930096a8dd1af6ca087bf9e2da8bc490cbb'),
+('function','private.is_internal_org_member()','0496a059f56d903a49a384fd2c2f1c94d71d75b119e22fd3b75d44545520bf7e','1cb0fa099eea93c21bda7734b097d930096a8dd1af6ca087bf9e2da8bc490cbb'),
 ('function','private.is_operational_portal_admin()',NULL,'5ec6857459aed38fce5bbfc8bfe1963cd5db8ac2d28f55ad1e1e8862bfc2d8d6'),
 ('function','private.is_portal_account_admin()','abf3859afab0412f48b0d6bbf8ddfbd500f00971bebd2f295e84bbd294b447ba','ad9598db0530fd734e6b2829f64bd94153d0f8b0cdb35a37fb6fe3e0ea302f33'),
 ('function','private.is_system_portal_account_admin()','5bfe267f05d59c56ddb497788a91fe336f1aef90802dee581bac07a0e09ada77','6347635e6b97237fe5e212d2c9817e477a91641ec0a27e9e9a6a1d4ca3ce4a25'),

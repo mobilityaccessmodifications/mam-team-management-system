@@ -12,8 +12,9 @@ insert into auth.users(id,email,is_anonymous,email_confirmed_at) values
  ('97000000-0000-4000-8000-000000000001','operator-proof@example.test',false,now()),
  ('97000000-0000-4000-8000-000000000002','operator-other@example.test',false,now());
 insert into public.profiles(id,full_name,app_role,login_name,credentials_valid_after) values
- ('97000000-0000-4000-8000-000000000001','Synthetic Proof Operator','system_admin','operator-proof@example.test',now()-interval '1 day');
-insert into private.portal_account_admins(auth_user_id) values ('97000000-0000-4000-8000-000000000001');
+ ('97000000-0000-4000-8000-000000000001','Synthetic Proof Operator','system_admin','operator-proof@example.test',now()-interval '1 day'),
+ ('97000000-0000-4000-8000-000000000002','Synthetic Fixture Writer','system_admin','operator-other@example.test',now()-interval '1 day');
+insert into private.portal_account_admins(auth_user_id) values ('97000000-0000-4000-8000-000000000001'),('97000000-0000-4000-8000-000000000002');
 insert into auth.sessions(id,user_id,created_at,not_after) values
  ('97000000-0000-4000-8000-000000000010','97000000-0000-4000-8000-000000000001',now()-interval '1 hour',null),
  ('97000000-0000-4000-8000-000000000011','97000000-0000-4000-8000-000000000002',now()-interval '1 hour',null);
@@ -78,9 +79,13 @@ begin
  update private.portal_account_admins set revoked_at=null where auth_user_id='97000000-0000-4000-8000-000000000001';
  update public.profiles set app_role='employee' where id='97000000-0000-4000-8000-000000000001';
  assert not private.verify_payroll_operator_session('97000000-0000-4000-8000-000000000001'), 'Native System Admin assertion retained';
+ perform pg_temp.proof_context(jsonb_set(c,'{sub}','"97000000-0000-4000-8000-000000000002"'::jsonb));
  update public.profiles set app_role='system_admin',account_status='disabled',disabled_at=clock_timestamp() where id='97000000-0000-4000-8000-000000000001';
+ perform pg_temp.proof_context(c);
  assert not private.verify_payroll_operator_session('97000000-0000-4000-8000-000000000001'), 'Disabled account denied';
+ perform pg_temp.proof_context(jsonb_set(c,'{sub}','"97000000-0000-4000-8000-000000000002"'::jsonb));
  update public.profiles set account_status='active',disabled_at=null where id='97000000-0000-4000-8000-000000000001';
+ perform pg_temp.proof_context(c);
  update auth.users set banned_until=clock_timestamp()+interval '1 hour' where id='97000000-0000-4000-8000-000000000001';
  assert not private.verify_payroll_operator_session('97000000-0000-4000-8000-000000000001'), 'Banned Auth user denied';
  update auth.users set banned_until=clock_timestamp()-interval '1 hour',deleted_at=clock_timestamp() where id='97000000-0000-4000-8000-000000000001';
