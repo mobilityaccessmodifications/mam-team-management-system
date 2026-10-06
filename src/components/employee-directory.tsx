@@ -735,6 +735,7 @@ export function EmployeeDirectory({
           </label>
         </div>
         <div className={toolbar.actions}>
+          {canManageRoles ? <a className={toolbar.button} href="/onboarding-review">Onboarding review</a> : null}
           <a className={toolbar.button} href="/people/export" aria-label="Export employees" title="Export employees">
             <Download size={16} aria-hidden="true" />
             <span className={styles.visuallyHidden}>Export employees</span>

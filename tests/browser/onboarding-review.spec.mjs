@@ -1,0 +1,61 @@
+import { test, expect } from '@playwright/test';
+test.beforeEach(async ({ page, baseURL }) => {
+  await page.route('**/*', route => new URL(route.request().url()).origin === baseURL ? route.continue() : route.abort());
+});
+test('onboarding review confirmation supports focus containment and dismissal without a mutation', async ({ page }) => {
+  await page.goto('/?fixture=onboarding-review');
+  const trigger = page.getByRole('button', { name: 'Cancel delivery' });
+  await trigger.click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Keep review' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(dialog.getByRole('button', { name: 'Confirm cancellation' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('button', { name: 'Keep review' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0); await expect(trigger).toBeFocused();
+  expect(await page.evaluate(() => window.reviewCalls)).toEqual([]);
+  await trigger.click(); await dialog.getByRole('button', { name: 'Keep review' }).click();
+  expect(await page.evaluate(() => window.reviewCalls)).toEqual([]);
+});
+test('onboarding review sends exact microseconds once and prevents repeat committed cancellation', async ({ page }) => {
+  await page.goto('/?fixture=onboarding-review&outcome=committed&hold=1');
+  await page.getByRole('button', { name: 'Cancel delivery' }).click();
+  await page.getByRole('dialog').locator('form').evaluate(form => { form.requestSubmit(); form.requestSubmit(); });
+  await expect.poll(() => page.evaluate(() => window.reviewCalls.length)).toBe(1);
+  await expect(page.getByRole('button', { name: 'Confirm cancellation' })).toBeDisabled();
+  await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toBeVisible();
+  await page.evaluate(() => window.releaseReview());
+  await expect(page.getByRole('status')).toContainText('Cancelled. Refresh');
+  await expect(page.getByRole('button', { name: 'Cancel delivery' })).toHaveCount(0);
+  expect(await page.evaluate(() => window.reviewCalls)).toEqual([{ deliveryId: '71000000-0000-4000-8000-000000000001', updatedAt: '2026-10-01T05:00:00.123456+00:00' }]);
+  expect(await page.evaluate(() => window.reviewReads)).toBe(0);
+  await page.getByRole('button', { name: 'Refresh list' }).click();
+  await expect(page.getByText('No onboarding credentials need review.')).toBeVisible();
+  expect(await page.evaluate(() => window.reviewCalls.length)).toBe(1);
+});
+for (const outcome of ['stale', 'unknown']) test(`onboarding review ${outcome} rejection requires authoritative refresh without an implicit repeat`, async ({ page }) => {
+  await page.goto('/?fixture=onboarding-review&outcome='+outcome);
+  await page.getByRole('button', { name: 'Cancel delivery' }).click();
+  await page.getByRole('button', { name: 'Confirm cancellation' }).click();
+  await expect(page.getByRole('alert')).toContainText('Refresh');
+  await expect(page.getByRole('button', { name: 'Cancel delivery' })).toBeDisabled();
+  expect(await page.locator('body').innerText()).not.toMatch(/synthetic private|provider|claim_token|password|@example/);
+  expect(await page.evaluate(() => window.reviewCalls.length)).toBe(1);
+  await page.getByRole('button', { name: 'Refresh list' }).click();
+  await expect(page.getByRole('button', { name: 'Cancel delivery' })).toBeEnabled();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(await page.evaluate(() => window.reviewReads)).toBe(1);
+  expect(await page.evaluate(() => window.reviewCalls.length)).toBe(1);
+  await page.getByRole('button', { name: 'Cancel delivery' }).click();
+  await page.getByRole('button', { name: 'Confirm cancellation' }).click();
+  await expect.poll(() => page.evaluate(() => window.reviewCalls.length)).toBe(2);
+  expect((await page.evaluate(() => window.reviewCalls))[1].updatedAt).toBe('2026-10-01T05:00:00.987654+00:00');
+});
+test('Directory cancellation entry retains the current canManageRoles P0-only gate', async ({ page }) => {
+  await page.goto('/?fixture=directory&viewer=admin');
+  await expect(page.getByRole('link', { name: 'Onboarding review' })).toHaveCount(0);
+  await page.goto('/?fixture=directory');
+  await expect(page.getByRole('link', { name: 'Onboarding review' })).toHaveAttribute('href', '/onboarding-review');
+});
