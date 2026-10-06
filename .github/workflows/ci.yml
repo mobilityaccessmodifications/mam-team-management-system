@@ -67,6 +67,27 @@ jobs:
         # the container's unprivileged postgres user. No service URL/secrets.
         run: runuser -u postgres -- node scripts/test-sql.mjs
 
+  annual-leave-all-submitters:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '17']
+    container: postgres:${{ matrix.postgres }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install runtime for the real bridge and release boundaries
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3
+          npm ci --ignore-scripts --no-audit --no-fund
+          install -d -o postgres -g postgres output/annual-gate-resume
+      - name: Twenty annual-leave groups with COPY, bridge and concurrency
+        run: runuser -u postgres -- node tests/run-annual-leave-suite.mjs
+
   security-sql:
     runs-on: ubuntu-latest
     services:
