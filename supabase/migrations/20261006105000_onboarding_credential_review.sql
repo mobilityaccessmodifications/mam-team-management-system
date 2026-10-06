@@ -72,14 +72,21 @@ language sql stable set search_path = '' as $catalog$
   from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
   where not t.tgisinternal and (n.nspname in ('public','private','storage') or c.oid='auth.users'::regclass)
   union all
-  select 'function',n.nspname||'.'||p.proname||'('||oidvectortypes(p.proargtypes)||')',pg_get_functiondef(p.oid)
-  from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private') and p.prokind='f'
+  select 'function',n.nspname||'.'||p.proname||'('||oidvectortypes(p.proargtypes)||')',
+    case when p.prokind='a' then jsonb_build_object('aggregate',to_jsonb(a)-'aggfnoid',
+      'arguments',pg_get_function_arguments(p.oid),'result',pg_get_function_result(p.oid))::text
+      else pg_get_functiondef(p.oid) end
+  from pg_proc p join pg_namespace n on n.oid=p.pronamespace left join pg_aggregate a on a.aggfnoid=p.oid
+  where n.nspname !~ '^pg_(toast_)?temp_'
+  union all
+  select 'routine_kind',n.nspname||'.'||p.proname||'('||oidvectortypes(p.proargtypes)||')',p.prokind::text
+  from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname !~ '^pg_(toast_)?temp_'
   union all
   select 'function_security',n.nspname||'.'||p.proname||'('||oidvectortypes(p.proargtypes)||')',jsonb_build_object(
     'owner',r.rolname,'acl',p.proacl::text,'config',p.proconfig,'security_definer',p.prosecdef,
     'volatility',p.provolatile,'strict',p.proisstrict,'parallel',p.proparallel,'leakproof',p.proleakproof)::text
   from pg_proc p join pg_namespace n on n.oid=p.pronamespace join pg_roles r on r.oid=p.proowner
-  where n.nspname in ('public','private') and p.prokind='f'
+  where n.nspname !~ '^pg_(toast_)?temp_'
   union all
   select 'view',format('%I.%I',n.nspname,c.relname),pg_get_viewdef(c.oid)
   from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','storage') and c.relkind in ('v','m')
@@ -132,9 +139,9 @@ language sql stable set search_path = '' as $catalog$
   from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace
   where a.attacl is not null and n.nspname !~ '^pg_(toast_)?temp_'
   union all
-  select 'global_function_acl',n.nspname||'.'||p.proname||'('||oidvectortypes(p.proargtypes)||')',p.proacl::text
+  select 'global_function_acl',n.nspname||'.'||p.proname||'('||oidvectortypes(p.proargtypes)||')',coalesce(p.proacl,acldefault('f',p.proowner))::text
   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-  where p.proacl is not null and n.nspname !~ '^pg_(toast_)?temp_'
+  where n.nspname !~ '^pg_(toast_)?temp_'
   union all
   select 'type',format('%I.%I',n.nspname,t.typname),jsonb_build_object(
     'owner',r.rolname,'acl',t.typacl::text,'kind',t.typtype,'category',t.typcategory,
@@ -194,13 +201,24 @@ create temp table pg_temp.onboarding_review_catalog_before on commit drop as
   select kind,object_identity,encode(extensions.digest(definition,'sha256'),'hex') as sha256
   from pg_temp.onboarding_review_catalog();
 alter table pg_temp.onboarding_review_catalog_before add primary key(kind,object_identity);
+do $review_routines_before$
+begin
+  if exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname !~ '^pg_(toast_)?temp_' and p.prokind<>'f'
+      and not (n.nspname='pg_catalog' and p.oid<16384)) then
+    raise exception 'Onboarding review requires the reviewed built-in non-function routine inventory.' using errcode='55000';
+  end if;
+end;
+$review_routines_before$;
 create temp table pg_temp.onboarding_review_catalog_delta(
   kind text not null,object_identity text not null,sha256 text not null,
   primary key(kind,object_identity)
 ) on commit drop;
 insert into pg_temp.onboarding_review_catalog_delta values
-('function','public.cancel_onboarding_credential_review(uuid, timestamp with time zone)','6c637483adbcc5344a1865cb5bce411af0239e11cad5d9c98f1f78c46a2b495d'),
-('function','public.list_onboarding_credential_reviews()','38d75d08a1f55ecfda9c66cf2cf4df641756a8e8f9c14ad76650d56c9ec4e194'),
+('function','public.cancel_onboarding_credential_review(uuid, timestamp with time zone)','98f9073d3df586cf6760dc9a965f92b5a08408fd8b00575ce81cdcbcd3322add'),
+('function','public.list_onboarding_credential_reviews()','b625cdcce3a20aca4d2b5b0da398e19f938e5d1948d13df2589ea1df4bb48d1c'),
+('routine_kind','public.cancel_onboarding_credential_review(uuid, timestamp with time zone)',encode(extensions.digest('f','sha256'),'hex')),
+('routine_kind','public.list_onboarding_credential_reviews()',encode(extensions.digest('f','sha256'),'hex')),
 ('function_security','public.cancel_onboarding_credential_review(uuid, timestamp with time zone)','9854602ac8fba4e8fb0b56304eb3b5cbb4259a3189d7acd7e5d977127b3f3f1e'),
 ('function_security','public.list_onboarding_credential_reviews()','9854602ac8fba4e8fb0b56304eb3b5cbb4259a3189d7acd7e5d977127b3f3f1e'),
 ('global_function_acl','public.cancel_onboarding_credential_review(uuid, timestamp with time zone)','48cbe0bdca3235e1dba22f9504e61b3c8e254ede516a33fa6fe51f6537916ca9'),
@@ -215,7 +233,10 @@ begin
     or not private.is_system_portal_account_admin() then
     raise exception 'Only System Admin may review onboarding credentials.' using errcode='42501';
   end if;
-  if not private.lock_portal_role_actor() or not private.is_system_portal_account_admin() then
+  if not private.lock_portal_role_actor() then
+    raise exception 'Only System Admin may review onboarding credentials.' using errcode='42501';
+  end if;
+  if not private.is_system_portal_account_admin() then
     raise exception 'Only System Admin may review onboarding credentials.' using errcode='42501';
   end if;
   return query select credential.id,person.full_name,person.company_key,credential.status,
@@ -236,7 +257,10 @@ begin
     or not private.is_system_portal_account_admin() then
     raise exception 'Only System Admin may review onboarding credentials.' using errcode='42501';
   end if;
-  if not private.lock_portal_role_actor() or not private.is_system_portal_account_admin() then
+  if not private.lock_portal_role_actor() then
+    raise exception 'Only System Admin may review onboarding credentials.' using errcode='42501';
+  end if;
+  if not private.is_system_portal_account_admin() then
     raise exception 'Only System Admin may review onboarding credentials.' using errcode='42501';
   end if;
   if p_delivery_id is null or p_expected_updated_at is null then

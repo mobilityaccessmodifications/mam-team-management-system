@@ -53,6 +53,24 @@ for (const outcome of ['stale', 'unknown']) test(`onboarding review ${outcome} r
   await expect.poll(() => page.evaluate(() => window.reviewCalls.length)).toBe(2);
   expect((await page.evaluate(() => window.reviewCalls))[1].updatedAt).toBe('2026-10-01T05:00:00.987654+00:00');
 });
+for (const outcome of ['stale', 'unknown']) test(`onboarding review ${outcome} restores native focus to Refresh list after disabling its connected trigger`, async ({ page }) => {
+  await page.goto('/?fixture=onboarding-review&outcome='+outcome+'&hold=1');
+  const trigger=page.getByRole('button', { name: 'Cancel delivery' });
+  const refresh=page.getByRole('button', { name: 'Refresh list' });
+  await trigger.click();
+  await page.getByRole('button', { name: 'Confirm cancellation' }).click();
+  await expect(trigger).toBeDisabled();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.evaluate(() => window.releaseReview());
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toContainText('Refresh');
+  expect(await trigger.evaluate(button => button.isConnected)).toBe(true);
+  await expect(trigger).toBeDisabled();
+  await expect(refresh).toBeEnabled();
+  await expect(refresh).toBeFocused();
+  expect(await page.evaluate(() => window.reviewCalls.length)).toBe(1);
+  expect(await page.evaluate(() => window.reviewReads)).toBe(0);
+});
 test('Directory cancellation entry retains the current canManageRoles P0-only gate', async ({ page }) => {
   await page.goto('/?fixture=directory&viewer=admin');
   await expect(page.getByRole('link', { name: 'Onboarding review' })).toHaveCount(0);

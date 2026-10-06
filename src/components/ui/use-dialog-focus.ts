@@ -24,6 +24,14 @@ function isFocusTarget(element: Element | null): element is FocusTarget {
   );
 }
 
+function isAvailableFocusTarget(element: FocusTarget | null): element is FocusTarget {
+  return Boolean(element?.isConnected
+    && element !== document.body && element !== document.documentElement
+    && !element.matches(":disabled") && !element.closest("[inert]")
+    && element.getClientRects().length > 0
+    && window.getComputedStyle(element).visibility !== "hidden");
+}
+
 // One stack owns Escape and the page scroll lock, including nested dialogs.
 const dialogStack: HTMLElement[] = [];
 let pageOverflow = "";
@@ -123,13 +131,10 @@ export function useDialogFocus(
       // restoration only needs to run after this cleanup stack, so a
       // microtask restores keyboard focus promptly without depending on paint.
       queueMicrotask(() => {
-        const preferredIsMeaningful = preferredReturnTarget?.isConnected
-          && preferredReturnTarget !== document.body
-          && preferredReturnTarget !== document.documentElement;
-        const returnTarget = preferredIsMeaningful
+        const returnTarget = isAvailableFocusTarget(preferredReturnTarget)
           ? preferredReturnTarget
-          : fallbackReturnTarget;
-        if (!wasTop || !returnTarget?.isConnected) return;
+          : isAvailableFocusTarget(fallbackReturnTarget) ? fallbackReturnTarget : null;
+        if (!wasTop || !returnTarget) return;
         const top = dialogStack.at(-1);
         if (!top || top.contains(returnTarget)) returnTarget.focus({ preventScroll: true });
       });

@@ -1,16 +1,23 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { command, createDatabase, sql, target, postgresEnv } from '../scripts/local-test-postgres.mjs';
 import { loadModule } from './helpers/contact-lifetime-harness.mjs';
 
-const [socket] = process.argv.slice(2);
+const [socket, group = 'all', evidenceName = 'native_'+process.pid] = process.argv.slice(2);
+assert.ok(['all','core','authority','routines'].includes(group));
+assert.match(evidenceName,/^[a-z0-9_-]+$/);
+const evidenceDir = path.join('output/onboarding-review-fixes',evidenceName);
+assert.equal(existsSync(evidenceDir),false,'Never overwrite historical test evidence');
+mkdirSync(evidenceDir,{recursive:true});
+const prefix = 'mam_test_onboarding_review_'+process.pid+'_';
+target(socket,prefix+'ownership');
 const migration = 'supabase/migrations/20261006105000_onboarding_credential_review.sql';
 const source = readFileSync(migration, 'utf8');
-const predecessor = 'mam_test_onboarding_review_predecessor';
+const predecessor = prefix+'predecessor';
 const history = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql') && f < path.basename(migration)).sort();
 const inputs = [migration, 'tests/run-onboarding-review-sql.mjs', 'tests/onboarding-review.sql', 'tests/onboarding-review-setup.sql',
   'src/app/onboarding-review/actions.ts', 'scripts/local-test-postgres.mjs',
@@ -19,7 +26,7 @@ const inputs = [migration, 'tests/run-onboarding-review-sql.mjs', 'tests/onboard
     'canonical-roles-hosted-member-predecessor.sql', 'canonical-roles-release-plan.sql', 'canonical-roles-release-readback.sql'].map(f => 'tests/migrations/'+f)];
 const sha = file => createHash('sha256').update(readFileSync(file)).digest('hex');
 const beforeSources = inputs.map(file => ({ file, sha256: sha(file) }));
-const results = [], sessions = new Set(), databases = new Set();
+const results = [], sessions = new Set(), databases = new Set(), executions = [], processEvidence = [], lockEvidence = [], snapshotEvidence = [];
 let sequence = 0;
 const actor = '73000000-0000-4000-8000-000000000001';
 const otherActor = '73000000-0000-4000-8000-000000000002';
@@ -31,20 +38,51 @@ const extract = (start, end) => source.slice(source.indexOf(start), source.index
 const collector = extract('create function pg_temp.onboarding_review_catalog()', '$catalog$;');
 const stateCollector = extract('create function pg_temp.onboarding_review_state()', '$state$;');
 function snapshot(database) {
-  return JSON.parse(sql(socket, database, `begin; set local search_path=''; ${collector}\n${stateCollector}
+  const value = JSON.parse(sql(socket, database, `begin; set local search_path=''; ${collector}\n${stateCollector}
     select jsonb_build_object('catalog', (select encode(extensions.digest(coalesce(jsonb_agg(to_jsonb(c)
       order by kind collate "C",object_identity collate "C"),'[]'::jsonb)::text,'sha256'),'hex') from pg_temp.onboarding_review_catalog() c),
       'actual',private.confirmed_test_purge_schema_hash(),'stored',(select schema_hash from private.confirmed_test_purge_schema),
       'state',pg_temp.onboarding_review_state()); rollback;`).trim());
+  snapshotEvidence.push({database,...value});
+  return value;
+}
+const protectedStateSQL = `select encode(extensions.digest(jsonb_build_object(
+  'credentials',(select jsonb_agg(to_jsonb(c) order by id) from private.employee_onboarding_credentials c),
+  'events',(select jsonb_agg(to_jsonb(e) order by id) from private.employee_onboarding_credential_events e),
+  'receipts',(select jsonb_agg(to_jsonb(r) order by event_key) from private.notification_delivery_receipts r),
+  'purges',(select jsonb_agg(to_jsonb(r) order by id) from private.confirmed_test_identity_purges r),
+  'auth',(select jsonb_agg(to_jsonb(u) order by id) from auth.users u),
+  'profiles',(select jsonb_agg(to_jsonb(p) order by id) from public.profiles p),
+  'people',(select jsonb_agg(to_jsonb(p) order by id) from public.internal_org_people p))::text,'sha256'),'hex')`;
+function protectedDigest(database) {
+  return sql(socket,database,protectedStateSQL+';').trim();
 }
 function clone(label, template = predecessor) {
-  const database = 'mam_test_onboarding_review_'+label;
+  assert.match(label,/^[a-z0-9_]+$/);
+  assert.ok(databases.has(template),'Only a database created by this run may be cloned');
+  const database = prefix+label;
+  assert.ok(database.length<=63,'Owned database name must fit PostgreSQL without truncation');
+  assert.equal(databaseExists(database),false,'New owned database name must be absent');
   command('createdb', ['-h',socket,'-p','55439','-U','postgres','--template='+template,database]);
   databases.add(database);
   return database;
 }
 function runSource(database, input = source) {
-  return command('psql', [...target(socket,database),'-v','VERBOSITY=verbose','-Atq'], { input, maxBuffer: 16*1024*1024 });
+  const inputFile = path.join(evidenceDir,'migration-'+executions.length+'.sql');
+  writeFileSync(inputFile,input);
+  const execution = {database,inputFile,sha256:createHash('sha256').update(input).digest('hex')};
+  executions.push(execution);
+  try {
+    const output = command('psql', [...target(socket,database),'-v','VERBOSITY=verbose','-Atq'], { input, maxBuffer: 16*1024*1024 });
+    execution.exit=0; return output;
+  } catch (error) {
+    execution.exit=Number(error.message.match(/exit=(\d+)/)?.[1]);
+    execution.error=error.message; throw error;
+  }
+}
+function databaseExists(database) {
+  return command('psql',['-X','-h',socket,'-p','55439','-U','postgres','-d','postgres','-Atq','-v','ON_ERROR_STOP=1',
+    '-c',`select exists(select 1 from pg_database where datname=${literal(database)});`]).trim()==='t';
 }
 function claims(user = actor, role = 'authenticated') {
   return `set local role ${role}; do $claims$ begin
@@ -60,8 +98,16 @@ function session(database, statement, { user = actor, role = 'authenticated', ho
   let output = '', error = '';
   child.stdout.on('data', chunk => { output += chunk; });
   child.stderr.on('data', chunk => { error += chunk; });
-  const done = new Promise((resolve,reject) => { child.on('error',reject); child.on('close',code => { sessions.delete(child); resolve({code,output,error}); }); });
-  child.stdin.write(`\\set VERBOSITY verbose\nbegin; set local statement_timeout='8s'; ${claims(user,role)}\n${statement}\n`);
+  const input = `\\set VERBOSITY verbose\nbegin; set local statement_timeout='8s'; ${claims(user,role)}\n${statement}\n`;
+  const receipt = {database,app,pid:child.pid};
+  const inputHash=createHash('sha256');
+  const track=chunk=>{ if(chunk!==undefined && chunk!==null) { inputHash.update(chunk); receipt.input_sha256=inputHash.copy().digest('hex'); } };
+  const originalWrite=child.stdin.write.bind(child.stdin), originalEnd=child.stdin.end.bind(child.stdin);
+  child.stdin.write=(chunk,...args)=>{ track(chunk); return originalWrite(chunk,...args); };
+  child.stdin.end=(chunk,...args)=>{ track(chunk); return originalEnd(chunk,...args); };
+  processEvidence.push(receipt);
+  const done = new Promise((resolve,reject) => { child.on('error',reject); child.on('close',code => { sessions.delete(child); receipt.exit=code; receipt.error=error; resolve({code,output,error}); }); });
+  child.stdin.write(input);
   if (!hold) child.stdin.end('commit;\n');
   return {app,child,done,output:()=>output};
 }
@@ -69,12 +115,19 @@ async function until(condition, label) {
   const deadline = Date.now()+6000;
   while (!condition()) { if (Date.now()>deadline) throw new Error('Timeout: '+label); await delay(20); }
 }
-const waitForLock = (database, process) => until(() => sql(socket,database,
-  `select wait_event_type from pg_stat_activity where application_name=${literal(process.app)};`).trim()==='Lock',process.app+' observable lock wait');
+const waitForLock = async (database, process) => {
+  await until(() => sql(socket,database,
+    `select wait_event_type from pg_stat_activity where application_name=${literal(process.app)};`).trim()==='Lock',process.app+' observable lock wait');
+  const lock = JSON.parse(sql(socket,database,`select jsonb_build_object('pid',pid,'wait_event_type',wait_event_type,
+    'wait_event',wait_event,'blockers',pg_blocking_pids(pid)) from pg_stat_activity where application_name=${literal(process.app)};`).trim());
+  assert.equal(lock.wait_event_type,'Lock'); assert.ok(lock.blockers.length>0);
+  lockEvidence.push({database,app:process.app,...lock});
+};
 const delivery = database => sql(socket,database,`select id from private.employee_onboarding_credentials where person_id=${literal(person)};`).trim();
 const cancel = id => `select public.cancel_onboarding_credential_review(${literal(id)},${literal(stamp)}::timestamptz);`;
 let completed = false;
 try {
+  assert.equal(databaseExists(predecessor),false,'Never reuse or reset an existing database');
   createDatabase(socket, predecessor); databases.add(predecessor);
   sql(socket,predecessor,readFileSync('tests/migrations/0001-supabase-platform.sql','utf8'));
   for (const file of history) {
@@ -100,6 +153,113 @@ try {
   assert.equal(after.actual,after.stored);
   command('psql',[...target(socket,positive),'-f','tests/onboarding-review.sql']);
   record('positive actual RPC authorization, safe metadata, microsecond CAS, actor audit, unchanged receipts/Auth/accounts and no resend');
+
+  if (group==='all' || group==='authority') {
+    const failures=[];
+    for (const operation of ['list','cancel']) for (const change of ['demotion','disabled','legitimate']) {
+      const database=clone(operation+'_'+change,positive);
+      sql(socket,database,`insert into public.internal_org_people(id,full_name,node_kind,company_key,position_title,auth_user_id,started_date)
+        values('75000000-0000-4000-8000-000000000001','Synthetic linked privileged reviewer','person','mam','Synthetic tester',${literal(actor)},current_date+1);`);
+      const revoker=session(database,"select pg_advisory_xact_lock(hashtextextended('mam:directory-role-control',0)); select 'HELD';",{user:otherActor,role:'postgres',hold:true});
+      await until(()=>revoker.output().includes('HELD'),'authority '+operation+' '+change+' fence');
+      const queued=session(database,operation==='list' ? "select count(*) from public.list_onboarding_credential_reviews();" : cancel(delivery(database)));
+      await waitForLock(database,queued);
+      assert.equal(lockEvidence.at(-1).wait_event,'advisory','The caller must actually wait at the held role-control advisory fence');
+      if (change==='demotion') revoker.child.stdin.write(`update public.profiles set app_role='admin' where id=${literal(actor)};\n`);
+      if (change==='disabled') revoker.child.stdin.write(`update public.profiles set account_status='disabled',disabled_at=clock_timestamp() where id=${literal(actor)};\n`);
+      revoker.child.stdin.write(`select 'PROTECTED:'||(${protectedStateSQL}); select 'CHANGED';\n`);
+      await until(()=>revoker.output().includes('CHANGED'),'authority mutation before release');
+      const beforeProtected=revoker.output().match(/PROTECTED:([a-f0-9]{64})/)?.[1];
+      assert.ok(beforeProtected,'Writer must bind exact post-role-change/pre-RPC state before releasing the authority fence');
+      const before=snapshot(database);
+      revoker.child.stdin.end('commit;\n');
+      const changed=await revoker.done; assert.equal(changed.code,0,changed.error);
+      const result=await queued.done;
+      const after=snapshot(database);
+      const afterProtected=protectedDigest(database);
+      const policy=await session(database,'select app_role,account_status,is_super_admin from public.get_portal_role_capabilities();').done;
+      const finalState={operation,change,database,result,before,after,policy,protected_before:beforeProtected,protected_after:afterProtected};
+      writeFileSync(path.join(evidenceDir,operation+'-'+change+'.json'),JSON.stringify(finalState,null,2));
+      try {
+        if (change==='legitimate') {
+          assert.equal(result.code,0,result.error);
+          assert.equal(result.output.trim(),operation==='list' ? '2' : 't');
+          if (operation==='list') assert.deepEqual(after,before);
+          else assert.equal(sql(socket,database,`select count(*) from private.employee_onboarding_credential_events where event_type='review_cancelled';`).trim(),'1');
+        } else {
+          assert.notEqual(result.code,0,operation+' '+change+' must refuse after the observable authority wait');
+          assert.match(result.error,/42501:/); assert.equal(result.output.trim(),'','No disclosure on denied list');
+          assert.equal(afterProtected,beforeProtected,'Denied operation must preserve credential/event/Auth/people/receipt rows');
+          assert.equal(after.catalog,before.catalog); assert.equal(after.actual,before.actual); assert.equal(after.stored,before.stored);
+          assert.equal(sql(socket,database,`select status from private.employee_onboarding_credentials where person_id=${literal(person)};`).trim(),'needs_review');
+          assert.equal(sql(socket,database,"select count(*) from private.employee_onboarding_credential_events where event_type='review_cancelled';").trim(),'0');
+        }
+        if (change==='demotion') { assert.equal(policy.code,0,policy.error); assert.equal(policy.output.trim(),'admin|active|f'); }
+        if (change==='legitimate') { assert.equal(policy.code,0,policy.error); assert.equal(policy.output.trim(),'system_admin|active|t'); }
+        if (change==='disabled') { assert.notEqual(policy.code,0); assert.match(policy.error,/42501:/); }
+        record(operation+' '+change+' after real role-control wait preserves ordinary policy and exact protected outcome');
+      } catch(error) { failures.push(error); console.error('FAIL: '+operation+' '+change+': '+error.message); }
+    }
+    assert.equal(failures.length,0,failures.map(e=>e.message).join('\n'));
+  }
+
+  if (group==='all' || group==='routines') {
+    const failures=[];
+    const firstBoundary='set constraints all immediate;\nselect pg_temp.assert_onboarding_review_transition();';
+    const refreshBoundary='end;\n$review_refresh$;';
+    const routineFaults=[
+      ['procedure', "create procedure private.unreviewed_review_marker() language sql as $$ select 1; $$;"],
+      ['aggregate', "create aggregate private.unreviewed_review_marker(integer) (sfunc=pg_catalog.int4pl,stype=integer,initcond='0');"],
+      ['window', "create function private.unreviewed_review_marker() returns bigint language internal window as 'window_row_number';"],
+    ];
+    for (const [kind,ddl] of routineFaults) for (const phase of ['initial','pre','post','deferred']) {
+      const database=clone(phase+'_'+kind);
+      const fault=ddl+` do $null_acl$ begin assert (select proacl is null from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+        where n.nspname='private' and p.proname='unreviewed_review_marker'),'Default NULL ACL is required for the regression'; end $null_acl$;`;
+      let input=source;
+      if (phase==='initial') input=source.replace('do $review_before$',()=>fault+'\ndo $review_before$');
+      if (phase==='pre') input=source.replace(firstBoundary,()=>fault+'\n'+firstBoundary);
+      if (phase==='post') input=source.replace(refreshBoundary,()=>refreshBoundary+'\n'+fault);
+      if (phase==='deferred') {
+        sql(socket,database,`create schema review_fixture;
+          create function review_fixture.late_routine() returns trigger language plpgsql as $late$
+            begin if current_setting('mam.review_fault',true)='on' then execute ${literal(fault)}; end if; return new; end $late$;
+          create constraint trigger late_routine after update on private.confirmed_test_purge_schema
+            deferrable initially deferred for each row execute function review_fixture.late_routine();
+          update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;`);
+        const control=clone('control_'+kind,database), controlBefore=snapshot(control);
+        assert.equal(controlBefore.actual,controlBefore.stored);
+        runSource(control);
+        assert.equal(snapshot(control).state,controlBefore.state);
+        assert.equal(snapshot(control).actual,snapshot(control).stored);
+        record('same-baseline conditional deferred '+kind+' positive control');
+        input=source.replace("set local search_path = '';",()=>"set local search_path = '';\nset local mam.review_fault='on';");
+      }
+      const before=snapshot(database);
+      try {
+        assert.throws(()=>runSource(database,input),/55000:/,phase+' '+kind+' default-NULL-ACL routine must fail closed');
+        assert.deepEqual(snapshot(database),before,'Full routine/catalog/state/fingerprint rollback');
+        assert.equal(sql(socket,database,"select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='private' and p.proname='unreviewed_review_marker';").trim(),'0');
+        record(phase+' '+kind+' default NULL ACL is rejected with complete atomic rollback');
+      } catch(error) { failures.push(error); console.error('FAIL: '+phase+' '+kind+': '+error.message); }
+    }
+    for (const [kind,fault] of [
+      ['aggregate_definition', "update pg_aggregate set agginitval='0' where aggfnoid='pg_catalog.sum(integer)'::regprocedure;"],
+      ['window_security', "alter function pg_catalog.row_number() security definer;"],
+      ['third_public_rpc', "create function public.unreviewed_review_marker() returns integer language sql as $$ select 1; $$;"],
+      ['private_default_function', "create function private.unreviewed_review_marker() returns integer language sql as $$ select 1; $$;"],
+    ]) for (const phase of ['pre','post']) {
+      const database=clone(phase+'_'+kind), before=snapshot(database);
+      const input=phase==='pre' ? source.replace(firstBoundary,()=>fault+'\n'+firstBoundary)
+        : source.replace(refreshBoundary,()=>refreshBoundary+'\n'+fault);
+      assert.throws(()=>runSource(database,input),/55000:/,phase+' '+kind+' must fail closed');
+      assert.deepEqual(snapshot(database),before,phase+' '+kind+' exact full rollback');
+      record(phase+' '+kind+' is inventoried and rejected outside the exact two-RPC delta');
+    }
+    assert.equal(failures.length,0,failures.map(e=>e.message).join('\n'));
+  }
+
+  if (group==='all' || group==='core') {
 
   const provider = clone('provider_grants');
   sql(socket,provider,'alter default privileges in schema public grant execute on functions to anon,service_role;');
@@ -144,13 +304,25 @@ try {
   const deferred = clone('deferred');
   sql(socket,deferred,`create schema review_fixture;
     create function review_fixture.late_grant() returns trigger language plpgsql as $$ begin
-      execute 'grant select(claimed_login) on private.employee_onboarding_credentials to service_role'; return new; end $$;
+      if current_setting('mam.review_grant_fault',true)='on' then
+        execute 'grant select(claimed_login) on private.employee_onboarding_credentials to service_role';
+      end if; return new; end $$;
     create constraint trigger late_grant after update on private.confirmed_test_purge_schema
-      deferrable initially deferred for each row execute function review_fixture.late_grant();`);
+      deferrable initially deferred for each row execute function review_fixture.late_grant();
+    update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;`);
+  const deferredControl=clone('deferred_control',deferred), deferredControlBefore=snapshot(deferredControl);
+  assert.equal(deferredControlBefore.actual,deferredControlBefore.stored);
+  runSource(deferredControl);
+  assert.equal(snapshot(deferredControl).state,deferredControlBefore.state);
+  assert.equal(snapshot(deferredControl).actual,snapshot(deferredControl).stored);
+  record('same-baseline existing deferred grant positive control');
   const deferredBefore = snapshot(deferred);
-  assert.throws(()=>runSource(deferred),/55000:/);
+  assert.throws(()=>runSource(deferred,source.replace("set local search_path = '';",()=>"set local search_path = '';\nset local mam.review_grant_fault='on';")),/55000:/);
   assert.deepEqual(snapshot(deferred),deferredBefore);
   record('conditional deferred fingerprint-write grant is drained and rolls back the complete feature');
+
+  }
+  if (group==='all' || group==='core') {
 
   const concurrent = clone('concurrent',positive);
   const id = delivery(concurrent);
@@ -229,13 +401,21 @@ try {
   assert.deepEqual(actionCalls.filter(c=>c.name==='cancel_onboarding_credential_review').at(-1).args,{p_delivery_id:row.deliveryId,p_expected_updated_at:row.updatedAt});
   assert.equal(sql(socket,actionDatabase,`select status from private.employee_onboarding_credentials where id=${literal(row.deliveryId)};`).trim(),'cancelled');
   record('actual exported Server Actions execute real authenticated RPCs, exact microseconds, stale rejection and committed cache-warning readback');
+  }
   assert.deepEqual(inputs.map(file=>({file,sha256:sha(file)})),beforeSources,'All tested inputs stayed byte-frozen');
   completed = true;
 } finally {
   for (const child of sessions) { child.stdin.end('rollback;\n'); child.kill('SIGTERM'); }
   await until(()=>sessions.size===0,'owned psql sessions cleanup');
   for (const database of [...databases].reverse()) command('dropdb',['-h',socket,'-p','55439','-U','postgres',database]);
-  mkdirSync('output',{recursive:true});
-  writeFileSync('output/onboarding-review-sql.json',JSON.stringify({completed,postgres:command('psql',['--version']).trim(),results,inputs:beforeSources,owned_databases_removed:[...databases],owned_sessions_remaining:sessions.size},null,2));
+  const cleanup=[...databases].map(database=>({database,exists:databaseExists(database)}));
+  assert.ok(cleanup.every(r=>!r.exists));
+  for (const receipt of processEvidence) {
+    try { process.kill(receipt.pid,0); receipt.alive=true; } catch(error) { if(error.code!=='ESRCH') throw error; receipt.alive=false; }
+  }
+  assert.ok(processEvidence.every(r=>!r.alive));
+  writeFileSync(path.join(evidenceDir,'results.json'),JSON.stringify({completed,group,postgres:command('psql',['--version']).trim(),
+    results,inputs:beforeSources,executions,lockEvidence,snapshotEvidence,processEvidence,cleanup,owned_databases_removed:[...databases],owned_sessions_remaining:sessions.size,
+    unverified:['formal Management non-superuser ledger wrapper','PG17','production acceptance']},null,2));
   console.log(`Onboarding review SQL: completed=${completed}; checks=${results.length}; owned sessions=${sessions.size}; databases cleaned=${databases.size}`);
 }

@@ -15,6 +15,12 @@ import { reviewActionHarness, deliveryId, updatedAt, rowFixture } from "../tests
 // This harness does not start Next or read a .env. Production components are
 // compiled unchanged; only server-action boundaries receive synthetic data.
 const sourceRoot = realpathSync(process.argv[2] ?? process.cwd());
+const allowUnmatchedContact = process.argv.includes("--allow-unmatched-contact");
+const browserArgs = process.argv.slice(3).filter(argument => argument !== "--allow-unmatched-contact");
+if (browserArgs.includes("--pass-with-no-tests")) throw new Error("The primary browser group must run actual tests");
+if (allowUnmatchedContact && (!browserArgs.includes("--grep") || browserArgs.some(argument => argument.endsWith(".spec.mjs")))) {
+  throw new Error("Unmatched contact allowance requires a title-only primary filter");
+}
 applyDayflowDstPatch(path.join(sourceRoot, "node_modules/@dayflow/core"));
 const onboardingReviewResults = {};
 for (const [name, options] of Object.entries({
@@ -84,7 +90,7 @@ try {
   await buildUnifiedRoleFixture(sourceRoot, scratch);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
-  const child = spawn(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "--config=tests/browser/playwright.config.mjs", ...process.argv.slice(3)], {
+  const child = spawn(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "--config=tests/browser/playwright.config.mjs", ...browserArgs], {
     env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR,
       CI: process.env.CI ?? "", PLAYWRIGHT_BROWSERS_PATH: path.resolve("node_modules/.cache/ms-playwright"),
       MAM_BROWSER_SOURCE_ROOT: sourceRoot,
@@ -94,7 +100,7 @@ try {
   const code = await new Promise((resolve, reject) => { child.on("error", reject); child.on("exit", resolve); });
   process.exitCode = code ?? 1;
   if (process.exitCode === 0) {
-    const contact = spawn(process.execPath, ["tests/browser/contact-lifetime-runner.mjs", ...process.argv.slice(3)], {
+    const contact = spawn(process.execPath, ["tests/browser/contact-lifetime-runner.mjs", ...browserArgs, ...(allowUnmatchedContact ? ["--pass-with-no-tests"] : [])], {
       env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, MAM_BROWSER_SOURCE_ROOT: sourceRoot },
       stdio: "inherit",
     });

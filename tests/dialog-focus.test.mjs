@@ -111,10 +111,27 @@ test("uses a fallback when a chained dialog opens from the page body", () => {
   assert.equal(h.document.activeElement, fallback);
 });
 
+for (const unavailable of ['disabled','hidden','inert']) test(`uses an available fallback when its still-connected opening control becomes ${unavailable}`, () => {
+  const h=harness(false), trigger=new h.Element(), fallback=new h.Element();
+  const parent=new h.Element([trigger,fallback]);
+  const closeParent=h.mount(parent);
+  trigger.focus();
+  const closeChild=h.mount(new h.Element(),()=>{}, {current:fallback});
+  if (unavailable==='disabled') trigger.attrs.disabled='';
+  if (unavailable==='hidden') trigger.visible=false;
+  if (unavailable==='inert') trigger.closest=selector=>selector==='[inert]' ? parent : null;
+  closeChild(); h.flush();
+  assert.equal(h.document.activeElement,fallback);
+  closeParent(); h.flush();
+});
+
 test("restores focus to a focusable SVG trigger", () => {
   const h = harness();
   const trigger = {
     isConnected: true,
+    matches() { return false; },
+    closest() { return null; },
+    getClientRects() { return [{}]; },
     focus() { h.document.activeElement = this; },
   };
   h.document.activeElement = trigger;
