@@ -1,0 +1,24 @@
+{
+  "version": "20261006106000",
+  "project": "xtwlrjqbusadghavchqm",
+  "organization": "fwlmbmospuwoaosffvmw",
+  "migrationSha256": "b0f1181b7d82f4b73596a153721d8d3d7f828c72478d931659177c8677543fe1",
+  "beforeFunctions": {
+    "private.confirmed_test_purge_schema_hash()": "3385d5a0140df3995e3196ffea442b4829f9a5357de3ccf5a8d521fbe9011a54",
+    "private.enforce_banked_annual_leave_request()": "1bb3697fa52dd3c7b7ad6edab3896c926ae6d91eb9d25fba9dc95a67a3ed057c",
+    "private.fill_leave_balance_required_hours()": "7740bdac9a0969b6d4d00d6a6df55d01b78189bfedef041223381eba6d7741da",
+    "public.decide_leave_with_balance(uuid,text,text)": "40e0e349f2e32bfb8ebb7941ea4a1eb2b8dc4ddb0b9d0b5452fd913e3b1c7822",
+    "public.decide_my_managed_leave_request(uuid,text,text)": "7c355635350aa346f99c108632698a21bee303047b8ba42b29c42f8c278ccd4c"
+  },
+  "afterFunctions": {
+    "private.confirmed_test_purge_schema_hash()": "3385d5a0140df3995e3196ffea442b4829f9a5357de3ccf5a8d521fbe9011a54",
+    "private.enforce_banked_annual_leave_request()": "ae1525bd291ea9265dd731a91eefb00b9f33dc3693577c1e73c3a2edb5186350",
+    "private.fill_leave_balance_required_hours()": "0eb04e084d523170f5c8840de52601156c969c214303086991f31b0120b7d966",
+    "private.lock_annual_leave_budget(boolean)": "1bdfe7cca5af086ad4b77bb02dfdd38d49a05808e1f3580e2a251ef7ee39f5f5",
+    "private.lock_annual_leave_budget_statement()": "9045d6920ad27e6defe7b57b38087748481ef2b8f763b51038557c54af1d60d9",
+    "private.refresh_annual_leave_required_hours()": "f853da6b34d33f8255a4c07488b916acd7f6a199a520d44cdfddf5bc241c6295",
+    "private.guard_legacy_annual_leave_classification()": "07cb631f83e7558e75e023eefcc3a93931166f2b83f6ebbc9286d1420d51d38d",
+    "public.decide_leave_with_balance(uuid,text,text)": "4a3e6e7c05796107b75ddea805554636b0cd7a6381b42fec863d3155f3745a0a",
+    "public.decide_my_managed_leave_request(uuid,text,text)": "7cc2a4d706ef3c32940b76370fe736d8848496a8818030fd96e4295fc416c1a2"
+  }
+}

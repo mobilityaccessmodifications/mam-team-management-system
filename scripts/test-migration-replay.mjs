@@ -3,11 +3,16 @@ import path from "node:path";
 import { createDatabase, sql, command, target } from "./local-test-postgres.mjs";
 
 const [socket, database = "mam_test_replay", ...regressions] = process.argv.slice(2);
+const annualLegacy = regressions.includes("--annual-legacy-fixture");
 createDatabase(socket, database);
 sql(socket, database, readFileSync(new URL("../tests/migrations/0001-supabase-platform.sql", import.meta.url), "utf8"));
 const files = readdirSync("supabase/migrations").filter((file) => file.endsWith(".sql")).sort();
 for (const file of files) {
   console.log(`Replay ${file}`);
+  if (annualLegacy && file === "20261006106000_annual_leave_all_submitter_gate.sql") {
+    command('createdb', ['-h', target(socket, database)[2], '-p', '55439', '-U', 'postgres', `--template=${database}`, `${database}_predecessor`]);
+    sql(socket, database, readFileSync(new URL("../tests/annual-leave-legacy-setup.sql", import.meta.url), "utf8"));
+  }
   if (file === "20261003090000_payroll_operator_session_proof.sql") {
     sql(socket, database, readFileSync(new URL("../tests/migrations/operator-session-platform.sql", import.meta.url), "utf8"));
     sql(socket, database, "update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;");
@@ -28,7 +33,7 @@ for (const file of files) {
 console.log(`PASS: executed all ${files.length} ordered migrations without changing their bytes`);
 sql(socket, database, readFileSync(new URL("../tests/migrations/effective-contract.sql", import.meta.url), "utf8"));
 console.log("PASS: effective schema, RLS, role/function ACLs and denied operations");
-for (const regression of regressions) {
+for (const regression of regressions.filter((entry) => entry !== "--annual-legacy-fixture")) {
   command("psql", [...target(socket, database), "-f", path.resolve(regression)]);
   console.log(`PASS: full-schema regression ${regression}`);
 }

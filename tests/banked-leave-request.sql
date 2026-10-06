@@ -1,4 +1,7 @@
 \set ON_ERROR_STOP on
+\if :{?annual_gate_current}
+\ir annual-leave-all-submitters.sql
+\else
 do $$begin assert current_database() in ('banked_leave_request_test','projected_leave_request_test'), 'Disposable database only'; end$$;
 create schema private;
 do $$begin
@@ -59,9 +62,8 @@ do $$declare person uuid := '10000000-0000-4000-8000-000000000001'; payload json
     insert into public.leave_requests(employee_person_id) values(person);
     raise exception 'TEST: missing banked balance accepted';
   exception when sqlstate '22023' then assert sqlerrm like '%balance is unavailable.%'; end;
-  -- Unpaid/sick and historical requests remain unchanged, even without balances.
+  -- Non-annual predecessor cases remain outside the annual balance rule.
   insert into public.leave_requests(employee_person_id,request_type_label) values(person,'Unpaid leave'),(person,'Sick leave'),(person,'Carer''s leave');
-  insert into public.leave_requests(employee_person_id,record_origin) values(person,'historical_import');
   assert (public.get_leave_priority_workspace()->'people'->0->>'requestFullDayHours')::numeric=7.6;
   assert not has_function_privilege('authenticated','public.get_leave_priority_workspace_before_request_limit(uuid)','EXECUTE');
   assert not has_function_privilege('authenticated','private.enforce_banked_annual_leave_request()','EXECUTE');
@@ -71,3 +73,4 @@ do $$declare person uuid := '10000000-0000-4000-8000-000000000001'; payload json
   assert payload->>'managerNote'='Please reapply for fewer paid days.';
   assert not payload ? 'leaveBalance';
 end$$;
+\endif
