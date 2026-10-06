@@ -81,6 +81,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends python3
           npm ci --ignore-scripts --no-audit --no-fund
+          install -d -o postgres -g postgres output/annual-gate-resume
       - name: Twenty annual-leave groups with COPY, bridge and concurrency
         run: runuser -u postgres -- node tests/run-annual-leave-suite.mjs
 
