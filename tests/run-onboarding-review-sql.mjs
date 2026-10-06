@@ -7,24 +7,33 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { command, createDatabase, sql, target, postgresEnv } from '../scripts/local-test-postgres.mjs';
 import { loadModule } from './helpers/contact-lifetime-harness.mjs';
 
-const [socket, group = 'all', evidenceName = 'native_'+process.pid] = process.argv.slice(2);
-assert.ok(['all','core','authority','routines'].includes(group));
-assert.match(evidenceName,/^[a-z0-9_-]+$/);
-const evidenceDir = path.join('output/onboarding-review-fixes',evidenceName);
-assert.equal(existsSync(evidenceDir),false,'Never overwrite historical test evidence');
-mkdirSync(evidenceDir,{recursive:true});
-const prefix = 'mam_test_onboarding_review_'+process.pid+'_';
-target(socket,prefix+'ownership');
 const migration = 'supabase/migrations/20261006105000_onboarding_credential_review.sql';
-const source = readFileSync(migration, 'utf8');
+const originalSource = 'output/onboarding-builtin-prestate-fix/source.original.sql';
+const [socket, group = 'all', evidenceName = 'native_'+process.pid, fixtureRole = 'postgres', sourceFile = migration, builtinFault = 'all'] = process.argv.slice(2);
+assert.ok(['all','core','authority','routines','builtin-prestate'].includes(group));
+assert.match(evidenceName,/^[a-z0-9_-]+$/);
+assert.ok(fixtureRole==='postgres' || (group==='builtin-prestate' && fixtureRole==='fixture_admin'));
+assert.ok(sourceFile===migration || (group==='builtin-prestate' && sourceFile===originalSource));
+assert.ok(['all','window_security','aggregate_definition','raw_acl','effective_acl','owner','config','missing_builtin','snapshot_gap','snapshot_call'].includes(builtinFault));
+assert.ok(builtinFault==='all' || group==='builtin-prestate');
+if (group==='builtin-prestate') process.umask(0o077);
+const evidenceDir = path.join(group==='builtin-prestate' ? 'output/onboarding-builtin-prestate-fix' : 'output/onboarding-review-fixes',evidenceName);
+assert.equal(existsSync(evidenceDir),false,'Never overwrite historical test evidence');
+mkdirSync(evidenceDir,{recursive:true,mode:0o700});
+const prefix = (group==='builtin-prestate' ? 'mam_test_105pre_' : 'mam_test_onboarding_review_')+process.pid+'_';
+target(socket,prefix+'ownership');
+const source = readFileSync(sourceFile, 'utf8');
 const predecessor = prefix+'predecessor';
 const history = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql') && f < path.basename(migration)).sort();
-const inputs = [migration, 'tests/run-onboarding-review-sql.mjs', 'tests/onboarding-review.sql', 'tests/onboarding-review-setup.sql',
+const publishedCollectorFile = 'supabase/migrations/20261001130000_confirmed_test_identity_cleanup.sql';
+const inputs = group==='builtin-prestate' ? [...new Set([migration,sourceFile,'tests/run-onboarding-review-sql.mjs',
+  'scripts/local-test-postgres.mjs',publishedCollectorFile])] : [migration, 'tests/run-onboarding-review-sql.mjs', 'tests/onboarding-review.sql', 'tests/onboarding-review-setup.sql',
   'src/app/onboarding-review/actions.ts', 'scripts/local-test-postgres.mjs',
   'tests/helpers/contact-lifetime-harness.mjs', ...history.map(f => 'supabase/migrations/'+f),
   ...['0001-supabase-platform.sql', 'operator-session-platform.sql', 'canonical-roles-storage-platform.sql',
     'canonical-roles-hosted-member-predecessor.sql', 'canonical-roles-release-plan.sql', 'canonical-roles-release-readback.sql'].map(f => 'tests/migrations/'+f)];
 const sha = file => createHash('sha256').update(readFileSync(file)).digest('hex');
+if (sourceFile===originalSource) assert.equal(sha(sourceFile),'09ed8674b98aeb990c696deb32abde13f5a6243f010c7d78831c7d314ee10a6f');
 const beforeSources = inputs.map(file => ({ file, sha256: sha(file) }));
 const results = [], sessions = new Set(), databases = new Set(), executions = [], processEvidence = [], lockEvidence = [], snapshotEvidence = [];
 let sequence = 0;
@@ -37,6 +46,10 @@ const record = label => { results.push(label); console.log('PASS: '+label); };
 const extract = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start))+end.length);
 const collector = extract('create function pg_temp.onboarding_review_catalog()', '$catalog$;');
 const stateCollector = extract('create function pg_temp.onboarding_review_state()', '$state$;');
+const catalogRows=collector.slice(collector.indexOf("  select 'relation',"),collector.indexOf('\n$catalog$;')).replace(/;\nend;$/,'');
+const snapshotCollector=`create function pg_temp.onboarding_review_catalog()
+returns table(kind text,object_identity text,definition text)
+language sql stable set search_path = '' as $catalog$\n${catalogRows}\n$catalog$;`;
 function snapshot(database) {
   const value = JSON.parse(sql(socket, database, `begin; set local search_path=''; ${collector}\n${stateCollector}
     select jsonb_build_object('catalog', (select encode(extensions.digest(coalesce(jsonb_agg(to_jsonb(c)
@@ -67,14 +80,16 @@ function clone(label, template = predecessor) {
   databases.add(database);
   return database;
 }
-function runSource(database, input = source) {
+function runSource(database, input = source, mode = 'full-core', user = 'postgres') {
   const inputFile = path.join(evidenceDir,'migration-'+executions.length+'.sql');
-  writeFileSync(inputFile,input);
-  const execution = {database,inputFile,sha256:createHash('sha256').update(input).digest('hex')};
+  writeFileSync(inputFile,input,{mode:0o600});
+  const execution = {database,inputFile,sha256:createHash('sha256').update(input).digest('hex'),mode,user,
+    sourceFile,source_sha256:createHash('sha256').update(source).digest('hex')};
   executions.push(execution);
   try {
-    const output = command('psql', [...target(socket,database),'-v','VERBOSITY=verbose','-Atq'], { input, maxBuffer: 16*1024*1024 });
-    execution.exit=0; return output;
+    const args=target(socket,database); args[args.indexOf('-U')+1]=user;
+    const output = command('psql', [...args,'-v','VERBOSITY=verbose','-Atq'], { input, maxBuffer: 16*1024*1024 });
+    execution.exit=0; execution.output=output; return output;
   } catch (error) {
     execution.exit=Number(error.message.match(/exit=(\d+)/)?.[1]);
     execution.error=error.message; throw error;
@@ -125,8 +140,170 @@ const waitForLock = async (database, process) => {
 };
 const delivery = database => sql(socket,database,`select id from private.employee_onboarding_credentials where person_id=${literal(person)};`).trim();
 const cancel = id => `select public.cancel_onboarding_credential_review(${literal(id)},${literal(stamp)}::timestamptz);`;
+function nativeSession(database,input) {
+  const app=`onboarding_prestate_${process.pid}_${++sequence}`;
+  const child=spawn('psql',[...target(socket,database),'-v','VERBOSITY=verbose','-Atq'],
+    {env:{...postgresEnv,PGAPPNAME:app},stdio:['pipe','pipe','pipe']});
+  sessions.add(child);
+  let output='',error='',query='';
+  const inputFile=path.join(evidenceDir,'session-'+sequence+'.sql');
+  const receipt={database,app,pid:child.pid,user:'postgres',mode:'controlled-native-session',inputFile};
+  processEvidence.push(receipt);
+  child.stdout.on('data',chunk=>{output+=chunk;}); child.stderr.on('data',chunk=>{error+=chunk;});
+  const track=chunk=>{if(chunk!==undefined && chunk!==null) {
+    query+=chunk; writeFileSync(inputFile,query,{mode:0o600});
+    receipt.input_sha256=createHash('sha256').update(query).digest('hex');
+  }};
+  const write=child.stdin.write.bind(child.stdin),end=child.stdin.end.bind(child.stdin);
+  child.stdin.write=(chunk,...args)=>{track(chunk); return write(chunk,...args);};
+  child.stdin.end=(chunk,...args)=>{track(chunk); return end(chunk,...args);};
+  const done=new Promise((resolve,reject)=>{child.on('error',reject); child.on('close',code=>{
+    sessions.delete(child); receipt.exit=code; receipt.output=output; receipt.error=error; resolve({code,output,error});
+  });});
+  child.stdin.write(input); return {app,child,done,output:()=>output};
+}
+function builtinSnapshot(database) {
+  const value=JSON.parse(runSource(database,`begin; set local search_path=''; ${snapshotCollector}\n${stateCollector}
+    select jsonb_build_object('catalog',(select encode(extensions.digest(coalesce(jsonb_agg(to_jsonb(c)
+      order by kind collate "C",object_identity collate "C"),'[]'::jsonb)::text,'sha256'),'hex') from pg_temp.onboarding_review_catalog() c),
+      'actual',private.confirmed_test_purge_schema_hash(),'stored',(select schema_hash from private.confirmed_test_purge_schema),
+      'state',pg_temp.onboarding_review_state(),'raw_routines',(select encode(extensions.digest(coalesce(jsonb_agg(
+        jsonb_build_array(format('%I.%I(%s)',n.nspname,p.proname,oidvectortypes(p.proargtypes)),p.prokind,
+          to_jsonb(p),to_jsonb(a),coalesce(p.proacl,acldefault('f',p.proowner)))
+        order by format('%I.%I(%s)',n.nspname,p.proname,oidvectortypes(p.proargtypes)) collate "C"),'[]'::jsonb)::text,'sha256'),'hex')
+        from pg_proc p join pg_namespace n on n.oid=p.pronamespace left join pg_aggregate a on a.aggfnoid=p.oid
+        where n.nspname !~ '^pg_(toast_)?temp_' and p.prokind<>'f'));
+    rollback;`,'complete-guard-snapshot').trim());
+  snapshotEvidence.push({database,...value}); return value;
+}
+async function runBuiltinPrestate() {
+  const base=prefix+'builtin_base';
+  assert.equal(databaseExists(base),false,'Never reuse an existing database');
+  createDatabase(socket,base); databases.add(base);
+  const publishedSource=readFileSync(publishedCollectorFile,'utf8');
+  const start=publishedSource.indexOf('create function private.confirmed_test_purge_schema_hash()');
+  assert.ok(start>=0);
+  const published=publishedSource.slice(start,publishedSource.indexOf('\n$$;',start)+4);
+  const tables=[['auth.users','id'],['public.profiles','id'],['public.internal_org_people','id'],
+    ['private.employee_onboarding_credentials','id'],['private.employee_onboarding_credential_events','id'],
+    ['private.notification_delivery_receipts','event_key'],['private.confirmed_test_identity_purges','id']];
+  runSource(base,`create schema auth; create schema private; create schema storage; create schema extensions;
+    create extension pgcrypto with schema extensions;
+    ${tables.map(([table,key])=>`create table ${table}(${key} text primary key,payload jsonb not null);
+      insert into ${table} values('synthetic-guard-row','{"synthetic":true}');`).join('\n')}
+    create table private.confirmed_test_purge_schema(singleton boolean primary key default true check(singleton),schema_hash text not null);
+    ${published}
+    insert into private.confirmed_test_purge_schema(schema_hash) select private.confirmed_test_purge_schema_hash();`,'synthetic-guard-prerequisite');
+  const actor=JSON.parse(runSource(base,`select jsonb_build_object('session',session_user,'actor',current_user,
+    'major',current_setting('server_version_num')::integer/10000,'superuser',(select rolsuper from pg_roles where rolname=current_user),
+    'memberships',(select coalesce(jsonb_agg(parent.rolname),'[]'::jsonb) from pg_auth_members m
+      join pg_roles parent on parent.oid=m.roleid join pg_roles member on member.oid=m.member where member.rolname=current_user));`,'native-operator-boundary').trim());
+  assert.equal(actor.session,'postgres'); assert.equal(actor.actor,'postgres');
+  assert.ok([16,17].includes(actor.major));
+  assert.equal(actor.superuser,fixtureRole==='postgres');
+  if (group==='builtin-prestate') assert.equal(fixtureRole,actor.major===17 ? 'fixture_admin' : 'postgres');
+  assert.ok(!actor.memberships.includes('fixture_admin') && !actor.memberships.includes('pg_read_all_settings'));
+  assert.equal(runSource(base,"select encode(extensions.digest(pg_get_functiondef('private.confirmed_test_purge_schema_hash()'::regprocedure),'sha256'),'hex');",'protected-published-collector-readback').trim(),
+    '3385d5a0140df3995e3196ffea442b4829f9a5357de3ccf5a8d521fbe9011a54');
+  const guard=extract('do $review_routines_before$','$review_routines_before$;');
+  assert.ok(guard.startsWith('do $review_routines_before$') && guard.endsWith('$review_routines_before$;'));
+  const query=`begin; set local search_path='';\n${collector}\n${guard}\nselect 'GUARD_ACCEPTED_BEFORE_BASELINE';\nrollback;\n`;
+  const baseline=builtinSnapshot(base); assert.equal(baseline.actual,baseline.stored);
+  const aclQuery=`select jsonb_build_object('raw',p.proacl::text,'effective',(select jsonb_agg(to_jsonb(a)
+    order by a.grantor,a.grantee,a.privilege_type,a.is_grantable) from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a))
+    from pg_proc p where p.oid='pg_catalog.row_number()'::regprocedure;`;
+  const pristineAcl=JSON.parse(runSource(base,aclQuery,'raw-and-effective-acl-readback').trim());
+  assert.equal(pristineAcl.raw,null);
+  const positive=clone('builtin_positive',base);
+  assert.equal(runSource(positive,query,'exact-extracted-catalog-and-initial-guard').trim(),'GUARD_ACCEPTED_BEFORE_BASELINE');
+  assert.deepEqual(builtinSnapshot(positive),baseline);
+  record('PG'+actor.major+' same-baseline exact extracted initial guard accepts pristine native builtins without writes');
+  for (const [label,fault] of [
+    ['window_security','alter function pg_catalog.row_number() security definer;'],
+    ['aggregate_definition',"update pg_aggregate set agginitval='0' where aggfnoid='pg_catalog.sum(integer)'::regprocedure;"],
+    ['raw_acl','grant execute on function pg_catalog.row_number() to public;'],
+    ['effective_acl','revoke execute on function pg_catalog.row_number() from public;'],
+    ['owner','alter function pg_catalog.row_number() owner to pg_signal_backend;'],
+    ['config','alter function pg_catalog.row_number() set search_path = public;'],
+    ['missing_builtin',"delete from pg_proc where oid='pg_catalog.row_number()'::regprocedure;"],
+  ].filter(([label])=>builtinFault==='all' || builtinFault===label)) {
+    const database=clone('builtin_'+label,base);
+    const fixture=JSON.parse(runSource(database,`select jsonb_build_object('session',session_user,'actor',current_user,
+      'superuser',(select rolsuper from pg_roles where rolname=current_user));\n${fault}`,'committed-builtin-fixture',fixtureRole).trim());
+    assert.equal(fixture.session,fixtureRole); assert.equal(fixture.actor,fixtureRole); assert.equal(fixture.superuser,true);
+    const before=builtinSnapshot(database);
+    assert.equal(before.actual,baseline.actual); assert.equal(before.stored,baseline.stored);
+    assert.notEqual(before.raw_routines,baseline.raw_routines);
+    if (label==='raw_acl' || label==='effective_acl') {
+      const actualAcl=JSON.parse(runSource(database,aclQuery,'raw-and-effective-acl-readback').trim());
+      assert.notEqual(actualAcl.raw,null);
+      if (label==='raw_acl') assert.deepEqual(actualAcl.effective,pristineAcl.effective,'Explicit default-equivalent ACL must still be refused');
+      else assert.notDeepEqual(actualAcl.effective,pristineAcl.effective);
+    }
+    try {
+      assert.throws(()=>runSource(database,query,'exact-extracted-catalog-and-initial-guard'),/55000:/,
+        'Initial built-in '+label+' must be rejected before catalog baseline capture');
+    } finally {
+      assert.deepEqual(builtinSnapshot(database),before,'Complete catalog/raw routine/state/stored/actual preservation');
+    }
+    record('PG'+actor.major+' initial builtin '+label+' rejected with 55000 and complete unchanged snapshot');
+  }
+  if (builtinFault==='all' || builtinFault==='snapshot_gap') {
+    const database=clone('builtin_snapshot_gap',base);
+    const caller=nativeSession(database,`begin isolation level read committed; set local search_path='';
+      ${collector}\n${guard}\nselect 'PRECHECK_VALIDATED';\n`);
+    await until(()=>caller.output().includes('PRECHECK_VALIDATED'),'exact pristine precheck before separate catalog-capture command');
+    runSource(database,'alter function pg_catalog.row_number() security definer;','committed-between-precheck-and-capture',fixtureRole);
+    const before=builtinSnapshot(database);
+    caller.child.stdin.end(`create temp table pg_temp.onboarding_review_catalog_before on commit drop as
+      select kind,object_identity,encode(extensions.digest(definition,'sha256'),'hex') as sha256
+      from pg_temp.onboarding_review_catalog();
+      select 'CATALOG_CAPTURE_ACCEPTED'; commit;\n`);
+    const result=await caller.done;
+    assert.deepEqual(builtinSnapshot(database),before,'Snapshot-gap failure preserves complete catalog/raw routine/state/stored/actual');
+    assert.notEqual(result.code,0,'Metadata committed after the precheck must not be adopted as catalog_before');
+    assert.match(result.error,/55000:/); assert.ok(!result.output.includes('CATALOG_CAPTURE_ACCEPTED'));
+    record('PG'+actor.major+' drift committed between precheck and catalog capture rejected with 55000');
+  }
+  if (builtinFault==='all' || builtinFault==='snapshot_call') {
+    assert.equal(collector.split('  return query').length,2);
+    const database=clone('builtin_snapshot_call',base), key='onboarding_prestate_snapshot_'+process.pid;
+    const holder=nativeSession(database,`begin; select pg_advisory_xact_lock(hashtextextended(${literal(key)},0)); select 'HELD';\n`);
+    await until(()=>holder.output().includes('HELD'),'owned snapshot proof advisory barrier');
+    const paused=collector.replace('  return query',()=>`  perform pg_advisory_xact_lock(hashtextextended(${literal(key)},0));\n  return query`);
+    const caller=nativeSession(database,`begin isolation level read committed; set local search_path=''; ${paused}
+      create temp table pg_temp.onboarding_review_catalog_before on commit drop as select * from pg_temp.onboarding_review_catalog();
+      select 'CAPTURED_CATALOG:'||encode(extensions.digest(coalesce(jsonb_agg(to_jsonb(c)
+        order by kind collate "C",object_identity collate "C"),'[]'::jsonb)::text,'sha256'),'hex') from pg_temp.onboarding_review_catalog_before c;
+      select 'CAPTURED_ROW_NUMBER:'||jsonb_agg(to_jsonb(c) order by kind collate "C")::text
+        from pg_temp.onboarding_review_catalog_before c where object_identity='pg_catalog.row_number()';
+      select 'SNAPSHOT_CAPTURED';\n`);
+    await waitForLock(database,caller);
+    assert.equal(lockEvidence.at(-1).wait_event,'advisory');
+    runSource(database,'alter function pg_catalog.row_number() security definer;','committed-during-stable-catalog-call',fixtureRole);
+    const before=builtinSnapshot(database); assert.notEqual(before.catalog,baseline.catalog);
+    holder.child.stdin.end('commit;\n'); assert.equal((await holder.done).code,0);
+    await until(()=>caller.output().includes('SNAPSHOT_CAPTURED'),'same STABLE caller snapshot retained after concurrent metadata commit');
+    caller.child.stdin.end('select count(*) from pg_temp.onboarding_review_catalog(); commit;\n');
+    const result=await caller.done; assert.notEqual(result.code,0); assert.match(result.error,/55000:/);
+    assert.deepEqual(builtinSnapshot(database),before);
+    assert.equal(caller.output().match(/CAPTURED_CATALOG:([a-f0-9]{64})/)?.[1],baseline.catalog,
+      'Contract validation and returned full inventory must share the pristine caller snapshot');
+    record('PG'+actor.major+' STABLE contract and inventory share the caller snapshot across a real metadata commit and next call rejects 55000');
+  }
+  if (sourceFile===migration) {
+    assert.ok(source.indexOf(guard)<source.indexOf('create temp table pg_temp.onboarding_review_state_before'),
+      'Initial routine metadata must be validated before either baseline capture');
+    assert.match(collector,/language plpgsql stable set search_path = ''/);
+    assert.ok(collector.indexOf('with routines as')<collector.indexOf('  return query'));
+    assert.match(collector,/builtin_count<>172/); assert.match(collector,/else null end\) then/);
+    record('PG'+actor.major+' fixed initial contract runs inside STABLE catalog before inventory and before baseline capture');
+  }
+}
 let completed = false;
 try {
+  if (group==='all' || group==='builtin-prestate') await runBuiltinPrestate();
+  if (group!=='builtin-prestate') {
   assert.equal(databaseExists(predecessor),false,'Never reuse or reset an existing database');
   createDatabase(socket, predecessor); databases.add(predecessor);
   sql(socket,predecessor,readFileSync('tests/migrations/0001-supabase-platform.sql','utf8'));
@@ -402,7 +579,9 @@ try {
   assert.equal(sql(socket,actionDatabase,`select status from private.employee_onboarding_credentials where id=${literal(row.deliveryId)};`).trim(),'cancelled');
   record('actual exported Server Actions execute real authenticated RPCs, exact microseconds, stale rejection and committed cache-warning readback');
   }
+  }
   assert.deepEqual(inputs.map(file=>({file,sha256:sha(file)})),beforeSources,'All tested inputs stayed byte-frozen');
+  assert.equal(new Set(results).size,results.length,'Every reported check label must be unique');
   completed = true;
 } finally {
   for (const child of sessions) { child.stdin.end('rollback;\n'); child.kill('SIGTERM'); }
@@ -415,7 +594,12 @@ try {
   }
   assert.ok(processEvidence.every(r=>!r.alive));
   writeFileSync(path.join(evidenceDir,'results.json'),JSON.stringify({completed,group,postgres:command('psql',['--version']).trim(),
+    sourceFile,source_sha256:createHash('sha256').update(source).digest('hex'),fixtureRole,builtinFault,
+    diagnostic_inventory_sha256:createHash('sha256').update(catalogRows).digest('hex'),
+    diagnostic_mode:'inventory-only SQL reconstruction for independent complete readback; not the guarded migration helper',
+    checks:results.length,unique_checks:new Set(results).size,
     results,inputs:beforeSources,executions,lockEvidence,snapshotEvidence,processEvidence,cleanup,owned_databases_removed:[...databases],owned_sessions_remaining:sessions.size,
-    unverified:['formal Management non-superuser ledger wrapper','PG17','production acceptance']},null,2));
+    unverified:group==='builtin-prestate' ? ['full-core COMMIT and unchanged-predecessor replay','formal Management ledger envelope','independent final-source review','hosted operator execution','production acceptance']
+      : ['formal Management non-superuser ledger wrapper','PG17','production acceptance']},null,2),{mode:0o600});
   console.log(`Onboarding review SQL: completed=${completed}; checks=${results.length}; owned sessions=${sessions.size}; databases cleaned=${databases.size}`);
 }

@@ -40,7 +40,30 @@ $review_before$;
 
 create function pg_temp.onboarding_review_catalog()
 returns table(kind text,object_identity text,definition text)
-language sql stable set search_path = '' as $catalog$
+language plpgsql stable set search_path = '' as $catalog$
+declare builtin_count bigint; builtin_hash text;
+begin
+  if exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname !~ '^pg_(toast_)?temp_' and p.prokind<>'f'
+      and not (n.nspname='pg_catalog' and p.oid<16384)) then
+    raise exception 'Onboarding review requires the reviewed built-in non-function routine inventory.' using errcode='55000';
+  end if;
+  with routines as (
+    select format('%I.%I(%s)',n.nspname,p.proname,oidvectortypes(p.proargtypes)) as identity,p.prokind as kind,
+      jsonb_build_object('proc',to_jsonb(p)-'oid',
+        'aggregate',case when p.prokind='a' then to_jsonb(a)-'aggfnoid' else null end) as metadata
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace left join pg_aggregate a on a.aggfnoid=p.oid
+    where n.nspname !~ '^pg_(toast_)?temp_' and p.prokind<>'f'
+  )
+  select count(*),encode(extensions.digest(coalesce(jsonb_agg(jsonb_build_array(r.identity,r.kind,r.metadata)
+    order by r.identity collate "C"),'[]'::jsonb)::text,'sha256'),'hex') into builtin_count,builtin_hash from routines r;
+  if builtin_count<>172 or builtin_hash is distinct from (case current_setting('server_version_num')::integer/10000
+    when 16 then 'c87f2f680aab3a071915bcc5c7774820f57a7e6c20b5be465cd3dffada088512'
+    when 17 then 'd6785c452e91fdc4bdeb4e75a3d07e003d778eb59831717421f45bb63bd71f75'
+    else null end) then
+    raise exception 'Onboarding review built-in non-function routine metadata changed.' using errcode='55000';
+  end if;
+  return query
   select 'relation',format('%I.%I',n.nspname,c.relname),jsonb_build_object(
     'kind',c.relkind,'rls',c.relrowsecurity,'force_rls',c.relforcerowsecurity,'owner',r.rolname,
     'acl',c.relacl::text,'options',c.reloptions,'persistence',c.relpersistence,'replica_identity',c.relreplident,
@@ -73,8 +96,8 @@ language sql stable set search_path = '' as $catalog$
   where not t.tgisinternal and (n.nspname in ('public','private','storage') or c.oid='auth.users'::regclass)
   union all
   select 'function',n.nspname||'.'||p.proname||'('||oidvectortypes(p.proargtypes)||')',
-    case when p.prokind='a' then jsonb_build_object('aggregate',to_jsonb(a)-'aggfnoid',
-      'arguments',pg_get_function_arguments(p.oid),'result',pg_get_function_result(p.oid))::text
+    case when p.prokind in ('a','w') then jsonb_build_object('proc',to_jsonb(p)-'oid',
+      'aggregate',case when p.prokind='a' then to_jsonb(a)-'aggfnoid' else null end)::text
       else pg_get_functiondef(p.oid) end
   from pg_proc p join pg_namespace n on n.oid=p.pronamespace left join pg_aggregate a on a.aggfnoid=p.oid
   where n.nspname !~ '^pg_(toast_)?temp_'
@@ -180,8 +203,20 @@ language sql stable set search_path = '' as $catalog$
     jsonb_build_object('event',w.ev_type,'enabled',w.ev_enabled,'instead',w.is_instead,
       'definition',pg_get_ruledef(w.oid))::text
   from pg_rewrite w join pg_class c on c.oid=w.ev_class join pg_namespace n on n.oid=c.relnamespace
-  where n.nspname in ('public','private','storage')
+  where n.nspname in ('public','private','storage');
+end;
 $catalog$;
+
+do $review_routines_before$
+begin
+  if exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname !~ '^pg_(toast_)?temp_' and p.prokind<>'f'
+      and not (n.nspname='pg_catalog' and p.oid<16384)) then
+    raise exception 'Onboarding review requires the reviewed built-in non-function routine inventory.' using errcode='55000';
+  end if;
+  perform 1 from pg_temp.onboarding_review_catalog();
+end;
+$review_routines_before$;
 
 create function pg_temp.onboarding_review_state() returns text
 language sql stable set search_path = '' as $state$
@@ -201,15 +236,6 @@ create temp table pg_temp.onboarding_review_catalog_before on commit drop as
   select kind,object_identity,encode(extensions.digest(definition,'sha256'),'hex') as sha256
   from pg_temp.onboarding_review_catalog();
 alter table pg_temp.onboarding_review_catalog_before add primary key(kind,object_identity);
-do $review_routines_before$
-begin
-  if exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname !~ '^pg_(toast_)?temp_' and p.prokind<>'f'
-      and not (n.nspname='pg_catalog' and p.oid<16384)) then
-    raise exception 'Onboarding review requires the reviewed built-in non-function routine inventory.' using errcode='55000';
-  end if;
-end;
-$review_routines_before$;
 create temp table pg_temp.onboarding_review_catalog_delta(
   kind text not null,object_identity text not null,sha256 text not null,
   primary key(kind,object_identity)
