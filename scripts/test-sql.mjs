@@ -20,9 +20,16 @@ function runPowerBiContract() {
   console.log("PASS: Power BI inspector rejects four unsupported invocations before credentials");
   createDatabase(socket, "mam_test_powerbi_contract");
   console.log(command("psql", [...target(socket, "mam_test_powerbi_contract"), "-f", path.join(sourceRoot, "tests/powerbi-hr-directory.sql")]));
-  const schemaSql = command("python3", ["-c", "import runpy, sys; print(runpy.run_path(sys.argv[1])['SCHEMA_SQL'])", path.join(sourceRoot, "scripts/inspect-powerbi-hr-directory.py")]).trim();
+  const schema = JSON.parse(command("python3", ["-c", "import json, runpy, sys; m = runpy.run_path(sys.argv[1]); print(json.dumps({'sql': m['SCHEMA_SQL'], 'keys': sorted(m['SCHEMA_KEYS'])}))", inspector]));
+  const schemaSql = schema.sql;
   const inspectSql = `select row_to_json(checks) from (${schemaSql}) checks;`;
-  const baseline = () => JSON.parse(sql(socket, "mam_test_powerbi_contract", inspectSql));
+  const baseline = () => {
+    const result = JSON.parse(sql(socket, "mam_test_powerbi_contract", inspectSql));
+    if (Object.keys(result).sort().join(",") !== schema.keys.join(",") || schema.keys.length !== 17) {
+      throw new Error("Power BI metadata must retain the exact 17-key contract");
+    }
+    return result;
+  };
   if (!Object.values(baseline()).every(value => value === true)) throw new Error("Synthetic Power BI metadata contract failed");
   for (const [change, predicate] of [
     ["grant select on public.internal_org_people to mam_powerbi_hr_reader", "source_tables_are_private"],
@@ -44,6 +51,68 @@ function runPowerBiContract() {
     console.log(`PASS: Power BI rejects ${predicate} drift`);
   }
   console.log("PASS: Power BI exact metadata contract and 12 rolled-back drift probes");
+  createDatabase(socket, "mam_test_powerbi_unrelated");
+  const columnProbes = [];
+  for (const [relation, column, predicate] of [
+    ["public.internal_org_people", "full_name", "source_tables_are_private"],
+    ["private.employee_directory_details", "first_name", "source_tables_are_private"],
+    ["public.powerbi_contract_other", "value", "no_other_business_relation_access"],
+    ["powerbi_hr.employee_directory", "full_name", "view_is_read_only"],
+    ["extensions.pg_stat_statements", "query", "shared_statistics_views_are_read_only"],
+    ["extensions.pg_stat_statements_info", "dealloc", "shared_statistics_views_are_read_only"],
+  ]) {
+    for (const privilege of ["SELECT", "INSERT", "UPDATE", "REFERENCES"]) {
+      if (privilege === "SELECT" && ["view_is_read_only", "shared_statistics_views_are_read_only"].includes(predicate)) continue;
+      columnProbes.push([
+        `${relation} column ${privilege}`,
+        `grant ${privilege}(${column}) on ${relation} to mam_powerbi_hr_reader`,
+        predicate,
+        `has_column_privilege('mam_powerbi_hr_reader', '${relation}', '${column}', '${privilege}')`,
+      ]);
+    }
+  }
+  for (const role of ["anon", "authenticated", "service_role"]) {
+    for (const privilege of ["SELECT", "INSERT", "UPDATE", "REFERENCES"]) {
+      columnProbes.push([
+        `${role} projection column ${privilege}`,
+        `grant ${privilege}(full_name) on powerbi_hr.employee_directory to ${role}`,
+        "app_roles_not_granted",
+        `has_column_privilege('${role}', 'powerbi_hr.employee_directory', 'full_name', '${privilege}')`,
+      ]);
+    }
+  }
+  const defaultsProbes = [
+    ["current database read-only override", "alter role mam_powerbi_hr_reader in database mam_test_powerbi_contract set default_transaction_read_only = off", "read_only_default"],
+    ["current database timeout override", "alter role mam_powerbi_hr_reader in database mam_test_powerbi_contract set statement_timeout = '120s'", "bounded_query_time"],
+    ["unrelated database read-only cannot supply default", "alter role mam_powerbi_hr_reader reset default_transaction_read_only; alter role mam_powerbi_hr_reader in database mam_test_powerbi_unrelated set default_transaction_read_only = on", "read_only_default"],
+    ["unrelated database timeout cannot supply default", "alter role mam_powerbi_hr_reader reset statement_timeout; alter role mam_powerbi_hr_reader in database mam_test_powerbi_unrelated set statement_timeout = '60s'", "bounded_query_time"],
+  ];
+  const failures = [];
+  for (const [label, change, predicate, evidence] of [...columnProbes, ...defaultsProbes]) {
+    const probeSql = `select json_build_object('checks', (select row_to_json(checks) from (${schemaSql}) checks), 'grantPresent', ${evidence ?? "true"})`;
+    const probe = JSON.parse(sql(socket, "mam_test_powerbi_contract", `begin; ${change}; ${probeSql}; rollback;`));
+    if (!probe.grantPresent) throw new Error(`Power BI probe grant was not present: ${label}`);
+    if (!Object.values(baseline()).every(value => value === true)) throw new Error(`Power BI probe did not roll back: ${label}`);
+    if (probe.checks[predicate] !== false) {
+      failures.push(label);
+      console.log(`FAIL: Power BI missed ${label}: ${predicate}`);
+    } else console.log(`PASS: Power BI rejects ${label}: ${predicate}`);
+  }
+  if (failures.length) throw new Error(`Power BI missed ${failures.length} column/default drifts: ${failures.join(", ")}`);
+  for (const [label, change] of [
+    ["current database safe read-only overrides unsafe global role", "alter role mam_powerbi_hr_reader set default_transaction_read_only = off; alter role mam_powerbi_hr_reader in database mam_test_powerbi_contract set default_transaction_read_only = on"],
+    ["current database safe timeout overrides unsafe global role", "alter role mam_powerbi_hr_reader set statement_timeout = '120s'; alter role mam_powerbi_hr_reader in database mam_test_powerbi_contract set statement_timeout = '60s'"],
+    ["unrelated database unsafe read-only is ignored", "alter role mam_powerbi_hr_reader in database mam_test_powerbi_unrelated set default_transaction_read_only = off"],
+    ["unrelated database unsafe timeout is ignored", "alter role mam_powerbi_hr_reader in database mam_test_powerbi_unrelated set statement_timeout = '120s'"],
+    ["global role read-only overrides database setting", "alter database mam_test_powerbi_contract set default_transaction_read_only = off"],
+    ["global role timeout overrides database setting", "alter database mam_test_powerbi_contract set statement_timeout = '120s'"],
+  ]) {
+    const changed = JSON.parse(sql(socket, "mam_test_powerbi_contract", `begin; ${change}; ${inspectSql} rollback;`));
+    if (!Object.values(changed).every(value => value === true)) throw new Error(`Power BI safe precedence control failed: ${label}`);
+    if (!Object.values(baseline()).every(value => value === true)) throw new Error(`Power BI safe precedence control did not roll back: ${label}`);
+    console.log(`PASS: Power BI accepts ${label}`);
+  }
+  console.log(`PASS: Power BI ${columnProbes.length} column ACL, ${defaultsProbes.length} default rejection probes and six safe precedence controls`);
 }
 try {
   if (!powerBiOnly) {
