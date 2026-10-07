@@ -54,11 +54,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install Python for the pinned release-helper rehearsal
         run: |
           apt-get update
           apt-get install -y --no-install-recommends python3
           runuser -u postgres -- python3 --version
+      - name: Prepare private onboarding review evidence directory
+        run: install -d -m 0700 -o postgres -g postgres output/onboarding-review-fixes
       - name: Full ordered replay, effective ACLs, real concurrency and rollback
         # initdb refuses root. This creates a new UNIX-socket-only cluster as
         # the container's unprivileged postgres user. No service URL/secrets.

@@ -1,0 +1,15 @@
+.page { margin: 0 auto; max-width: 1440px; padding: 32px 24px; }
+.page h1 { margin: 24px 0; }
+.button { border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #1e293b; padding: 9px 14px; cursor: pointer; font: inherit; }
+.button:disabled { opacity: .5; cursor: not-allowed; }
+.button:focus-visible { outline: 2px solid #ea580c; outline-offset: 3px; }
+.scroll { overflow-x: auto; margin-top: 20px; }
+.table { width: 100%; border-collapse: collapse; text-align: left; }
+.table th, .table td { border-bottom: 1px solid #e2e8f0; padding: 12px; vertical-align: top; }
+.table thead th { font-size: 13px; color: #475569; }
+.table td:last-child { white-space: nowrap; }
+.visuallyHidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.backdrop { display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; padding: 20px; background: rgb(15 23 42 / .45); z-index: 1000; }
+.dialog { background: #fff; color: #1e293b; border-radius: 12px; padding: 24px; width: min(100%, 440px); }
+.dialog h2 { font-size: 20px; }
+.dialog form { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; margin-top: 24px; }

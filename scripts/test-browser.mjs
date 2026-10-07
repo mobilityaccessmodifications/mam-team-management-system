@@ -10,11 +10,27 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { buildUnifiedRoleFixture } from "../tests/browser/unified-role-build.mjs";
 import { applyDayflowDstPatch } from "./apply-dayflow-dst-patch.mjs";
+import { reviewActionHarness, deliveryId, updatedAt, rowFixture } from "../tests/helpers/onboarding-review-action-harness.mjs";
 
 // This harness does not start Next or read a .env. Production components are
 // compiled unchanged; only server-action boundaries receive synthetic data.
 const sourceRoot = realpathSync(process.argv[2] ?? process.cwd());
+const allowUnmatchedContact = process.argv.includes("--allow-unmatched-contact");
+const browserArgs = process.argv.slice(3).filter(argument => argument !== "--allow-unmatched-contact");
+if (browserArgs.includes("--pass-with-no-tests")) throw new Error("The primary browser group must run actual tests");
+if (allowUnmatchedContact && (!browserArgs.includes("--grep") || browserArgs.some(argument => argument.endsWith(".spec.mjs")))) {
+  throw new Error("Unmatched contact allowance requires a title-only primary filter");
+}
 applyDayflowDstPatch(path.join(sourceRoot, "node_modules/@dayflow/core"));
+const onboardingReviewResults = {};
+for (const [name, options] of Object.entries({
+  success: {}, committed: { revalidateError: true }, stale: { dbError: { code: "55000", message: "synthetic private detail" } },
+  unknown: { transportError: new Error("synthetic private provider") },
+})) onboardingReviewResults[name] = await reviewActionHarness({ ...options, sourceRoot }).actions.cancelOnboardingCredentialReview({ deliveryId, updatedAt });
+for (const [name, rows] of Object.entries({ list: [rowFixture], empty: [], refreshed: [{ ...rowFixture, updated_at: "2026-10-01T05:00:00.987654+00:00" }] })) {
+  onboardingReviewResults[name] = await reviewActionHarness({ rows, sourceRoot }).actions.listOnboardingCredentialReviews();
+  if (!onboardingReviewResults[name].ok) throw new Error("Canonical onboarding review fixture rejected");
+}
 const directoryInput = { ...draft, personId, personVersion: 1, detailVersion: 1 };
 const directoryResults = {};
 for (const [name, dbError] of Object.entries({
@@ -50,8 +66,12 @@ try {
     entryPoints: ["tests/browser/fixture.jsx"], bundle: true, outdir: scratch,
     platform: "browser", jsx: "automatic", sourcemap: false, minify: false,
     alias: { "@/app/leave/actions": path.join(sourceRoot, "tests/browser/payroll-display-actions.jsx"), "@/app/people/actions": path.join(sourceRoot, "tests/browser/directory-actions.jsx"), "@/components/employee-device-assignments": path.join(sourceRoot, "tests/browser/directory-fixture.jsx"), "@/app/people/team-directory-actions": path.join(sourceRoot, "tests/browser/team-directory-actions.jsx"), "@": path.join(sourceRoot, "src"), react: path.resolve("node_modules/react"), "react-dom": path.resolve("node_modules/react-dom") },
-    define: { "process.env.NODE_ENV": '"production"', DIRECTORY_FIXTURE_RESULTS: JSON.stringify(directoryResults) },
-    plugins: [{ name: "production-global-styles", setup(builder) {
+    define: { "process.env.NODE_ENV": '"production"', DIRECTORY_FIXTURE_RESULTS: JSON.stringify(directoryResults), ONBOARDING_REVIEW_RESULTS: JSON.stringify(onboardingReviewResults) },
+    plugins: [{ name: "onboarding-review-action-boundary", setup(builder) {
+      builder.onResolve({ filter: /^\.\/actions$/ }, ({ importer }) => {
+        if (/[/\\]src[/\\]app[/\\]onboarding-review[/\\]review-list\.tsx$/.test(importer)) return { path: path.join(sourceRoot, "tests/browser/onboarding-review-actions.mjs") };
+      });
+    } }, { name: "production-global-styles", setup(builder) {
       // Use the real global source and existing PostCSS configuration, not a
       // copied portal rule or a stale Next build artifact.
       builder.onLoad({ filter: /[/\\]src[/\\]app[/\\]globals\.css$/ }, async ({ path: filename }) => {
@@ -70,7 +90,7 @@ try {
   await buildUnifiedRoleFixture(sourceRoot, scratch);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
-  const child = spawn(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "--config=tests/browser/playwright.config.mjs", ...process.argv.slice(3)], {
+  const child = spawn(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "--config=tests/browser/playwright.config.mjs", ...browserArgs], {
     env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR,
       CI: process.env.CI ?? "", PLAYWRIGHT_BROWSERS_PATH: path.resolve("node_modules/.cache/ms-playwright"),
       MAM_BROWSER_SOURCE_ROOT: sourceRoot,
@@ -80,7 +100,7 @@ try {
   const code = await new Promise((resolve, reject) => { child.on("error", reject); child.on("exit", resolve); });
   process.exitCode = code ?? 1;
   if (process.exitCode === 0) {
-    const contact = spawn(process.execPath, ["tests/browser/contact-lifetime-runner.mjs", ...process.argv.slice(3)], {
+    const contact = spawn(process.execPath, ["tests/browser/contact-lifetime-runner.mjs", ...browserArgs, ...(allowUnmatchedContact ? ["--pass-with-no-tests"] : [])], {
       env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, MAM_BROWSER_SOURCE_ROOT: sourceRoot },
       stdio: "inherit",
     });
