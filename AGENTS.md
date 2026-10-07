@@ -30,31 +30,55 @@ This is the internal team-management portal for Mobility Access Modifications (M
 ## Account targets
 
 - GitHub owner/repository: `mobilityaccessmodifications/mam-team-management-system`.
-  Always run GitHub commands with the MAM-scoped profile:
+  Run every GitHub command with the MAM-scoped profile:
   `env GH_CONFIG_DIR='/Users/nixon/.github-profiles/mam' gh <command>`.
-  Before any write, `gh auth status` must report the active account
-  `mobilityaccessmodifications`.
+  Before any GitHub write (push, PR, merge, or release), run the exact
+  read-only identity check
+  `env GH_CONFIG_DIR='/Users/nixon/.github-profiles/mam' gh api user --jq .login`
+  and require exactly `mobilityaccessmodifications`. If sandbox, Keychain, or
+  network isolation prevents the check, retry the identical command with
+  system-level execution. Never substitute an unscoped `gh auth status`, run
+  `gh auth login`/`logout`, or start browser/device authentication from an
+  ambiguous failure.
 - Vercel project: `ai-7033s-projects/mam-team-management-system`. Always use
   `npx vercel --global-config '/Users/nixon/.vercel-profiles/mam' <command>`.
+  Production is deployed only by merging the reviewed GitHub branch into the
+  configured production branch. Never run `vercel deploy` or `vercel --prod`.
 - Supabase organization/project: `fwlmbmospuwoaosffvmw` /
-  `xtwlrjqbusadghavchqm`. Use the native Supabase CLI profile `mam`, for
-  example `npx --yes supabase@latest projects list --profile mam
-  --output-format json`, and verify this project ID before reads, migrations,
-  Auth changes, or other operations. Never run an unprofiled Supabase command.
+  `xtwlrjqbusadghavchqm`. Run every remote Supabase command from this repository
+  through the credential helper:
+  `"$HOME/Documents/Codex/bin/codex-project-credential" exec supabase -- <command>`.
+  For CLI discovery, the child command may be
+  `npx --yes supabase@latest projects list --output-format json`. Verify the
+  exact organization and project ref before reads or writes. Never run
+  `supabase login`, an unwrapped remote command, or native `--profile`.
+  Retry sandbox, Keychain, and network failures system-level through the same
+  wrapper. When the approved Management API database-query route supports the
+  task, use the saved access token and do not request a database password.
+- For every People System n8n operation, follow
+  `/Volumes/UG/MAM/opencode/n8n/AGENTS.md` and its Required n8n connection
+  policy. Run `python3 scripts/verify.py` from that n8n project root, and retry
+  the exact verification system-level after a sandbox/network failure. Never
+  use a global n8n MCP/browser session or request a key from an unverified
+  failure.
 
 ### GitHub and Vercel write preflight (mandatory)
 
 GitHub login and the Git author are separate identities. Complete every check
-below before creating a branch, committing, pushing, opening or merging a PR,
-or releasing to production. If any check fails, stop and correct it before a
-write.
+at the stage where it applies: checks 1, 3, and 4 are local branch/commit
+preflight; add checks 2 and 5 before push/PR/merge; add checks 6 and 7 before a
+release. GitHub connectivity is not required to branch, edit, test, or commit
+locally. If the system-level API check is unavailable, continue safe local work
+and stop only the affected remote operation. Classify authentication failures
+under the global evidence rules and never "correct" them by starting a login
+flow.
 
 1. Confirm the remote is exactly
    `https://github.com/mobilityaccessmodifications/mam-team-management-system.git`:
    `git remote get-url origin`.
-2. Confirm the MAM-scoped GitHub account:
-   `env GH_CONFIG_DIR='/Users/nixon/.github-profiles/mam' gh auth status`.
-   Never rely on the default/global `gh` profile.
+2. Run the exact MAM GitHub identity check defined above. Never rely on the
+   default/global `gh` profile or treat a sandbox-only failure as an invalid
+   session.
 3. Set and verify this repository's local commit identity (never a global
    identity):
    `git config --local user.name mobilityaccessmodifications`
@@ -65,8 +89,8 @@ write.
    `git show -s --format='%an <%ae>' HEAD`.
    It must be the MAM identity above. Never push commits authored as
    `forgerealestate`, Forge, Insider Leads, a personal account, or another
-   project identity. A correct `gh auth status` does not fix a wrong commit
-   author.
+   project identity. A correct GitHub API identity check does not fix a wrong
+   commit author.
 5. Verify the branch and PR target are `main`; inspect PR metadata with
    `env GH_CONFIG_DIR='/Users/nixon/.github-profiles/mam' gh pr view <number>
    --json baseRefName,headRefName,author,mergeCommit`.
@@ -77,8 +101,9 @@ write.
    mam-team-management-system`.
 
 Never use Forge, Insider Leads, or another project's GitHub/Vercel/Supabase
-profile for this repository. The checked-in `.mcp.json` scopes Codex to this
-project in read-only mode; keep it read-only for inspection.
+profile for this repository. A project-local `.mcp.json`, when present, is for
+read-only inspection and is not authentication evidence; never use a global or
+unverified MCP connection as a fallback.
 
 ## Architecture
 
