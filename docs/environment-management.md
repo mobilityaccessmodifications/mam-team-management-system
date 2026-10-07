@@ -55,6 +55,29 @@ network interception; it is not a Development, Preview or Production setting.
 - Password manager or macOS Keychain: recovery copies and credentials used by approved local tooling.
 - Never create `.env.save`; use controlled platform history or the password manager.
 
+## Existing Power BI reader and inspection
+
+Keep `mam_powerbi_hr_reader` credentials only in the approved password manager
+and Power BI data-source configuration, never in Git, application environment
+variables, fixtures or inspection output. The reader is separate from Auth users,
+portal roles and the operator's Supabase Management API credential. Do not reuse
+a service-role key or Management token as an analyst credential.
+
+Run `scripts/inspect-powerbi-hr-directory.py inspect` only through the existing
+MAM `codex-project-credential exec supabase --` wrapper from this repository.
+The script requires exact organisation `fwlmbmospuwoaosffvmw` and project
+`xtwlrjqbusadghavchqm`, then makes one bounded READ ONLY catalog/ACL query and
+compares only migration version `20260924235000` with the preserved source hash.
+It emits no employee rows, passwords, migration bodies or statistics query text.
+Missing or drifted structure is a failed observation, not permission to create
+a role/view, grant access, rotate a password, replay an old migration, repair the
+ledger or replace pins. There is no apply operation.
+
+The fixed 16-column projection, including employment history and reason for
+leaving, is HR-confidential. Existing Power BI sharing and retention approvals
+still apply; this preservation does not add recipients or authorise a refresh,
+export or access expansion. Synthetic SQL fixtures are isolated from production.
+
 ## Account secret boundary
 
 The browser uses the publishable key and the signed-in user's cookie-backed session. Account-management operations cross a Server Action that first verifies the session and database-controlled administrator permission. Only then may server code create/read an Auth user, set a password or change the Auth ban state with `SUPABASE_SECRET_KEY`.

@@ -57,6 +57,32 @@ The payroll self-service release adds a first-Victorian-business-day Calendar re
 
 Paid subscription records in the same release record seats/licences, whether a credit card is used, a free-text cardholder or company-card name, the billing anchor date and a server-calculated next billing date. The label is company-neutral so MAM and Equipsy cards can both be recorded. Never enter a card number, expiry date or security code. Last Reviewed Date is derived from the audited review event. Service account email, username, password, MFA details, recovery codes, licence key and notes belong only in the separate encrypted credential vault, never in the subscription register or an export.
 
+## Existing Power BI HR projection
+
+The separate PostgreSQL reader `mam_powerbi_hr_reader` is restricted to
+`powerbi_hr.employee_directory`. Its existing 16-column HR projection is not
+the Analytics API, a portal role, or an employee login. Treat its output,
+including employment schedules and reason for leaving, as confidential HR data.
+Do not add fields, recipients or grants without separate approval.
+
+The historical source remains in PR #175 at
+`fc3682fb42f92f4167cdfbb4ea7feaf236e6924b`; it is not a new executable migration.
+Use the approved MAM credential wrapper from this repository for a metadata-only
+inspection:
+
+```bash
+"$HOME/Documents/Codex/bin/codex-project-credential" exec supabase -- python3 scripts/inspect-powerbi-hr-directory.py inspect
+npm run test:sql -- --powerbi-hr-directory
+```
+
+The inspector verifies the exact MAM organisation/project before one bounded
+read-only structure, ACL and historical-version query. It emits predicates only,
+never employee rows, passwords, recorded SQL or statistics query text. Exit 0
+means the observed contract matches, 1 means missing/drifted structure or source,
+and 2 means invalid invocation or an unavailable reader. There is no apply path.
+The SQL command uses a disposable synthetic fixture; it is not a production
+migration replay or proof of a live Power BI model refresh.
+
 ## Data boundaries
 
 - Real names, positions, companies and reporting relationships live only in the authenticated, RLS-protected Supabase directory. The complete organisation chart is limited to active Managers, HR and System Admin. Ordinary employees receive only their safe team-Directory branch and no Organisation tab; the projection exposes name, position, company and reporting relationship and, only when a person is selected, that person’s work email.
