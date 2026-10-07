@@ -4,11 +4,49 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startCluster, createDatabase, stopCluster, sql, target, command, postgresEnv } from "./local-test-postgres.mjs";
 
-const sourceRoot = realpathSync(process.argv[2] ?? process.cwd());
+const powerBiOnly = process.argv[2] === "--powerbi-hr-directory";
+const sourceRoot = realpathSync((powerBiOnly ? process.argv[3] : process.argv[2]) ?? process.cwd());
 const socket = startCluster();
 let passed = false;
 console.log(`Disposable PostgreSQL socket: ${socket}`);
+function runPowerBiContract() {
+  const inspector = path.join(sourceRoot, "scripts/inspect-powerbi-hr-directory.py");
+  for (const args of [[], ["apply"], ["apply", "unapproved-source"], ["inspect", "extra"]]) {
+    const rejected = spawnSync("python3", [inspector, ...args], { env: postgresEnv, encoding: "utf8" });
+    if (rejected.status !== 2 || !rejected.stderr.includes("Usage:") || rejected.stdout) {
+      throw new Error("Power BI inspector accepted an unsupported operation");
+    }
+  }
+  console.log("PASS: Power BI inspector rejects four unsupported invocations before credentials");
+  createDatabase(socket, "mam_test_powerbi_contract");
+  console.log(command("psql", [...target(socket, "mam_test_powerbi_contract"), "-f", path.join(sourceRoot, "tests/powerbi-hr-directory.sql")]));
+  const schemaSql = command("python3", ["-c", "import runpy, sys; print(runpy.run_path(sys.argv[1])['SCHEMA_SQL'])", path.join(sourceRoot, "scripts/inspect-powerbi-hr-directory.py")]).trim();
+  const inspectSql = `select row_to_json(checks) from (${schemaSql}) checks;`;
+  const baseline = () => JSON.parse(sql(socket, "mam_test_powerbi_contract", inspectSql));
+  if (!Object.values(baseline()).every(value => value === true)) throw new Error("Synthetic Power BI metadata contract failed");
+  for (const [change, predicate] of [
+    ["grant select on public.internal_org_people to mam_powerbi_hr_reader", "source_tables_are_private"],
+    ["grant update on powerbi_hr.employee_directory to mam_powerbi_hr_reader", "view_is_read_only"],
+    ["grant select on public.powerbi_contract_other to mam_powerbi_hr_reader", "no_other_business_relation_access"],
+    ["grant usage on sequence public.powerbi_contract_sequence to mam_powerbi_hr_reader", "no_sequence_access"],
+    ["grant execute on function public.powerbi_contract_definer() to mam_powerbi_hr_reader", "no_security_definer_routines"],
+    ["grant anon to mam_powerbi_hr_reader", "no_role_membership"],
+    ["alter role mam_powerbi_hr_reader bypassrls", "role_is_limited"],
+    ["alter role mam_powerbi_hr_reader set default_transaction_read_only = off", "read_only_default"],
+    ["alter role mam_powerbi_hr_reader set statement_timeout = '120s'", "bounded_query_time"],
+    ["alter view powerbi_hr.employee_directory set (security_barrier = false)", "security_barrier"],
+    ["alter view powerbi_hr.employee_directory rename column full_name to unapproved_column", "projection_is_exact"],
+    ["grant select on powerbi_hr.employee_directory to authenticated", "app_roles_not_granted"],
+  ]) {
+    const changed = JSON.parse(sql(socket, "mam_test_powerbi_contract", `begin; ${change}; ${inspectSql} rollback;`));
+    if (changed[predicate] !== false) throw new Error(`Power BI drift was not rejected: ${predicate}`);
+    if (!Object.values(baseline()).every(value => value === true)) throw new Error("Power BI drift probe did not roll back");
+    console.log(`PASS: Power BI rejects ${predicate} drift`);
+  }
+  console.log("PASS: Power BI exact metadata contract and 12 rolled-back drift probes");
+}
 try {
+  if (!powerBiOnly) {
   const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (replay.status !== 0) throw new Error("Full migration replay failed");
   const onboardingReview = spawnSync(process.execPath, [path.join(sourceRoot, "tests/run-onboarding-review-sql.mjs"), socket], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
@@ -76,6 +114,8 @@ try {
   command("psql", [...target(socket, "mam_test_employee_calendar"), "-f", path.join(sourceRoot, "tests/employee-team-calendar.sql")]);
   createDatabase(socket, "mam_test_staff_calendar");
   command("psql", [...target(socket, "mam_test_staff_calendar"), "-f", path.join(sourceRoot, "tests/calendar-staff-details.sql")]);
+  }
+  runPowerBiContract();
   passed = true;
 } finally {
   stopCluster(socket);

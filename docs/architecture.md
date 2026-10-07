@@ -53,6 +53,33 @@ There is no live payroll API, AroFlo or provisioning write integration. Payroll 
 - A supplied HR workbook is staged and reconciled against the live directory before import. Matching is never used to automatically replace identities, deactivate people or relink portal accounts.
 - There are no demo roles or fake selectable profiles. The controlled System Admin may use **Change profile**, backed only by active real directory people, to select an employee or manager workflow context. It never impersonates an Auth user or grants a capability to the selected employee: each read and mutation is re-authorised against the real System Admin session, and the real System Admin remains the audit actor. Its existing functions remain available so restricted workflows can be tested end to end.
 
+## Existing Power BI PostgreSQL boundary
+
+`powerbi_hr.employee_directory` is a separate security-barrier HR view, not a
+portal role or an Analytics API dataset. Its dedicated reader is limited to
+SELECT on that view, without source-table/private-schema access, role membership,
+sequence access, reachable SECURITY DEFINER routines or view/schema writes.
+The application roles are not granted this schema or view. Read-only transactions
+and a 60-second statement timeout remain the reader defaults.
+
+The existing projection contains exactly `employee_id`, `first_name`, `last_name`,
+`full_name`, `company_key`, `position_title`, `is_active`, `started_date`,
+`created_at`, `updated_at`, `detail_updated_at`, `scheduled_employment_end_date`,
+`employment_type`, `working_weekdays`, `working_day_times` and `reason_for_leaving`.
+It joins organisation people to private employee details for person nodes, including
+inactive people; it does not export contact details, date of birth or credentials.
+This is an HR-confidential boundary, not an ordinary employee reporting grant.
+
+Historical version `20260924235000` is preserved in PR #175 rather than inserted
+into current executable migration history. The pure inspector verifies its exact
+recorded source and current catalog predicates, without applying SQL or changing
+ledger/pins. Its business-relation census retains only the two pre-existing
+Supabase PUBLIC statistics-view exceptions, `extensions.pg_stat_statements` and
+`extensions.pg_stat_statements_info`, and checks that they have no write grants.
+It reads neither statistics rows nor query text; it does not certify the contents
+of those shared metadata views. Power BI model credentials, refresh and sharing
+remain separate operational boundaries.
+
 ## Portal accounts
 
 `profiles` is the account registry linked one-to-one to Supabase Auth and to a real directory person. It stores the normalised login name, controlled application role, active/disabled state, password-change metadata, credential validity cutoff and optimistic account version. Private HR-authorisation and audit tables control who may manage accounts and record mutations without recording password values.
