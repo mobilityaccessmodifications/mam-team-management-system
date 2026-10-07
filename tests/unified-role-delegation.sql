@@ -38,7 +38,8 @@ set local role authenticated;
 do $$ declare p record; begin
   assert (select count(*)=1 from public.list_subscription_management_delegates() where person_id='a1000000-0000-4000-8000-000000000015'), 'Existing independent Manager register delegation remains';
   assert not exists(select 1 from public.list_subscription_management_delegates() where person_id in ('a1000000-0000-4000-8000-000000000006','a1000000-0000-4000-8000-000000000008')), 'Stale non-Manager delegates are not effective';
-  assert not exists(select 1 from public.list_subscription_credential_grant_candidates() where person_id in ('a1000000-0000-4000-8000-000000000006','a1000000-0000-4000-8000-000000000008')), 'Only active linked Managers are optional vault candidates';
+  assert not exists(select 1 from public.list_subscription_credential_grant_candidates() where person_id='a1000000-0000-4000-8000-000000000006'), 'Account remains excluded from subscription delegation';
+  assert exists(select 1 from public.list_subscription_credential_grant_candidates() where person_id='a1000000-0000-4000-8000-000000000008'), 'Active linked Employee is eligible without activating historical grants';
   select * into strict p from public.get_portal_role_capabilities('a1000000-0000-4000-8000-000000000015');
   assert p.can_manage_subscriptions and not p.can_manage_subscription_credentials, 'Register grant never implies vault';
   select * into strict p from public.get_portal_role_capabilities('a1000000-0000-4000-8000-000000000016');
@@ -50,8 +51,8 @@ do $$ declare p record; begin
   assert p.can_manage_subscriptions and not p.can_manage_subscription_credentials, 'Replacement grants management only';
   begin perform public.replace_subscription_management_delegates(array['a1000000-0000-4000-8000-000000000006']::uuid[]);
     raise exception 'Account received a new management delegation'; exception when invalid_parameter_value then null; end;
-  begin perform public.replace_subscription_credential_access_grants(array['a1000000-0000-4000-8000-000000000008']::uuid[]);
-    raise exception 'Employee received new vault delegation'; exception when invalid_parameter_value then null; end;
+  begin perform public.replace_subscription_credential_access_grants(array['a1000000-0000-4000-8000-000000000006']::uuid[]);
+    raise exception 'Account received new vault delegation'; exception when invalid_parameter_value then null; end;
   begin perform public.replace_subscription_management_delegates(array['a1000000-0000-4000-8000-000000000014','a1000000-0000-4000-8000-000000000014']::uuid[]);
     raise exception 'Duplicate management delegates accepted'; exception when invalid_parameter_value then null; end;
   begin perform public.replace_subscription_management_delegates(array[null]::uuid[]);

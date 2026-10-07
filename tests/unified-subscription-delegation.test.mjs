@@ -95,6 +95,7 @@ test('subscription page exposes separate management/vault switches, controlled o
   assert.ok(switches.some(n=>/Register management/.test(n.props['aria-label'])));
   assert.ok(switches.some(n=>/Credential vault/.test(n.props['aria-label'])));
   assert.match(text(tree),/Admin.*role|role.*Admin/);
+  assert.match(text(tree),/Active Managers and Employees/);
 });
 test('acknowledged vault failure invalidates committed management once and retains a blocked draft',async()=>{
   const f = await delegationDialogFixture({vaultResult:{ok:false,message:'Synthetic acknowledged failure'}});
@@ -159,7 +160,7 @@ test('partial grant saves stay blocked until an explicit authoritative delegatio
   f.snapshots.management = [{personId:targetId,fullName:'Synthetic Manager',positionTitle:'Tester'}];
   nodes(tree).find(node=>node.type==='button' && text(node)==='Reload delegation').props.onClick();
   tree = f.render();
-  assert.match(text(tree),/Loading Managers/);
+  assert.match(text(tree),/Loading delegates/);
   await flush();tree = f.render();
   assert.equal(f.loads.length,6);
   assert.deepEqual(f.calls,[['management',[targetId]],['vault',[targetId]],['invalidate']]);
