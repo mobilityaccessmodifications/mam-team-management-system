@@ -19,7 +19,7 @@ select ('71000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,
 insert into public.internal_org_people(id,full_name,node_kind,company_key,position_title,auth_user_id,started_date)
 select ('72000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,
   'Synthetic review employee '||n,'person','mam','Synthetic tester',
-  ('71000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,current_date+1 from generate_series(2,6) n;
+  ('71000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,timezone('Australia/Melbourne',clock_timestamp())::date+1 from generate_series(2,6) n;
 update private.employee_onboarding_credentials set status='needs_review',review_code='delivery_uncertain',
   claimed_login='synthetic-private@example.test',claimed_work_email='synthetic-private@example.test',
   claimed_personal_email='synthetic-home@example.test',claim_token=gen_random_uuid(),
@@ -129,7 +129,7 @@ reset role;
 select set_config('request.jwt.claim.sub','',true);
 do $$ declare original jsonb; begin
   select row into original from review_before;
-  update public.internal_org_people set started_date=current_date-1 where id='72000000-0000-4000-8000-000000000006';
+  update public.internal_org_people set started_date=timezone('Australia/Melbourne',clock_timestamp())::date-1 where id='72000000-0000-4000-8000-000000000006';
   assert (select status='cancelled' from private.employee_onboarding_credentials where id=(original->>'id')::uuid),
     'Ordinary scheduler must not requeue a cancelled credential';
   assert private.confirmed_test_purge_schema_hash()=(select schema_hash from private.confirmed_test_purge_schema);

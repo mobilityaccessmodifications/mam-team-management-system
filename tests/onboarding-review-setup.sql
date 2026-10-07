@@ -10,7 +10,7 @@ select ('73000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,
 insert into public.internal_org_people(id,full_name,node_kind,company_key,position_title,auth_user_id,started_date)
 select ('74000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,
   'Synthetic review race employee '||n,'person','mam','Synthetic tester',
-  ('73000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,current_date+1 from generate_series(3,8) n;
+  ('73000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,timezone('Australia/Melbourne',clock_timestamp())::date+1 from generate_series(3,8) n;
 insert into private.employee_directory_details(person_id,first_name,work_email)
 select ('74000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,
   'Synthetic','synthetic-review-race-'||n||'@example.test' from generate_series(3,8) n;
