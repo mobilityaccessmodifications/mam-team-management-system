@@ -79,28 +79,33 @@ export function LeaveRequestDialog({
   const [endTime, setEndTime] = useState("");
   const dateRangeError = leaveDateRangeError(formStartDate, formEndDate);
   const balancePerson = leavePriority?.people.find((person) => person.personId === (requestForPersonId || activeProfile.id));
-  const requestedHours = dateRangeError ? null : requestedLeaveHours(formStartDate, formEndDate, startTime, endTime,
-    balancePerson?.requestFullDayHours ?? (employmentType === "full_time" ? 7.6 : 7.5));
   const balanceError = [INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, UNCONFIRMED_ACCRUAL_MESSAGE].includes(formError);
   const personId = requestForPersonId || activeProfile.id;
-  const projectionKey = JSON.stringify([personId, formStartDate, previewPersonId]);
+  const projectionKey = JSON.stringify([personId, formStartDate, formEndDate, startTime, endTime, previewPersonId]);
   const [projectionState, setProjectionState] = useState<{ key: string; data: AnnualLeaveProjection | null } | null>(null);
   const projection = projectionState?.key === projectionKey ? projectionState.data : null;
   const projectionLoading = !dateRangeError && formLeaveType === "Annual leave" && projectionState?.key !== projectionKey;
-  const limitGuidance = !dateRangeError && formLeaveType === "Annual leave" && !projectionLoading && projection?.status !== "unavailable"
+  const quantityPolicy = projection?.quantityPolicy ? {
+    ...projection.quantityPolicy, publicHolidayDates: new Set(projection.quantityPolicy.publicHolidayDates),
+  } : undefined;
+  const requestedHours = formLeaveType === "Annual leave"
+    ? projection?.requestedHours ?? null
+    : dateRangeError ? null : requestedLeaveHours(formStartDate, formEndDate, startTime, endTime,
+      balancePerson?.requestFullDayHours ?? (employmentType === "full_time" ? 7.6 : 7.5));
+  const limitGuidance = quantityPolicy && !dateRangeError && formLeaveType === "Annual leave" && !projectionLoading && projection?.status !== "unavailable"
     ? annualLeaveLimitGuidance(formStartDate, formEndDate, startTime, endTime,
-      balancePerson?.requestFullDayHours ?? (employmentType === "full_time" ? 7.6 : 7.5), projection?.availableHours)
+      balancePerson?.requestFullDayHours ?? (employmentType === "full_time" ? 7.6 : 7.5), projection?.availableHours, quantityPolicy)
     : null;
   useEffect(() => {
     if (formLeaveType !== "Annual leave" || dateRangeError) return;
     let active = true;
     const timer = setTimeout(() => {
-      void previewAnnualLeaveBalance(personId, formStartDate, previewPersonId)
+      void previewAnnualLeaveBalance(personId, formStartDate, previewPersonId, formEndDate, startTime, endTime)
         .then((data) => { if (active) setProjectionState({ key: projectionKey, data }); })
         .catch(() => { if (active) setProjectionState({ key: projectionKey, data: null }); });
     }, 200);
     return () => { active = false; clearTimeout(timer); };
-  }, [personId, formStartDate, previewPersonId, projectionKey, formLeaveType, dateRangeError]);
+  }, [personId, formStartDate, formEndDate, startTime, endTime, previewPersonId, projectionKey, formLeaveType, dateRangeError]);
   return (
     <>
     <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeLeaveRequestForm()}>

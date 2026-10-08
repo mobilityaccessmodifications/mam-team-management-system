@@ -83,7 +83,7 @@ test('unknown employment fails closed and partial-day summary retains times/time
 for(const invalid of [
  {startDate:'2026-02-30'},{endDate:'2026-10-01'},{endDate:'2028-10-12'},
  {leaveType:'Other'},{startTime:'12:10',endTime:'16:00'},{startTime:'16:00',endTime:'12:00'},
- {startDate:'2026-10-11',endDate:'2026-10-11'},{employeeNote:'x'.repeat(2001)},
+ {leaveType:'Unpaid leave',startDate:'2026-10-11',endDate:'2026-10-11'},{employeeNote:'x'.repeat(2001)},
  {employeeNote:'hidden\u202e'},{employeeNote:'hidden\u0000'},
 ]) test(`field policy rejects ${Object.keys(invalid).join('/')}`,async()=>{
  const f=fixture();const r=await f.call(f.packet('prepare',{...input(),...invalid}));
@@ -93,4 +93,13 @@ test('one missing time asks for its pair; no optional note required',async()=>{
  const f=fixture(); const r=await f.call(f.packet('prepare',{...input(),startTime:'12:00'}));
  assert.deepEqual(r.body,{code:'needs_input',missing:['endTime']});
  const p=await f.call(f.packet('prepare',input()));assert.match(p.body.summary,/Note \(optional\): None/);
+});
+
+test('annual weekend reaches authoritative saved-policy validation without changing consent rules',async()=>{
+  const f=fixture(); const r=await f.call(f.packet('prepare',{...input(),startDate:'2026-10-11',endDate:'2026-10-11'}));
+  assert.equal(r.status,200); assert.equal(r.body.code,'prepared'); assert.equal(f.writes(),0);
+  const partial=await f.call(f.packet('prepare',{...input(),startDate:'2026-10-11',endDate:'2026-10-11',startTime:'09:00',endTime:'14:00'}));
+  assert.equal(partial.status,200); assert.equal(partial.body.code,'prepared'); assert.equal(f.writes(),0);
+  const multi=await f.call(f.packet('prepare',{...input(),endDate:'2026-10-13',startTime:'09:00',endTime:'14:00'}));
+  assert.equal(multi.status,400); assert.equal(f.writes(),0);
 });

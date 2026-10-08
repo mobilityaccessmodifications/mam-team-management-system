@@ -20,6 +20,12 @@ select public.set_employee_annual_leave_balance(id,200,'2026-09-01',false) from 
 select public.set_employee_sick_leave_balance(id,80,'2026-09-01') from public.internal_org_people where id::text like '96000000%';
 insert into private.leave_accrual_policies(person_id,effective_from,weekly_hours,weekdays,annual_weeks,personal_weeks,enabled,note,actor_user_id)
 select id,'2026-09-02',38,array[1,2,3,4,5],4,2,true,'Synthetic policy','96000000-0000-4000-8000-000000000001' from public.internal_org_people where id::text like '96000000%';
+do $$ begin
+  if to_regclass('private.leave_payroll_calendars') is not null then
+    execute $fixture$insert into private.leave_payroll_calendars(person_id,calendar_key)
+      select id,'none' from public.internal_org_people where id::text like '96000000%'$fixture$;
+  end if;
+end $$;
 insert into public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment) values
 ('96000000-0000-4000-8000-000000000012','96000000-0000-4000-8000-000000000002','96000000-0000-4000-8000-000000000002','annual','Annual leave','2026-09-24','2026-09-25',2,'approved',now(),'historical_import',repeat('a',64),'full_time','paid_entitlement'),
 ('96000000-0000-4000-8000-000000000013','96000000-0000-4000-8000-000000000003','96000000-0000-4000-8000-000000000003','annual','Annual leave','2026-09-04','2026-09-25',16,'approved',now(),'historical_import',repeat('b',64),'full_time','paid_entitlement');

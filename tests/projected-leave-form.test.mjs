@@ -6,9 +6,9 @@ const balance={};
 new Function('exports',ts.transpileModule(fs.readFileSync('src/lib/leave-request-balance.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(balance);
 function render({available=8,status='projected',key,loading=false}={}) {
   const calls=[];let state=0;
-  const projection={status,projectedDate:'2026-10-12',availableHours:available};
+  const projection={status,projectedDate:'2026-10-12',availableHours:available,requestedHours:7.6};
   const imports={
-    react:{useRef:v=>({current:v}),useEffect(){},useState:v=>[++state===3?(loading?null:{key:key??JSON.stringify(['self','2026-10-12',null]),data:projection}):v,()=>{}]},
+    react:{useRef:v=>({current:v}),useEffect(){},useState:v=>[++state===3?(loading?null:{key:key??JSON.stringify(['self','2026-10-12','2026-10-12','','',null]),data:projection}):v,()=>{}]},
     'react/jsx-runtime':{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'fragment'},
     'lucide-react':{},'@/app/leave/actions':{},'@/components/leave-priority-controls':{LeaveRequestBalance:'balance'},
     '@/components/ui/modal-backdrop':{ModalBackdrop:'backdrop'},'@/components/ui/use-dialog-focus':{useDialogFocus(){}},

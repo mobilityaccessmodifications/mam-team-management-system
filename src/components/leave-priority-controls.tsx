@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { ChevronDown, HeartPulse, Palmtree } from "lucide-react";
 import { LeaveAccrualControls, LeaveAccrualNotice } from "@/components/leave-accrual-controls";
 import { saveAnnualLeaveBalance, saveSickLeaveBalance } from "@/app/leave/actions";
-import { approvalBalanceCoverage, leaveDateLabel, melbourneToday, type LeavePriorityWorkspace } from "@/lib/leave-priority";
+import { approvalBalanceCoverage, leaveDateLabel, melbourneToday, type LeavePriorityWorkspace, type LeaveBankSourceKind } from "@/lib/leave-priority";
 import type { AnnualLeaveProjection } from "@/lib/leave-request-balance";
 import styles from "@/components/leave-demo.module.css";
 
@@ -32,6 +32,7 @@ function ApprovalBalanceCard({
   label,
   currentHours,
   approvedHours,
+  accruedHours,
   retainedHours,
   balanceSource,
   availableHours,
@@ -43,8 +44,9 @@ function ApprovalBalanceCard({
   label: string;
   currentHours?: number | null;
   approvedHours?: number | null;
+  accruedHours?: number | null;
   retainedHours?: number | null;
-  balanceSource?: "owner_estimate" | "confirmed_usage" | null;
+  balanceSource?: "owner_estimate" | "confirmed_usage" | LeaveBankSourceKind | null;
   availableHours?: number | null;
   asOf?: string | null;
   sick?: boolean;
@@ -59,12 +61,13 @@ function ApprovalBalanceCard({
   return <article className={`${styles.balanceCard} ${styles.balanceBreakdownCard}`} data-kind={sick ? "sick" : "annual"}>
     <header>
       <span className={styles.balanceIcon}><Icon size={21} strokeWidth={1.7} aria-hidden="true" /></span>
-      <span><strong>{label}</strong>{asOf ? <small>{balanceSource ? "As at" : "Xero as at"} {leaveDateLabel(asOf)}</small> : null}{balanceSource ? <small>{balanceSource === "owner_estimate" ? "Owner-approved estimate" : "Audited payroll reconciliation"}</small> : null}</span>
+      <span><strong>{label}</strong>{asOf ? <small>{balanceSource ? "As at" : "Xero as at"} {leaveDateLabel(asOf)}</small> : null}{balanceSource ? <small>{balanceSource === "owner_estimate" ? "Owner-approved estimate" : balanceSource === "payroll_report" ? "Xero payroll report" : balanceSource === "payslip" ? "Payroll payslip" : balanceSource === "manual_snapshot" ? "Administrator balance" : "Audited payroll reconciliation"}</small> : null}</span>
     </header>
     <dl className={styles.balanceBreakdown}>
       <div><dt>{balanceSource ? "Banked balance" : "Current Xero balance"}</dt><dd>{amount(currentHours)}</dd></div>
       <div><dt>{balanceSource ? "Approved leave after balance date" : "Approved leave in People Hub"}</dt><dd>{amount(approvedHours == null ? null : approvedHours - (retainedHours ?? 0), true)}</dd></div>
       {retainedHours != null && retainedHours > 0 ? <div><dt>Retained unsettled commitment</dt><dd>{amount(retainedHours, true)}</dd></div> : null}
+      {!projection && accruedHours != null && accruedHours > 0 ? <div><dt>Eligible accrued leave</dt><dd>{amount(accruedHours)}</dd></div> : null}
       {projection ? <>
         <div><dt>Estimated accrual before leave starts</dt><dd>{amount(projection.accruedHours)}</dd></div>
         {Boolean(projection.otherTakenHours) ? <div><dt>Other confirmed leave taken</dt><dd>{amount(projection.otherTakenHours, true)}</dd></div> : null}
@@ -141,13 +144,13 @@ export function LeavePriorityControls({ workspace, busy, onRequest, onSaved }: {
         <small>Banked annual: {person.annualPayrollHours == null ? "Unavailable" : `${balanceHours(person.annualPayrollHours)} hours`}</small>
         {person.annualRetainedHours != null && person.annualRetainedHours > 0 ? <small>Retained unsettled annual: {balanceHours(person.annualRetainedHours)} hours</small> : null}
         <small>Annual available after approved leave: {person.annualAvailableHours == null ? "Unavailable" : `${balanceHours(person.annualAvailableHours)} hours`}</small>
-        <small>{person.annualBalanceSource === "owner_estimate" ? "Owner-approved estimate" : "Audited payroll reconciliation"}</small>
+        <small>{person.annualBalanceSource === "owner_estimate" ? "Owner-approved estimate" : person.annualBalanceSource === "payroll_report" ? "Xero payroll report" : person.annualBalanceSource === "payslip" ? "Payroll payslip" : person.annualBalanceSource === "manual_snapshot" ? "Administrator balance" : "Audited payroll reconciliation"}</small>
       </> : <small>{person.paidLeave ? `Annual: ${person.hours == null ? "Not supplied" : `${balanceHours(person.hours)} hours`}` : "Unpaid leave only"}</small> : null}
         {person.canViewSickBalance ? person.sickBalanceSource ? <>
           <small>Banked sick: {person.sickPayrollHours == null ? "Unavailable" : `${balanceHours(person.sickPayrollHours)} hours`}</small>
           {person.sickRetainedHours != null && person.sickRetainedHours > 0 ? <small>Retained unsettled sick: {balanceHours(person.sickRetainedHours)} hours</small> : null}
           <small>Sick available after approved leave: {person.sickAvailableHours == null ? "Unavailable" : `${balanceHours(person.sickAvailableHours)} hours`}</small>
-          <small>{person.sickBalanceSource === "owner_estimate" ? "Owner-approved estimate" : "Audited payroll reconciliation"}</small>
+          <small>{person.sickBalanceSource === "owner_estimate" ? "Owner-approved estimate" : person.sickBalanceSource === "payroll_report" ? "Xero payroll report" : person.sickBalanceSource === "payslip" ? "Payroll payslip" : person.sickBalanceSource === "manual_snapshot" ? "Administrator balance" : "Audited payroll reconciliation"}</small>
         </> : <small>Sick: {person.sickHours == null ? "Not supplied" : `${balanceHours(person.sickHours)} hours`}</small> : null}
         <LeaveAccrualNotice person={person} />
       </div>
@@ -202,7 +205,7 @@ export function ApprovalLeaveBalances({ workspace, personId, requestId }: {
     <strong>Leave balances</strong>
     <div className={styles.balanceCards}>
       {annualBreakdown
-        ? <ApprovalBalanceCard label="Annual leave" currentHours={person.canViewBalance ? person.annualPayrollHours : null} approvedHours={person.canViewBalance ? person.annualApprovedHours : null} retainedHours={person.canViewBalance ? person.annualRetainedHours : null} balanceSource={person.canViewBalance ? person.annualBalanceSource : null} availableHours={person.canViewBalance ? person.annualAvailableHours : null} asOf={person.canViewBalance ? person.annualPayrollDate : null} />
+        ? <ApprovalBalanceCard label="Annual leave" accruedHours={person.canViewBalance ? person.annualEarnedHours : null} currentHours={person.canViewBalance ? person.annualPayrollHours : null} approvedHours={person.canViewBalance ? person.annualApprovedHours : null} retainedHours={person.canViewBalance ? person.annualRetainedHours : null} balanceSource={person.canViewBalance ? person.annualBalanceSource : null} availableHours={person.canViewBalance ? person.annualAvailableHours : null} asOf={person.canViewBalance ? person.annualPayrollDate : null} />
         : <BalanceCard label="Annual leave" hours={person?.canViewBalance ? person.hours : null} />}
       {person?.canViewSickBalance ? sickBreakdown
         ? <ApprovalBalanceCard label="Sick leave" currentHours={person.sickPayrollHours} approvedHours={person.sickApprovedHours} retainedHours={person.sickRetainedHours} balanceSource={person.sickBalanceSource} availableHours={person.sickAvailableHours} asOf={person.sickPayrollDate} sick />

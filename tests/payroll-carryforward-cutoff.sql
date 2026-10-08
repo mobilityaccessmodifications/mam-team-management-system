@@ -53,8 +53,10 @@ update private.employee_directory_details set scheduled_employment_end_date='202
 do $$declare pid uuid:='96000000-0000-4000-8000-000000000003'; calculation jsonb; begin
   calculation:=private.calculate_employee_leave_accrual(pid,(now() at time zone 'Australia/Melbourne')::date-1);
   assert calculation->>'status'='current';
-  assert (calculation->>'annualTaken')::numeric=0;
-  assert private.payroll_request_unconsumed_hours(pid,'2026-09-24',(calculation->>'annualAsOf')::date)=45.6, 'A review omitted from current accrual cannot release a commitment';
+  assert (calculation->>'annualTaken')::numeric=7.6, 'Correcting employment end cannot erase confirmed actual usage';
+  assert (calculation->>'annualExactHours')::numeric=132.8321;
+  assert private.payroll_request_unconsumed_hours(pid,'2026-09-24',(calculation->>'annualAsOf')::date)=45.6, 'Legacy commitment diagnostics remain conservative after the employment end';
+  assert (private.project_annual_leave_balance(pid,((calculation->>'annualAsOf')::date+1))->>'availableHours')::numeric=94.8321, 'Confirmed usage overlapping the preserved reservation is debited once';
 end$$;
 rollback to employment_end;
 savepoint missing_review;

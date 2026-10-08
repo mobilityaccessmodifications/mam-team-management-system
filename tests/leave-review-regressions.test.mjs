@@ -61,14 +61,14 @@ const person = { personId: "employee", name: "Synthetic Employee", canViewBalanc
 const request = { id: "request", personId: "employee", employee: "Synthetic Employee", initials: "SE", team: "Synthetic team",
   leaveType: "Annual leave", days: 1, fullDayHours: 7.6, dateLabel: "23 Sept 2026", status: priority.BALANCE_PENDING_STATUS };
 
-function approval({ sufficient, personChanges, status = priority.BALANCE_PENDING_STATUS, missing = false } = {}) {
+function approval({ sufficient, personChanges, requestChanges, quantityMetadata = { requiredHours: 7.6 }, status = priority.BALANCE_PENDING_STATUS, missing = false, busy = false, readOnly = false } = {}) {
   const decisions = [];
-  const currentRequest = { ...request, status };
+  const currentRequest = { ...request, ...requestChanges, status };
   const workspace = { people: [{ ...person, ...personChanges }], requests: missing ? [] : [{ id: request.id,
-    pendingBalance: status === priority.BALANCE_PENDING_STATUS, requiredHours: 7.6, balanceSufficient: sufficient }] };
+    pendingBalance: status === priority.BALANCE_PENDING_STATUS, ...quantityMetadata, balanceSufficient: sufficient }] };
   const tree = ApprovalsView({ leavePriority: workspace, pending: [currentRequest], selected: currentRequest,
     selectedId: request.id, note: "", calendarRequests: [], calendarCheckIns: [], attachmentsByRequestId: new Map(),
-    busy: false, readOnly: false, onDecision: (decision) => decisions.push(decision) });
+    busy, readOnly, onDecision: (decision) => decisions.push(decision) });
   return { decisions, tree, html: renderToStaticMarkup(tree), button: nodes(tree).find((node) => node.props?.className === "approveButton") };
 }
 
@@ -106,6 +106,57 @@ test("F01: ordinary pending requests retain the existing conditional approval po
   assert.equal(content(button), " Approve pending balance");
   button.props.onClick();
   assert.deepEqual(decisions, [priority.BALANCE_PENDING_STATUS]);
+});
+
+test("canonical saved weekend and longer ordinary-day quantities determine displayed duration and approval", () => {
+  for (const [requiredHours, startDate] of [[6, "2026-10-10"], [12.5, "2026-10-13"]]) {
+    const { html, button, decisions } = approval({ status: "Pending", quantityMetadata: { requiredHours },
+      requestChanges: { startDate, endDate: startDate }, personChanges: { annualAvailableHours: requiredHours } });
+    assert.match(html, new RegExp(`<span>${String(requiredHours).replace(".", "\\.")} hours</span>`));
+    assert.doesNotMatch(html, /7\.6 hours/);
+    assert.match(html, /data-sufficient="true">Enough balance/);
+    assert.equal(button.props.disabled, false);
+    assert.equal(content(button), " Approve");
+    button.props.onClick();
+    assert.deepEqual(decisions, ["Approved"]);
+  }
+});
+
+test("canonical partial-day quantity replaces stored display hours", () => {
+  const { html, button } = approval({ status: "Pending", quantityMetadata: { requiredHours: 5 },
+    requestChanges: { hours: 7.5 }, personChanges: { annualAvailableHours: 5 } });
+  assert.match(html, /<strong>5 hours<\/strong>/);
+  assert.doesNotMatch(html, /7\.5 hours/);
+  assert.equal(button.props.disabled, false);
+});
+
+test("unknown canonical holiday quantity cannot fall back or approve from a sufficient boolean", () => {
+  for (const status of ["Pending", priority.BALANCE_PENDING_STATUS]) {
+    const { html, button } = approval({ status, sufficient: true, quantityMetadata: { requiredHours: null },
+      requestChanges: { startDate: "2026-09-25", endDate: "2026-09-25", hours: 7.6 },
+      personChanges: { annualAvailableHours: 100 } });
+    assert.doesNotMatch(html, /7\.6 hours/);
+    assert.match(html, /data-sufficient="false">Check balance/);
+    assert.equal(button.props.disabled, true);
+    assert.equal(content(button), " Check balance");
+  }
+});
+
+test("canonical funded approval preserves busy, read-only and hidden-balance restrictions", () => {
+  for (const restrictions of [{ busy: true }, { readOnly: true }, { personChanges: { canViewBalance: false, annualAvailableHours: 6 } }]) {
+    const { button } = approval({ status: "Pending", quantityMetadata: { requiredHours: 6 },
+      personChanges: { annualAvailableHours: 6 }, ...restrictions });
+    assert.equal(button.props.disabled, true);
+  }
+});
+
+test("legacy approval payloads use their prior quantity only when canonical metadata is absent", () => {
+  const { html, button, decisions } = approval({ status: "Pending", quantityMetadata: {},
+    personChanges: { annualAvailableHours: 7.6 } });
+  assert.match(html, /<span>7\.6 hours<\/span>/);
+  assert.equal(button.props.disabled, false);
+  button.props.onClick();
+  assert.deepEqual(decisions, ["Approved"]);
 });
 
 test("F05: public-holiday-adjusted evidence date does not retain a false Monday label", () => {
