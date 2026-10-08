@@ -12,7 +12,7 @@ export const draft = {
   employmentType: 'full_time', contractType: '', laptopSupplied: '', laptopId: '', mouseId: '', keyboardId: '', assetTags: [],
   company: 'mam', isActive: true,
 };
-export function loadActions({ dbError = null, authError = null, transportError = null, roleAccess = true, readErrorAt = 0, revalidateError = null, sourceRoot = process.cwd() } = {}) {
+export function loadActions({ dbError = null, authError = null, transportError = null, roleAccess = true, readErrorAt = 0, revalidateError = null, teamManagerError = null, teamManagerDefault = { status: 'missing', managerId: null, managerName: '' }, managerRecord = null, sourceRoot = process.cwd() } = {}) {
   const calls = [];
   let reads = 0;
   const team = { exports: {} };
@@ -22,6 +22,7 @@ export function loadActions({ dbError = null, authError = null, transportError =
     if (transportError) throw transportError;
     if (name === 'get_portal_role_capabilities') return { data: [capabilities(roleAccess ? 'system_admin' : 'admin', roleAccess ? null : personId)], error: null };
     if (name === 'can_manage_portal_accounts') return { data: roleAccess, error: null };
+    if (name === 'get_employee_team_manager_default') return { data: teamManagerDefault, error: teamManagerError };
     return { data: name === 'update_employee_directory_role' ? args.p_role : [{ person_id: personId }], error: dbError };
   } };
   const mod = { exports: {} };
@@ -34,7 +35,7 @@ export function loadActions({ dbError = null, authError = null, transportError =
     'next/cache': { revalidatePath: () => { calls.push({ name: 'revalidate' }); if (revalidateError) throw revalidateError; } },
     '@/lib/employee-directory': {
       requireEmployeeDirectoryManager: async () => { if (authError) throw authError; return { supabase }; },
-      findEmployeeDirectoryRecord: async () => { if (++reads === readErrorAt) throw new Error('private fixture read failure'); return { ...draft, personId, personVersion: 2, detailVersion: 2, fullName: 'Taylor Synthetic' }; },
+      findEmployeeDirectoryRecord: async (_client, id) => { if (++reads === readErrorAt) throw new Error('private fixture read failure'); if (managerRecord?.personId === id) return managerRecord; return { ...draft, personId, personVersion: 2, detailVersion: 2, fullName: 'Taylor Synthetic' }; },
     },
     '@/app/accounts/actions': { createPortalAccount: async () => calls.push({ name: 'account' }) },
     '@/lib/organisation-directory': {}, '@/lib/supabase/admin': {}, '@/lib/portal-account-status': {},
