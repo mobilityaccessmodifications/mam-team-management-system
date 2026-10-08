@@ -3,8 +3,9 @@ import { test, expect } from '@playwright/test';
 const cards = {
   employee: {
     can: /Use own profile, leave, availability calendar, resources and work-schedule requests; view the safe team directory/,
-    cannot: /Approve leave, edit staff or accounts, manage payroll balances, access the credential vault or administer the system/,
+    cannot: /Approve leave, edit staff or accounts, manage payroll balances, manage subscriptions or access credentials without delegation, or administer the system/,
     scope: /Own records and the privacy-preserving team view/,
+    delegation: /Subscription register management and credential-vault access are separate optional switches controlled by Super Admin. Neither grant implies the other/,
   },
   manager: {
     can: /Review reporting-team leave and work-schedule requests, submit leave on behalf of eligible reports, review check-ins and edit manager-safe directory fields/,

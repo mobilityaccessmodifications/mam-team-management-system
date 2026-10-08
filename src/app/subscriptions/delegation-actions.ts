@@ -31,7 +31,7 @@ export async function replaceSubscriptionManagementDelegates(personIds: string[]
   let committed = false;
   try {
     if (!Array.isArray(personIds) || personIds.length > 24 || new Set(personIds).size !== personIds.length
-      || personIds.some(id => typeof id !== "string" || !UUID_PATTERN.test(id))) return { ok: false, message: "Choose a valid unique list of active Managers." };
+      || personIds.some(id => typeof id !== "string" || !UUID_PATTERN.test(id))) return { ok: false, message: "Choose a valid unique list of active Managers or Employees." };
     const supabase = await requireManagementGrantAdministrator();
     const { error } = await supabase.rpc("replace_subscription_management_delegates", { p_person_ids: personIds });
     if (error) throw new Error(SAVE_ERROR);

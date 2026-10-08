@@ -3,8 +3,9 @@ export const ROLE_PERMISSION_CARDS: Record<OrdinaryPortalRole, { label: string; 
   employee: {
     label: "Team member",
     can: "Use own profile, leave, availability calendar, resources and work-schedule requests; view the safe team directory.",
-    cannot: "Approve leave, edit staff or accounts, manage payroll balances, access the credential vault or administer the system.",
+    cannot: "Approve leave, edit staff or accounts, manage payroll balances, manage subscriptions or access credentials without delegation, or administer the system.",
     scope: "Own records and the privacy-preserving team view.",
+    delegation: "Subscription register management and credential-vault access are separate optional switches controlled by Super Admin. Neither grant implies the other.",
   },
   manager: {
     label: "Manager",
