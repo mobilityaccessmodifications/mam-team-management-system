@@ -622,7 +622,7 @@ DO $$ DECLARE r uuid; BEGIN
   ASSERT private.leave_request_quantity('b1000000-0000-4000-8000-000000000002','2030-12-09','2030-12-09','09:00','11:10',2.17)=130::numeric/60;
   ASSERT private.leave_request_quantity('b1000000-0000-4000-8000-000000000002','2030-12-09','2030-12-09','09:00','11:10',6) IS NULL;
   INSERT INTO public.leave_requests(employee_person_id,record_origin,source_record_sha256,status,submitted_at,leave_type,request_type_label,start_date,end_date,business_days,start_time,end_time,hours)
-  VALUES('b1000000-0000-4000-8000-000000000002','historical_import',repeat('d',64),'submitted',now(),'annual','Annual leave','2030-12-09','2030-12-09',1,'09:00:00','11:00:30',2.01) RETURNING id INTO r;
+  VALUES('b1000000-0000-4000-8000-000000000002','historical_import',encode(sha256(convert_to('synthetic-annual-historical-timed-precision-20261008','UTF8')),'hex'),'submitted',now(),'annual','Annual leave','2030-12-09','2030-12-09',1,'09:00:00','11:00:30',2.01) RETURNING id INTO r;
   ASSERT (SELECT hours=2.01 FROM public.leave_requests WHERE id=r);
   ASSERT private.leave_request_required_hours(r)=7230::numeric/3600;
   ASSERT private.leave_payroll_day_hours(r,'2030-12-09')=7230::numeric/3600;
