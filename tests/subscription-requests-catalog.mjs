@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {command,createDatabase,sql,target} from '../scripts/local-test-postgres.mjs';
 
 export function runSubscriptionRequestCatalog(socket,group='all') {
-  const migration='supabase/migrations/20261008140000_subscription_requests_milestone1.sql';
+  const migration='supabase/migrations/20261008150000_subscription_requests_milestone1.sql';
   const source=readFileSync(migration,'utf8');
   const sourceHash=createHash('sha256').update(source).digest('hex');
   const refresh=source.includes('do $sr_refresh$')?'do $sr_refresh$':'update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;';
@@ -32,7 +32,7 @@ export function runSubscriptionRequestCatalog(socket,group='all') {
   const inputPins=hashInputs();
   const proof=mkdtempSync(path.join(socket,'mam-sr-catalog-'));const records=[];
   const save=()=>writeFileSync(path.join(proof,'RESULT.json'),JSON.stringify({source_sha256:sourceHash,inputs:inputPins,records},null,2)+'\n',{mode:0o600});save();
-  const dataTables=['auth.users','public.profiles','public.internal_org_people','private.portal_account_admins','private.portal_account_admin_events',
+  const dataTables=['auth.users','public.profiles','public.internal_org_people','private.portal_account_admins','private.portal_account_admin_events','private.employee_team_manager_defaults',
     'private.subscription_register','private.subscription_memberships','private.subscription_audit_events','private.subscription_management_grants',
     'private.subscription_management_grant_events','private.subscription_credential_vault','private.subscription_credential_audit_events',
     'private.subscription_credential_access_grants','private.subscription_credential_access_audit_events','private.subscription_credential_grant_changes'];
@@ -54,6 +54,7 @@ export function runSubscriptionRequestCatalog(socket,group='all') {
       } else sql(socket,predecessor,readFileSync('supabase/migrations/'+f,'utf8'));
     }
     command('psql',[...target(socket,predecessor),'-f','tests/unified-role-fixture.sql']);
+    sql(socket,predecessor,"insert into private.employee_team_manager_defaults(company_key,team_name,manager_person_id,configured_by_auth_user_id) values('mam','Operation & Accounts','a1000000-0000-4000-8000-000000000004','a1000000-0000-4000-8000-000000000004');");
     const before=snapshot(predecessor);
     assert.equal(before.actual,before.stored);
     const positive=predecessor+'_positive';
@@ -103,9 +104,19 @@ export function runSubscriptionRequestCatalog(socket,group='all') {
       ['trigger_predicate','before_checks','drop trigger subscription_request_events_immutable on private.subscription_request_events;create trigger subscription_request_events_immutable before update or delete on private.subscription_request_events for each row when(false) execute function private.sr_immutable();'],
       ['trigger_columns','before_checks','drop trigger subscription_request_events_immutable on private.subscription_request_events;create trigger subscription_request_events_immutable before update of version or delete on private.subscription_request_events for each row execute function private.sr_immutable();'],
       ['existing_data','before_checks',"update public.profiles set updated_at=clock_timestamp() where id='a1000000-0000-4000-8000-000000000004';"],
-      ['configuration_seed','before_checks',"update private.subscription_request_config set enabled=true,approver_user_id='a1000000-0000-4000-8000-000000000004',approver_person_id='a1000000-0000-4000-8000-000000000004';"]
+      ['configuration_seed','before_checks',"update private.subscription_request_config set enabled=true,approver_user_id='a1000000-0000-4000-8000-000000000004',approver_person_id='a1000000-0000-4000-8000-000000000004';"],
+      ['main221_before_getter_acl','before_snapshot','grant execute on function public.get_employee_team_manager_default(text,text) to anon;'],
+      ['main221_before_creator_security','before_snapshot','alter function public.create_employee_directory_record(text,text,text,text,text,text,text,uuid,text,date,date,date,text,boolean,text,text,text,text,text[],integer) security invoker;'],
+      ['main221_before_config_default','before_snapshot','alter table private.employee_team_manager_defaults alter column version set default 2;'],
+      ['main221_before_config_rls','before_snapshot','alter table private.employee_team_manager_defaults disable row level security;'],
+      ['main221_before_type_acl','before_snapshot','grant usage on type private.employee_team_manager_defaults to anon;'],
+      ['main221_after_config_data','before_checks',"update private.employee_team_manager_defaults set version=version+1 where company_key='mam';"],
+      ['main221_after_getter_acl','before_checks','grant execute on function public.get_employee_team_manager_default(text,text) to anon;'],
+      ['main221_after_creator_security','before_checks','alter function public.create_employee_directory_record(text,text,text,text,text,text,text,uuid,text,date,date,date,text,boolean,text,text,text,text,text[],integer) security invoker;'],
+      ['main221_deferred_config_pre','before_checks',queue("update private.employee_team_manager_defaults set version=version+1 where company_key='mam'")],
+      ['main221_deferred_config_post','after_refresh',queue("update private.employee_team_manager_defaults set version=version+1 where company_key='mam'")]
     ];
-    const selected=group==='all'?cases:cases.filter(c=>c[0]===group);assert.ok(selected.length>0);
+    const selected=group==='all'?cases:cases.filter(c=>group==='main221'?c[0].startsWith('main221_'):c[0]===group);assert.ok(selected.length>0);
     assert.equal(new Set(selected.map(c=>c[0])).size,selected.length);
     for(const [name,phase,fault,benign=false] of selected) {
       const database=predecessor+'_'+name;

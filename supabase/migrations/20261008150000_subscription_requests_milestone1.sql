@@ -9,7 +9,7 @@ do $sr_predecessor$ begin
   end if;
 end $sr_predecessor$;
 lock table private.confirmed_test_purge_schema in share row exclusive mode nowait;
-lock table auth.users,private.portal_account_admin_events,private.portal_account_admins,private.subscription_audit_events,private.subscription_credential_access_audit_events,private.subscription_credential_access_grants,private.subscription_credential_audit_events,private.subscription_credential_grant_changes,private.subscription_credential_vault,private.subscription_management_grant_events,private.subscription_management_grants,private.subscription_memberships,private.subscription_register,public.internal_org_people,public.profiles in share row exclusive mode nowait;
+lock table auth.users,private.employee_team_manager_defaults,private.portal_account_admin_events,private.portal_account_admins,private.subscription_audit_events,private.subscription_credential_access_audit_events,private.subscription_credential_access_grants,private.subscription_credential_audit_events,private.subscription_credential_grant_changes,private.subscription_credential_vault,private.subscription_management_grant_events,private.subscription_management_grants,private.subscription_memberships,private.subscription_register,public.internal_org_people,public.profiles in share row exclusive mode nowait;
 do $sr_predecessor$ declare predecessor_hash text; begin
   if (select count(*) from private.confirmed_test_purge_schema) <> 1 then
     raise exception 'Subscription requests require one predecessor ledger.' using errcode='55000';
@@ -191,15 +191,248 @@ begin
   where n.nspname in ('public','private','storage');
 end;
 $catalog$;
+create temporary table sr_published_predecessor(kind text not null,object_identity text not null,after_hash text not null,before_definition text,primary key(kind,object_identity)) on commit drop;
+insert into sr_published_predecessor values
+  ('column','private.employee_team_manager_defaults.company_key','e6605275024bf56ce66d3ab37b2568d0d8bb0e61006cc87b1b79e5f67a167468',null),
+  ('column','private.employee_team_manager_defaults.configured_at','be398acfa5d9d0dcb83cec2fe9670a09c1ed2d5782fe8ecb34d16a2117ac8cb1',null),
+  ('column','private.employee_team_manager_defaults.configured_by_auth_user_id','115ab150dcd80075f83c73b5c9c1850acbc4d8b2b33039a4b4e75c8bc0b0450e',null),
+  ('column','private.employee_team_manager_defaults.configured_by_database_role','31211cdfe198bfe29619232e9038808fd3029333225fb6f811cce007d5a86e68',null),
+  ('column','private.employee_team_manager_defaults.manager_person_id','af3eac436abb751f4a9d978f730f881f15388a93b37a05ab5fa31a0f485d4c8e',null),
+  ('column','private.employee_team_manager_defaults.team_name','485c07e7ec42ac0a6aa108931d58b3645b610d165a15ba19f98b7948d462d976',null),
+  ('column','private.employee_team_manager_defaults.version','2a6c34f89054acc3661378c3deb660358d757e5bfae6fb8e870719419f4b88ff',null),
+  ('column','private.employee_team_manager_defaults_pkey.company_key','18f7571ef0723d2e4f19c869a52679a06f9e96067bb1c1999516e5135f19bc9e',null),
+  ('column','private.employee_team_manager_defaults_pkey.team_name','8cf8c9b217e34994afc9862d9bc1e478863200715dc4bcc5b4812916ccb8a3ae',null),
+  ('constraint','private.employee_team_manager_defaults:employee_team_manager_defaults_company_key_check','b93d8f30ffea3296cb163e75f440f8e9082d2915dbb30e5e34d80d43086717ca',null),
+  ('constraint','private.employee_team_manager_defaults:employee_team_manager_defaults_configured_by_auth_user_id_fkey','75e7bcf18c501f7fdf09fab734184790017be8eb4bbf0bc03b5437bf69ecddf8',null),
+  ('constraint','private.employee_team_manager_defaults:employee_team_manager_defaults_manager_person_id_fkey','88a4400f1df9eaaec51b3b52a52e2bc32b029d4f5c29a43beaa46c90b7f80598',null),
+  ('constraint','private.employee_team_manager_defaults:employee_team_manager_defaults_pkey','aaa2ce0ee2127137105507e1dda207a65640160acf14e8eb46c72d81cb1ded31',null),
+  ('constraint','private.employee_team_manager_defaults:employee_team_manager_defaults_team_name_check','47f35f8659cbab738f1018c0ef8e1504edfd06a62906a4375f13c9424a9ce645',null),
+  ('constraint','private.employee_team_manager_defaults:employee_team_manager_defaults_version_check','00d9a2d858138d9c8377b040fb3f07ff072cd3bb40a2a473934ff729d6ba78f0',null),
+  ('function','public.create_employee_directory_record(text, text, text, text, text, text, text, uuid, text, date, date, date, text, boolean, text, text, text, text, text[], integer)','d5f3f4cababd7e532df61c7a4fcec2410acbbeb8ebf32ac157ca3068760ea296',$sr_published_before$CREATE OR REPLACE FUNCTION public.create_employee_directory_record(p_first_name text, p_last_name text, p_work_email text, p_personal_email text, p_phone text, p_position_title text, p_team_name text, p_manager_id uuid, p_country text, p_date_of_birth date, p_started_date date, p_scheduled_employment_end_date date, p_company_key text, p_is_active boolean, p_laptop_supplied text, p_laptop_id text, p_mouse_id text, p_keyboard_id text, p_asset_tags text[], p_sort_order integer DEFAULT 0)
+ RETURNS TABLE(person_id uuid, person_version bigint, detail_version bigint)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_unified_role_fence boolean := private.lock_portal_role_actor();
+  v_actor uuid := (select auth.uid());
+  v_first_name text;
+  v_last_name text;
+  v_work_email text;
+  v_personal_email text;
+  v_phone text;
+  v_position_title text;
+  v_team_name text;
+  v_country text;
+  v_laptop_supplied text;
+  v_laptop_id text;
+  v_mouse_id text;
+  v_keyboard_id text;
+  v_asset_tags text[];
+  v_company_key text := lower(nullif(btrim(p_company_key), ''));
+  v_full_name text;
+  v_sort_order integer := coalesce(p_sort_order, 0);
+  v_person public.internal_org_people%rowtype;
+  v_detail private.employee_directory_details%rowtype;
+begin
+  if not private.is_internal_org_hr() then
+    raise exception 'Only an authorized HR user can create employee directory records.'
+      using errcode = '42501';
+  end if;
+
+  v_first_name := private.normalise_employee_directory_text(p_first_name, 80, true, 'First name');
+  v_last_name := private.normalise_employee_directory_text(p_last_name, 120, false, 'Last name');
+  v_work_email := private.normalise_employee_directory_email(p_work_email, 'Work email');
+  v_personal_email := private.normalise_employee_directory_email(p_personal_email, 'Personal email');
+  v_phone := private.normalise_employee_directory_text(p_phone, 64, false, 'Phone');
+  v_position_title := private.normalise_employee_directory_text(p_position_title, 120, true, 'Job title');
+  v_team_name := private.normalise_employee_directory_text(p_team_name, 120, false, 'Team');
+  v_country := private.normalise_employee_directory_text(p_country, 120, false, 'Country');
+  v_laptop_supplied := private.normalise_employee_directory_laptop_supplied(p_laptop_supplied);
+  v_laptop_id := private.normalise_employee_directory_text(p_laptop_id, 120, false, 'Laptop ID');
+  v_mouse_id := private.normalise_employee_directory_text(p_mouse_id, 120, false, 'Mouse ID');
+  v_keyboard_id := private.normalise_employee_directory_text(p_keyboard_id, 120, false, 'Keyboard ID');
+  v_asset_tags := private.normalise_employee_directory_asset_tags(p_asset_tags);
+  v_full_name := concat_ws(' ', v_first_name, v_last_name);
+
+  if char_length(v_full_name) > 120 then
+    raise exception 'First and last name together are too long.' using errcode = '22001';
+  end if;
+
+  if v_company_key is null or v_company_key not in ('mam', 'equipsy') then
+    raise exception 'Choose MAM or Equipsy as the company.' using errcode = '22023';
+  end if;
+
+  if p_is_active is null then
+    raise exception 'Choose whether the employee is active.' using errcode = '22004';
+  end if;
+
+  if v_laptop_supplied = 'mam_laptop' and v_laptop_id is null then
+    raise exception 'A Laptop ID is required for a MAM laptop.' using errcode = '22004';
+  end if;
+
+  if v_sort_order not between 0 and 32767 then
+    raise exception 'Sort order must be between 0 and 32767.' using errcode = '22023';
+  end if;
+
+  if p_date_of_birth is not null and p_date_of_birth > current_date then
+    raise exception 'Date of birth cannot be in the future.' using errcode = '22023';
+  end if;
+
+  if p_scheduled_employment_end_date is not null
+    and p_started_date is not null
+    and p_scheduled_employment_end_date < p_started_date then
+    raise exception 'Scheduled employment end date cannot be before the start date.'
+      using errcode = '22023';
+  end if;
+
+  if p_manager_id is not null then
+    if not exists (
+      select 1
+      from public.internal_org_people manager
+      where manager.id = p_manager_id
+        and manager.node_kind = 'person'
+        and manager.is_active
+    ) then
+      raise exception 'Choose an active employee as the manager.' using errcode = '23503';
+    end if;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('internal_org_people_hierarchy', 0));
+
+  insert into public.internal_org_people (
+    company_key,
+    node_kind,
+    position_title,
+    full_name,
+    parent_id,
+    started_date,
+    sort_order,
+    is_active,
+    auth_user_id,
+    created_by,
+    updated_by
+  )
+  values (
+    v_company_key,
+    'person',
+    v_position_title,
+    v_full_name,
+    p_manager_id,
+    p_started_date,
+    v_sort_order,
+    p_is_active,
+    null,
+    v_actor,
+    v_actor
+  )
+  returning * into v_person;
+
+  insert into private.employee_directory_details (
+    person_id,
+    first_name,
+    last_name,
+    work_email,
+    personal_email,
+    phone,
+    team_name,
+    country,
+    date_of_birth,
+    scheduled_employment_end_date,
+    laptop_supplied,
+    laptop_id,
+    mouse_id,
+    keyboard_id,
+    asset_tags,
+    created_by,
+    updated_by
+  )
+  values (
+    v_person.id,
+    v_first_name,
+    v_last_name,
+    v_work_email,
+    v_personal_email,
+    v_phone,
+    v_team_name,
+    v_country,
+    p_date_of_birth,
+    p_scheduled_employment_end_date,
+    v_laptop_supplied,
+    v_laptop_id,
+    v_mouse_id,
+    v_keyboard_id,
+    v_asset_tags,
+    v_actor,
+    v_actor
+  )
+  returning * into v_detail;
+
+  insert into private.employee_directory_audit_events (
+    person_id,
+    actor_user_id,
+    event_type,
+    changed_fields
+  )
+  values (
+    v_person.id,
+    v_actor,
+    'created',
+    array[
+      'first_name',
+      'last_name',
+      'work_email',
+      'personal_email',
+      'phone',
+      'position_title',
+      'team_name',
+      'manager_id',
+      'country',
+      'date_of_birth',
+      'started_date',
+      'scheduled_employment_end_date',
+      'company_key',
+      'is_active',
+      'sort_order',
+      'laptop_supplied',
+      'laptop_id',
+      'mouse_id',
+      'keyboard_id',
+      'asset_tags'
+    ]::text[]
+  );
+
+  return query select v_person.id, v_person.version, v_detail.version;
+end;
+$function$
+$sr_published_before$),
+  ('function','public.get_employee_team_manager_default(text, text)','3301244c4cbf06ae7e0ecfa1711c73d58a05bdac2e0cd2f914197d8f169a155a',null),
+  ('function_security','public.get_employee_team_manager_default(text, text)','9b6712489182a62306a6b7f682d82499b0f0a7d56c7811574e26df13f6c6f404',null),
+  ('global_function_acl','public.get_employee_team_manager_default(text, text)','48cbe0bdca3235e1dba22f9504e61b3c8e254ede516a33fa6fe51f6537916ca9',null),
+  ('global_relation_acl','private.employee_team_manager_defaults',case current_setting('server_version_num')::integer/10000 when 16 then 'c0e6bb2dbd327bd3c3ef5cf70c329910a5853d629417887f257e091ff5b73577' when 17 then 'd51696be62bea2471822f7114b081fc4989012a076cf2721dc1bf1139b89773d' end,null),
+  ('index','private.employee_team_manager_defaults_pkey','3c6f840a81fa52e854aa4423490e7c6b8667091b53e4e20f1536c831e31fefaf',null),
+  ('relation','private.employee_team_manager_defaults',case current_setting('server_version_num')::integer/10000 when 16 then 'd07dee95e06b266e400556fe83f155d3bc1acedfe62716a92195d68da9b63a6a' when 17 then '441c0e971192032eedaebcff160a2cfc9b91cafaaf71ca7a0472da6aa5d01e07' end,null),
+  ('routine_kind','public.get_employee_team_manager_default(text, text)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+  ('type','private._employee_team_manager_defaults','f34a8c0c042c2f43ba2d26ca715887f97cd06218084b6066532b06990343e9a2',null),
+  ('type','private.employee_team_manager_defaults','cbc380d1794b5266d8c1a87401bd65d7ad562c355a63d3988777884c613fc3d7',null);
 create function pg_temp.sr_capture_catalog() returns table(kind text,object_identity text,definition text)
 language plpgsql stable set search_path='' as $sr_capture$
 declare inventory jsonb; observed text; expected text; begin
   select coalesce(jsonb_agg(to_jsonb(c) order by c.kind collate "C",c.object_identity collate "C"),'[]'::jsonb)
     into inventory from pg_temp.sr_inventory() c;
+  if exists(select 1 from pg_temp.sr_published_predecessor d
+    left join jsonb_to_recordset(inventory) as c(kind text,object_identity text,definition text)
+      on c.kind=d.kind and c.object_identity=d.object_identity
+    where c.kind is null or encode(extensions.digest(c.definition,'sha256'),'hex') is distinct from d.after_hash) then
+    raise exception 'Published Team Manager predecessor metadata differs.' using errcode='55000';
+  end if;
   select encode(extensions.digest(jsonb_agg(jsonb_build_object('kind',c.kind,'object_identity',c.object_identity,
-    'definition',case when c.kind='role' then (c.definition::jsonb-'oid')::text else c.definition end)
+    'definition',case when c.kind='role' then (c.definition::jsonb-'oid')::text else coalesce(d.before_definition,c.definition) end)
     order by c.kind collate "C",c.object_identity collate "C")::text,'sha256'),'hex') into observed
-    from jsonb_to_recordset(inventory) as c(kind text,object_identity text,definition text);
+    from jsonb_to_recordset(inventory) as c(kind text,object_identity text,definition text)
+    left join pg_temp.sr_published_predecessor d on d.kind=c.kind and d.object_identity=c.object_identity
+    where d.kind is null or d.before_definition is not null;
   expected:=case current_setting('server_version_num')::integer/10000
     when 16 then 'be3468ce0d699999a758d75e9176667b6a862f980056bf55c37136f0f2646de1'
     when 17 then '9db98709473bcc37a3af5689d1e890c945d31b8953dc5db8091164e2b51cd17c' end;
@@ -334,7 +567,7 @@ insert into sr_catalog_delta values
   ('type','private.subscription_requests','0efc744a4923b138a841712d0750085b5444b6e6882a5961eeb1131ceb9c3084');
 create function pg_temp.sr_existing_data() returns text language plpgsql stable set search_path='' as $sr_data$
 declare relation_name text; rows jsonb; inventory jsonb:='{}'::jsonb; begin
-  foreach relation_name in array array['auth.users','private.portal_account_admin_events','private.portal_account_admins','private.subscription_audit_events','private.subscription_credential_access_audit_events','private.subscription_credential_access_grants','private.subscription_credential_audit_events','private.subscription_credential_grant_changes','private.subscription_credential_vault','private.subscription_management_grant_events','private.subscription_management_grants','private.subscription_memberships','private.subscription_register','public.internal_org_people','public.profiles'] loop
+  foreach relation_name in array array['auth.users','private.employee_team_manager_defaults','private.portal_account_admin_events','private.portal_account_admins','private.subscription_audit_events','private.subscription_credential_access_audit_events','private.subscription_credential_access_grants','private.subscription_credential_audit_events','private.subscription_credential_grant_changes','private.subscription_credential_vault','private.subscription_management_grant_events','private.subscription_management_grants','private.subscription_memberships','private.subscription_register','public.internal_org_people','public.profiles'] loop
     execute format('select coalesce(jsonb_agg(to_jsonb(r) order by to_jsonb(r)::text collate "C"),''[]''::jsonb) from %s r',relation_name::regclass) into rows;
     inventory:=inventory||jsonb_build_object(relation_name,rows);
   end loop;
