@@ -18,7 +18,7 @@ try{
   for(const regression of ['core-review-safety.sql','payroll-closing-contract.sql','payroll-closing.sql',
     'payroll-carryforward-lifecycle.sql','payroll-closing-privacy.sql','payroll-closing-mutation-guards.sql',
     'payroll-closing-security.sql','payroll-closing-legacy-drift.sql','payroll-carryforward-import.sql',
-    'payroll-carryforward-cutoff.sql','annual-leave-legacy-provenance.sql']){
+    'payroll-carryforward-cutoff.sql','annual-leave-legacy-provenance.sql','annual-source-bank.sql']){
     run('psql',[...target(socket,prefix),'-f',`tests/${regression}`]);
     console.log(`PASS: annual-leave regression ${regression}`);
   }
