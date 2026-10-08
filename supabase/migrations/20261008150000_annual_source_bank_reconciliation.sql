@@ -16,8 +16,8 @@ insert into annual_source_function_spec values
 ('private.payroll_request_hours_after(uuid,date)',true,'3f4505db5271b025109f00cb7915435e852c5fa46fa20aabdd499e17786cf541','fa4c121210ae3c9dddb8007460f0d5b633299592ef680ed7579c499f5cd68e0f',null),
 ('private.approved_leave_hours_after(uuid,text[],date)',true,'251bfea3140b47d8067928c2daf65801555b118a612c3cfa5989fae52141648b','5a4fc5021ba4c613cb9031514ad362b5910ab8aea6d808e46522f1680ef04155',null),
 ('private.project_annual_leave_balance(uuid,date)',true,'ee185baa6a8dfa834b77cdfeb60339e70d39f42915ec00112142536126c4de4a','b88e6a78a3c43681496f9649611cc06df507955bf10929f1b27970cd2ff848d0',null),
-('private.enforce_banked_annual_leave_request()',true,'ae1525bd291ea9265dd731a91eefb00b9f33dc3693577c1e73c3a2edb5186350','701b0c8de1a8d099430f8abf5feda4f73d3bb6146e3a1ef0f2e6ec3aca38a09f',null),
-('private.leave_payroll_balance_sufficient(uuid)',true,'c38b9655a39149fc1d8b6c4d1f538f1cca22cf248ea61c2b9ba18f0022c56814','9360cad546ee72d8297c8aabdfc30ec93177576f4c85af9ce0019f79e9b270ec',null),
+('private.enforce_banked_annual_leave_request()',true,'ae1525bd291ea9265dd731a91eefb00b9f33dc3693577c1e73c3a2edb5186350','8443b5e62134cf6cb797743b36418b9a4b332f1f205c814522d47ccd6ca1b684',null),
+('private.leave_payroll_balance_sufficient(uuid)',true,'c38b9655a39149fc1d8b6c4d1f538f1cca22cf248ea61c2b9ba18f0022c56814','3ca926e6db700a3cae42341a738413ee5ce4eba03ac3d09bb671e44373af5619',null),
 ('public.get_leave_priority_workspace(uuid)',true,'14f3fab427dcf668cea958a12c5f63420a2a213a1f042e8ac96d33eb28c8010a','387adba7c8121c288ec8014047867a1287e521a3d51413167bb51ef477e1511d',null),
 ('private.leave_request_required_hours(uuid)',true,'681d232c53dbe0588b6b3385536046e0babc58bef865f6d268120bb9975ffbc5','5dbc557b82ea473692dc0dd2fe82443114e0c7287b4e69321235d56fc96641f7',null),
 ('public.stage_payroll_balance_import(uuid,text,jsonb,jsonb)',true,'df1e25106f7352bd6e47d409833595520072aac3773a7afbca33e4d31e8af600','df1e25106f7352bd6e47d409833595520072aac3773a7afbca33e4d31e8af600',null),
@@ -30,11 +30,12 @@ insert into annual_source_function_spec values
 ('public.submit_selected_employee_leave_request(uuid,text,date,date,time,time,text)',true,'86c48e29da1aad4a3bca871bacaa7e58f8cd79ddffd741239653e3211cb8e22e','0d4c6c27b4148950c14fb1e83c23f197ced06fb128502ce345dde75289467c07',null),
 ('private.openclaw_submit_self(uuid,text,date,date,time,time,text)',true,'c07b73136a9d569286e30131d0bfb8fc98ae47a7cb9a0047c3473921ff6bac8f','9fc31b148db1bb70cc137cf50013dee23920b3fb33539f92ef2486f52051ea2e',null),
 ('public.set_employee_leave_accrual_policy(uuid,numeric,numeric,numeric,boolean,boolean,text)',true,'5801f93155c7b4e9d6cb40e51bacbff7643c8dc7cffbb0f644165d6a5b5fa8d6','c53f9141657702799d4db13a6eb0a0d39cdf6c93aabfb56de616e7069a4db0f5',null),
+('private.fill_leave_balance_required_hours()',true,'0eb04e084d523170f5c8840de52601156c969c214303086991f31b0120b7d966','d815207f35ecc6808d08a5f997ab3a5c1019f03f6a2524cbcdc58b690a797951',null),
 ('private.leave_bank_basis(uuid,text)',false,null,'b6ad67f7ad0b2c11c51c70c91fa7276abc469a3ac9ed305e1b0357394aa01faf','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
-('private.leave_payroll_day_hours(uuid,date)',false,null,'b4a35fba7a47bc4c82b1a47747117c511d91f22e76eed163ee2f3a4d8650985d','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
+('private.leave_payroll_day_hours(uuid,date)',false,null,'c404ccc94bd8967bf47d4d58188ca4e9e9e02bf4f2a8d690418a2b515a00e5bc','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
 ('private.calculate_leave_entitlement(uuid,text,date)',false,null,'7e5156169f5079119cdc98072940b9df9d08f1f7b055fa1e6075868d07bb65e6','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
-('private.leave_request_quantity(uuid,date,date,time,time,numeric)',false,null,'68f9448e18dfdf34d1bea1cc4d558fc6669e840e92dfee8bfebec740673c8b0b','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
-('private.adopt_leave_bank_sources(text,text,jsonb)',false,null,'ba43296857b750d82797027130e753acd21569cf814e6d9616d2127f6b5614de','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":false}'::jsonb),
+('private.leave_request_quantity(uuid,date,date,time,time,numeric)',false,null,'bbd035ddbad9d5afdc7ab4105e0c4aed449d42923f1d71330aeb3bd0daaadb61','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
+('private.adopt_leave_bank_sources(text,text,jsonb)',false,null,'3abf4e9666d95e464a3799f5896321cbd25571e67dab0761037eb161d39e7263','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":false}'::jsonb),
 ('private.reject_leave_bank_source_mutation()',false,null,'c7582653b887df78b36e447364aa428504e6f401772362aa0477192728afb296','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":false}'::jsonb),
 ('public.preview_annual_leave_request(uuid,date,date,time,time,uuid)',false,null,'ee919150e1caf4b47f3dd36e23b11b33aa5225b7042ca6ae6307e2b65132cd9f','{"acl":"{postgres=X/postgres,authenticated=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb);
 create temporary table annual_source_relation_spec(schema_name text,relation_name text,relation_kind text,primary key(schema_name,relation_name)) on commit drop;
@@ -49,7 +50,7 @@ insert into annual_source_relation_spec values
 ('private','leave_bank_adoption_receipts_owner_key_key','i'),
 ('private','leave_bank_adoption_receipts_plan_hash_key','i');
 do $annual_source_function_predecessor$ declare item record; begin
-  if (select count(*) from annual_source_function_spec where is_existing)<>18 or (select count(*) from annual_source_function_spec where not is_existing)<>7
+  if (select count(*) from annual_source_function_spec where is_existing)<>19 or (select count(*) from annual_source_function_spec where not is_existing)<>7
     or exists(select 1 from annual_source_relation_spec s join pg_namespace n on n.nspname=s.schema_name join pg_class c on c.relnamespace=n.oid and c.relname=s.relation_name) then
     raise exception 'Annual source bank scope or new-relation predecessor differs.' using errcode='55000';
   end if;
@@ -238,7 +239,7 @@ begin
   ordinary_days:=ordinary_days+1;
   if p_start_time is not null then
    elapsed:=extract(epoch from(p_end_time-p_start_time))/3600;
-   if elapsed<=0 or elapsed>24 or (p_hours is not null and abs(p_hours-elapsed)>0.0001) then return null; end if;
+   if elapsed<=0 or elapsed>24 or (p_hours is not null and abs(p_hours-round(elapsed,2))>0.0001) then return null; end if;
    total:=total+elapsed;
   elsif p_start=p_end and p_hours is not null then
    if p_hours<=0 or p_hours>24 or p_hours::text in ('NaN','Infinity','-Infinity') then return null; end if;
@@ -267,7 +268,7 @@ begin
  if r.start_time is not null or r.end_time is not null then
   if r.start_date<>r.end_date or r.start_time is null or r.end_time is null then return null; end if;
   elapsed:=extract(epoch from(r.end_time-r.start_time))/3600;
-  if elapsed<=0 or elapsed>24 or (r.hours is not null and abs(r.hours-elapsed)>0.0001) then return null; end if;
+  if elapsed<=0 or elapsed>24 or (r.hours is not null and abs(r.hours-round(elapsed,2))>0.0001) then return null; end if;
   return elapsed;
  end if;
  if r.hours is not null then
@@ -484,12 +485,23 @@ begin
   end loop;
  end if;
  available:=(projection->>'availableHours')::numeric+own_hours;
- if new.hours is not null and new.hours>available then raise exception 'Not enough balance. Your projected annual leave balance at the start of this leave is insufficient. Request fewer paid hours or submit a separate unpaid leave request.' using errcode='22023'; end if;
+ if new.hours is not null and coalesce(required,new.hours)>available then raise exception 'Not enough balance. Your projected annual leave balance at the start of this leave is insufficient. Request fewer paid hours or submit a separate unpaid leave request.' using errcode='22023'; end if;
  if projection->>'status'='unavailable' or required is null or required<=0 or available is null or required::text in('NaN','Infinity','-Infinity') then
   raise exception 'Your annual leave projection is unavailable. Please contact payroll before requesting annual leave.' using errcode='22023'; end if;
  if required>available then
   if projection->>'status'='banked_only' then raise exception 'Future accrual could not be confirmed and your banked balance is insufficient. Please contact payroll.' using errcode='22023'; end if;
   raise exception 'Not enough balance. Your projected annual leave balance at the start of this leave is insufficient. Request fewer paid hours or submit a separate unpaid leave request.' using errcode='22023'; end if;
+ return new;
+end $$;
+
+create or replace function private.fill_leave_balance_required_hours() returns trigger language plpgsql volatile security definer set search_path='' as $$
+declare required numeric;
+begin
+ required:=private.leave_request_required_hours(new.request_id);
+ if required is null or required<=0 or (new.required_hours is not null and new.required_hours is distinct from round(required,4)) then
+  raise exception 'Paid hours are calculated automatically for this request.' using errcode='22023';
+ end if;
+ new.required_hours:=round(required,4);
  return new;
 end $$;
 
@@ -499,7 +511,8 @@ create or replace function private.leave_payroll_balance_sufficient(p_request_id
  cross join lateral(select private.project_annual_leave_balance(p.id,(now() at time zone 'Australia/Melbourne')::date) result)c
  cross join lateral(select private.leave_bank_basis(p.id,'annual') result)b
  where r.id=p_request_id and r.status='submitted' and r.record_origin='portal' and r.approval_required and r.request_type_label='Annual leave'
- and c.result->>'status' in ('projected','banked_only') and c.result->>'accrualStatus'='current' and(c.result->>'availableHours')::numeric>=a.required_hours
+ and c.result->>'status' in ('projected','banked_only') and c.result->>'accrualStatus'='current'
+ and private.leave_request_required_hours(r.id)>0 and(c.result->>'availableHours')::numeric>=private.leave_request_required_hours(r.id)
  and case when (b.result->>'coveredThrough')::date<(now() at time zone 'Australia/Melbourne')::date then private.payroll_request_unconsumed_hours(p.id,(b.result->>'coveredThrough')::date,(now() at time zone 'Australia/Melbourne')::date-1) is not null else true end
  and case when c.result->>'status'='projected' then greatest((b.result->>'coveredThrough')::date,(c.result->>'throughDate')::date)>=(a.approved_at at time zone 'Australia/Melbourne')::date
  else b.result->>'status'='current' and (b.result->>'updatedAt')::timestamptz>=a.approved_at and (b.result->>'coveredThrough')::date>=(a.approved_at at time zone 'Australia/Melbourne')::date end);
@@ -568,7 +581,7 @@ revoke all on function public.preview_annual_leave_request(uuid,date,date,time,t
 grant execute on function public.preview_annual_leave_request(uuid,date,date,time,time,uuid) to authenticated;
 
 create function private.adopt_leave_bank_sources(p_owner_key text,p_plan_hash text,p_rows jsonb) returns uuid language plpgsql volatile set search_path='' as $$
-declare receipt uuid:=gen_random_uuid(); item jsonb; pid uuid; legacy jsonb; old_hash text; stage private.payroll_balance_import_stage_rows%rowtype; imported private.payroll_balance_imports%rowtype; archive private.payroll_balance_source_archives%rowtype; qty numeric;
+declare receipt uuid:=gen_random_uuid(); item jsonb; pid uuid; legacy jsonb; old_hash text; stage private.payroll_balance_import_stage_rows%rowtype; imported private.payroll_balance_imports%rowtype; archive private.payroll_balance_source_archives%rowtype; qty numeric; initial_source_hashes jsonb:='{}'::jsonb; source_hash text;
 begin
  if current_user<>'postgres' or current_setting('transaction_isolation')<>'read committed' then raise exception 'Source adoption requires the approved database operator.' using errcode='42501'; end if;
  if p_plan_hash!~'^[a-f0-9]{64}$' or jsonb_typeof(p_rows)<>'array' or jsonb_array_length(p_rows) not between 1 and 200 then raise exception 'Invalid source adoption plan.' using errcode='22023'; end if;
@@ -583,6 +596,12 @@ begin
   select to_jsonb(b) into legacy from private.employee_annual_leave_balances b where b.person_id=pid;
   old_hash:=encode(extensions.digest(coalesce(legacy,'null'::jsonb)::text,'sha256'),'hex');
   if old_hash is distinct from item->>'expectedLegacyHash' then raise exception 'Opening balance changed; reconcile fresh target.' using errcode='40001'; end if;
+  if not(initial_source_hashes ? pid::text) then
+   select encode(extensions.digest(coalesce(jsonb_agg(to_jsonb(s) order by s.adopted_at,s.id),'[]'::jsonb)::text,'sha256'),'hex')
+    into source_hash from private.leave_bank_sources s where s.person_id=pid and s.leave_kind='annual';
+   initial_source_hashes:=initial_source_hashes||jsonb_build_object(pid::text,source_hash);
+  end if;
+  if (initial_source_hashes->>pid::text) is distinct from item->>'expectedSourceHash' then raise exception 'Canonical source evidence changed; reconcile fresh target.' using errcode='40001'; end if;
   if item->>'sourceKind'='payroll_report' then
    select * into strict stage from private.payroll_balance_import_stage_rows where id=(item->>'stageRowId')::bigint;
    select * into strict imported from private.payroll_balance_imports where id=(item->>'identityImportId')::uuid;
@@ -1604,7 +1623,7 @@ create temporary table annual_source_catalog_normalized on commit drop as
 insert into annual_source_catalog_normalized select definition from annual_source_function_before;
 set constraints all immediate;
 do $annual_source_intended_delta$ declare relation record; has_rows boolean; begin
- if (select count(*) from annual_source_function_after)<>25
+ if (select count(*) from annual_source_function_after)<>26
    or (select count(*) from annual_source_new_relation_actual)<>9
    or (select count(*) from annual_source_new_relation_expected)<>9
    or exists(select 1 from annual_source_function_spec s left join annual_source_function_after a using(signature) where a.signature is null or s.after_sha256 is null or encode(extensions.digest(a.definition,'sha256'),'hex') is distinct from s.after_sha256 or (not s.is_existing and (s.new_metadata is null or a.portable_metadata is distinct from s.new_metadata)))

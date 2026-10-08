@@ -307,13 +307,15 @@ DO $$ DECLARE b jsonb; BEGIN
  ASSERT private.approved_leave_hours_after(pg_temp.source_person(10),ARRAY['Annual leave'],'2026-10-01') IS NULL;
 END $$;
 ROLLBACK TO invalid_source_pending_proof;
-DO $$ DECLARE before_sources bigint; before_receipts bigint; before_carry jsonb; before_legacy jsonb; bad jsonb; BEGIN
+DO $$ DECLARE before_sources bigint; before_receipts bigint; before_carry jsonb; before_legacy jsonb; before_source_hash text; bad jsonb; BEGIN
  SELECT count(*) INTO before_sources FROM private.leave_bank_sources;
  SELECT count(*) INTO before_receipts FROM private.leave_bank_adoption_receipts;
  SELECT jsonb_agg(to_jsonb(e) ORDER BY id) INTO before_carry FROM private.payroll_carryforward_events e;
  SELECT to_jsonb(a) INTO before_legacy FROM private.employee_annual_leave_balances a WHERE person_id=pg_temp.source_person(10);
+ SELECT encode(extensions.digest(coalesce(jsonb_agg(to_jsonb(s) ORDER BY s.adopted_at,s.id),'[]'::jsonb)::text,'sha256'),'hex')
+  INTO before_source_hash FROM private.leave_bank_sources s WHERE s.person_id=pg_temp.source_person(10) AND s.leave_kind='annual';
  bad:=jsonb_build_array(jsonb_build_object('personId',pg_temp.source_person(10),'kind','annual','hours','21','reportDate','2026-10-01','coveredThrough','2026-10-01','sourceKind','payslip','sourceFingerprint',repeat('d',64),'note','Synthetic invalid proof atomic adoption',
-  'expectedLegacyHash',encode(extensions.digest(before_legacy::text,'sha256'),'hex'),'includedUsage',jsonb_build_array(jsonb_build_object('requestId',pg_temp.source_request(70),'includedHours','7.6','includedPendingHours','7.6','requestFingerprint',repeat('f',64),'evidenceHash',repeat('c',64)))));
+  'expectedLegacyHash',encode(extensions.digest(before_legacy::text,'sha256'),'hex'),'expectedSourceHash',before_source_hash,'includedUsage',jsonb_build_array(jsonb_build_object('requestId',pg_temp.source_request(70),'includedHours','7.6','includedPendingHours','7.6','requestFingerprint',repeat('f',64),'evidenceHash',repeat('c',64)))));
  BEGIN
   PERFORM private.adopt_leave_bank_sources('synthetic-invalid-source-inclusion',repeat('e',64),bad);
   RAISE EXCEPTION 'Incorrect proof source adoption committed' USING ERRCODE='ZX001';

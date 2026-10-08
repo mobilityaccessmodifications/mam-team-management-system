@@ -3,7 +3,7 @@
   "organization": "fwlmbmospuwoaosffvmw",
   "baseHead": "9ff635a92568eee29b58192405bcfa0b45cce8f2",
   "version": "20261008150000",
-  "migrationSha256": "36c97962def827740d01a3846ffbe32ee34b03c188c333b043fdd5287fc196b5",
+  "migrationSha256": "84a62945f9fecfc7b036c14d4d3f45f1d5dd4f6ca03fc496b4f9e28f1ed21fa3",
   "before": {
     "roles": [
       {
@@ -4989,6 +4989,15 @@
         "sha256": "681d232c53dbe0588b6b3385536046e0babc58bef865f6d268120bb9975ffbc5",
         "securityDefiner": true
       },
+      "private.fill_leave_balance_required_hours()": {
+        "acl": "{postgres=X/postgres}",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "sha256": "0eb04e084d523170f5c8840de52601156c969c214303086991f31b0120b7d966",
+        "securityDefiner": true
+      },
       "private.has_payroll_balance_import_access()": {
         "acl": "{postgres=X/postgres}",
         "owner": "postgres",
@@ -6164,7 +6173,7 @@
       {
         "version": "20261008150000",
         "name": "annual_source_bank_reconciliation",
-        "sourceHash": "9f8040d832a42edf2d73cbd2bc05e02623be5140679697ba03abe2a73c4e206e"
+        "sourceHash": "99324ef84b85f41a80d842ad6768c464f2c31e74576b71a71f80d7f44e9ffc48"
       }
     ],
     "tables": {
@@ -6748,7 +6757,7 @@
             "name": "z_leave_requests_banked_annual_limit",
             "enabled": "O",
             "definition": "CREATE TRIGGER z_leave_requests_banked_annual_limit BEFORE INSERT OR UPDATE ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.enforce_banked_annual_leave_request()",
-            "functionHash": "701b0c8de1a8d099430f8abf5feda4f73d3bb6146e3a1ef0f2e6ec3aca38a09f"
+            "functionHash": "8443b5e62134cf6cb797743b36418b9a4b332f1f205c814522d47ccd6ca1b684"
           },
           {
             "name": "z_leave_requests_refresh_required_hours",
@@ -7497,7 +7506,7 @@
             "name": "leave_balance_approvals_fill_required_hours",
             "enabled": "O",
             "definition": "CREATE TRIGGER leave_balance_approvals_fill_required_hours BEFORE INSERT OR UPDATE ON private.leave_balance_approvals FOR EACH ROW EXECUTE FUNCTION private.fill_leave_balance_required_hours()",
-            "functionHash": "0eb04e084d523170f5c8840de52601156c969c214303086991f31b0120b7d966"
+            "functionHash": "d815207f35ecc6808d08a5f997ab3a5c1019f03f6a2524cbcdc58b690a797951"
           },
           {
             "name": "reject_retired_test_identity_reference",
@@ -10743,6 +10752,15 @@
         "sha256": "5dbc557b82ea473692dc0dd2fe82443114e0c7287b4e69321235d56fc96641f7",
         "securityDefiner": true
       },
+      "private.fill_leave_balance_required_hours()": {
+        "acl": "{postgres=X/postgres}",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "sha256": "d815207f35ecc6808d08a5f997ab3a5c1019f03f6a2524cbcdc58b690a797951",
+        "securityDefiner": true
+      },
       "private.has_payroll_balance_import_access()": {
         "acl": "{postgres=X/postgres}",
         "owner": "postgres",
@@ -10758,7 +10776,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "701b0c8de1a8d099430f8abf5feda4f73d3bb6146e3a1ef0f2e6ec3aca38a09f",
+        "sha256": "8443b5e62134cf6cb797743b36418b9a4b332f1f205c814522d47ccd6ca1b684",
         "securityDefiner": true
       },
       "private.confirmed_test_purge_census(uuid,uuid)": {
@@ -10776,7 +10794,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "9360cad546ee72d8297c8aabdfc30ec93177576f4c85af9ce0019f79e9b270ec",
+        "sha256": "3ca926e6db700a3cae42341a738413ee5ce4eba03ac3d09bb671e44373af5619",
         "securityDefiner": true
       },
       "private.payroll_request_hours_after(uuid,date)": {
@@ -11091,7 +11109,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "b4a35fba7a47bc4c82b1a47747117c511d91f22e76eed163ee2f3a4d8650985d",
+        "sha256": "c404ccc94bd8967bf47d4d58188ca4e9e9e02bf4f2a8d690418a2b515a00e5bc",
         "securityDefiner": true
       },
       "private.reject_leave_bank_source_mutation()": {
@@ -11109,7 +11127,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "ba43296857b750d82797027130e753acd21569cf814e6d9616d2127f6b5614de",
+        "sha256": "3abf4e9666d95e464a3799f5896321cbd25571e67dab0761037eb161d39e7263",
         "securityDefiner": false
       },
       "private.calculate_leave_entitlement(uuid,text,date)": {
@@ -11127,7 +11145,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "68f9448e18dfdf34d1bea1cc4d558fc6669e840e92dfee8bfebec740673c8b0b",
+        "sha256": "bbd035ddbad9d5afdc7ab4105e0c4aed449d42923f1d71330aeb3bd0daaadb61",
         "securityDefiner": true
       },
       "public.preview_annual_leave_request(uuid,date,date,time,time,uuid)": {
@@ -16106,14 +16124,14 @@
       "version": "20261008150000",
       "name": "annual_source_bank_reconciliation",
       "statementHashes": [
-        "36c97962def827740d01a3846ffbe32ee34b03c188c333b043fdd5287fc196b5"
+        "84a62945f9fecfc7b036c14d4d3f45f1d5dd4f6ca03fc496b4f9e28f1ed21fa3"
       ],
       "ndims": 1,
       "lower": 1,
       "upper": 1,
       "cardinality": 1,
       "isNull": false,
-      "rawHash": "aa3db47c83f50cccfa029e0aeff16019a223d72aa4acbc34fc22ece622893850"
+      "rawHash": "dc241f57a35b497efa9837a1a9888e325df6f81649e915646e4ae6d03ca9de17"
     }
   ],
   "localPredecessors": [

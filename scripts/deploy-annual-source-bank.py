@@ -107,7 +107,7 @@ def validate_function_specs(sql, pins):
         specs[signature] = (existing, before_sha, after_sha)
     existing = {signature for signature, value in specs.items() if value[0]}
     new = set(specs) - existing
-    require(len(existing) == 18 and len(new) == 7, 'Unexpected core function scope')
+    require(len(existing) == 19 and len(new) == 7, 'Unexpected core function scope')
     before, after = pins['before']['functions'], pins['after']['functions']
     require(existing <= set(before) and new.isdisjoint(before) and set(after) == set(before) | new, 'Core and catalog function scope differ')
     for signature, (is_existing, before_sha, after_sha) in specs.items():

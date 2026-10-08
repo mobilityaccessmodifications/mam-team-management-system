@@ -18,7 +18,7 @@ class AnnualSourceBankReleaseTests(unittest.TestCase):
         cls.m = runpy.run_path(str(ROOT / 'scripts/deploy-annual-source-bank.py'))
 
     def setUp(self):
-        existing_signatures = ['private.synthetic_old_' + str(index) + '()' for index in range(18)]
+        existing_signatures = ['private.synthetic_old_' + str(index) + '()' for index in range(19)]
         new_signatures = ['private.synthetic_new_' + str(index) + '()' for index in range(7)]
         specifications = ["('" + signature + "',true,'" + '3' * 64 + "','" + '3' * 64 + "',null)" for signature in existing_signatures]
         specifications += ["('" + signature + "',false,null,'" + '6' * 64 + "','{}'::jsonb)" for signature in new_signatures]

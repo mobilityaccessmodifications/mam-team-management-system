@@ -58,7 +58,7 @@ CREATE FUNCTION pg_temp.adoption_payload() RETURNS jsonb LANGUAGE sql STABLE AS 
  SELECT jsonb_agg(payload ORDER BY n) FROM (
  SELECT n,jsonb_build_object('personId',p.id,'kind','annual','hours',s.annual_hours,'reportDate',s.as_of,
   'coveredThrough',NULL,'sourceKind','payroll_report','archiveId',a.id,'stageRowId',s.id,'identityImportId',i.id,
-  'fileSha256',a.source_sha256,'expectedLegacyHash',pg_temp.adoption_hash(to_jsonb(b)),
+  'fileSha256',a.source_sha256,'expectedSourceHash',pg_temp.adoption_hash('[]'::jsonb),'expectedLegacyHash',pg_temp.adoption_hash(to_jsonb(b)),
   'expectedStageHash',pg_temp.adoption_hash(to_jsonb(s)),'expectedIdentityHash',pg_temp.adoption_hash(to_jsonb(i)),
   'expectedArchiveHash',pg_temp.adoption_hash(to_jsonb(a)),'sourceFingerprint',pg_temp.adoption_hash(to_jsonb(s)),
   'note','Synthetic verified archived payroll row, with unknown service cutoff') AS payload
@@ -68,7 +68,7 @@ CREATE FUNCTION pg_temp.adoption_payload() RETURNS jsonb LANGUAGE sql STABLE AS 
  JOIN private.payroll_balance_import_stage_rows s ON s.employee_name=p.full_name AND s.as_of='2026-10-01'
  JOIN private.payroll_balance_source_archives a ON a.batch_id=s.batch_id
  UNION ALL SELECT 28,jsonb_build_object('personId',b.person_id,'kind','annual','hours',32.5545,'reportDate','2026-10-02',
-  'coveredThrough','2026-10-02','sourceKind','payslip','expectedLegacyHash',pg_temp.adoption_hash(to_jsonb(b)),
+  'coveredThrough','2026-10-02','sourceKind','payslip','expectedSourceHash',pg_temp.adoption_hash('[]'::jsonb),'expectedLegacyHash',pg_temp.adoption_hash(to_jsonb(b)),
   'sourceFingerprint',encode(extensions.digest('Synthetic user-confirmed payslip: coverage 9/28-10/2; received 10/7; 7.6 already deducted','sha256'),'hex'),
   'note','Synthetic user confirmation of payslip coverage through 10/2; received 10/7 separately; annual 7.6 included')
  FROM private.employee_annual_leave_balances b WHERE b.person_id=pg_temp.adoption_person(1)
@@ -100,6 +100,7 @@ END $$;
 DO $$ DECLARE p jsonb:=pg_temp.adoption_payload(); BEGIN
  ASSERT jsonb_array_length(p)=28;
  PERFORM pg_temp.expect_adoption_error('wrong-kind',jsonb_set(p,'{27,kind}','"personal"'),'22023');
+ PERFORM pg_temp.expect_adoption_error('missing-source-cas',p #- '{27,expectedSourceHash}','40001');
  PERFORM pg_temp.expect_adoption_error('stale-legacy',jsonb_set(p,'{27,expectedLegacyHash}',to_jsonb(repeat('0',64))),'40001');
  PERFORM pg_temp.expect_adoption_error('wrong-archive-sha',jsonb_set(p,'{0,fileSha256}',to_jsonb(repeat('0',64))),'55000');
  PERFORM pg_temp.expect_adoption_error('stale-stage',jsonb_set(p,'{0,expectedStageHash}',to_jsonb(repeat('0',64))),'55000');
@@ -111,7 +112,7 @@ DO $$ DECLARE p jsonb:=pg_temp.adoption_payload(); BEGIN
  PERFORM pg_temp.expect_adoption_error('missing-payslip-cutoff',p #- '{27,coveredThrough}','22023');
  PERFORM pg_temp.expect_adoption_error('payslip-cutoff-after-report',jsonb_set(p,'{27,coveredThrough}','"2026-10-03"'),'23514');
 END $$;
-\echo PASS: 11 evidence/CAS failures; late-row failures roll back all earlier rows and receipts
+\echo PASS: 12 evidence/CAS failures; late-row failures roll back all earlier rows and receipts
 SAVEPOINT wrong_source_company;
 UPDATE private.payroll_balance_imports SET company_key='equipsy' WHERE id=pg_temp.adoption_identity(1);
 SELECT pg_temp.expect_adoption_error('source-company',pg_temp.adoption_payload(),'55000');
@@ -224,6 +225,42 @@ DO $$ DECLARE current_hash text; item record; BEGIN
  END LOOP;
 END $$;
 \echo PASS: all five protected data inventories remain exact
+CREATE FUNCTION pg_temp.adoption_current_source_hash(pid uuid) RETURNS text LANGUAGE sql STABLE AS $$
+ SELECT encode(extensions.digest(coalesce(jsonb_agg(to_jsonb(s) order by s.adopted_at,s.id),'[]'::jsonb)::text,'sha256'),'hex')
+ FROM private.leave_bank_sources s WHERE s.person_id=pid AND s.leave_kind='annual';
+$$;
+CREATE FUNCTION pg_temp.adoption_fresh_payload() RETURNS jsonb LANGUAGE sql STABLE AS $$
+ SELECT jsonb_agg(item||jsonb_build_object('expectedSourceHash',pg_temp.adoption_current_source_hash((item->>'personId')::uuid)) order by position)
+ FROM jsonb_array_elements(pg_temp.adoption_payload()) WITH ORDINALITY source(item,position);
+$$;
+CREATE TEMP TABLE adoption_stale_source_payload AS SELECT pg_temp.adoption_fresh_payload() AS payload;
+DO $$ DECLARE p jsonb; before_rows bigint; before_receipts bigint; BEGIN
+ SELECT count(*) INTO before_rows FROM private.leave_bank_sources;
+ SELECT count(*) INTO before_receipts FROM private.leave_bank_adoption_receipts;
+ PERFORM pg_temp.expect_adoption_error('older-empty-source-plan',pg_temp.adoption_payload(),'40001');
+ p:=pg_temp.adoption_fresh_payload();
+ PERFORM pg_temp.expect_adoption_error('same-person-inconsistent-cas',jsonb_set(p,'{27,expectedSourceHash}',to_jsonb(repeat('0',64))),'40001');
+ PERFORM pg_temp.expect_adoption_error('late-missing-source-cas',p #- '{27,expectedSourceHash}','40001');
+ ASSERT (SELECT count(*) FROM private.leave_bank_sources)=before_rows AND (SELECT count(*) FROM private.leave_bank_adoption_receipts)=before_receipts;
+END $$;
+CREATE TEMP TABLE adoption_newer_receipt AS
+SELECT private.adopt_leave_bank_sources('synthetic-adoption-newer-source',repeat('a',64),jsonb_set(pg_temp.adoption_fresh_payload(),'{27,hours}','99.9999')) AS id;
+DO $$ DECLARE bank jsonb; p jsonb; BEGIN
+ bank:=private.leave_bank_basis(pg_temp.adoption_person(1),'annual');
+ ASSERT (bank->>'bankHours')::numeric=99.9999, 'Fresh canonical source CAS accepts newer financial facts';
+ ASSERT (SELECT count(*) FROM private.leave_bank_sources WHERE adoption_receipt_id=(SELECT id FROM adoption_newer_receipt))=28,
+  'Same-person report and payslip share the initial source rowset hash';
+ ASSERT (SELECT hours=51 AND as_of='2026-09-10' FROM private.employee_annual_leave_balances WHERE person_id=pg_temp.adoption_person(1)), 'Legacy balance remains unchanged through both plans';
+ SELECT payload INTO p FROM adoption_stale_source_payload;
+ PERFORM pg_temp.expect_adoption_error('stale-pre-newer-source-plan',p,'40001');
+ ASSERT (private.leave_bank_basis(pg_temp.adoption_person(1),'annual')->>'bankHours')::numeric=99.9999,
+  'Rejected older plan cannot overwrite the newer canonical bank';
+ PERFORM private.adopt_leave_bank_sources('synthetic-adoption-refreshed-source',repeat('b',64),pg_temp.adoption_fresh_payload());
+ ASSERT (private.leave_bank_basis(pg_temp.adoption_person(1),'annual')->>'bankHours')::numeric=32.5545,
+  'Only an explicitly refreshed source snapshot can adopt another financial fact';
+ ASSERT (SELECT count(*) FROM private.leave_bank_adoption_receipts WHERE owner_key IN ('synthetic-adoption-28','synthetic-adoption-newer-source','synthetic-adoption-refreshed-source'))=3;
+END $$;
+\echo PASS: initial 28 empty-source facts cache once per identity; absent/conflicting/stale source CAS rejects atomically; unchanged legacy does not bypass newer source; fresh source CAS succeeds
 ROLLBACK;
 \echo PASS: entire synthetic adoption test rolled back
 

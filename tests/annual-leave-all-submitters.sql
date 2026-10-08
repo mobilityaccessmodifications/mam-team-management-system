@@ -489,4 +489,150 @@ END $$;
 ROLLBACK TO source_bank_weekend_producers;
 \echo PASS: actual self selected idempotent weekend producers; exact policy quantity; role and replay boundaries
 
+SAVEPOINT fractional_conditional_approval;
+CREATE TEMP TABLE annual_precision_request(id uuid PRIMARY KEY);
+GRANT SELECT,INSERT ON pg_temp.annual_precision_request TO authenticated;
+INSERT INTO private.leave_accrual_policies(person_id,effective_from,weekly_hours,weekdays,annual_weeks,personal_weeks,enabled,note)
+VALUES('b1000000-0000-4000-8000-000000000002','2020-01-02',38,array[1,2,3],4,2,false,'Synthetic fractional conditional quantity');
+UPDATE private.employee_annual_leave_balances SET hours=20 WHERE person_id='b1000000-0000-4000-8000-000000000002';
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000002');
+SET LOCAL ROLE authenticated;
+INSERT INTO pg_temp.annual_precision_request
+SELECT id FROM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09');
+RESET ROLE;
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000003');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE result record; BEGIN
+  SELECT * INTO result FROM public.decide_leave_with_balance((SELECT id FROM pg_temp.annual_precision_request),'Approved – pending leave balance',NULL);
+  ASSERT result.status='Approved – pending leave balance';
+END $$;
+RESET ROLE;
+DO $$ DECLARE r uuid:=(SELECT id FROM pg_temp.annual_precision_request); BEGIN
+  ASSERT (SELECT status='submitted' AND record_origin='portal' AND approval_required FROM public.leave_requests WHERE id=r);
+  ASSERT private.leave_request_required_hours(r)=38::numeric/3;
+  ASSERT (SELECT required_hours=12.6667 FROM private.leave_balance_approvals WHERE request_id=r);
+  UPDATE private.employee_annual_leave_balances SET hours=12.6667 WHERE person_id='b1000000-0000-4000-8000-000000000002';
+  ASSERT private.leave_payroll_balance_sufficient(r), 'Rounded-up receipt must not reject sufficient raw funding';
+  ASSERT NOT has_table_privilege('authenticated','private.leave_balance_approvals','SELECT');
+  ASSERT NOT has_function_privilege('authenticated','private.leave_request_required_hours(uuid)','EXECUTE');
+  ASSERT NOT has_function_privilege('authenticated','private.leave_payroll_balance_sufficient(uuid)','EXECUTE');
+END $$;
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000002');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE r uuid:=(SELECT id FROM pg_temp.annual_precision_request); BEGIN
+  ASSERT EXISTS(SELECT 1 FROM jsonb_array_elements(public.get_leave_priority_workspace()->'requests') q WHERE q->>'id'=r::text AND (q->>'balanceSufficient')::boolean);
+  BEGIN
+    PERFORM public.decide_leave_with_balance(r,'Approved – pending leave balance',NULL);
+    RAISE EXCEPTION 'Fractional receipt authorized self approval' USING ERRCODE='ZX001';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000004');
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+  BEGIN
+    PERFORM public.decide_leave_with_balance((SELECT id FROM pg_temp.annual_precision_request),'Approved – pending leave balance',NULL);
+    RAISE EXCEPTION 'Fractional receipt authorized Account review' USING ERRCODE='ZX001';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000007');
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+  ASSERT NOT EXISTS(SELECT 1 FROM jsonb_array_elements(public.get_leave_priority_workspace()->'requests') q WHERE q->>'id'=(SELECT id::text FROM pg_temp.annual_precision_request)), 'Sibling employee must not see another employee request';
+END $$;
+RESET ROLE;
+ROLLBACK TO fractional_conditional_approval;
+\echo PASS: actual authenticated conditional RPC stores 38/3 as 12.6667; sufficient raw funding; private receipts and reviewer authority unchanged
+
+SAVEPOINT rounded_down_conditional_funding;
+CREATE TEMP TABLE annual_precision_request(id uuid PRIMARY KEY);
+GRANT SELECT,INSERT ON pg_temp.annual_precision_request TO authenticated;
+INSERT INTO private.leave_accrual_policies(person_id,effective_from,weekly_hours,weekdays,annual_weeks,personal_weeks,enabled,note)
+VALUES('b1000000-0000-4000-8000-000000000002','2020-01-02',37,array[1,2,3],4,2,false,'Synthetic raw funding boundary');
+UPDATE private.employee_annual_leave_balances SET hours=20 WHERE person_id='b1000000-0000-4000-8000-000000000002';
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000002');
+SET LOCAL ROLE authenticated;
+INSERT INTO pg_temp.annual_precision_request
+SELECT id FROM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09');
+RESET ROLE;
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000003');
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.decide_leave_with_balance((SELECT id FROM pg_temp.annual_precision_request),'Approved – pending leave balance',NULL);
+RESET ROLE;
+DO $$ DECLARE r uuid:=(SELECT id FROM pg_temp.annual_precision_request); BEGIN
+  ASSERT private.leave_request_required_hours(r)=37::numeric/3;
+  ASSERT (SELECT required_hours=12.3333 FROM private.leave_balance_approvals WHERE request_id=r);
+  UPDATE private.employee_annual_leave_balances SET hours=12.3333 WHERE person_id='b1000000-0000-4000-8000-000000000002';
+  ASSERT NOT private.leave_payroll_balance_sufficient(r), 'Four-decimal cache must not fund a greater raw quantity';
+END $$;
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000002');
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+  ASSERT EXISTS(SELECT 1 FROM jsonb_array_elements(public.get_leave_priority_workspace()->'requests') q WHERE q->>'id'=(SELECT id::text FROM pg_temp.annual_precision_request) AND NOT (q->>'balanceSufficient')::boolean);
+END $$;
+RESET ROLE;
+DO $$ DECLARE r uuid:=(SELECT id FROM pg_temp.annual_precision_request); BEGIN
+  UPDATE private.employee_annual_leave_balances SET hours=12.3334 WHERE person_id='b1000000-0000-4000-8000-000000000002';
+  ASSERT private.leave_payroll_balance_sufficient(r), 'Funding above the raw quantity is sufficient';
+  ASSERT (SELECT required_hours=12.3333 FROM private.leave_balance_approvals WHERE request_id=r), 'Funding checks must not rewrite the receipt';
+END $$;
+ROLLBACK TO rounded_down_conditional_funding;
+\echo PASS: conditional funding uses raw 37/3; 12.3333 is insufficient and 12.3334 is sufficient without rewriting the receipt
+
+SAVEPOINT current_policy_conditional_funding;
+CREATE TEMP TABLE annual_precision_request(id uuid PRIMARY KEY);
+GRANT SELECT,INSERT ON pg_temp.annual_precision_request TO authenticated;
+UPDATE private.employee_annual_leave_balances SET hours=20 WHERE person_id='b1000000-0000-4000-8000-000000000006';
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000006');
+SET LOCAL ROLE authenticated;
+INSERT INTO pg_temp.annual_precision_request
+SELECT id FROM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09');
+RESET ROLE;
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000003');
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.decide_leave_with_balance((SELECT id FROM pg_temp.annual_precision_request),'Approved – pending leave balance',NULL);
+RESET ROLE;
+DO $$ BEGIN
+  ASSERT (SELECT required_hours=7.5 FROM private.leave_balance_approvals WHERE request_id=(SELECT id FROM pg_temp.annual_precision_request));
+END $$;
+INSERT INTO private.leave_accrual_policies(person_id,effective_from,weekly_hours,weekdays,annual_weeks,personal_weeks,enabled,note)
+VALUES('b1000000-0000-4000-8000-000000000006','2020-01-02',38,array[1,2,3,4],4,2,false,'Synthetic changed ordinary work arrangement');
+DO $$ DECLARE r uuid:=(SELECT id FROM pg_temp.annual_precision_request); BEGIN
+  ASSERT private.leave_request_required_hours(r)=9.5;
+  ASSERT (SELECT required_hours=7.5 FROM private.leave_balance_approvals WHERE request_id=r), 'A work policy change must not silently rewrite the decision receipt';
+  UPDATE private.employee_annual_leave_balances SET hours=8 WHERE person_id='b1000000-0000-4000-8000-000000000006';
+  ASSERT NOT private.leave_payroll_balance_sufficient(r), 'Stale 7.5-hour receipt cannot fund a current 9.5-hour obligation';
+  UPDATE private.employee_annual_leave_balances SET hours=10 WHERE person_id='b1000000-0000-4000-8000-000000000006';
+  ASSERT private.leave_payroll_balance_sufficient(r);
+END $$;
+INSERT INTO private.leave_accrual_policies(person_id,effective_from,weekly_hours,weekdays,annual_weeks,personal_weeks,enabled,note)
+VALUES('b1000000-0000-4000-8000-000000000006','2020-01-03',38,array[1,1,2,3],4,2,false,'Synthetic ambiguous ordinary schedule');
+DO $$ DECLARE r uuid:=(SELECT id FROM pg_temp.annual_precision_request); BEGIN
+  ASSERT private.leave_request_required_hours(r) IS NULL;
+  ASSERT NOT private.leave_payroll_balance_sufficient(r), 'Unknown live quantity must fail closed despite a funded stale receipt';
+  ASSERT (SELECT required_hours=7.5 FROM private.leave_balance_approvals WHERE request_id=r);
+END $$;
+ROLLBACK TO current_policy_conditional_funding;
+\echo PASS: live policy quantity controls conditional funding; stale receipt is immutable and unknown quantity fails closed
+
+SAVEPOINT historical_timed_precision;
+UPDATE private.employee_annual_leave_balances SET hours=2.0084 WHERE person_id='b1000000-0000-4000-8000-000000000002';
+DO $$ DECLARE r uuid; BEGIN
+  ASSERT private.leave_request_quantity('b1000000-0000-4000-8000-000000000002','2030-12-09','2030-12-09','09:00','11:10',2.17)=130::numeric/60;
+  ASSERT private.leave_request_quantity('b1000000-0000-4000-8000-000000000002','2030-12-09','2030-12-09','09:00','11:10',6) IS NULL;
+  INSERT INTO public.leave_requests(employee_person_id,record_origin,source_record_sha256,status,submitted_at,leave_type,request_type_label,start_date,end_date,business_days,start_time,end_time,hours)
+  VALUES('b1000000-0000-4000-8000-000000000002','historical_import',repeat('d',64),'submitted',now(),'annual','Annual leave','2030-12-09','2030-12-09',1,'09:00:00','11:00:30',2.01) RETURNING id INTO r;
+  ASSERT (SELECT hours=2.01 FROM public.leave_requests WHERE id=r);
+  ASSERT private.leave_request_required_hours(r)=7230::numeric/3600;
+  ASSERT private.leave_payroll_day_hours(r,'2030-12-09')=7230::numeric/3600;
+  BEGIN
+    UPDATE public.leave_requests SET hours=6 WHERE id=r;
+    RAISE EXCEPTION 'Historical timed request accepted a six-hour cache for two hours and thirty seconds' USING ERRCODE='ZX001';
+  EXCEPTION WHEN invalid_parameter_value THEN ASSERT SQLERRM LIKE '%timed hours are inconsistent%'; END;
+  ASSERT (SELECT hours=2.01 FROM public.leave_requests WHERE id=r);
+END $$;
+ROLLBACK TO historical_timed_precision;
+\echo PASS: 130-minute canonical helper validates its 2.17-hour cache; a valid timed row funds actual elapsed hours and rejects a mismatched cache
+
 ROLLBACK;
