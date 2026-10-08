@@ -34,7 +34,7 @@ import { getPortalRoleCapabilities } from "@/app/roles/actions";
 import { ROLE_CAPABILITY_ERROR, type PortalRole, type PortalRoleCapabilities } from "@/lib/portal-role-capabilities";
 import registerToolbar from "@/components/people-toolbar.module.css";
 import { ApprovalBalancePill, ApprovalLeaveBalances, LeavePriorityControls, SickEvidenceNotice } from "@/components/leave-priority-controls";
-import { BALANCE_PENDING_STATUS, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
+import { BALANCE_PENDING_STATUS, melbourneToday, type LeaveDecision, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import {
   getCurrentEmployeeSelfProfile,
   getSelectedEmployeeProfile,
@@ -162,6 +162,7 @@ function revealSelectedLeaveTab(node: HTMLButtonElement | null) {
 }
 
 type RequestStatus = "Pending" | "Approved" | "Declined" | "Cancelled" | typeof BALANCE_PENDING_STATUS;
+type LeaveRegisterFilter = "All" | RequestStatus | "Completed";
 type AccessRole = PortalRole;
 
 type LeaveRequest = {
@@ -195,6 +196,12 @@ type LeaveRequest = {
   managerNote?: string;
   evidenceDueDate?: string;
 };
+
+// Register-only date classification. Approval, reservations and Calendar keep
+// the original status; a past end date does not prove attendance or settlement.
+function getLeaveRegisterStatus(request: Pick<LeaveRequest, "status" | "endDate">, today: string): RequestStatus | "Completed" {
+  return request.status === "Approved" && request.endDate < today ? "Completed" : request.status;
+}
 
 type Profile = {
   id: string;
@@ -608,7 +615,7 @@ export function LeaveDemo({
   const [selectedRequestId, setSelectedRequestId] = useState(initialNavigation?.requestId ?? "");
   const [mobileRequestDetailOpen, setMobileRequestDetailOpen] = useState(Boolean(initialNavigation?.requestId));
   const [leaveSection, setLeaveSection] = useState<LeaveSection>(initialNavigation?.section ?? "requests");
-  const [statusFilter, setStatusFilter] = useState<"All" | RequestStatus>(initialNavigation?.requestId ? "All" : "Pending");
+  const [statusFilter, setStatusFilter] = useState<LeaveRegisterFilter>(initialNavigation?.requestId ? "All" : "Pending");
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [managerNote, setManagerNote] = useState("");
   const [formError, setFormError] = useState("");
@@ -1416,8 +1423,9 @@ export function LeaveDemo({
   const canAccessBalance = Boolean(activeCapabilities?.can_import_payroll_balances && canImportPayrollBalances)
     || Boolean(activeCapabilities?.can_manage_leave_balances && leavePriority?.canManageBalances === true);
   const myRequests = requests.filter((request) => request.personId === activeProfile.id);
+  const leaveRegisterToday = melbourneToday();
   const filteredRequests = visibleRequests.filter((request) => {
-    return statusFilter === "All" || request.status === statusFilter;
+    return statusFilter === "All" || getLeaveRegisterStatus(request, leaveRegisterToday) === statusFilter;
   });
   const selectedRegisterRequest = selectedRequestId
     ? filteredRequests.find((request) => request.id === selectedRequestId)
@@ -1642,7 +1650,7 @@ export function LeaveDemo({
     scrollPageToTop();
   }
 
-  function changeLeaveStatusFilter(filter: "All" | RequestStatus) {
+  function changeLeaveStatusFilter(filter: LeaveRegisterFilter) {
     setStatusFilter(filter);
     setSelectedRequestId("");
     setMobileRequestDetailOpen(false);
@@ -2076,7 +2084,7 @@ export function LeaveDemo({
             />}
           /> : null}
           {activeCapabilities && activeView === "leave" ? <LeaveWorkspaceLoadBoundary loading={leaveDataLoading}>
-            <LeaveView leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} canViewAllLeave={canViewAllLeave} canAccessBalance={canAccessBalance} balanceContent={<><PayrollBalanceImporter previewPersonId={previewPersonId || undefined} comparisonOnly={activeCapabilities?.payroll_comparison_only === true} hideManagementControls={!activeCapabilities?.can_manage_leave_balances} onSaved={refreshLeaveWorkspace} />{activeCapabilities?.can_manage_leave_balances ? <LeavePriorityControls key={previewPersonId || "self"} previewPersonId={previewPersonId} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /> : null}</>} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onDeleteSupportingFile={deleteSupportingFile} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} />
+            <LeaveView today={leaveRegisterToday} leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} canViewAllLeave={canViewAllLeave} canAccessBalance={canAccessBalance} balanceContent={<><PayrollBalanceImporter previewPersonId={previewPersonId || undefined} comparisonOnly={activeCapabilities?.payroll_comparison_only === true} hideManagementControls={!activeCapabilities?.can_manage_leave_balances} onSaved={refreshLeaveWorkspace} />{activeCapabilities?.can_manage_leave_balances ? <LeavePriorityControls key={previewPersonId || "self"} previewPersonId={previewPersonId} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /> : null}</>} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onDeleteSupportingFile={deleteSupportingFile} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} />
           </LeaveWorkspaceLoadBoundary> : null}
           {activeView === "calendar" && canViewActiveWorkspaceCalendar ? <TeamCalendar
             key={isPreviewingEmployeeAccess ? activeProfile.id : "signed-in"}
@@ -2367,7 +2375,7 @@ function LeaveLoadingState() {
   );
 }
 
-function LeaveView({ leavePriority, onBalancesSaved, profile, section, requests, allRequests, selected, filter, pending, canReview, canViewAllLeave, canAccessBalance, balanceContent, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canApplyForLeave, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, onRequestLeave, onFilter, onSection, onNote, onSelect, onCloseMobileDetail, onDecision, onAddSupportingFiles, onDeleteSupportingFile, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { leavePriority?: LeavePriorityWorkspace; onBalancesSaved: () => Promise<void>; profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; pending: LeaveRequest[]; canReview: boolean; canViewAllLeave?: boolean; canAccessBalance: boolean; balanceContent: ReactNode; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canApplyForLeave: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onRequestLeave: () => void; onFilter: (filter: "All" | RequestStatus) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onCloseMobileDetail: () => void; onDecision: (status: LeaveDecision) => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onDeleteSupportingFile: (attachmentId: string) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+function LeaveView({ leavePriority, onBalancesSaved, profile, section, requests, allRequests, selected, filter, today, pending, canReview, canViewAllLeave, canAccessBalance, balanceContent, selectedId, note, calendarRequests, calendarCheckIns, attachmentsByRequestId, busy, readOnly, hidePrivateDetails, canApplyForLeave, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, onRequestLeave, onFilter, onSection, onNote, onSelect, onCloseMobileDetail, onDecision, onAddSupportingFiles, onDeleteSupportingFile, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { leavePriority?: LeavePriorityWorkspace; onBalancesSaved: () => Promise<void>; profile: Profile; section: LeaveSection; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: LeaveRegisterFilter; today?: string; pending: LeaveRequest[]; canReview: boolean; canViewAllLeave?: boolean; canAccessBalance: boolean; balanceContent: ReactNode; selectedId: string; note: string; calendarRequests: LeaveRequest[]; calendarCheckIns: CheckInCalendarEntry[]; attachmentsByRequestId: Map<string, LeaveAttachment[]>; busy: boolean; readOnly: boolean; hidePrivateDetails: boolean; canApplyForLeave: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; onRequestLeave: () => void; onFilter: (filter: LeaveRegisterFilter) => void; onSection: (section: LeaveSection) => void; onNote: (note: string) => void; onSelect: (id: string, section?: LeaveSection) => void; onCloseMobileDetail: () => void; onDecision: (status: LeaveDecision) => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onDeleteSupportingFile: (attachmentId: string) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
   const applyAction = canApplyForLeave ? <button className={`${styles.primaryButton} ${styles.applyForLeaveButton}`} type="button" onClick={onRequestLeave} disabled={busy} aria-haspopup="dialog" aria-label="Apply for leave" title="Apply for leave"><Plus aria-hidden="true" size={17} /><span className={styles.applyFullLabel}>Apply for leave</span><span className={styles.applyCompactLabel}>Apply</span></button> : null;
   return (
     <section className={styles.leaveDesk}>
@@ -2387,7 +2395,7 @@ function LeaveView({ leavePriority, onBalancesSaved, profile, section, requests,
       ) : null}
       {applyAction}
       </div>
-      {section === "requests" ? <RequestsView key={filter} profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} canViewAllLeave={canViewAllLeave} attachmentsByRequestId={attachmentsByRequestId} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onViewMore={(id) => onSelect(id, "approvals")} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onDeleteSupportingFile={onDeleteSupportingFile} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
+      {section === "requests" ? <RequestsView key={filter} today={today} profile={profile} requests={requests} allRequests={allRequests} selected={selected} filter={filter} canReview={canReview} canViewAllLeave={canViewAllLeave} attachmentsByRequestId={attachmentsByRequestId} readOnly={readOnly} hidePrivateDetails={hidePrivateDetails} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} busy={busy} onFilter={onFilter} onSelect={(id) => onSelect(id, "requests")} onViewMore={(id) => onSelect(id, "approvals")} onCloseMobileDetail={onCloseMobileDetail} onAddSupportingFiles={onAddSupportingFiles} onDeleteSupportingFile={onDeleteSupportingFile} onStartCancellation={onStartCancellation} onDismissCancellation={onDismissCancellation} onConfirmCancellation={onConfirmCancellation} /> : null}
       {section === "approvals" && canReview ? <ApprovalsView leavePriority={leavePriority} onBalancesSaved={onBalancesSaved} pending={pending} selected={selected} selectedId={selectedId} note={note} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={busy} readOnly={readOnly} onNote={onNote} onSelect={(id) => onSelect(id, "approvals")} onDecision={onDecision} onDeleteSupportingFile={onDeleteSupportingFile} /> : null}
       {section === "balance" && canAccessBalance ? <div className={styles.balanceWorkspace}>{balanceContent}</div> : null}
     </section>
@@ -2416,8 +2424,8 @@ function getLeaveRegisterSelectionPage(requests: LeaveRequest[], selectedId: str
   return index < 0 ? null : Math.floor(index / pageSize) + 1;
 }
 
-function RequestsView({ profile, requests, allRequests, selected, filter, canReview, canViewAllLeave, attachmentsByRequestId, readOnly, hidePrivateDetails, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onViewMore, onCloseMobileDetail, onAddSupportingFiles, onDeleteSupportingFile, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: "All" | RequestStatus; canReview: boolean; canViewAllLeave?: boolean; attachmentsByRequestId: Map<string, LeaveAttachment[]>; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: "All" | RequestStatus) => void; onSelect: (id: string) => void; onViewMore: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onDeleteSupportingFile: (attachmentId: string) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
-  const filters: ("All" | RequestStatus)[] = ["All", "Pending", BALANCE_PENDING_STATUS, "Approved", "Declined", "Cancelled"];
+function RequestsView({ profile, requests, allRequests, selected, filter, today = melbourneToday(), canReview, canViewAllLeave, attachmentsByRequestId, readOnly, hidePrivateDetails, canCancelOwnLeave, mobileDetailOpen, cancellationRequestId, cancellationError, cancelledRequestId, busy, onFilter, onSelect, onViewMore, onCloseMobileDetail, onAddSupportingFiles, onDeleteSupportingFile, onStartCancellation, onDismissCancellation, onConfirmCancellation }: { profile: Profile; requests: LeaveRequest[]; allRequests: LeaveRequest[]; selected?: LeaveRequest; filter: LeaveRegisterFilter; today?: string; canReview: boolean; canViewAllLeave?: boolean; attachmentsByRequestId: Map<string, LeaveAttachment[]>; readOnly: boolean; hidePrivateDetails: boolean; canCancelOwnLeave: boolean; mobileDetailOpen: boolean; cancellationRequestId: string | null; cancellationError: string; cancelledRequestId: string | null; busy: boolean; onFilter: (filter: LeaveRegisterFilter) => void; onSelect: (id: string) => void; onViewMore: (id: string) => void; onCloseMobileDetail: () => void; onAddSupportingFiles: (requestId: string, files: File[]) => Promise<void>; onDeleteSupportingFile: (attachmentId: string) => Promise<void>; onStartCancellation: (requestId: string) => void; onDismissCancellation: () => void; onConfirmCancellation: (requestId: string) => void }) {
+  const filters: LeaveRegisterFilter[] = ["All", "Pending", BALANCE_PENDING_STATUS, "Approved", "Declined", "Cancelled", "Completed"];
   const isEmployee = !canReview && !canViewAllLeave;
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<LeaveRegisterSort>("default");
@@ -2451,7 +2459,7 @@ function RequestsView({ profile, requests, allRequests, selected, filter, canRev
   return (
     <section className={styles.recordsWorkspace}>
       <div className={styles.viewToolbar}>
-        <div className={styles.filterTabs} role="group" aria-label="Leave request status">{filters.map((item) => <button aria-pressed={filter === item} className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item === BALANCE_PENDING_STATUS ? "Waiting for balance" : item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => request.status === item).length}</span></button>)}</div>
+        <div className={styles.filterTabs} role="group" aria-label="Leave request status">{filters.map((item) => <button aria-pressed={filter === item} className={filter === item ? styles.filterActive : ""} type="button" onClick={() => onFilter(item)} key={item}>{item === BALANCE_PENDING_STATUS ? "Waiting for balance" : item}<span>{item === "All" ? allRequests.length : allRequests.filter((request) => getLeaveRegisterStatus(request, today) === item).length}</span></button>)}</div>
       </div>
       <div className={registerToolbar.toolbar}>
         <div className={registerToolbar.controls}>
