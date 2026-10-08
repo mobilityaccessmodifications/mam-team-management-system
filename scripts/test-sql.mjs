@@ -118,6 +118,10 @@ try {
   if (!powerBiOnly) {
   const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql", "tests/unified-role-subscription-employee-delegation.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (replay.status !== 0) throw new Error("Full migration replay failed");
+  for (const regression of ['new-starter-team-manager.sql', 'new-starter-team-manager-creation.sql', 'new-starter-team-manager-resolution.sql', 'new-starter-team-manager-schema.sql', 'new-starter-team-manager-matrix.sql', 'new-starter-team-manager-parent-effects.sql']) {
+    command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests', regression)]);
+    console.log(`PASS: Team Manager ${regression}`);
+  }
   const onboardingReview = spawnSync(process.execPath, [path.join(sourceRoot, "tests/run-onboarding-review-sql.mjs"), socket], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (onboardingReview.status !== 0) throw new Error("Onboarding review PostgreSQL authorization, CAS, concurrency and catalog rollback tests failed");
   command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests/operator-session-proof.sql')]);
