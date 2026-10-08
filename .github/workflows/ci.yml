@@ -42,6 +42,22 @@ jobs:
       - name: Real UI behavior with isolated synthetic action fixtures
         run: npm run test:browser
 
+  subscription-request-browser:
+    runs-on: ubuntu-latest
+    container: postgres:16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install isolated Chromium with its runtime libraries
+        run: npx playwright install --with-deps chromium --only-shell
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: node_modules/.cache/ms-playwright
+      - name: Real Requests UI to Server Actions to disposable PostgreSQL
+        run: runuser -u postgres -- node tests/subscription-requests-browser.mjs
+
   full-migration-replay-and-openclaw:
     runs-on: ubuntu-latest
     strategy:
