@@ -207,6 +207,7 @@ DO $$ DECLARE c jsonb; w jsonb; person jsonb; BEGIN
   c:=private.calculate_leave_entitlement(pg_temp.source_person(6),'personal','2026-10-07');
   ASSERT c->>'status'='current';
   ASSERT (c->>'taken')::numeric=5;
+  ASSERT abs((SELECT sum((value->>'accruedHours')::numeric) FROM jsonb_array_elements(c->'terms'))-(c->>'earned')::numeric)<0.000000000001, 'Personal terms use personal entitlement rate';
   w:=public.get_leave_priority_workspace();
   SELECT value INTO STRICT person FROM jsonb_array_elements(w->'people') WHERE value->>'personId'=pg_temp.source_person(6)::text;
   ASSERT (person->>'sickApprovedHours')::numeric=5;
@@ -229,14 +230,35 @@ DO $$ DECLARE c jsonb; p jsonb; BEGIN
   ASSERT c->>'status'='needs_review' AND c->>'eligibilityStatus'='needs_review';
   ASSERT (c->>'reviewDate')::date='2026-10-05';
   ASSERT (c->>'asOf')::date='2026-10-04';
-  ASSERT (c->>'taken')::numeric=2, 'Extra actual usage before the unpaid service hold remains charged';
+  ASSERT (c->>'taken')::numeric=9.6, 'Actual usage remains charged across the unpaid service hold';
+  ASSERT (c->>'usageThroughDate')::date='2026-10-07';
   p:=private.project_annual_leave_balance(pg_temp.source_person(5),'2026-10-08');
   ASSERT (p->>'approvedHours')::numeric=7.6;
   ASSERT (p->>'otherTakenHours')::numeric=2, 'Later approved usage does not erase earlier unrelated actual usage';
   ASSERT abs((p->>'availableHours')::numeric-(20.5+7.6/13-7.6-2))<0.000000000001;
 END $$;
+SAVEPOINT source_bank_extra_after_hold;
+INSERT INTO private.leave_accrual_day_reviews(person_id,service_date,annual_eligible_hours,personal_eligible_hours,annual_taken_hours,personal_taken_hours,request_fingerprint,note,actor_user_id)
+VALUES(pg_temp.source_person(5),'2026-10-06',7.6,7.6,10.6,0,private.leave_accrual_request_fingerprint(pg_temp.source_person(5),'2026-10-06'),'Synthetic extra actual annual usage after eligibility hold',pg_temp.source_person(900));
+DO $$ DECLARE c jsonb; p jsonb; BEGIN
+  c:=private.calculate_leave_entitlement(pg_temp.source_person(5),'annual','2026-10-07');
+  ASSERT (c->>'taken')::numeric=12.6, 'Extra confirmed usage after a hold is still deducted';
+  ASSERT (c->>'asOf')::date='2026-10-04', 'Usage does not falsely advance eligible service';
+  p:=private.project_annual_leave_balance(pg_temp.source_person(5),'2026-10-08');
+  ASSERT (p->>'otherTakenHours')::numeric=5;
+  ASSERT abs((p->>'availableHours')::numeric-(20.5+7.6/13-7.6-5))<0.000000000001;
+END $$;
+ROLLBACK TO source_bank_extra_after_hold;
+UPDATE public.leave_requests SET status='cancelled' WHERE id=pg_temp.source_request(50);
+DO $$ DECLARE c jsonb; p jsonb; BEGIN
+  c:=private.calculate_leave_entitlement(pg_temp.source_person(5),'annual','2026-10-07');
+  ASSERT c->>'status'='needs_review';
+  p:=private.project_annual_leave_balance(pg_temp.source_person(5),'2026-10-08');
+  ASSERT p->>'status'='unavailable' AND p->>'availableHours' IS NULL, 'Stale usage after an eligibility hold fails closed';
+  ASSERT (p->>'payrollHours')::numeric=20.5;
+END $$;
 ROLLBACK TO source_bank_actual_usage_past_hold;
-\echo PASS: actual usage before an eligibility hold is retained independently of later approved usage
+\echo PASS: actual usage and stale reviews after eligibility holds are processed independently
 
 SAVEPOINT source_bank_used_edit_credit;
 UPDATE private.leave_accrual_policies SET enabled=false,requires_review=false WHERE person_id=pg_temp.source_person(1);
@@ -256,5 +278,121 @@ DO $$ BEGIN
 END $$;
 ROLLBACK TO source_bank_used_edit_credit;
 \echo PASS: editing an approved request cannot release confirmed already-used annual hours
+
+SAVEPOINT source_bank_pending_inclusion;
+INSERT INTO private.payroll_closing_receipts(id,owner_key,actor_user_id,operation,provenance,note,payload,result)
+VALUES('98400000-0000-4000-8000-000000000070','synthetic-source-pending-proof',pg_temp.source_person(900),'closing','owner_estimate','Synthetic retained usage evidence','[]','{}');
+INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
+VALUES(pg_temp.source_request(70),pg_temp.source_person(10),pg_temp.source_person(10),'annual','Annual leave','2026-09-25','2026-09-25',1,NULL,'approved',now(),'historical_import',repeat('a',64),'full_time','paid_entitlement');
+INSERT INTO private.payroll_carryforward_events(receipt_id,request_id,person_id,company_key,leave_kind,origin_after,through_date,total_hours,accounted_hours,pending_hours,request_fingerprint)
+VALUES('98400000-0000-4000-8000-000000000070',pg_temp.source_request(70),pg_temp.source_person(10),'mam','annual','2026-09-10','2026-10-01',7.6,0,7.6,
+ (SELECT private.payroll_request_fingerprint(to_jsonb(r)) FROM public.leave_requests r WHERE id=pg_temp.source_request(70)));
+DO $$ DECLARE b jsonb; p jsonb; BEGIN
+ b:=private.leave_bank_basis(pg_temp.source_person(10),'annual');
+ ASSERT b->>'status'='current' AND (b->>'coveredThrough')::date='2026-10-01';
+ ASSERT (b->>'retainedHours')::numeric=7.6, 'A known service cutoff does not prove pending usage was deducted';
+ ASSERT private.approved_leave_hours_after(pg_temp.source_person(10),ARRAY['Annual leave'],'2026-10-01')=7.6;
+ p:=private.project_annual_leave_balance(pg_temp.source_person(10),'2026-10-08');
+ ASSERT (p->>'retainedHours')::numeric=7.6;
+ ASSERT abs((p->>'availableHours')::numeric-(21+30.4/13-7.6))<0.000000000001;
+END $$;
+SAVEPOINT invalid_source_pending_proof;
+INSERT INTO private.leave_bank_sources(person_id,leave_kind,hours,report_date,covered_service_through,source_kind,source_fingerprint,note,operator_role,included_usage)
+VALUES(pg_temp.source_person(10),'annual',21,'2026-10-01','2026-10-01','payslip',repeat('b',64),'Synthetic incorrect inclusion fingerprint','postgres',
+ jsonb_build_array(jsonb_build_object('requestId',pg_temp.source_request(70),'includedHours','7.6','includedPendingHours','7.6','requestFingerprint',repeat('f',64),'evidenceHash',repeat('c',64))));
+DO $$ DECLARE b jsonb; BEGIN
+ b:=private.leave_bank_basis(pg_temp.source_person(10),'annual');
+ ASSERT b->>'status'='needs_review';
+ ASSERT (b->>'retainedHours')::numeric=7.6, 'Incorrect inclusion proof preserves the entire reservation';
+ ASSERT private.approved_leave_hours_after(pg_temp.source_person(10),ARRAY['Annual leave'],'2026-10-01') IS NULL;
+END $$;
+ROLLBACK TO invalid_source_pending_proof;
+DO $$ DECLARE before_sources bigint; before_receipts bigint; before_carry jsonb; before_legacy jsonb; bad jsonb; BEGIN
+ SELECT count(*) INTO before_sources FROM private.leave_bank_sources;
+ SELECT count(*) INTO before_receipts FROM private.leave_bank_adoption_receipts;
+ SELECT jsonb_agg(to_jsonb(e) ORDER BY id) INTO before_carry FROM private.payroll_carryforward_events e;
+ SELECT to_jsonb(a) INTO before_legacy FROM private.employee_annual_leave_balances a WHERE person_id=pg_temp.source_person(10);
+ bad:=jsonb_build_array(jsonb_build_object('personId',pg_temp.source_person(10),'kind','annual','hours','21','reportDate','2026-10-01','coveredThrough','2026-10-01','sourceKind','payslip','sourceFingerprint',repeat('d',64),'note','Synthetic invalid proof atomic adoption',
+  'expectedLegacyHash',encode(extensions.digest(before_legacy::text,'sha256'),'hex'),'includedUsage',jsonb_build_array(jsonb_build_object('requestId',pg_temp.source_request(70),'includedHours','7.6','includedPendingHours','7.6','requestFingerprint',repeat('f',64),'evidenceHash',repeat('c',64)))));
+ BEGIN
+  PERFORM private.adopt_leave_bank_sources('synthetic-invalid-source-inclusion',repeat('e',64),bad);
+  RAISE EXCEPTION 'Incorrect proof source adoption committed' USING ERRCODE='ZX001';
+ EXCEPTION WHEN invalid_parameter_value THEN ASSERT SQLERRM='Source usage inclusion evidence differs.';END;
+ ASSERT (SELECT count(*) FROM private.leave_bank_sources)=before_sources;
+ ASSERT (SELECT count(*) FROM private.leave_bank_adoption_receipts)=before_receipts;
+ ASSERT (SELECT jsonb_agg(to_jsonb(e) ORDER BY id) FROM private.payroll_carryforward_events e)=before_carry;
+ ASSERT (SELECT to_jsonb(a) FROM private.employee_annual_leave_balances a WHERE person_id=pg_temp.source_person(10))=before_legacy;
+END $$;
+DO $$ DECLARE before_carry jsonb; b jsonb; r public.leave_requests%rowtype; BEGIN
+ SELECT jsonb_agg(to_jsonb(e) ORDER BY id) INTO before_carry FROM private.payroll_carryforward_events e;
+ SELECT * INTO STRICT r FROM public.leave_requests WHERE id=pg_temp.source_request(70);
+ INSERT INTO private.leave_bank_sources(person_id,leave_kind,hours,report_date,covered_service_through,source_kind,source_fingerprint,note,operator_role,included_usage)
+ VALUES(pg_temp.source_person(10),'annual',21,'2026-10-01','2026-10-01','payslip',repeat('b',64),'Synthetic explicit partial pending inclusion','postgres',
+  jsonb_build_array(jsonb_build_object('requestId',r.id,'includedHours','3.8','includedPendingHours','3.8','requestFingerprint',private.payroll_request_fingerprint(to_jsonb(r)),'evidenceHash',repeat('c',64))));
+ b:=private.leave_bank_basis(pg_temp.source_person(10),'annual');
+ ASSERT b->>'status'='current' AND (b->>'retainedHours')::numeric=3.8;
+ ASSERT private.approved_leave_hours_after(pg_temp.source_person(10),ARRAY['Annual leave'],'2026-10-01')=3.8, 'Only the explicitly included pending portion leaves the reservation';
+ ASSERT (SELECT jsonb_agg(to_jsonb(e) ORDER BY id) FROM private.payroll_carryforward_events e)=before_carry, 'Immutable carry evidence remains unchanged';
+ ASSERT private.payroll_retained_hours(pg_temp.source_person(10),'annual')=7.6, 'Raw carry history is not settled by source adoption';
+END $$;
+ROLLBACK TO source_bank_pending_inclusion;
+\echo PASS: known coverage retains pending usage; exact inclusion only removes its specified portion; invalid proof adoption is atomic
+
+SAVEPOINT source_bank_pending_window_ambiguity;
+INSERT INTO private.payroll_closing_receipts(id,owner_key,actor_user_id,operation,provenance,note,payload,result)
+VALUES('98400000-0000-4000-8000-000000000071','synthetic-source-straddling-pending',pg_temp.source_person(900),'closing','owner_estimate','Synthetic undated retained allocation','[]','{}');
+INSERT INTO private.leave_bank_sources(person_id,leave_kind,hours,report_date,covered_service_through,source_kind,source_fingerprint,note,operator_role)
+VALUES(pg_temp.source_person(11),'annual',100,'2026-10-01','2026-09-30','payslip',repeat('b',64),'Synthetic verified service end before older retained window ends','postgres');
+INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
+VALUES(pg_temp.source_request(71),pg_temp.source_person(11),pg_temp.source_person(11),'annual','Annual leave','2026-09-30','2026-10-02',3,NULL,'approved',now(),'historical_import',repeat('a',64),'full_time','paid_entitlement');
+INSERT INTO private.payroll_carryforward_events(receipt_id,request_id,person_id,company_key,leave_kind,origin_after,through_date,total_hours,accounted_hours,pending_hours,request_fingerprint)
+VALUES('98400000-0000-4000-8000-000000000071',pg_temp.source_request(71),pg_temp.source_person(11),'mam','annual','2026-09-10','2026-10-01',22.8,7.6,7.6,
+ (SELECT private.payroll_request_fingerprint(to_jsonb(r)) FROM public.leave_requests r WHERE id=pg_temp.source_request(71)));
+DO $$ DECLARE p jsonb; BEGIN
+ ASSERT private.approved_leave_hours_after(pg_temp.source_person(11),ARRAY['Annual leave'],'2026-10-01') IS NULL, 'Undated pending allocation crossing the new service cutoff has unknown overlap';
+ p:=private.project_annual_leave_balance(pg_temp.source_person(11),'2026-10-08');
+ ASSERT p->>'status'='unavailable' AND p->>'availableHours' IS NULL;
+ ASSERT (p->>'retainedHours')::numeric=7.6;
+END $$;
+ROLLBACK TO source_bank_pending_window_ambiguity;
+\echo PASS: undated retained allocation straddling a source cutoff fails closed
+
+SAVEPOINT source_bank_pending_after_cutoff;
+INSERT INTO private.payroll_closing_receipts(id,owner_key,actor_user_id,operation,provenance,note,payload,result)
+VALUES('98400000-0000-4000-8000-000000000072','synthetic-source-postcutoff-pending',pg_temp.source_person(900),'closing','owner_estimate','Synthetic post-cutoff retained allocation','[]','{}');
+INSERT INTO private.leave_bank_sources(person_id,leave_kind,hours,report_date,covered_service_through,source_kind,source_fingerprint,note,operator_role)
+VALUES(pg_temp.source_person(12),'annual',100,'2026-10-01','2026-10-01','payslip',repeat('b',64),'Synthetic verified service end before the whole pending window','postgres');
+INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
+VALUES(pg_temp.source_request(72),pg_temp.source_person(12),pg_temp.source_person(12),'annual','Annual leave','2026-10-02','2026-10-05',2,NULL,'approved',now(),'historical_import',repeat('a',64),'full_time','paid_entitlement');
+INSERT INTO private.payroll_carryforward_events(receipt_id,request_id,person_id,company_key,leave_kind,origin_after,through_date,total_hours,accounted_hours,pending_hours,request_fingerprint)
+VALUES('98400000-0000-4000-8000-000000000072',pg_temp.source_request(72),pg_temp.source_person(12),'mam','annual','2026-10-01','2026-10-05',15.2,0,15.2,
+ (SELECT private.payroll_request_fingerprint(to_jsonb(r)) FROM public.leave_requests r WHERE id=pg_temp.source_request(72)));
+DO $$ DECLARE b jsonb; BEGIN
+ b:=private.leave_bank_basis(pg_temp.source_person(12),'annual');
+ ASSERT (b->>'retainedHours')::numeric=15.2;
+ ASSERT private.approved_leave_hours_after(pg_temp.source_person(12),ARRAY['Annual leave'],'2026-10-01')=15.2, 'Pending entirely after the cutoff is already reserved by the post-cutoff request';
+END $$;
+ROLLBACK TO source_bank_pending_after_cutoff;
+\echo PASS: retained usage entirely inside the post-cutoff reservation is counted once
+
+SAVEPOINT source_bank_luke_like_included_usage;
+INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
+VALUES(pg_temp.source_request(73),pg_temp.source_person(1),pg_temp.source_person(1),'annual','Annual leave','2026-10-02','2026-10-02',1,NULL,'approved',now(),'historical_import',repeat('a',64),'full_time','paid_entitlement');
+DO $$ DECLARE r public.leave_requests%rowtype; b jsonb; c jsonb; BEGIN
+ SELECT * INTO STRICT r FROM public.leave_requests WHERE id=pg_temp.source_request(73);
+ ASSERT NOT EXISTS(SELECT 1 FROM private.payroll_carryforward_events WHERE person_id=r.employee_person_id);
+ INSERT INTO private.leave_bank_sources(person_id,leave_kind,hours,report_date,covered_service_through,source_kind,source_fingerprint,note,operator_role,included_usage)
+ VALUES(r.employee_person_id,'annual',32.5545,'2026-10-02','2026-10-02','payslip',repeat('b',64),'Synthetic direct confirmation of included annual usage without a carry event','postgres',
+  jsonb_build_array(jsonb_build_object('requestId',r.id,'includedHours','7.6','includedPendingHours','0','requestFingerprint',private.payroll_request_fingerprint(to_jsonb(r)),'evidenceHash',repeat('c',64))));
+ b:=private.leave_bank_basis(r.employee_person_id,'annual');
+ ASSERT b->>'status'='current' AND (b->>'retainedHours')::numeric=0;
+ ASSERT private.approved_leave_hours_after(r.employee_person_id,ARRAY['Annual leave'],'2026-10-02')=0;
+ c:=private.calculate_leave_entitlement(r.employee_person_id,'annual','2026-10-07');
+ ASSERT abs((c->>'exactHours')::numeric-(32.5545+22.8/13))<0.000000000001, 'The already-deducted Oct2 usage is not deducted again';
+ ASSERT NOT EXISTS(SELECT 1 FROM private.payroll_carryforward_events WHERE person_id=r.employee_person_id);
+ ASSERT NOT EXISTS(SELECT 1 FROM private.leave_accrual_day_reviews WHERE person_id=r.employee_person_id);
+END $$;
+ROLLBACK TO source_bank_luke_like_included_usage;
+\echo PASS: explicit included usage with zero pending carry remains auditable without fabricated history
 
 ROLLBACK;

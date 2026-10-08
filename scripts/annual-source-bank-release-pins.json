@@ -3,7 +3,7 @@
   "organization": "fwlmbmospuwoaosffvmw",
   "baseHead": "9ff635a92568eee29b58192405bcfa0b45cce8f2",
   "version": "20261008150000",
-  "migrationSha256": "63a6098ed34847e454d7940fe3394a7b251f7d304245d45b60343440fb6a90cb",
+  "migrationSha256": "36c97962def827740d01a3846ffbe32ee34b03c188c333b043fdd5287fc196b5",
   "before": {
     "roles": [
       {
@@ -6164,7 +6164,7 @@
       {
         "version": "20261008150000",
         "name": "annual_source_bank_reconciliation",
-        "sourceHash": "283140037d17142f4032fda26ec481ba538d8835ba6ab7778f4c70847721caac"
+        "sourceHash": "9f8040d832a42edf2d73cbd2bc05e02623be5140679697ba03abe2a73c4e206e"
       }
     ],
     "tables": {
@@ -10384,6 +10384,14 @@
             "notNull": false,
             "identity": "",
             "columnAcl": null
+          },
+          {
+            "name": "included_usage",
+            "type": "jsonb",
+            "default": "'[]'::jsonb",
+            "notNull": true,
+            "identity": "",
+            "columnAcl": null
           }
         ],
         "forceRls": true,
@@ -10417,6 +10425,11 @@
             "name": "leave_bank_sources_hours_check",
             "type": "c",
             "definition": "CHECK (((hours >= ('-10000'::integer)::numeric) AND (hours <= (100000)::numeric)))"
+          },
+          {
+            "name": "leave_bank_sources_included_usage_check",
+            "type": "c",
+            "definition": "CHECK (((jsonb_typeof(included_usage) = 'array'::text) AND (jsonb_array_length(included_usage) <= 200)))"
           },
           {
             "name": "leave_bank_sources_leave_kind_check",
@@ -10709,7 +10722,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "ad626860c0861c0a31261f22e86351ae7c590ab93f008b5e23d0e793d2d9b3d9",
+        "sha256": "387adba7c8121c288ec8014047867a1287e521a3d51413167bb51ef477e1511d",
         "securityDefiner": true
       },
       "private.confirmed_test_purge_schema_hash()": {
@@ -10799,7 +10812,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "5b0c4664bbf4152d803bd0df4064cc98585fd58450515cf9daadec36a846b04f",
+        "sha256": "b88e6a78a3c43681496f9649611cc06df507955bf10929f1b27970cd2ff848d0",
         "securityDefiner": true
       },
       "private.reject_retired_test_identity_reference()": {
@@ -10889,7 +10902,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "125d47cae4ca705e5aa96076c584dfc799bc388154323e4a4fc82d6eebca571c",
+        "sha256": "5a4fc5021ba4c613cb9031514ad362b5910ab8aea6d808e46522f1680ef04155",
         "securityDefiner": true
       },
       "private.confirmed_test_retained_leave_receipt(jsonb)": {
@@ -11069,7 +11082,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "a791b553df9e67831164d8e269e6481411cf5699896a34c5ce0598e1bcd31e2b",
+        "sha256": "b6ad67f7ad0b2c11c51c70c91fa7276abc469a3ac9ed305e1b0357394aa01faf",
         "securityDefiner": true
       },
       "private.leave_payroll_day_hours(uuid,date)": {
@@ -11096,7 +11109,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "1818230f883b3f5f82dc939f5e79d1408aa076c2e48cb6e9301eff4ceaa896b5",
+        "sha256": "ba43296857b750d82797027130e753acd21569cf814e6d9616d2127f6b5614de",
         "securityDefiner": false
       },
       "private.calculate_leave_entitlement(uuid,text,date)": {
@@ -11105,7 +11118,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "4a563ab911182b1b11b98728765ee9934890be20217388a22d05d8b14d5e1fc0",
+        "sha256": "7e5156169f5079119cdc98072940b9df9d08f1f7b055fa1e6075868d07bb65e6",
         "securityDefiner": true
       },
       "private.leave_request_quantity(uuid,date,date,time,time,numeric)": {
@@ -16093,14 +16106,14 @@
       "version": "20261008150000",
       "name": "annual_source_bank_reconciliation",
       "statementHashes": [
-        "63a6098ed34847e454d7940fe3394a7b251f7d304245d45b60343440fb6a90cb"
+        "36c97962def827740d01a3846ffbe32ee34b03c188c333b043fdd5287fc196b5"
       ],
       "ndims": 1,
       "lower": 1,
       "upper": 1,
       "cardinality": 1,
       "isNull": false,
-      "rawHash": "e6acfd3af6bc4c42bc5124c4133000f65a4c1a8f3a9cd6f9dc1fab8796ba66e0"
+      "rawHash": "aa3db47c83f50cccfa029e0aeff16019a223d72aa4acbc34fc22ece622893850"
     }
   ],
   "localPredecessors": [

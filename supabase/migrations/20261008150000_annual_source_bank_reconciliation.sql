@@ -14,11 +14,11 @@ create temporary table annual_source_function_spec(signature text primary key,is
 insert into annual_source_function_spec values
 ('private.calculate_employee_leave_accrual(uuid,date)',true,'1006d839cb1f2019acea176d2b0e16ee6a0d923a81c9bdc0f46284797338b1ee','c798f362037f8e9e074b227d42a78574d924195dfe1f05e64a0a6c02dca5e4ab',null),
 ('private.payroll_request_hours_after(uuid,date)',true,'3f4505db5271b025109f00cb7915435e852c5fa46fa20aabdd499e17786cf541','fa4c121210ae3c9dddb8007460f0d5b633299592ef680ed7579c499f5cd68e0f',null),
-('private.approved_leave_hours_after(uuid,text[],date)',true,'251bfea3140b47d8067928c2daf65801555b118a612c3cfa5989fae52141648b','125d47cae4ca705e5aa96076c584dfc799bc388154323e4a4fc82d6eebca571c',null),
-('private.project_annual_leave_balance(uuid,date)',true,'ee185baa6a8dfa834b77cdfeb60339e70d39f42915ec00112142536126c4de4a','5b0c4664bbf4152d803bd0df4064cc98585fd58450515cf9daadec36a846b04f',null),
+('private.approved_leave_hours_after(uuid,text[],date)',true,'251bfea3140b47d8067928c2daf65801555b118a612c3cfa5989fae52141648b','5a4fc5021ba4c613cb9031514ad362b5910ab8aea6d808e46522f1680ef04155',null),
+('private.project_annual_leave_balance(uuid,date)',true,'ee185baa6a8dfa834b77cdfeb60339e70d39f42915ec00112142536126c4de4a','b88e6a78a3c43681496f9649611cc06df507955bf10929f1b27970cd2ff848d0',null),
 ('private.enforce_banked_annual_leave_request()',true,'ae1525bd291ea9265dd731a91eefb00b9f33dc3693577c1e73c3a2edb5186350','701b0c8de1a8d099430f8abf5feda4f73d3bb6146e3a1ef0f2e6ec3aca38a09f',null),
 ('private.leave_payroll_balance_sufficient(uuid)',true,'c38b9655a39149fc1d8b6c4d1f538f1cca22cf248ea61c2b9ba18f0022c56814','9360cad546ee72d8297c8aabdfc30ec93177576f4c85af9ce0019f79e9b270ec',null),
-('public.get_leave_priority_workspace(uuid)',true,'14f3fab427dcf668cea958a12c5f63420a2a213a1f042e8ac96d33eb28c8010a','ad626860c0861c0a31261f22e86351ae7c590ab93f008b5e23d0e793d2d9b3d9',null),
+('public.get_leave_priority_workspace(uuid)',true,'14f3fab427dcf668cea958a12c5f63420a2a213a1f042e8ac96d33eb28c8010a','387adba7c8121c288ec8014047867a1287e521a3d51413167bb51ef477e1511d',null),
 ('private.leave_request_required_hours(uuid)',true,'681d232c53dbe0588b6b3385536046e0babc58bef865f6d268120bb9975ffbc5','5dbc557b82ea473692dc0dd2fe82443114e0c7287b4e69321235d56fc96641f7',null),
 ('public.stage_payroll_balance_import(uuid,text,jsonb,jsonb)',true,'df1e25106f7352bd6e47d409833595520072aac3773a7afbca33e4d31e8af600','df1e25106f7352bd6e47d409833595520072aac3773a7afbca33e4d31e8af600',null),
 ('private.freeze_payroll_balance_comparison(uuid)',true,'23439afa06e8c51f8da3d221684f08e6a1e184a9ab555f9112dd081cfebae9b5','312caf027b965cb7cb1ae07571f2d73d7326571211efc4c64de42607f52cdb60',null),
@@ -30,11 +30,11 @@ insert into annual_source_function_spec values
 ('public.submit_selected_employee_leave_request(uuid,text,date,date,time,time,text)',true,'86c48e29da1aad4a3bca871bacaa7e58f8cd79ddffd741239653e3211cb8e22e','0d4c6c27b4148950c14fb1e83c23f197ced06fb128502ce345dde75289467c07',null),
 ('private.openclaw_submit_self(uuid,text,date,date,time,time,text)',true,'c07b73136a9d569286e30131d0bfb8fc98ae47a7cb9a0047c3473921ff6bac8f','9fc31b148db1bb70cc137cf50013dee23920b3fb33539f92ef2486f52051ea2e',null),
 ('public.set_employee_leave_accrual_policy(uuid,numeric,numeric,numeric,boolean,boolean,text)',true,'5801f93155c7b4e9d6cb40e51bacbff7643c8dc7cffbb0f644165d6a5b5fa8d6','c53f9141657702799d4db13a6eb0a0d39cdf6c93aabfb56de616e7069a4db0f5',null),
-('private.leave_bank_basis(uuid,text)',false,null,'a791b553df9e67831164d8e269e6481411cf5699896a34c5ce0598e1bcd31e2b','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
+('private.leave_bank_basis(uuid,text)',false,null,'b6ad67f7ad0b2c11c51c70c91fa7276abc469a3ac9ed305e1b0357394aa01faf','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
 ('private.leave_payroll_day_hours(uuid,date)',false,null,'b4a35fba7a47bc4c82b1a47747117c511d91f22e76eed163ee2f3a4d8650985d','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
-('private.calculate_leave_entitlement(uuid,text,date)',false,null,'4a563ab911182b1b11b98728765ee9934890be20217388a22d05d8b14d5e1fc0','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
+('private.calculate_leave_entitlement(uuid,text,date)',false,null,'7e5156169f5079119cdc98072940b9df9d08f1f7b055fa1e6075868d07bb65e6','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
 ('private.leave_request_quantity(uuid,date,date,time,time,numeric)',false,null,'68f9448e18dfdf34d1bea1cc4d558fc6669e840e92dfee8bfebec740673c8b0b','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
-('private.adopt_leave_bank_sources(text,text,jsonb)',false,null,'1818230f883b3f5f82dc939f5e79d1408aa076c2e48cb6e9301eff4ceaa896b5','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":false}'::jsonb),
+('private.adopt_leave_bank_sources(text,text,jsonb)',false,null,'ba43296857b750d82797027130e753acd21569cf814e6d9616d2127f6b5614de','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":false}'::jsonb),
 ('private.reject_leave_bank_source_mutation()',false,null,'c7582653b887df78b36e447364aa428504e6f401772362aa0477192728afb296','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":false}'::jsonb),
 ('public.preview_annual_leave_request(uuid,date,date,time,time,uuid)',false,null,'ee919150e1caf4b47f3dd36e23b11b33aa5225b7042ca6ae6307e2b65132cd9f','{"acl":"{postgres=X/postgres,authenticated=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb);
 create temporary table annual_source_relation_spec(schema_name text,relation_name text,relation_kind text,primary key(schema_name,relation_name)) on commit drop;
@@ -133,7 +133,8 @@ create table private.leave_bank_sources (
  source_fingerprint text not null check(source_fingerprint ~ '^[a-f0-9]{64}$'), note text not null check(length(note) between 1 and 2000),
  adopted_at timestamptz not null default clock_timestamp(), operator_role text not null,
  adoption_receipt_id uuid references private.leave_bank_adoption_receipts(id),
- legacy_snapshot_fingerprint text check(legacy_snapshot_fingerprint ~ '^[a-f0-9]{64}$')
+ legacy_snapshot_fingerprint text check(legacy_snapshot_fingerprint ~ '^[a-f0-9]{64}$'),
+ included_usage jsonb not null default '[]'::jsonb check(jsonb_typeof(included_usage)='array' and jsonb_array_length(included_usage)<=200)
 );
 create index leave_bank_sources_latest on private.leave_bank_sources(person_id,leave_kind,adopted_at desc,id desc);
 create table private.leave_payroll_calendars (
@@ -157,23 +158,63 @@ create trigger reject_retired_test_identity_reference before insert or update on
 
 create function private.leave_bank_basis(p_person uuid,p_kind text) returns jsonb language plpgsql stable security definer set search_path='' as $$
 declare src private.leave_bank_sources%rowtype; legacy jsonb; bank numeric; day date; fingerprint text; provenance text;
+ proof jsonb; req public.leave_requests%rowtype; carry private.payroll_carryforward_events%rowtype; included numeric;
+ included_pending numeric; covered_qty numeric; retained numeric:=0; seen uuid[]:='{}'; invalid_proof boolean:=false; invalid_carry boolean:=false;
 begin
  if p_kind not in ('annual','personal') then raise exception 'Unknown leave entitlement.' using errcode='22023'; end if;
  if p_kind='annual' then select to_jsonb(b),case when not b.is_example then b.hours end,b.as_of into legacy,bank,day from private.employee_annual_leave_balances b where person_id=p_person;
  else select to_jsonb(b),b.hours,b.as_of into legacy,bank,day from private.employee_sick_leave_balances b where person_id=p_person; end if;
  select * into src from private.leave_bank_sources where person_id=p_person and leave_kind=p_kind order by adopted_at desc,id desc limit 1;
  if found then
+  if jsonb_typeof(src.included_usage)<>'array' or jsonb_array_length(src.included_usage)>200 then invalid_proof:=true;
+  elsif jsonb_array_length(src.included_usage)>0 and src.covered_service_through is null then invalid_proof:=true;
+  else
+   for proof in select value from jsonb_array_elements(src.included_usage) loop
+    if jsonb_typeof(proof)<>'object' then invalid_proof:=true;exit;end if;
+    if (select count(*) from jsonb_object_keys(proof))<>5 or not(proof ?& array['requestId','includedHours','includedPendingHours','requestFingerprint','evidenceHash'])
+      or coalesce(proof->>'requestId','')!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      or coalesce(proof->>'includedHours','')!~'^[0-9]+([.][0-9]+)?$' or coalesce(proof->>'includedPendingHours','')!~'^[0-9]+([.][0-9]+)?$'
+      or coalesce(proof->>'requestFingerprint','')!~'^[0-9a-f]{64}$' or coalesce(proof->>'evidenceHash','')!~'^[0-9a-f]{64}$' then invalid_proof:=true;exit;end if;
+    if (proof->>'requestId')::uuid=any(seen) then invalid_proof:=true;exit;end if;
+    seen:=array_append(seen,(proof->>'requestId')::uuid);
+    included:=(proof->>'includedHours')::numeric;included_pending:=(proof->>'includedPendingHours')::numeric;
+    if included<=0 or included>100000 or included_pending<0 or included_pending>included then invalid_proof:=true;exit;end if;
+    select * into req from public.leave_requests where id=(proof->>'requestId')::uuid and employee_person_id=p_person;
+    if not found or req.status<>'approved' or req.pay_treatment is distinct from 'paid_entitlement'
+      or (p_kind='annual' and (req.leave_type is distinct from 'annual' or req.request_type_label is distinct from 'Annual leave'))
+      or (p_kind='personal' and (req.leave_type is distinct from 'personal' or req.request_type_label is null or req.request_type_label not in ('Sick leave','Carer''s leave')))
+      or proof->>'requestFingerprint' is distinct from private.payroll_request_fingerprint(to_jsonb(req)) then invalid_proof:=true;exit;end if;
+    covered_qty:=private.payroll_request_hours_after(req.id,req.start_date-1)-private.payroll_request_hours_after(req.id,src.covered_service_through);
+    if covered_qty is null or included>covered_qty then invalid_proof:=true;exit;end if;
+    if included_pending>0 then
+     select * into carry from private.payroll_carryforward_events where person_id=p_person and leave_kind=p_kind and request_id=req.id order by id desc limit 1;
+     if not found or carry.request_fingerprint is distinct from proof->>'requestFingerprint' or included_pending>carry.pending_hours
+       or least(req.end_date,carry.through_date)>src.covered_service_through then invalid_proof:=true;exit;end if;
+    end if;
+   end loop;
+  end if;
+  for carry in select distinct on(request_id,leave_kind) * from private.payroll_carryforward_events where person_id=p_person and leave_kind=p_kind order by request_id,leave_kind,id desc loop
+   select * into req from public.leave_requests where id=carry.request_id;
+   if not found or carry.request_fingerprint is distinct from private.payroll_request_fingerprint(to_jsonb(req))
+     or carry.company_key is distinct from(select company_key from public.internal_org_people where id=p_person) then invalid_carry:=true;end if;
+   included_pending:=0;
+   if not invalid_proof then
+    select coalesce(sum((value->>'includedPendingHours')::numeric),0) into included_pending from jsonb_array_elements(src.included_usage) where value->>'requestId'=carry.request_id::text;
+   end if;
+   retained:=retained+greatest(0,carry.pending_hours-included_pending);
+  end loop;
   fingerprint:=encode(extensions.digest(coalesce(legacy,'null'::jsonb)::text,'sha256'),'hex');
   return jsonb_build_object('bankHours',src.hours,'reportDate',src.report_date,'coveredThrough',src.covered_service_through,
-   'sourceKind',src.source_kind,'sourceId',src.id,'adoptedAt',src.adopted_at,'updatedAt',src.adopted_at,
-   'status',case when src.legacy_snapshot_fingerprint is not null and src.legacy_snapshot_fingerprint<>fingerprint then 'needs_review'
+   'sourceKind',src.source_kind,'sourceId',src.id,'adoptedAt',src.adopted_at,'updatedAt',src.adopted_at,'includedUsage',src.included_usage,'retainedHours',retained,
+   'status',case when invalid_proof or invalid_carry or (src.legacy_snapshot_fingerprint is not null and src.legacy_snapshot_fingerprint<>fingerprint) then 'needs_review'
     when src.covered_service_through is null then 'coverage_unconfirmed' else 'current' end);
  end if;
+ retained:=private.payroll_retained_hours(p_person,p_kind);
  if legacy->>'source_import_id' is not null and legacy->>'closing_receipt_id' is null then
-  return jsonb_build_object('bankHours',bank,'reportDate',day,'coveredThrough',null,'sourceKind','payroll_report','sourceId',legacy->'source_import_id','updatedAt',legacy->'updated_at','status',case when bank is null then 'not_configured' else 'coverage_unconfirmed' end);
+  return jsonb_build_object('bankHours',bank,'reportDate',day,'coveredThrough',null,'sourceKind','payroll_report','sourceId',legacy->'source_import_id','updatedAt',legacy->'updated_at','includedUsage','[]'::jsonb,'retainedHours',retained,'status',case when bank is null then 'not_configured' else 'coverage_unconfirmed' end);
  end if;
  if legacy->>'closing_receipt_id' is not null then select case when operation='settlement' then 'owner_estimate' else r.provenance end into provenance from private.payroll_closing_receipts r where id=(legacy->>'closing_receipt_id')::uuid; end if;
- return jsonb_build_object('bankHours',bank,'reportDate',day,'coveredThrough',day,'sourceKind',provenance,'updatedAt',legacy->'updated_at',
+ return jsonb_build_object('bankHours',bank,'reportDate',day,'coveredThrough',day,'sourceKind',provenance,'updatedAt',legacy->'updated_at','includedUsage','[]'::jsonb,'retainedHours',retained,
   'status',case when bank is null then 'not_configured' else 'current' end);
 end $$;
 revoke all on function private.leave_bank_basis(uuid,text) from public,anon,authenticated,service_role;
@@ -253,7 +294,7 @@ create or replace function private.payroll_request_hours_after(p_request uuid,p_
 $$;
 
 create or replace function private.approved_leave_hours_after(p_person_id uuid,p_leave_types text[],p_after date) returns numeric language plpgsql stable security definer set search_path='' as $$
-declare r public.leave_requests%rowtype; total numeric:=0; qty numeric; kind text; basis jsonb; cutoff date; pending numeric;
+declare r public.leave_requests%rowtype; total numeric:=0; qty numeric; kind text; basis jsonb; cutoff date; pending numeric; carry record; included numeric; window_from date; window_through date;
 begin
  if p_after is null then return null; end if;
  kind:=case when 'Annual leave'=any(p_leave_types) then 'annual' when 'Sick leave'=any(p_leave_types) or 'Carer''s leave'=any(p_leave_types) then 'personal' end;
@@ -277,7 +318,21 @@ begin
  for r in select * from public.leave_requests where employee_person_id=p_person_id and status='approved' and request_type_label=any(p_leave_types) and end_date>cutoff and (kind is null or pay_treatment='paid_entitlement') loop
   qty:=private.payroll_request_hours_after(r.id,cutoff); if qty is null then return null; end if; total:=total+qty;
  end loop;
- if basis->>'sourceId' is null then
+ if basis->>'sourceId' is not null then
+  for carry in select e.*,req.start_date,req.end_date,req.status,req.pay_treatment,req.request_type_label from
+   (select distinct on(e.request_id,e.leave_kind) e.* from private.payroll_carryforward_events e where e.person_id=p_person_id and e.leave_kind=kind order by e.request_id,e.leave_kind,e.id desc)e
+   join public.leave_requests req on req.id=e.request_id where e.pending_hours>0 loop
+   select coalesce(sum((value->>'includedPendingHours')::numeric),0) into included from jsonb_array_elements(coalesce(basis->'includedUsage','[]'::jsonb)) where value->>'requestId'=carry.request_id::text;
+   pending:=carry.pending_hours-included;
+   if pending<0 then return null;elsif pending=0 then continue;end if;
+   if carry.status<>'approved' or carry.pay_treatment is distinct from 'paid_entitlement' or not(carry.request_type_label=any(p_leave_types)) then return null;end if;
+   window_from:=greatest(carry.start_date,carry.origin_after+1);window_through:=least(carry.end_date,carry.through_date);
+   if window_through<window_from then return null;
+   elsif window_through<=cutoff then total:=total+pending;
+   elsif window_from>cutoff then continue;
+   else return null;end if;
+  end loop;
+ else
   select coalesce(sum(e.pending_hours),0) into pending from (select distinct on(e.request_id,e.leave_kind) e.* from private.payroll_carryforward_events e where e.person_id=p_person_id and (kind is null or e.leave_kind=kind) and e.through_date<=p_after order by e.request_id,e.leave_kind,e.id desc)e;
   total:=total+pending;
  end if;
@@ -287,13 +342,13 @@ end $$;
 create function private.calculate_leave_entitlement(p_person uuid,p_kind text,p_through date) returns jsonb language plpgsql stable security definer set search_path='' as $$
 declare basis jsonb; pol private.leave_accrual_policies%rowtype; rev private.leave_accrual_day_reviews%rowtype;
  day date; cutoff date; through_day date; review_day date; start_day date; end_day date; ordinary numeric; eligible numeric; earned_numerator numeric:=0; taken numeric:=0;
- status text; qty numeric; r record; requires_actual boolean; policy_id uuid; terms jsonb:='{}'; term jsonb; future_unpaid numeric; eligibility_status text:='current'; usage_review_day date;
+ status text; qty numeric; r record; requires_actual boolean; policy_id uuid; terms jsonb:='{}'; term jsonb; future_unpaid numeric; eligibility_status text:='current'; usage_review_day date; usage_through date;
 begin
  basis:=private.leave_bank_basis(p_person,p_kind); cutoff:=(basis->>'coveredThrough')::date; status:=basis->>'status'; through_day:=cutoff;
+ select p.started_date,d.scheduled_employment_end_date into start_day,end_day from public.internal_org_people p left join private.employee_directory_details d on d.person_id=p.id where p.id=p_person;
  if p_through is null or basis->>'bankHours' is null or not exists(select 1 from private.leave_accrual_policies where person_id=p_person) then status:='not_configured';
  elsif status='current' and p_through-cutoff>3660 then status:='needs_review';eligibility_status:='needs_review';review_day:=cutoff+1;
  elsif status='current' then
-  select p.started_date,d.scheduled_employment_end_date into start_day,end_day from public.internal_org_people p left join private.employee_directory_details d on d.person_id=p.id where p.id=p_person;
   for day in select d::date from generate_series(cutoff+1,p_through,interval '1 day') d loop
    if day<coalesce(start_day,day) or day>coalesce(end_day,day) then through_day:=day; continue; end if;
    select * into pol from private.leave_accrual_policies where person_id=p_person and effective_from<=day order by effective_from desc,created_at desc,id desc limit 1;
@@ -313,19 +368,29 @@ begin
    end loop;
    if (rev.id is not null and rev.request_fingerprint<>private.leave_accrual_request_fingerprint(p_person,day)) or (requires_actual and rev.id is null) then status:='needs_review';eligibility_status:='needs_review';review_day:=day;exit; end if;
    eligible:=case when pol.enabled or pol.requires_review then coalesce(case when p_kind='annual' then rev.annual_eligible_hours else rev.personal_eligible_hours end*420,greatest(0,ordinary-future_unpaid)) else 0 end;
-   term:=coalesce(terms->pol.id::text,jsonb_build_object('fromDate',day,'weeklyHours',pol.weekly_hours,'weekdays',pol.weekdays,'annualWeeks',pol.annual_weeks,'eligibleNumerator',0));
+   term:=coalesce(terms->pol.id::text,jsonb_build_object('fromDate',day,'weeklyHours',pol.weekly_hours,'weekdays',pol.weekdays,'annualWeeks',pol.annual_weeks,'personalWeeks',pol.personal_weeks,'eligibleNumerator',0));
    term:=term||jsonb_build_object('throughDate',day,'eligibleNumerator',(term->>'eligibleNumerator')::numeric+eligible);terms:=jsonb_set(terms,array[pol.id::text],term);
    earned_numerator:=earned_numerator+eligible*case when p_kind='annual' then pol.annual_weeks else pol.personal_weeks end;
-   taken:=taken+coalesce(case when p_kind='annual' then rev.annual_taken_hours else rev.personal_taken_hours end,0);through_day:=day;
+   through_day:=day;
+  end loop;
+ end if;
+ if cutoff is not null and p_through is not null then
+  usage_through:=greatest(cutoff,least(p_through,(now() at time zone 'Australia/Melbourne')::date-1));
+  for rev in select distinct on(service_date) * from private.leave_accrual_day_reviews where person_id=p_person and service_date>cutoff and service_date<=usage_through order by service_date,created_at desc,id desc loop
+   if rev.service_date<coalesce(start_day,rev.service_date) or rev.service_date>coalesce(end_day,rev.service_date) then continue;end if;
+   if rev.request_fingerprint<>private.leave_accrual_request_fingerprint(p_person,rev.service_date) then
+    usage_review_day:=least(usage_review_day,rev.service_date);continue;
+   end if;
+   taken:=taken+coalesce(case when p_kind='annual' then rev.annual_taken_hours else rev.personal_taken_hours end,0);
   end loop;
  end if;
  if usage_review_day is not null then status:='needs_review';review_day:=least(review_day,usage_review_day); end if;
- return jsonb_build_object('status',status,'eligibilityStatus',eligibility_status,'reviewDate',review_day,'hours',round((basis->>'bankHours')::numeric+earned_numerator/(420*52)-taken,4),
+ return jsonb_build_object('status',status,'eligibilityStatus',eligibility_status,'usageThroughDate',usage_through,'reviewDate',review_day,'hours',round((basis->>'bankHours')::numeric+earned_numerator/(420*52)-taken,4),
   'exactHours',(basis->>'bankHours')::numeric+earned_numerator/(420*52)-taken,'earned',earned_numerator/(420*52),'taken',taken,
   'asOf',coalesce(through_day,(basis->>'reportDate')::date),'payrollHours',basis->'bankHours','payrollDate',basis->'reportDate',
   'coveredThrough',basis->'coveredThrough','sourceKind',basis->'sourceKind','policyId',policy_id,
   'terms',coalesce((select jsonb_agg((value-'eligibleNumerator')||jsonb_build_object('eligibleHours',(value->>'eligibleNumerator')::numeric/420,
-   'accruedHours',(value->>'eligibleNumerator')::numeric*(value->>'annualWeeks')::numeric/(420*52)) order by value->>'fromDate') from jsonb_each(terms)),'[]'::jsonb));
+   'accruedHours',(value->>'eligibleNumerator')::numeric*(value->>case when p_kind='annual' then 'annualWeeks' else 'personalWeeks' end)::numeric/(420*52)) order by value->>'fromDate') from jsonb_each(terms)),'[]'::jsonb));
 end $$;
 revoke all on function private.calculate_leave_entitlement(uuid,text,date) from public,anon,authenticated,service_role;
 
@@ -350,7 +415,7 @@ begin
  c:=private.calculate_leave_entitlement(p_person,'annual',p_start-1);
  approved:=private.approved_leave_hours_after(p_person,array['Annual leave'],(basis->>'reportDate')::date);
  if basis->>'coveredThrough' is not null then
-  for rev in select distinct on(service_date) * from private.leave_accrual_day_reviews where person_id=p_person and service_date>(basis->>'coveredThrough')::date and service_date<p_start and service_date<=(c->>'asOf')::date order by service_date,created_at desc,id desc loop
+  for rev in select distinct on(service_date) * from private.leave_accrual_day_reviews where person_id=p_person and service_date>(basis->>'coveredThrough')::date and service_date<p_start and service_date<=(c->>'usageThroughDate')::date order by service_date,created_at desc,id desc loop
    if rev.request_fingerprint<>private.leave_accrual_request_fingerprint(p_person,rev.service_date) then approved:=null;exit; end if;
    qty:=0;
    for r in select id from public.leave_requests where employee_person_id=p_person and status='approved' and pay_treatment='paid_entitlement' and request_type_label='Annual leave' and rev.service_date between start_date and end_date loop
@@ -363,7 +428,7 @@ begin
  return jsonb_build_object('status',projection_status,
   'accrualStatus',c->'status','projectedDate',p_start,'fromDate',(basis->>'coveredThrough')::date+1,'throughDate',p_start-1,
   'payrollDate',basis->'reportDate','bankReportDate',basis->'reportDate','coveredServiceThrough',basis->'coveredThrough','payrollHours',basis->'bankHours',
-  'approvedHours',approved,'retainedHours',case when basis->>'sourceId' is null or basis->>'coveredThrough' is null then private.payroll_retained_hours(p_person,'annual') else 0 end,
+  'approvedHours',approved,'retainedHours',basis->'retainedHours',
   'balanceSource',basis->'sourceKind','sourceKind',basis->'sourceKind','accruedHours',c->'earned','otherTakenHours',greatest(0,(c->>'taken')::numeric-consumed),
   'availableHours',case when projection_status='unavailable' then null else (basis->>'bankHours')::numeric+(c->>'earned')::numeric-approved-greatest(0,(c->>'taken')::numeric-consumed) end,'terms',terms);
 end $$;
@@ -462,7 +527,7 @@ begin
    approved:=private.approved_leave_hours_after(pid,array['Sick leave','Carer''s leave'],(s->>'reportDate')::date);
    consumed:=0;
    if s->>'coveredThrough' is not null then
-    for review in select distinct on(service_date) * from private.leave_accrual_day_reviews where person_id=pid and service_date>(s->>'coveredThrough')::date and service_date<=(c->>'asOf')::date order by service_date,created_at desc,id desc loop
+    for review in select distinct on(service_date) * from private.leave_accrual_day_reviews where person_id=pid and service_date>(s->>'coveredThrough')::date and service_date<=(c->>'usageThroughDate')::date order by service_date,created_at desc,id desc loop
      if review.request_fingerprint<>private.leave_accrual_request_fingerprint(pid,review.service_date) then approved:=null;exit;end if;
      qty:=0;
      for rr in select id from public.leave_requests where employee_person_id=pid and status='approved' and pay_treatment='paid_entitlement' and request_type_label in ('Sick leave','Carer''s leave') and review.service_date between start_date and end_date loop
@@ -473,7 +538,7 @@ begin
    end if;
    person:=person||jsonb_build_object('sickHours',c->'hours','sickAsOf',c->'asOf','sickPayrollHours',s->'bankHours','sickPayrollDate',s->'reportDate',
     'sickApprovedHours',approved,'sickAvailableHours',case when c->>'status'='current' then (c->>'exactHours')::numeric-approved+consumed else null end,
-    'sickRetainedHours',private.payroll_retained_hours(pid,'personal'),'sickBalanceSource',s->'sourceKind','sickAccrualStatus',c->'status');
+    'sickRetainedHours',s->'retainedHours','sickBalanceSource',s->'sourceKind','sickAccrualStatus',c->'status');
   end if;
   people:=people||jsonb_build_array(person);
  end loop;
@@ -533,8 +598,10 @@ begin
   elsif item->>'sourceKind'='payslip' then
    if item->>'coveredThrough' is null or item->>'sourceFingerprint'!~'^[a-f0-9]{64}$' or length(item->>'note')<1 then raise exception 'Payslip coverage evidence required.' using errcode='22023'; end if;
   else raise exception 'Unsupported source adoption kind.' using errcode='22023'; end if;
-  insert into private.leave_bank_sources(person_id,leave_kind,hours,report_date,covered_service_through,source_kind,source_archive_id,source_row_id,source_import_id,source_fingerprint,note,operator_role,adoption_receipt_id,legacy_snapshot_fingerprint)
-  values(pid,'annual',qty,(item->>'reportDate')::date,(item->>'coveredThrough')::date,item->>'sourceKind',(item->>'archiveId')::uuid,(item->>'stageRowId')::bigint,(item->>'identityImportId')::uuid,item->>'sourceFingerprint',item->>'note',current_user,receipt,old_hash);
+  if jsonb_typeof(coalesce(item->'includedUsage','[]'::jsonb))<>'array' or jsonb_array_length(coalesce(item->'includedUsage','[]'::jsonb))>200 then raise exception 'Invalid source usage inclusion evidence.' using errcode='22023';end if;
+  insert into private.leave_bank_sources(person_id,leave_kind,hours,report_date,covered_service_through,source_kind,source_archive_id,source_row_id,source_import_id,source_fingerprint,note,operator_role,adoption_receipt_id,legacy_snapshot_fingerprint,included_usage)
+  values(pid,'annual',qty,(item->>'reportDate')::date,(item->>'coveredThrough')::date,item->>'sourceKind',(item->>'archiveId')::uuid,(item->>'stageRowId')::bigint,(item->>'identityImportId')::uuid,item->>'sourceFingerprint',item->>'note',current_user,receipt,old_hash,coalesce(item->'includedUsage','[]'::jsonb));
+  if jsonb_array_length(coalesce(item->'includedUsage','[]'::jsonb))>0 and private.leave_bank_basis(pid,'annual')->>'status'='needs_review' then raise exception 'Source usage inclusion evidence differs.' using errcode='22023';end if;
  end loop;
  return receipt;
 end $$;
@@ -1509,7 +1576,7 @@ select s.signature,s.is_existing,pg_get_functiondef(p.oid) definition,
 from annual_source_function_spec s join pg_proc p on p.oid=to_regprocedure(s.signature);
 create temporary table annual_source_new_relation_expected(name text primary key,metadata jsonb not null) on commit drop;
 insert into annual_source_new_relation_expected values
-('private.leave_bank_sources','{"acl":"{postgres=arwdDxt/postgres}","rls":true,"owner":"postgres","columns":[{"acl":null,"name":"id","type":"uuid","default":"gen_random_uuid()","identity":"","not_null":true,"collation":null,"generated":""},{"acl":null,"name":"person_id","type":"uuid","default":null,"identity":"","not_null":true,"collation":null,"generated":""},{"acl":null,"name":"leave_kind","type":"text","default":null,"identity":"","not_null":true,"collation":"\"default\"","generated":""},{"acl":null,"name":"hours","type":"numeric(12,4)","default":null,"identity":"","not_null":true,"collation":null,"generated":""},{"acl":null,"name":"report_date","type":"date","default":null,"identity":"","not_null":true,"collation":null,"generated":""},{"acl":null,"name":"covered_service_through","type":"date","default":null,"identity":"","not_null":false,"collation":null,"generated":""},{"acl":null,"name":"source_kind","type":"text","default":null,"identity":"","not_null":true,"collation":"\"default\"","generated":""},{"acl":null,"name":"source_archive_id","type":"uuid","default":null,"identity":"","not_null":false,"collation":null,"generated":""},{"acl":null,"name":"source_row_id","type":"bigint","default":null,"identity":"","not_null":false,"collation":null,"generated":""},{"acl":null,"name":"source_import_id","type":"uuid","default":null,"identity":"","not_null":false,"collation":null,"generated":""},{"acl":null,"name":"source_fingerprint","type":"text","default":null,"identity":"","not_null":true,"collation":"\"default\"","generated":""},{"acl":null,"name":"note","type":"text","default":null,"identity":"","not_null":true,"collation":"\"default\"","generated":""},{"acl":null,"name":"adopted_at","type":"timestamp with time zone","default":"clock_timestamp()","identity":"","not_null":true,"collation":null,"generated":""},{"acl":null,"name":"operator_role","type":"text","default":null,"identity":"","not_null":true,"collation":"\"default\"","generated":""},{"acl":null,"name":"adoption_receipt_id","type":"uuid","default":null,"identity":"","not_null":false,"collation":null,"generated":""},{"acl":null,"name":"legacy_snapshot_fingerprint","type":"text","default":null,"identity":"","not_null":false,"collation":"\"default\"","generated":""}],"options":null,"policies":[],"triggers":[{"name":"leave_bank_sources_immutable","enabled":"O","definition":"CREATE TRIGGER leave_bank_sources_immutable BEFORE DELETE OR UPDATE ON private.leave_bank_sources FOR EACH ROW EXECUTE FUNCTION private.reject_leave_bank_source_mutation()","function_sha256":"c7582653b887df78b36e447364aa428504e6f401772362aa0477192728afb296"},{"name":"reject_retired_test_identity_reference","enabled":"O","definition":"CREATE TRIGGER reject_retired_test_identity_reference BEFORE INSERT OR UPDATE ON private.leave_bank_sources FOR EACH ROW EXECUTE FUNCTION private.reject_retired_test_identity_reference()","function_sha256":"bbd7503fa072b9606dfefe24ff4ced9c9d81a284f3169af115a79978e43d64cb"}],"force_rls":true,"constraints":[{"name":"leave_bank_sources_adoption_receipt_id_fkey","type":"f","deferred":false,"validated":true,"deferrable":false,"definition":"FOREIGN KEY (adoption_receipt_id) REFERENCES private.leave_bank_adoption_receipts(id)"},{"name":"leave_bank_sources_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK ((covered_service_through <= report_date))"},{"name":"leave_bank_sources_hours_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK (((hours >= (''-10000''::integer)::numeric) AND (hours <= (100000)::numeric)))"},{"name":"leave_bank_sources_leave_kind_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK ((leave_kind = ANY (ARRAY[''annual''::text, ''personal''::text])))"},{"name":"leave_bank_sources_legacy_snapshot_fingerprint_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK ((legacy_snapshot_fingerprint ~ ''^[a-f0-9]{64}$''::text))"},{"name":"leave_bank_sources_note_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK (((length(note) >= 1) AND (length(note) <= 2000)))"},{"name":"leave_bank_sources_person_id_fkey","type":"f","deferred":false,"validated":true,"deferrable":false,"definition":"FOREIGN KEY (person_id) REFERENCES public.internal_org_people(id)"},{"name":"leave_bank_sources_pkey","type":"p","deferred":false,"validated":true,"deferrable":false,"definition":"PRIMARY KEY (id)"},{"name":"leave_bank_sources_source_archive_id_fkey","type":"f","deferred":false,"validated":true,"deferrable":false,"definition":"FOREIGN KEY (source_archive_id) REFERENCES private.payroll_balance_source_archives(id)"},{"name":"leave_bank_sources_source_fingerprint_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK ((source_fingerprint ~ ''^[a-f0-9]{64}$''::text))"},{"name":"leave_bank_sources_source_import_id_fkey","type":"f","deferred":false,"validated":true,"deferrable":false,"definition":"FOREIGN KEY (source_import_id) REFERENCES private.payroll_balance_imports(id)"},{"name":"leave_bank_sources_source_kind_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK ((source_kind = ANY (ARRAY[''payroll_report''::text, ''payslip''::text, ''manual_snapshot''::text])))"},{"name":"leave_bank_sources_source_row_id_fkey","type":"f","deferred":false,"validated":true,"deferrable":false,"definition":"FOREIGN KEY (source_row_id) REFERENCES private.payroll_balance_import_stage_rows(id)"}],"toast_table":{"acl":null,"rls":false,"owner":"postgres","options":null,"force_rls":false},"toast_indexes":[{"acl":null,"owner":"postgres","indkey":[1,2],"indpred":null,"options":null,"indexprs":null,"indnatts":2,"indislive":true,"indoption":[0,0],"opclasses":["pg_catalog.oid_ops","pg_catalog.int4_ops"],"definition":"CREATE UNIQUE INDEX pg_toast_<parent>_index ON pg_toast.pg_toast_<parent> USING btree (chunk_id, chunk_seq)","indisready":true,"indisvalid":true,"indisunique":true,"indnkeyatts":2,"indcheckxmin":false,"indimmediate":true,"indisprimary":true,"indisclustered":false,"indisexclusion":false,"indisreplident":false,"indnullsnotdistinct":false}]}'::jsonb),
+('private.leave_bank_sources','{"acl":"{postgres=arwdDxt/postgres}","rls":true,"owner":"postgres","columns":[{"acl":null,"name":"id","type":"uuid","default":"gen_random_uuid()","identity":"","not_null":true,"collation":null,"generated":""},{"acl":null,"name":"person_id","type":"uuid","default":null,"identity":"","not_null":true,"collation":null,"generated":""},{"acl":null,"name":"leave_kind","type":"text","default":null,"identity":"","not_null":true,"collation":"\"default\"","generated":""},{"acl":null,"name":"hours","type":"numeric(12,4)","default":null,"identity":"","not_null":true,"collation":null,"generated":""},{"acl":null,"name":"report_date","type":"date","default":null,"identity":"","not_null":true,"collation":null,"generated":""},{"acl":null,"name":"covered_service_through","type":"date","default":null,"identity":"","not_null":false,"collation":null,"generated":""},{"acl":null,"name":"source_kind","type":"text","default":null,"identity":"","not_null":true,"collation":"\"default\"","generated":""},{"acl":null,"name":"source_archive_id","type":"uuid","default":null,"identity":"","not_null":false,"collation":null,"generated":""},{"acl":null,"name":"source_row_id","type":"bigint","default":null,"identity":"","not_null":false,"collation":null,"generated":""},{"acl":null,"name":"source_import_id","type":"uuid","default":null,"identity":"","not_null":false,"collation":null,"generated":""},{"acl":null,"name":"source_fingerprint","type":"text","default":null,"identity":"","not_null":true,"collation":"\"default\"","generated":""},{"acl":null,"name":"note","type":"text","default":null,"identity":"","not_null":true,"collation":"\"default\"","generated":""},{"acl":null,"name":"adopted_at","type":"timestamp with time zone","default":"clock_timestamp()","identity":"","not_null":true,"collation":null,"generated":""},{"acl":null,"name":"operator_role","type":"text","default":null,"identity":"","not_null":true,"collation":"\"default\"","generated":""},{"acl":null,"name":"adoption_receipt_id","type":"uuid","default":null,"identity":"","not_null":false,"collation":null,"generated":""},{"acl":null,"name":"legacy_snapshot_fingerprint","type":"text","default":null,"identity":"","not_null":false,"collation":"\"default\"","generated":""},{"acl":null,"name":"included_usage","type":"jsonb","default":"''[]''::jsonb","identity":"","not_null":true,"collation":null,"generated":""}],"options":null,"policies":[],"triggers":[{"name":"leave_bank_sources_immutable","enabled":"O","definition":"CREATE TRIGGER leave_bank_sources_immutable BEFORE DELETE OR UPDATE ON private.leave_bank_sources FOR EACH ROW EXECUTE FUNCTION private.reject_leave_bank_source_mutation()","function_sha256":"c7582653b887df78b36e447364aa428504e6f401772362aa0477192728afb296"},{"name":"reject_retired_test_identity_reference","enabled":"O","definition":"CREATE TRIGGER reject_retired_test_identity_reference BEFORE INSERT OR UPDATE ON private.leave_bank_sources FOR EACH ROW EXECUTE FUNCTION private.reject_retired_test_identity_reference()","function_sha256":"bbd7503fa072b9606dfefe24ff4ced9c9d81a284f3169af115a79978e43d64cb"}],"force_rls":true,"constraints":[{"name":"leave_bank_sources_adoption_receipt_id_fkey","type":"f","deferred":false,"validated":true,"deferrable":false,"definition":"FOREIGN KEY (adoption_receipt_id) REFERENCES private.leave_bank_adoption_receipts(id)"},{"name":"leave_bank_sources_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK ((covered_service_through <= report_date))"},{"name":"leave_bank_sources_hours_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK (((hours >= (''-10000''::integer)::numeric) AND (hours <= (100000)::numeric)))"},{"name":"leave_bank_sources_included_usage_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK (((jsonb_typeof(included_usage) = ''array''::text) AND (jsonb_array_length(included_usage) <= 200)))"},{"name":"leave_bank_sources_leave_kind_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK ((leave_kind = ANY (ARRAY[''annual''::text, ''personal''::text])))"},{"name":"leave_bank_sources_legacy_snapshot_fingerprint_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK ((legacy_snapshot_fingerprint ~ ''^[a-f0-9]{64}$''::text))"},{"name":"leave_bank_sources_note_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK (((length(note) >= 1) AND (length(note) <= 2000)))"},{"name":"leave_bank_sources_person_id_fkey","type":"f","deferred":false,"validated":true,"deferrable":false,"definition":"FOREIGN KEY (person_id) REFERENCES public.internal_org_people(id)"},{"name":"leave_bank_sources_pkey","type":"p","deferred":false,"validated":true,"deferrable":false,"definition":"PRIMARY KEY (id)"},{"name":"leave_bank_sources_source_archive_id_fkey","type":"f","deferred":false,"validated":true,"deferrable":false,"definition":"FOREIGN KEY (source_archive_id) REFERENCES private.payroll_balance_source_archives(id)"},{"name":"leave_bank_sources_source_fingerprint_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK ((source_fingerprint ~ ''^[a-f0-9]{64}$''::text))"},{"name":"leave_bank_sources_source_import_id_fkey","type":"f","deferred":false,"validated":true,"deferrable":false,"definition":"FOREIGN KEY (source_import_id) REFERENCES private.payroll_balance_imports(id)"},{"name":"leave_bank_sources_source_kind_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK ((source_kind = ANY (ARRAY[''payroll_report''::text, ''payslip''::text, ''manual_snapshot''::text])))"},{"name":"leave_bank_sources_source_row_id_fkey","type":"f","deferred":false,"validated":true,"deferrable":false,"definition":"FOREIGN KEY (source_row_id) REFERENCES private.payroll_balance_import_stage_rows(id)"}],"toast_table":{"acl":null,"rls":false,"owner":"postgres","options":null,"force_rls":false},"toast_indexes":[{"acl":null,"owner":"postgres","indkey":[1,2],"indpred":null,"options":null,"indexprs":null,"indnatts":2,"indislive":true,"indoption":[0,0],"opclasses":["pg_catalog.oid_ops","pg_catalog.int4_ops"],"definition":"CREATE UNIQUE INDEX pg_toast_<parent>_index ON pg_toast.pg_toast_<parent> USING btree (chunk_id, chunk_seq)","indisready":true,"indisvalid":true,"indisunique":true,"indnkeyatts":2,"indcheckxmin":false,"indimmediate":true,"indisprimary":true,"indisclustered":false,"indisexclusion":false,"indisreplident":false,"indnullsnotdistinct":false}]}'::jsonb),
 ('private.leave_bank_sources_pkey','{"acl":null,"live":true,"owner":"postgres","ready":true,"valid":true,"unique":true,"columns":1,"options":null,"primary":true,"clustered":false,"exclusion":false,"immediate":true,"definition":"CREATE UNIQUE INDEX leave_bank_sources_pkey ON private.leave_bank_sources USING btree (id)","key_columns":1,"replica_identity":false,"nulls_not_distinct":false}'::jsonb),
 ('private.leave_payroll_calendars','{"acl":"{postgres=arwdDxt/postgres}","rls":true,"owner":"postgres","columns":[{"acl":null,"name":"person_id","type":"uuid","default":null,"identity":"","not_null":true,"collation":null,"generated":""},{"acl":null,"name":"calendar_key","type":"text","default":null,"identity":"","not_null":true,"collation":"\"default\"","generated":""}],"options":null,"policies":[],"triggers":[{"name":"reject_retired_test_identity_reference","enabled":"O","definition":"CREATE TRIGGER reject_retired_test_identity_reference BEFORE INSERT OR UPDATE ON private.leave_payroll_calendars FOR EACH ROW EXECUTE FUNCTION private.reject_retired_test_identity_reference()","function_sha256":"bbd7503fa072b9606dfefe24ff4ced9c9d81a284f3169af115a79978e43d64cb"}],"force_rls":true,"constraints":[{"name":"leave_payroll_calendars_calendar_key_check","type":"c","deferred":false,"validated":true,"deferrable":false,"definition":"CHECK ((calendar_key = ANY (ARRAY[''victoria''::text, ''none''::text])))"},{"name":"leave_payroll_calendars_person_id_fkey","type":"f","deferred":false,"validated":true,"deferrable":false,"definition":"FOREIGN KEY (person_id) REFERENCES public.internal_org_people(id)"},{"name":"leave_payroll_calendars_pkey","type":"p","deferred":false,"validated":true,"deferrable":false,"definition":"PRIMARY KEY (person_id)"}],"toast_table":{"acl":null,"rls":false,"owner":"postgres","options":null,"force_rls":false},"toast_indexes":[{"acl":null,"owner":"postgres","indkey":[1,2],"indpred":null,"options":null,"indexprs":null,"indnatts":2,"indislive":true,"indoption":[0,0],"opclasses":["pg_catalog.oid_ops","pg_catalog.int4_ops"],"definition":"CREATE UNIQUE INDEX pg_toast_<parent>_index ON pg_toast.pg_toast_<parent> USING btree (chunk_id, chunk_seq)","indisready":true,"indisvalid":true,"indisunique":true,"indnkeyatts":2,"indcheckxmin":false,"indimmediate":true,"indisprimary":true,"indisclustered":false,"indisexclusion":false,"indisreplident":false,"indnullsnotdistinct":false}]}'::jsonb),
 ('private.leave_bank_sources_latest','{"acl":null,"live":true,"owner":"postgres","ready":true,"valid":true,"unique":false,"columns":4,"options":null,"primary":false,"clustered":false,"exclusion":false,"immediate":true,"definition":"CREATE INDEX leave_bank_sources_latest ON private.leave_bank_sources USING btree (person_id, leave_kind, adopted_at DESC, id DESC)","key_columns":4,"replica_identity":false,"nulls_not_distinct":false}'::jsonb),

@@ -99,15 +99,19 @@ export function leaveDateLabel(date: string) {
 
 // Full-day display hours are supplied from the database's snapshotted/current
 // classification. Staged or older payloads retain the former 7.5-hour fallback.
-export function approvalRequestHours(request: { days: number; hours?: number; fullDayHours?: number }): number | null {
-  const hours = request.hours ?? request.days * (request.fullDayHours ?? 7.5);
-  return Number.isFinite(hours) && hours > 0 ? hours : null;
+export function approvalRequestHours(request: { days: number; hours?: number; fullDayHours?: number }, priorityRequest?: Pick<LeavePriorityWorkspace["requests"][number], "requiredHours">): number | null {
+  const hours = priorityRequest && Object.hasOwn(priorityRequest, "requiredHours")
+    ? priorityRequest.requiredHours
+    : request.hours ?? request.days * (request.fullDayHours ?? 7.5);
+  return typeof hours === "number" && Number.isFinite(hours) && hours > 0 ? hours : null;
 }
 
-export function approvalBalanceCoverage(person: LeaveBalancePerson | undefined, leaveType: string, requiredHours: number | null, request?: Pick<LeavePriorityWorkspace["requests"][number], "pendingBalance" | "balanceSufficient">) {
+export function approvalBalanceCoverage(person: LeaveBalancePerson | undefined, leaveType: string, requiredHours: number | null, request?: Pick<LeavePriorityWorkspace["requests"][number], "pendingBalance" | "balanceSufficient" | "requiredHours">) {
   const sick = leaveType === "Sick leave" || leaveType === "Carer's leave";
   if (leaveType !== "Annual leave" && !sick) return null;
   if (!person || !(sick ? person.canViewSickBalance : person.canViewBalance)) return null;
+  if (request && Object.hasOwn(request, "requiredHours")
+    && (request.requiredHours == null || !Number.isFinite(request.requiredHours) || request.requiredHours <= 0)) return "Check balance";
   // Conditional approvals use the same request-specific result as the server's
   // final decision gate: fresh accrual less other approved commitments, with
   // review holds and example balances excluded. Do not reconstruct it from the
