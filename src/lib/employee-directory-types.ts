@@ -1,4 +1,8 @@
 export type EmployeeDirectoryCompany = "mam" | "equipsy";
+export type EmployeeTeamManagerDefault =
+  | { status: "valid"; managerId: string; managerName: string }
+  | { status: "missing" | "invalid"; managerId: null; managerName: "" };
+export type EmployeeTeamManagerDefaultResult = EmployeeTeamManagerDefault | { error: string };
 export type EmployeeLaptopSupply = "" | "own_laptop" | "mam_laptop";
 export type EmployeeEmploymentType = "abn" | "casual" | "full_time" | "part_time" | "overseas";
 export type EmployeeContractType = "permanent" | "fixed_term";

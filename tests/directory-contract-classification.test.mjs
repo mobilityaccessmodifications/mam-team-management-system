@@ -35,7 +35,9 @@ function loadActions({ classificationError = null } = {}) {
     'next/cache': { revalidatePath: () => {} },
     '@/lib/employee-directory': {
       requireEmployeeDirectoryManager: async () => ({ supabase }),
-      findEmployeeDirectoryRecord: async (_client, id) => ({ personId: id, contractType: '' }),
+      findEmployeeDirectoryRecord: async (_client, id) => id === managerId
+        ? { personId: managerId, company: 'mam', isActive: true }
+        : { personId: id, contractType: '' },
       listEmployeeDirectoryRecordsForManager: async () => [],
     },
     '@/lib/organisation-directory': { getOrganisationPersonWorkEmailForMember: async () => null },

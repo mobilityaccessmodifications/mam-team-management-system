@@ -18,6 +18,8 @@ import { preparePortalAccountStatusChange, finalisePortalAccountStatusChange, re
 import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryCompany,
+  EmployeeTeamManagerDefault,
+  EmployeeTeamManagerDefaultResult,
   EmployeeEmploymentType,
   EmployeeContractType,
   EmployeeDirectoryMutationResult,
@@ -147,6 +149,42 @@ function optionalUuid(value: unknown, label: string) {
 function company(value: unknown): EmployeeDirectoryCompany {
   if (value !== "mam" && value !== "equipsy") throw new DirectoryInputError(GENERIC_SAVE_ERROR);
   return value;
+}
+
+async function resolveTeamManagerDefault(
+  supabase: Awaited<ReturnType<typeof requireEmployeeDirectoryManager>>["supabase"],
+  companyKey: EmployeeDirectoryCompany,
+  teamName: string,
+): Promise<EmployeeTeamManagerDefault> {
+  const { data, error } = await supabase.rpc("get_employee_team_manager_default", {
+    p_company_key: companyKey,
+    p_team_name: teamName,
+  });
+  if (error || !data || typeof data !== "object" || Array.isArray(data)) {
+    throw new DirectoryInputError("Team Manager could not be checked. Refresh and try again.");
+  }
+  const result = data as Record<string, unknown>;
+  if (result.status === "valid" && typeof result.managerId === "string" && UUID_PATTERN.test(result.managerId)
+    && typeof result.managerName === "string" && result.managerName.trim()) {
+    return { status: "valid", managerId: result.managerId, managerName: result.managerName };
+  }
+  if ((result.status === "missing" || result.status === "invalid") && result.managerId === null && result.managerName === "") {
+    return { status: result.status, managerId: null, managerName: "" };
+  }
+  throw new DirectoryInputError("Team Manager could not be checked. Refresh and try again.");
+}
+
+export async function getEmployeeTeamManagerDefault(input: {
+  company: EmployeeDirectoryCompany;
+  teamName: string;
+}): Promise<EmployeeTeamManagerDefaultResult> {
+  try {
+    const { supabase } = await requireDirectoryMutationManager();
+    const value = inputObject(input);
+    return await resolveTeamManagerDefault(supabase, company(value.company), validatedTeam(value.teamName));
+  } catch (error) {
+    return { error: error instanceof DirectoryInputError ? error.message : "Team Manager could not be checked. Refresh and try again." };
+  }
 }
 
 function employmentType(value: unknown): EmployeeEmploymentType {
@@ -323,7 +361,7 @@ function mutationErrorMessage(error: { code?: string; message?: string } | null)
   if (error?.code === "40001") {
     return "This record has changed. Refresh it, then try again.";
   }
-  if (error?.message === "Choose an active employee as the manager." || error?.message === "This reporting link would create a cycle." || error?.message === "The selected parent org node does not exist.") {
+  if (error?.message === "Choose an active employee as the manager." || error?.message === "Choose an active same-company employee as the manager." || error?.message === "This reporting link would create a cycle." || error?.message === "The selected parent org node does not exist.") {
     return "Choose a valid manager and try again.";
   }
   return GENERIC_SAVE_ERROR;
@@ -446,9 +484,19 @@ export async function createEmployeeDirectoryRecord(
     if (values.p_is_active) {
       if (!values.p_started_date) throw new DirectoryInputError("A start date is required for a new active employee.");
     }
+    if (values.p_manager_id !== null) {
+      const manager = await findEmployeeDirectoryRecord(supabase, values.p_manager_id);
+      if (manager.personId !== values.p_manager_id || !manager.isActive || manager.company !== values.p_company_key) {
+        throw new DirectoryInputError("Choose a valid manager and try again.");
+      }
+    } else {
+      const configured = await resolveTeamManagerDefault(supabase, values.p_company_key, values.p_team_name);
+      if (configured.status === "invalid") {
+        throw new DirectoryInputError("The configured Team Manager is not available. Choose a valid manager before saving.");
+      }
+    }
     let { data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule_times", {
       ...directoryValues,
-      p_manager_id: null,
       p_sort_order: 0,
     });
     if (isMissingWorkScheduleRpc(error) && values.p_working_day_times.length === 0) {
@@ -456,14 +504,12 @@ export async function createEmployeeDirectoryRecord(
       void p_working_day_times;
       ({ data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule", {
         ...weekdayValues,
-        p_manager_id: null,
         p_sort_order: 0,
       }));
     }
     if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
       ({ data, error } = await supabase.rpc("create_employee_directory_record_with_employment_type", {
         ...legacyDraftValues({ ...directoryValues, p_contract_type: selectedContractType }),
-        p_manager_id: null,
         p_sort_order: 0,
       }));
     }

@@ -40,7 +40,7 @@ if (process.env.MAM_FLIGHT_FIXTURE === '1') {
       const { actions, calls } = loadActions({ readErrorAt });
       assert.deepEqual(await actions[method](updateInput), { committed: true, personId, error: 'Employee details were saved, but the saved record could not be loaded. Refresh the directory before trying again. Do not create the employee again.' });
       assert.deepEqual(calls.map(call => call.name), method === 'createEmployeeDirectoryRecord'
-        ? ['create_employee_directory_record_with_work_schedule_times']
+        ? ['get_employee_team_manager_default', 'create_employee_directory_record_with_work_schedule_times']
         : ['update_employee_directory_record_with_work_schedule_times', 'set_employee_check_in_contract_classification']);
     }
   });
@@ -82,12 +82,16 @@ if (process.env.MAM_FLIGHT_FIXTURE === '1') {
       assert.equal(calls.length, 0);
       const locked = loadActions({ dbError: lockError });
       assert.deepEqual(await locked.actions[method](updateInput), { error: lockMessage });
-      assert.equal(locked.calls.length, 1);
+      assert.deepEqual(locked.calls.map(call => call.name), method === 'createEmployeeDirectoryRecord'
+        ? ['get_employee_team_manager_default', 'create_employee_directory_record_with_work_schedule_times']
+        : ['update_employee_directory_record_with_work_schedule_times']);
       const denied = loadActions({ dbError: { code: '40001', message: 'private version detail' } });
       assert.deepEqual(await denied.actions[method](updateInput), { error: 'This record has changed. Refresh it, then try again.' });
       const unknown = loadActions({ dbError: { code: 'XX000', message: 'private manager provider detail', details: 'synthetic-secret' } });
       assert.deepEqual(await unknown.actions[method](updateInput), { error: generic });
-      assert.equal(unknown.calls.length, 1);
+      assert.deepEqual(unknown.calls.map(call => call.name), method === 'createEmployeeDirectoryRecord'
+        ? ['get_employee_team_manager_default', 'create_employee_directory_record_with_work_schedule_times']
+        : ['update_employee_directory_record_with_work_schedule_times']);
     }
     const roleDenied = loadActions({ roleAccess: false });
     assert.deepEqual(await roleDenied.actions.updateEmployeeDirectoryRole({ personId, role: 'manager', expectedRole: 'employee' }), { error: 'Only a Super Admin can change roles.' });
