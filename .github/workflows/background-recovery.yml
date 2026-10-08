@@ -5,15 +5,26 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-concurrency:
-  group: people-hub-background-recovery
-  cancel-in-progress: false
 jobs:
   recover:
     if: github.ref == 'refs/heads/main'
     environment: people-hub-production
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        job:
+          - leave-notifications
+          - check-in-reminders
+          - new-starter-day-one
+          - onboarding-credentials
+          - scheduled-offboarding
+          - leave-priority-reminders
+    concurrency:
+      group: people-hub-background-recovery-${{ matrix.job }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,4 +36,5 @@ jobs:
       - name: Recover queued notifications
         env:
           MAM_PEOPLE_HUB_CRON_SECRET: ${{ secrets.MAM_PEOPLE_HUB_CRON_SECRET }}
-        run: node scripts/recover-background-jobs.mjs
+          MAM_RECOVERY_JOB: ${{ matrix.job }}
+        run: node scripts/recover-background-jobs.mjs "$MAM_RECOVERY_JOB"
