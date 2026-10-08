@@ -16,8 +16,8 @@ do $$declare bid uuid; row jsonb; p jsonb; begin
   p:=(select result from staged_result); bid:=(p->>'batchId')::uuid;
   assert p->>'comparisonOnly'='true';
   select value into row from jsonb_array_elements(p->'comparisonRows') where value->>'kind'='annual';
-  assert (row->>'systemHours')::numeric=94.8321, 'Real comparison producer includes protected older carry';
-  assert row->>'different'='false';
+  assert (row->>'systemHours')::numeric=140.4321, 'Xero comparison uses dated bank before future or retained reservations';
+  assert row->>'different'='true';
   begin perform public.commit_payroll_balance_import(bid,1); raise exception 'P0 applied comparison'; exception when sqlstate '42501' then null; end;
   perform pg_temp.set_test_actor('96000000-0000-4000-8000-000000000003');
   begin perform public.commit_payroll_balance_import(bid,1); raise exception 'Comparison uploader applied'; exception when sqlstate '42501' then null; end;

@@ -5,7 +5,7 @@ do $$declare w jsonb; p jsonb; projection jsonb; begin
   w:=public.get_leave_priority_workspace();
   select value into p from jsonb_array_elements(w->'people') where value->>'personId'='96000000-0000-4000-8000-000000000003';
   assert (p->>'annualRetainedHours')::numeric=38, 'Retained commitment aggregate must be visible separately';
-  assert (p->>'annualAvailableHours')::numeric=94.8321;
+  assert abs((p->>'annualAvailableHours')::numeric-(94.8321+7.6/13*(select count(*) from generate_series(date '2026-09-25',(now() at time zone 'Australia/Melbourne')::date-1,interval '1 day') day where extract(isodow from day) between 1 and 5)))<0.000000000001, 'Known paid service accrues while the retained commitment remains reserved';
   assert p->>'annualBalanceSource'='owner_estimate';
   perform pg_temp.set_test_actor('96000000-0000-4000-8000-000000000003');
   w:=public.get_leave_priority_workspace();

@@ -1,3 +1,11 @@
+export type LeaveAccrualStatus = "current" | "needs_review" | "not_configured" | "coverage_unconfirmed";
+export type LeaveBankSourceKind = "payroll_report" | "payslip" | "manual_snapshot";
+export type LeaveRequestWorkPolicy = {
+  weeklyHours: number;
+  weekdays: number[];
+  calendarKey: "victoria" | "none" | null;
+};
+
 export const BALANCE_PENDING_STATUS = "Approved – pending leave balance" as const;
 export type LeaveDecision = "Approved" | "Declined" | typeof BALANCE_PENDING_STATUS;
 
@@ -7,6 +15,7 @@ export type LeaveBalancePerson = {
   canSubmit: boolean;
   paidLeave: boolean;
   requestFullDayHours?: number;
+  requestWorkPolicy?: LeaveRequestWorkPolicy | null;
   canViewBalance: boolean;
   hours: number | null;
   asOf: string | null;
@@ -19,14 +28,23 @@ export type LeaveBalancePerson = {
   annualApprovedHours?: number | null;
   annualAvailableHours?: number | null;
   annualRetainedHours?: number | null;
-  annualBalanceSource?: "owner_estimate" | "confirmed_usage" | null;
+  annualBalanceSource?: "owner_estimate" | "confirmed_usage" | LeaveBankSourceKind | null;
+  annualAccrualStatus?: LeaveAccrualStatus;
+  annualEligibilityStatus?: LeaveAccrualStatus;
+  annualCoveredServiceThrough?: string | null;
+  annualEarnedHours?: number | null;
+  annualSourceKind?: LeaveBankSourceKind | null;
   sickPayrollHours?: number | null;
   sickPayrollDate?: string | null;
   sickApprovedHours?: number | null;
   sickAvailableHours?: number | null;
   sickRetainedHours?: number | null;
-  sickBalanceSource?: "owner_estimate" | "confirmed_usage" | null;
-  accrualStatus?: "current" | "needs_review" | "not_configured";
+  sickBalanceSource?: "owner_estimate" | "confirmed_usage" | LeaveBankSourceKind | null;
+  sickAccrualStatus?: LeaveAccrualStatus;
+  sickCoveredServiceThrough?: string | null;
+  sickEarnedHours?: number | null;
+  sickSourceKind?: LeaveBankSourceKind | null;
+  accrualStatus?: LeaveAccrualStatus;
   accrualReviewDate?: string | null;
   accrualPolicy?: {
     weeklyHours: number; annualWeeks: number; personalWeeks: number;
@@ -105,6 +123,10 @@ export function approvalBalanceCoverage(person: LeaveBalancePerson | undefined, 
   const balance = hasPayrollAvailability
     ? person[availableField]
     : sick ? person.sickHours : person.hours;
-  if (requiredHours == null || balance == null || !Number.isFinite(balance) || (!hasPayrollAvailability && person.accrualStatus === "needs_review")) return "Check balance";
+  const entitlementStatus = sick ? person.sickAccrualStatus : person.annualEligibilityStatus ?? person.annualAccrualStatus;
+  const fallbackStatus = entitlementStatus ?? person.accrualStatus;
+  if (requiredHours == null || !Number.isFinite(requiredHours) || balance == null || !Number.isFinite(balance)
+    || entitlementStatus === "needs_review"
+    || (!hasPayrollAvailability && (fallbackStatus === "needs_review" || fallbackStatus === "coverage_unconfirmed"))) return "Check balance";
   return balance >= requiredHours ? "Enough balance" : "Not enough balance";
 }

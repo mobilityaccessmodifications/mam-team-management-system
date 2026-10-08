@@ -53,12 +53,12 @@ FROM generate_series(1,27) n JOIN private.employee_annual_leave_balances b ON b.
 INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,
   status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
 VALUES
-(pg_temp.source_request(1),pg_temp.source_person(1),pg_temp.source_person(1),'sick','Sick leave','2026-09-24','2026-09-24',1,NULL,'approved',now(),'historical_import',repeat('1',64),'full_time','paid_entitlement'),
+(pg_temp.source_request(1),pg_temp.source_person(1),pg_temp.source_person(1),'personal','Sick leave','2026-09-24','2026-09-24',1,NULL,'approved',now(),'historical_import',repeat('1',64),'full_time','paid_entitlement'),
 (pg_temp.source_request(2),pg_temp.source_person(2),pg_temp.source_person(2),'annual','Annual leave','2030-12-09','2030-12-09',1,NULL,'approved',now(),'historical_import',repeat('2',64),'full_time','paid_entitlement'),
 (pg_temp.source_request(3),pg_temp.source_person(3),pg_temp.source_person(3),'annual','Annual leave','2026-09-26','2026-09-27',2,NULL,'approved',now(),'historical_import',repeat('3',64),'part_time','paid_entitlement'),
 (pg_temp.source_request(4),pg_temp.source_person(4),pg_temp.source_person(4),'annual','Annual leave','2026-09-11','2026-10-02',16,NULL,'approved',now(),'historical_import',repeat('4',64),'full_time','paid_entitlement'),
 (pg_temp.source_request(5),pg_temp.source_person(5),pg_temp.source_person(5),'unpaid','Unpaid leave','2026-10-05','2026-10-05',1,NULL,'approved',now(),'historical_import',repeat('5',64),'full_time','unpaid'),
-(pg_temp.source_request(6),pg_temp.source_person(6),pg_temp.source_person(6),'sick','Sick leave','2026-10-05','2026-10-05',1,5,'approved',now(),'historical_import',repeat('6',64),'full_time','paid_entitlement'),
+(pg_temp.source_request(6),pg_temp.source_person(6),pg_temp.source_person(6),'personal','Sick leave','2026-10-05','2026-10-05',1,5,'approved',now(),'historical_import',repeat('6',64),'full_time','paid_entitlement'),
 (pg_temp.source_request(7),pg_temp.source_person(7),pg_temp.source_person(7),'annual','Annual leave','2030-12-09','2030-12-09',1,NULL,'approved',now(),'historical_import',repeat('7',64),'full_time','paid_entitlement'),
 (pg_temp.source_request(9),pg_temp.source_person(9),pg_temp.source_person(9),'annual','Annual leave','2026-09-25','2026-09-25',1,NULL,'approved',now(),'historical_import',repeat('9',64),'full_time','paid_entitlement');
 UPDATE public.leave_requests SET start_time='09:00',end_time='14:00' WHERE id=pg_temp.source_request(6);
@@ -120,7 +120,7 @@ ROLLBACK TO unknown_calendar;
 \echo PASS: effective weekend policy; Victoria holiday; unknown and none calendars
 
 SAVEPOINT holiday_service;
-UPDATE private.employee_annual_leave_balances SET as_of='2026-09-24',hours=20 WHERE person_id=pg_temp.source_person(9);
+
 INSERT INTO private.leave_bank_sources(id,person_id,leave_kind,hours,report_date,covered_service_through,source_kind,source_fingerprint,note,operator_role,adopted_at)
 VALUES('98300000-0000-4000-8000-000000000099',pg_temp.source_person(9),'annual',20,'2026-09-24','2026-09-24','payroll_report',repeat('e',64),'Synthetic later adoption with verified service coverage','postgres',clock_timestamp());
 UPDATE private.leave_payroll_calendars SET calendar_key='victoria' WHERE person_id=pg_temp.source_person(9);
@@ -178,4 +178,83 @@ DO $$ DECLARE signature text; relation text; BEGIN
   ASSERT (SELECT count(*) FROM private.leave_accrual_day_reviews WHERE person_id::text LIKE '98000000-%')=0;
 END $$;
 \echo PASS: private calculators and source/calendar tables retain denied application-role access
+SAVEPOINT source_bank_paid_annual_service;
+INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,
+  status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
+VALUES(pg_temp.source_request(10),pg_temp.source_person(10),pg_temp.source_person(10),'annual','Annual leave','2026-10-05','2026-10-05',1,NULL,
+  'approved',now(),'historical_import',repeat('a',64),'full_time','paid_entitlement');
+DO $$ DECLARE c jsonb; p jsonb; BEGIN
+  c:=private.calculate_leave_entitlement(pg_temp.source_person(10),'annual','2026-10-07');
+  ASSERT c->>'status'='needs_review' AND c->>'eligibilityStatus'='current', 'Unconfirmed paid annual usage does not stop eligible ordinary service';
+  ASSERT (c->>'reviewDate')::date='2026-10-05';
+  ASSERT (c->>'asOf')::date='2026-10-07';
+  ASSERT abs((c->>'earned')::numeric-30.4/13)<0.000000000001;
+  ASSERT (c->>'taken')::numeric=0, 'Approval is not manufactured actual usage';
+  p:=private.project_annual_leave_balance(pg_temp.source_person(10),'2026-10-08');
+  ASSERT p->>'status'='projected';
+  ASSERT (p->>'approvedHours')::numeric=7.6;
+  ASSERT abs((p->>'availableHours')::numeric-(21+30.4/13-7.6))<0.000000000001, 'Reserve the pending approved annual hours once';
+  ASSERT (SELECT count(*) FROM private.leave_accrual_day_reviews WHERE person_id=pg_temp.source_person(10))=0;
+END $$;
+ROLLBACK TO source_bank_paid_annual_service;
+\echo PASS: paid approved annual usage remains pending while ordinary service accrues
+
+SAVEPOINT source_bank_actual_personal_no_double_debit;
+INSERT INTO private.leave_accrual_day_reviews(person_id,service_date,annual_eligible_hours,personal_eligible_hours,annual_taken_hours,personal_taken_hours,request_fingerprint,note,actor_user_id)
+VALUES(pg_temp.source_person(6),'2026-10-05',7.6,7.6,0,5,private.leave_accrual_request_fingerprint(pg_temp.source_person(6),'2026-10-05'),'Synthetic confirmed personal actual usage',pg_temp.source_person(900));
+SELECT pg_temp.set_test_actor(pg_temp.source_person(900));
+DO $$ DECLARE c jsonb; w jsonb; person jsonb; BEGIN
+  c:=private.calculate_leave_entitlement(pg_temp.source_person(6),'personal','2026-10-07');
+  ASSERT c->>'status'='current';
+  ASSERT (c->>'taken')::numeric=5;
+  w:=public.get_leave_priority_workspace();
+  SELECT value INTO STRICT person FROM jsonb_array_elements(w->'people') WHERE value->>'personId'=pg_temp.source_person(6)::text;
+  ASSERT (person->>'sickApprovedHours')::numeric=5;
+  ASSERT abs((person->>'sickAvailableHours')::numeric-(40+30.4/26-5))<0.000000000001, 'Reviewed approved personal usage is deducted once';
+END $$;
+ROLLBACK TO source_bank_actual_personal_no_double_debit;
+\echo PASS: reviewed personal usage does not get charged again as an approval reservation
+
+SAVEPOINT source_bank_actual_usage_past_hold;
+INSERT INTO private.leave_accrual_day_reviews(person_id,service_date,annual_eligible_hours,personal_eligible_hours,annual_taken_hours,personal_taken_hours,request_fingerprint,note,actor_user_id)
+VALUES(pg_temp.source_person(5),'2026-10-02',7.6,7.6,2,0,private.leave_accrual_request_fingerprint(pg_temp.source_person(5),'2026-10-02'),'Synthetic extra actual annual usage before service hold',pg_temp.source_person(900));
+INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,
+  status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
+VALUES(pg_temp.source_request(50),pg_temp.source_person(5),pg_temp.source_person(5),'annual','Annual leave','2026-10-06','2026-10-06',1,NULL,
+  'approved',now(),'historical_import',repeat('b',64),'full_time','paid_entitlement');
+INSERT INTO private.leave_accrual_day_reviews(person_id,service_date,annual_eligible_hours,personal_eligible_hours,annual_taken_hours,personal_taken_hours,request_fingerprint,note,actor_user_id)
+VALUES(pg_temp.source_person(5),'2026-10-06',7.6,7.6,7.6,0,private.leave_accrual_request_fingerprint(pg_temp.source_person(5),'2026-10-06'),'Synthetic actual approved annual usage after separate service hold',pg_temp.source_person(900));
+DO $$ DECLARE c jsonb; p jsonb; BEGIN
+  c:=private.calculate_leave_entitlement(pg_temp.source_person(5),'annual','2026-10-07');
+  ASSERT c->>'status'='needs_review' AND c->>'eligibilityStatus'='needs_review';
+  ASSERT (c->>'reviewDate')::date='2026-10-05';
+  ASSERT (c->>'asOf')::date='2026-10-04';
+  ASSERT (c->>'taken')::numeric=2, 'Extra actual usage before the unpaid service hold remains charged';
+  p:=private.project_annual_leave_balance(pg_temp.source_person(5),'2026-10-08');
+  ASSERT (p->>'approvedHours')::numeric=7.6;
+  ASSERT (p->>'otherTakenHours')::numeric=2, 'Later approved usage does not erase earlier unrelated actual usage';
+  ASSERT abs((p->>'availableHours')::numeric-(20.5+7.6/13-7.6-2))<0.000000000001;
+END $$;
+ROLLBACK TO source_bank_actual_usage_past_hold;
+\echo PASS: actual usage before an eligibility hold is retained independently of later approved usage
+
+SAVEPOINT source_bank_used_edit_credit;
+UPDATE private.leave_accrual_policies SET enabled=false,requires_review=false WHERE person_id=pg_temp.source_person(1);
+INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,
+ status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
+VALUES(pg_temp.source_request(501),pg_temp.source_person(1),pg_temp.source_person(1),'annual','Annual leave','2026-10-05','2026-10-05',1,7.6,
+ 'approved',now(),'historical_import',encode(sha256(convert_to('source-bank-used-edit-credit-501','UTF8')),'hex'),'full_time','paid_entitlement');
+SELECT pg_temp.set_test_actor(pg_temp.source_person(900));
+SELECT public.review_employee_leave_accrual_day(pg_temp.source_person(1),'2026-10-05',0,0,7.6,0,'Synthetic confirmed used annual hours');
+DO $$ BEGIN
+ ASSERT abs((private.project_annual_leave_balance(pg_temp.source_person(1),'2030-12-09')->>'availableHours')::numeric-24.9545)<0.000000000001;
+ BEGIN
+  UPDATE public.leave_requests SET start_date='2030-12-09',end_date='2030-12-10',business_days=2,hours=30 WHERE id=pg_temp.source_request(501);
+  RAISE EXCEPTION 'Confirmed used hours were returned as editable approval credit.' USING ERRCODE='ZX001';
+ EXCEPTION WHEN invalid_parameter_value THEN ASSERT SQLERRM LIKE 'Not enough balance.%'; END;
+ ASSERT (SELECT start_date='2026-10-05' AND hours=7.6 FROM public.leave_requests WHERE id=pg_temp.source_request(501));
+END $$;
+ROLLBACK TO source_bank_used_edit_credit;
+\echo PASS: editing an approved request cannot release confirmed already-used annual hours
+
 ROLLBACK;

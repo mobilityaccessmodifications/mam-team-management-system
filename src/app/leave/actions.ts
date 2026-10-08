@@ -1094,7 +1094,9 @@ async function savePayrollBalance(kind: "annual" | "personal", personId: string,
       : await supabase.rpc("set_employee_sick_leave_balance", { p_person_id: id, p_hours: hours, p_as_of: asOf });
     if (error) return { ok: false, committed: false, message: error.code === "55000" && error.message === "Use audited payroll reconciliation for retained commitments."
       ? "This balance has retained payroll commitments. Use the audited closing reconciliation or settlement operation."
-      : "Balance could not be saved. Check your access and balance date." };
+      : error.code === "55000" && error.message === "Use audited annual source adoption for this payroll balance."
+        ? "This balance uses a payroll source. It must be corrected through an audited payroll source adoption."
+        : "Balance could not be saved. Check your access and balance date." };
     committed = true;
     revalidatePath("/");
     return { ok: true, committed: true };
@@ -1156,11 +1158,12 @@ export async function saveLeaveAccrualDay(personId: string, input: {
   return { ok: true };
 }
 
-export async function previewAnnualLeaveBalance(personId: string, startDate: string, previewPersonId?: string): Promise<AnnualLeaveProjection | null> {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return null;
+export async function previewAnnualLeaveBalance(personId: string, startDate: string, previewPersonId?: string, endDate = startDate, startTime = "", endTime = ""): Promise<AnnualLeaveProjection | null> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || leaveDateRangeError(startDate, endDate) || Boolean(startTime) !== Boolean(endTime)
+    || [startTime, endTime].some((time) => time && !TIME_PATTERN.test(time))) return null;
   const supabase = await requireLeaveSession();
-  const { data, error } = await supabase.rpc("preview_annual_leave_balance", {
-    p_person_id: selectedPersonId(personId), p_start_date: startDate,
+  const { data, error } = await supabase.rpc("preview_annual_leave_request", {
+    p_person_id: selectedPersonId(personId), p_start_date: startDate, p_end_date: endDate, p_start_time: startTime || null, p_end_time: endTime || null,
     p_preview_person_id: previewPersonId ? selectedPersonId(previewPersonId) : null,
   });
   if (error || !data || !["projected", "banked_only", "unavailable"].includes(data.status)) return null;

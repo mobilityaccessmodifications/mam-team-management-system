@@ -11,7 +11,7 @@ import urllib.error
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = 'xtwlrjqbusadghavchqm'
 ORG = 'fwlmbmospuwoaosffvmw'
-BASE_HEAD = '284b1c9e990c9348e4131432324181b57a132206'
+BASE_HEAD = '9ff635a92568eee29b58192405bcfa0b45cce8f2'
 NAME = 'annual_source_bank_reconciliation'
 PINS = ROOT / 'scripts/annual-source-bank-release-pins.json'
 BASE_HELPER = ROOT / 'scripts/deploy-payroll-closing-carryforward.py'
@@ -53,7 +53,7 @@ def base_helper():
 
 def ledger_expression():
     return """(select coalesce(jsonb_agg(jsonb_build_object(
-      'version',version,'name',name,'statements',to_jsonb(statements),
+      'version',version,'name',name,'statementHashes',case when statements is null then null else coalesce((select jsonb_agg(case when value is null then null else encode(sha256(convert_to(value,'UTF8')),'hex') end order by position) from unnest(statements) with ordinality source(value,position)),'[]'::jsonb) end,
       'ndims',array_ndims(statements),'lower',array_lower(statements,1),
       'upper',array_upper(statements,1),'cardinality',cardinality(statements),
       'isNull',statements is null,
@@ -64,7 +64,7 @@ def ledger_expression():
 def validate_ledger(rows):
     require(isinstance(rows, list) and rows, 'Explicit nonempty raw ledger required')
     versions = []
-    fields = {'version', 'name', 'statements', 'ndims', 'lower', 'upper', 'cardinality', 'isNull', 'rawHash'}
+    fields = {'version', 'name', 'statementHashes', 'ndims', 'lower', 'upper', 'cardinality', 'isNull', 'rawHash'}
     for row in rows:
         require(isinstance(row, dict) and set(row) == fields, 'Incomplete raw ledger row')
         require(isinstance(row['version'], str) and re.fullmatch('[0-9]{14}', row['version']), 'Malformed ledger version')
@@ -72,10 +72,10 @@ def validate_ledger(rows):
         require(isinstance(row['rawHash'], str) and re.fullmatch('[0-9a-f]{64}', row['rawHash']), 'Native raw ledger hash required')
         require(type(row['isNull']) is bool, 'Explicit ledger NULL flag required')
         if row['isNull']:
-            require(all(row[key] is None for key in ['statements', 'ndims', 'lower', 'upper', 'cardinality']), 'Malformed NULL ledger array')
+            require(all(row[key] is None for key in ['statementHashes', 'ndims', 'lower', 'upper', 'cardinality']), 'Malformed NULL ledger array')
         else:
-            statements = row['statements']
-            require(isinstance(statements, list) and all(x is None or isinstance(x, str) for x in statements), 'Unsupported raw statements array')
+            statements = row['statementHashes']
+            require(isinstance(statements, list) and all(x is None or (isinstance(x, str) and re.fullmatch('[0-9a-f]{64}', x)) for x in statements), 'Unsupported raw statements array')
             require(type(row['cardinality']) is int and row['cardinality'] == len(statements), 'Ledger array cardinality differs')
             if not statements:
                 require(all(row[key] is None for key in ['ndims', 'lower', 'upper']), 'Malformed empty ledger array')
@@ -90,6 +90,30 @@ def migration_path(pins):
     version = pins.get('version')
     require(isinstance(version, str) and re.fullmatch('[0-9]{14}', version), 'Explicit migration version required')
     return ROOT / 'supabase/migrations' / (version + '_' + NAME + '.sql')
+
+
+def validate_function_specs(sql, pins):
+    blocks = re.findall(r'insert into annual_source_function_spec values\n(.*?)\ncreate temporary table annual_source_relation_spec', sql, re.S)
+    require(len(blocks) == 1, 'Missing exact core function scope')
+    rows = blocks[0].splitlines()
+    pattern = re.compile(r"\('([^']+)',(true|false),(null|'([0-9a-f]{64})'),'([0-9a-f]{64})',(null|'(?:[^']|'')*'::jsonb)\)([,;])")
+    specs = {}
+    for index, row in enumerate(rows):
+        match = pattern.fullmatch(row)
+        require(match is not None and match[7] == (';' if index == len(rows) - 1 else ','), 'Unsupported core function specification')
+        signature, existing, before_sha, after_sha = match[1], match[2] == 'true', match[4], match[5]
+        require(signature not in specs and signature.startswith(('private.', 'public.')), 'Duplicate or invalid core function specification')
+        require((existing and before_sha is not None) or (not existing and before_sha is None), 'Incomplete core function predecessor hash')
+        specs[signature] = (existing, before_sha, after_sha)
+    existing = {signature for signature, value in specs.items() if value[0]}
+    new = set(specs) - existing
+    require(len(existing) == 18 and len(new) == 7, 'Unexpected core function scope')
+    before, after = pins['before']['functions'], pins['after']['functions']
+    require(existing <= set(before) and new.isdisjoint(before) and set(after) == set(before) | new, 'Core and catalog function scope differ')
+    for signature, (is_existing, before_sha, after_sha) in specs.items():
+        require(not is_existing or before[signature].get('sha256') == before_sha, 'Core predecessor definition pin differs: ' + signature)
+        require(after[signature].get('sha256') == after_sha, 'Core resulting definition pin differs: ' + signature)
+    require(all(before[signature] == after[signature] for signature in set(before) - existing), 'Unlisted protected function change')
 
 
 def validate_candidate(sql, pins):
@@ -108,13 +132,14 @@ def validate_candidate(sql, pins):
             and isinstance(after.get('functions'), dict) and set(before['functions']) <= set(after['functions']), 'Protected function pins omitted')
     require(isinstance(before.get('tables'), dict) and before['tables']
             and isinstance(after.get('tables'), dict) and set(before['tables']) <= set(after['tables']), 'Protected table pins omitted')
+    validate_function_specs(sql, pins)
     require(before.get('purgeGuard') == {'rows': 1, 'matches': True}
             and after.get('purgeGuard') == {'rows': 1, 'matches': True}, 'Protected collector consistency pins required')
     validate_ledger(pins.get('beforeLedger'))
     validate_ledger(pins.get('afterLedger'))
     require(pins['afterLedger'][:-1] == pins['beforeLedger'], 'Historical raw ledger changes are not authorized')
     new = pins['afterLedger'][-1]
-    require(new['version'] == pins['version'] and new['name'] == NAME and new['statements'] == [sql]
+    require(new['version'] == pins['version'] and new['name'] == NAME and new['statementHashes'] == [digest(sql)]
             and (new['ndims'], new['lower'], new['upper'], new['cardinality'], new['isNull']) == (1, 1, 1, 1, False),
             'Exact singleton target source/shape required')
     require(max(row['version'] for row in pins['beforeLedger']) < pins['version'], 'Target must be newer than the exact predecessor')
@@ -165,8 +190,8 @@ def build_transaction(sql, pins):
     receipts = "(select encode(sha256(convert_to(coalesce(jsonb_agg(to_jsonb(p) order by id),'[]')::text,'UTF8')),'hex') from private.confirmed_test_identity_purges p)"
     capture = 'create temporary table annual_source_release_receipts on commit drop as select ' + receipts + ' as value;'
     insert = 'insert into supabase_migrations.schema_migrations(version,name,statements) values(' + ','.join([literal(pins['version']), literal(NAME), 'array[' + literal(sql) + ']']) + ');'
-    final = "do $annual_source_release_final$ begin if pg_temp.annual_source_security() is distinct from (select value from pg_temp.annual_source_security_before) or " + receipts + " is distinct from (select value from pg_temp.annual_source_release_receipts) or private.confirmed_test_purge_schema_hash() is distinct from (select schema_hash from private.confirmed_test_purge_schema where singleton) then raise exception 'Source-bank final security, collector or receipt drift' using errcode='55000'; end if; end $annual_source_release_final$;"
-    return "begin; set local search_path=''; set local lock_timeout='3s'; set local statement_timeout='90s';\nlock table " + locks + " in share row exclusive mode nowait;\n" + guard(pins['before'], pins['beforeLedger']) + '\n' + capture + '\n' + base_helper()['transaction_body'](sql) + '\n' + insert + '\nset constraints all immediate;\n' + guard(pins['after'], pins['afterLedger']) + '\n' + final + "\ndrop function pg_temp.annual_source_security();\nnotify pgrst,'reload schema';\ncommit;"
+    final = "do $annual_source_release_final$ begin perform pg_temp.annual_source_assert_delta(); if pg_temp.annual_source_security() is distinct from (select value from pg_temp.annual_source_security_before) or " + receipts + " is distinct from (select value from pg_temp.annual_source_release_receipts) or private.confirmed_test_purge_schema_hash() is distinct from (select schema_hash from private.confirmed_test_purge_schema where singleton) then raise exception 'Source-bank final security, collector or receipt drift' using errcode='55000'; end if; end $annual_source_release_final$;"
+    return "begin; set local search_path=''; set local lock_timeout='3s'; set local statement_timeout='90s';\nlock table " + locks + " in share row exclusive mode nowait;\n" + guard(pins['before'], pins['beforeLedger']) + '\n' + capture + '\n' + base_helper()['transaction_body'](sql) + '\n' + insert + '\nset constraints all immediate;\n' + guard(pins['after'], pins['afterLedger']) + '\n' + final + "\ndrop function pg_temp.annual_source_assert_delta();\ndrop function pg_temp.annual_source_catalog();\ndrop function pg_temp.annual_source_table_metadata(oid);\ndrop function pg_temp.annual_source_index_metadata(oid);\ndrop function pg_temp.annual_source_data();\ndrop function pg_temp.annual_source_security();\nnotify pgrst,'reload schema';\ncommit;"
 
 
 def validate_local_sources(pins):

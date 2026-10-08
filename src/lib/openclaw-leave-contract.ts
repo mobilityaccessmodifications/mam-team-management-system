@@ -114,8 +114,8 @@ function fields(value: unknown, employee?: Employee, now = Date.now()): LeaveFie
   const startTime = time(v.startTime), endTime = time(v.endTime);
   if ((startTime === null) !== (endTime === null)) return { missing: [startTime === null ? "startTime" : "endTime"] };
   const weekday = (s: string) => new Date(s).getUTCDay() % 6 !== 0;
-  if (startTime && endTime && (!weekday(startDate) || !weekday(endDate) || startTime === "18:00" || endTime === "06:00" || (days === 0 && endTime <= startTime))) fail("invalid_request");
-  if (days < 2 && !weekday(startDate) && !weekday(endDate)) fail("invalid_request");
+  if (startTime && endTime && ((v.leaveType !== "Annual leave" && (!weekday(startDate) || !weekday(endDate))) || (v.leaveType === "Annual leave" && days !== 0) || startTime === "18:00" || endTime === "06:00" || (days === 0 && endTime <= startTime))) fail("invalid_request");
+  if (v.leaveType !== "Annual leave" && days < 2 && !weekday(startDate) && !weekday(endDate)) fail("invalid_request");
   if (v.employeeNote !== undefined && typeof v.employeeNote !== "string") fail("invalid_request");
   const employeeNote = (v.employeeNote as string | undefined)?.trim() ?? "";
   // Control/bidi characters cannot visually hide altered confirmation fields.

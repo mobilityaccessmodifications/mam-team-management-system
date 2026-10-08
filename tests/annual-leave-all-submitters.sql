@@ -24,6 +24,11 @@ FROM public.profiles WHERE login_name LIKE 'annual-fixture-%';
 INSERT INTO private.employee_annual_leave_balances(person_id,hours,as_of,is_example,updated_by)
 SELECT id,0,(now() at time zone 'Australia/Melbourne')::date,false,'b1000000-0000-4000-8000-000000000001'::uuid
 FROM public.profiles WHERE login_name LIKE 'annual-fixture-%';
+INSERT INTO private.leave_accrual_policies(person_id,effective_from,weekly_hours,weekdays,annual_weeks,personal_weeks,enabled,note)
+SELECT d.person_id,'2020-01-01',CASE WHEN d.employment_type='part_time' THEN 37.5 ELSE 38 END,array[1,2,3,4,5],4,2,false,'Synthetic declared ordinary policy; accrual paused for budget-only cases'
+FROM private.employee_directory_details d WHERE d.person_id::text LIKE 'b1000000-%' OR d.person_id::text LIKE 'b2000000-%';
+INSERT INTO private.leave_payroll_calendars(person_id,calendar_key)
+SELECT person_id,'none' FROM private.employee_directory_details WHERE person_id::text LIKE 'b1000000-%' OR person_id::text LIKE 'b2000000-%';
 SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000001');
 INSERT INTO private.leave_approval_grants(reviewer_user_id,scope_kind,reviewer_label,priority)
 VALUES('b1000000-0000-4000-8000-000000000001','global','Synthetic Annual Admin',100);
@@ -226,9 +231,10 @@ DO $$ BEGIN
   END;
   ASSERT (SELECT employment_type='part_time' FROM private.employee_directory_details
     WHERE person_id='b2000000-0000-4000-8000-000000000002');
+  ASSERT private.leave_request_required_hours('b2000000-0000-4000-8000-000000000010')=7.5;
   UPDATE private.employee_directory_details SET working_weekdays=array[1,2,3]::smallint[]
     WHERE person_id='b2000000-0000-4000-8000-000000000002';
-  ASSERT private.leave_request_required_hours('b2000000-0000-4000-8000-000000000010')=7.5;
+  ASSERT private.leave_request_required_hours('b2000000-0000-4000-8000-000000000010')=12.5, '37.5 weekly hours over three saved ordinary days uses 12.5 per day';
 END $$;
 \echo PASS T15 legacy classification changes fail closed without rewriting requests
 ROLLBACK TO legacy_classification;
@@ -390,4 +396,97 @@ DO $$ BEGIN
     AND tgname='leave_notification_on_mutation' AND tgenabled='O');
 END $$;
 \echo PASS T20 effective INSERT UPDATE RLS private ACL and notification protections remain enabled
+SAVEPOINT source_bank_weekend_producers;
+INSERT INTO private.leave_accrual_policies(person_id,effective_from,weekly_hours,weekdays,annual_weeks,personal_weeks,enabled,note)
+VALUES('b1000000-0000-4000-8000-000000000006','2020-01-02',12,array[6,7],4,2,false,'Synthetic declared weekend ordinary hours; accrual paused');
+UPDATE private.employee_annual_leave_balances SET hours=5.9999 WHERE person_id='b1000000-0000-4000-8000-000000000006';
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000006');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE day date:=(current_date+28)+(6-extract(isodow from current_date+28)::integer); BEGIN
+  BEGIN
+    PERFORM public.submit_my_leave_request('Annual leave',day,day);
+    RAISE EXCEPTION 'Weekend self request rounded insufficient balance into funding' USING ERRCODE='ZX001';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    ASSERT SQLERRM LIKE ANY(array['Not enough balance.%','Future accrual could not be confirmed%']);
+  END;
+END $$;
+RESET ROLE;
+DO $$ BEGIN ASSERT NOT EXISTS(SELECT 1 FROM public.leave_requests WHERE employee_person_id='b1000000-0000-4000-8000-000000000006'); END $$;
+UPDATE private.employee_annual_leave_balances SET hours=6 WHERE person_id='b1000000-0000-4000-8000-000000000006';
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE day date:=(current_date+28)+(6-extract(isodow from current_date+28)::integer); r uuid; replay uuid;
+  key constant uuid:='b6000000-0000-4000-8000-000000000066'; BEGIN
+  SELECT id INTO r FROM public.submit_my_leave_request('Annual leave',day,day);
+  ASSERT r IS NOT NULL;
+  ASSERT (SELECT business_days=1 AND hours IS NULL FROM public.leave_requests WHERE id=r), 'Full weekend request uses the policy quantity, without rounded stored hours';
+  SELECT id INTO r FROM public.submit_leave_request_once(key,NULL,'Annual leave',day+1,day+1);
+  SELECT id INTO replay FROM public.submit_leave_request_once(key,NULL,'Annual leave',day+1,day+1);
+  ASSERT replay=r, 'Weekend idempotent producer has one canonical request';
+  BEGIN
+    PERFORM public.submit_leave_request_once(key,NULL,'Annual leave',day+7,day+7);
+    RAISE EXCEPTION 'Weekend replay accepted changed request details' USING ERRCODE='ZX001';
+  EXCEPTION WHEN invalid_parameter_value THEN ASSERT SQLERRM LIKE 'This submission was already used%'; END;
+  BEGIN
+    PERFORM public.submit_my_leave_request('Annual leave',day-1,day-1);
+    RAISE EXCEPTION 'Weekend employee acquired Friday annual leave' USING ERRCODE='ZX001';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+  BEGIN
+    PERFORM public.decide_my_managed_leave_request(r,'Approved',NULL);
+    RAISE EXCEPTION 'Weekend employee acquired self-approval' USING ERRCODE='ZX001';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
+DO $$ DECLARE r record; BEGIN
+  ASSERT (SELECT count(*)=2 FROM public.leave_requests WHERE employee_person_id='b1000000-0000-4000-8000-000000000006');
+  FOR r IN SELECT id FROM public.leave_requests WHERE employee_person_id='b1000000-0000-4000-8000-000000000006' LOOP
+    ASSERT private.leave_request_required_hours(r.id)=6, '12 weekly hours over Saturday/Sunday is six per day';
+  END LOOP;
+  ASSERT (SELECT count(*)=1 FROM private.leave_submission_receipts
+    WHERE actor_user_id='b1000000-0000-4000-8000-000000000006' AND submission_key='b6000000-0000-4000-8000-000000000066');
+END $$;
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000003');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE day date:=(current_date+28)+(6-extract(isodow from current_date+28)::integer); r uuid; BEGIN
+  SELECT id INTO r FROM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000006','Annual leave',day+7,day+7);
+  ASSERT r IS NOT NULL, 'Direct manager can submit a funded saved-policy weekend';
+END $$;
+RESET ROLE;
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000004');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE day date:=(current_date+28)+(6-extract(isodow from current_date+28)::integer); BEGIN
+  BEGIN
+    PERFORM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000006','Annual leave',day+14,day+14);
+    RAISE EXCEPTION 'Account acquired delegated weekend submission' USING ERRCODE='ZX001';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
+UPDATE private.employee_annual_leave_balances SET hours=11.9999 WHERE person_id='b1000000-0000-4000-8000-000000000006';
+SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000006');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE day date:=(current_date+28)+(6-extract(isodow from current_date+28)::integer); BEGIN
+  BEGIN
+    PERFORM public.submit_my_leave_request('Annual leave',day+20,day+22);
+    RAISE EXCEPTION 'Friday through Sunday annual request rounded twelve hours into funding' USING ERRCODE='ZX001';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    ASSERT SQLERRM LIKE ANY(array['Not enough balance.%','Future accrual could not be confirmed%']);
+  END;
+END $$;
+RESET ROLE;
+UPDATE private.employee_annual_leave_balances SET hours=12 WHERE person_id='b1000000-0000-4000-8000-000000000006';
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE day date:=(current_date+28)+(6-extract(isodow from current_date+28)::integer); r uuid; BEGIN
+  SELECT id INTO r FROM public.submit_my_leave_request('Annual leave',day+20,day+22);
+  ASSERT r IS NOT NULL;
+  ASSERT (SELECT business_days=2 AND hours IS NULL FROM public.leave_requests WHERE id=r), 'Friday through Sunday contains two scheduled days';
+END $$;
+RESET ROLE;
+DO $$ DECLARE r record; BEGIN
+  FOR r IN SELECT id,business_days FROM public.leave_requests WHERE employee_person_id='b1000000-0000-4000-8000-000000000006' LOOP
+    ASSERT private.leave_request_required_hours(r.id)=r.business_days*6;
+  END LOOP;
+  ASSERT (SELECT count(*)=4 FROM public.leave_requests WHERE employee_person_id='b1000000-0000-4000-8000-000000000006');
+END $$;
+ROLLBACK TO source_bank_weekend_producers;
+\echo PASS: actual self selected idempotent weekend producers; exact policy quantity; role and replay boundaries
+
 ROLLBACK;

@@ -18,10 +18,14 @@ class AnnualSourceBankReleaseTests(unittest.TestCase):
         cls.m = runpy.run_path(str(ROOT / 'scripts/deploy-annual-source-bank.py'))
 
     def setUp(self):
-        self.sql = "begin;\ncreate function pg_temp.annual_source_security() returns jsonb language sql as $f$ select '{}'::jsonb $f$;\ncreate temporary table annual_source_security_before(value jsonb) on commit drop;\nselect 'commit;'::text;\ncommit;\n"
-        old = dict(version='20261006110000', name='synthetic_predecessor', statements=None,
+        existing_signatures = ['private.synthetic_old_' + str(index) + '()' for index in range(18)]
+        new_signatures = ['private.synthetic_new_' + str(index) + '()' for index in range(7)]
+        specifications = ["('" + signature + "',true,'" + '3' * 64 + "','" + '3' * 64 + "',null)" for signature in existing_signatures]
+        specifications += ["('" + signature + "',false,null,'" + '6' * 64 + "','{}'::jsonb)" for signature in new_signatures]
+        self.sql = "begin;\ncreate function pg_temp.annual_source_security() returns jsonb language sql as $f$ select '{}'::jsonb $f$;\ncreate temporary table annual_source_security_before(value jsonb) on commit drop;\ninsert into annual_source_function_spec values\n" + ',\n'.join(specifications) + ";\ncreate temporary table annual_source_relation_spec(x text);\nselect 'commit;'::text;\ncommit;\n"
+        old = dict(version='20261006110000', name='synthetic_predecessor', statementHashes=None,
                    ndims=None, lower=None, upper=None, cardinality=None, isNull=True, rawHash='1' * 64)
-        new = dict(version='20261008235900', name=self.m['NAME'], statements=[self.sql],
+        new = dict(version='20261008235900', name=self.m['NAME'], statementHashes=[self.m['digest'](self.sql)],
                    ndims=1, lower=1, upper=1, cardinality=1, isNull=False, rawHash='2' * 64)
         function = dict(sha256='3' * 64, owner='postgres', acl='{postgres=X/postgres}',
                         securityDefiner=True, config=['search_path=""'])
@@ -29,16 +33,55 @@ class AnnualSourceBankReleaseTests(unittest.TestCase):
                        ledger=[dict(version=old['version'], name=old['name'], sourceHash='4' * 64)],
                        functions={'private.confirmed_test_purge_schema_hash()': function},
                        tables={'private.confirmed_test_purge_schema': dict(owner='postgres', rls=True, forceRls=True)})
+        for signature in existing_signatures:
+            catalog['functions'][signature] = copy.deepcopy(function)
         after = copy.deepcopy(catalog)
+        for signature in new_signatures:
+            after['functions'][signature] = dict(function, sha256='6' * 64)
         after['ledger'].append(dict(version=new['version'], name=new['name'],
                                     sourceHash=self.m['digest'](json.dumps([self.sql], ensure_ascii=False, separators=(',', ':')))))
         self.pins = dict(project=self.m['PROJECT'], organization=self.m['ORG'], baseHead=self.m['BASE_HEAD'],
                          version=new['version'], migrationSha256=self.m['digest'](self.sql),
                          before=catalog, after=after, beforeLedger=[old], afterLedger=[copy.deepcopy(old), new], localPredecessors=[])
 
+    def test_every_core_before_and_after_definition_pin_is_checked(self):
+        for phase in ['before', 'after']:
+            for signature in self.pins[phase]['functions']:
+                if 'synthetic_' not in signature:
+                    continue
+                with self.subTest(phase=phase, signature=signature):
+                    pins = copy.deepcopy(self.pins)
+                    pins[phase]['functions'][signature]['sha256'] = '9' * 64
+                    with self.assertRaisesRegex(ValueError, 'definition pin differs'):
+                        self.m['validate_candidate'](self.sql, pins)
+
+    def test_core_signature_omissions_additions_duplicates_and_undeclared_change_rejected(self):
+        for phase in ['before', 'after']:
+            pins = copy.deepcopy(self.pins)
+            del pins[phase]['functions']['private.synthetic_old_0()']
+            with self.assertRaises(ValueError):
+                self.m['validate_candidate'](self.sql, pins)
+        pins = copy.deepcopy(self.pins)
+        pins['before']['functions']['private.synthetic_new_0()'] = copy.deepcopy(pins['after']['functions']['private.synthetic_new_0()'])
+        with self.assertRaises(ValueError):
+            self.m['validate_candidate'](self.sql, pins)
+        pins = copy.deepcopy(self.pins)
+        pins['after']['functions']['private.unknown_function()'] = copy.deepcopy(next(iter(pins['after']['functions'].values())))
+        with self.assertRaises(ValueError):
+            self.m['validate_candidate'](self.sql, pins)
+        pins = copy.deepcopy(self.pins)
+        pins['after']['functions']['private.confirmed_test_purge_schema_hash()']['sha256'] = '9' * 64
+        with self.assertRaisesRegex(ValueError, 'Unlisted protected function change'):
+            self.m['validate_candidate'](self.sql, pins)
+        sql = self.sql.replace('private.synthetic_old_1()', 'private.synthetic_old_0()')
+        pins = copy.deepcopy(self.pins)
+        pins['migrationSha256'] = self.m['digest'](sql)
+        with self.assertRaisesRegex(ValueError, 'Duplicate'):
+            self.m['validate_candidate'](sql, pins)
+
     def test_candidate_accepts_exact_null_history_and_singleton_target(self):
         self.m['validate_candidate'](self.sql, self.pins)
-        empty = dict(version='20261006120000', name='synthetic_empty', statements=[],
+        empty = dict(version='20261006120000', name='synthetic_empty', statementHashes=[],
                      ndims=None, lower=None, upper=None, cardinality=0, isNull=False, rawHash='5' * 64)
         pins = copy.deepcopy(self.pins)
         pins['beforeLedger'].append(empty)
@@ -60,12 +103,12 @@ class AnnualSourceBankReleaseTests(unittest.TestCase):
                 self.m['validate_candidate'](self.sql, pins)
 
     def test_history_replacement_and_array_bound_only_drift_fail(self):
-        for key, value in [('name', 'changed'), ('rawHash', '0' * 64), ('isNull', False), ('statements', [])]:
+        for key, value in [('name', 'changed'), ('rawHash', '0' * 64), ('isNull', False), ('statementHashes', [])]:
             pins = copy.deepcopy(self.pins)
             pins['afterLedger'][0][key] = value
             with self.assertRaises(ValueError):
                 self.m['validate_candidate'](self.sql, pins)
-        for key, value in [('lower', 0), ('upper', 0), ('ndims', 2), ('cardinality', 2), ('statements', [self.sql.rstrip()])]:
+        for key, value in [('lower', 0), ('upper', 0), ('ndims', 2), ('cardinality', 2), ('statementHashes', [self.m['digest'](self.sql.rstrip())])]:
             pins = copy.deepcopy(self.pins)
             pins['afterLedger'][-1][key] = value
             with self.assertRaises(ValueError):
@@ -73,7 +116,7 @@ class AnnualSourceBankReleaseTests(unittest.TestCase):
 
     def test_missing_raw_statement_field_does_not_become_null(self):
         rows = copy.deepcopy(self.pins['beforeLedger'])
-        del rows[0]['statements']
+        del rows[0]['statementHashes']
         with self.assertRaises(ValueError):
             self.m['validate_ledger'](rows)
         rows = copy.deepcopy(self.pins['beforeLedger'])
@@ -116,7 +159,7 @@ class AnnualSourceBankReleaseTests(unittest.TestCase):
         sql = self.sql.replace('\ncommit;\n', '\ndrop function pg_temp.annual_source_security();\ncommit;\n')
         pins = copy.deepcopy(self.pins)
         pins['migrationSha256'] = self.m['digest'](sql)
-        pins['afterLedger'][-1]['statements'] = [sql]
+        pins['afterLedger'][-1]['statementHashes'] = [self.m['digest'](sql)]
         with self.assertRaises(ValueError):
             self.m['build_transaction'](sql, pins)
 
