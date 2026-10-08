@@ -6,9 +6,10 @@ const paths = [
   'leave-notifications', 'check-in-reminders', 'new-starter-day-one', 'onboarding-credentials', 'scheduled-offboarding', 'leave-priority-reminders',
 ];
 
-export async function runRecovery(secret, fetchJob = fetch, log = console) {
+export async function runRecovery(secret, fetchJob = fetch, log = console, job) {
+  if (job !== undefined && !paths.includes(job)) throw new Error('Select one supported recovery worker.');
   if (!secret?.trim()) throw new Error('MAM recovery credential is not configured.');
-  const results = await Promise.all(paths.map(async (job) => {
+  const results = await Promise.all((job === undefined ? paths : [job]).map(async (job) => {
     try {
       const response = await fetchJob(`${origin}/api/cron/recovery?job=${job}`, {
         headers: { authorization: `Bearer ${secret}` },
@@ -31,5 +32,14 @@ export async function runRecovery(secret, fetchJob = fetch, log = console) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (!await runRecovery(process.env.MAM_PEOPLE_HUB_CRON_SECRET)) process.exitCode = 1;
+  const args = process.argv.slice(2);
+  if (args.length !== 1 || !paths.includes(args[0])) {
+    console.error('Select one supported recovery worker.');
+    process.exitCode = 1;
+  } else if (!process.env.MAM_PEOPLE_HUB_CRON_SECRET?.trim()) {
+    console.error('MAM recovery credential is not configured.');
+    process.exitCode = 1;
+  } else if (!await runRecovery(process.env.MAM_PEOPLE_HUB_CRON_SECRET, fetch, console, args[0])) {
+    process.exitCode = 1;
+  }
 }
