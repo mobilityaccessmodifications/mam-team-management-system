@@ -3,7 +3,7 @@
   "organization": "fwlmbmospuwoaosffvmw",
   "baseHead": "9ff635a92568eee29b58192405bcfa0b45cce8f2",
   "version": "20261008150000",
-  "migrationSha256": "ab7a5140999a768298455afb0e25f35e4d36d3b6451efa5c3227c9344634a990",
+  "migrationSha256": "45393c11e860c424ad719aafcaae514d070b21ca4375cb1a5643dab414f6e0c4",
   "before": {
     "roles": [
       {
@@ -6173,7 +6173,7 @@
       {
         "version": "20261008150000",
         "name": "annual_source_bank_reconciliation",
-        "sourceHash": "971f6e22c270f2ef5f11ea0103467a5b740a219799174edb0e5c6db4e6d026b2"
+        "sourceHash": "9fa99404a47e48b1cd98c4006e5b2465c6cfc469692de4286c90f118b31f0d5e"
       }
     ],
     "tables": {
@@ -10920,7 +10920,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "39061290da2ab38cd8985d771195bf4372090f0e8c4bffbf031e2165d5dae906",
+        "sha256": "03833b5e9266e4da7386994162bed27660c583b8f21eac95143046a4d3936f65",
         "securityDefiner": true
       },
       "private.confirmed_test_retained_leave_receipt(jsonb)": {
@@ -11136,7 +11136,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "7e5156169f5079119cdc98072940b9df9d08f1f7b055fa1e6075868d07bb65e6",
+        "sha256": "32843b768f85879c6d158f5b0e4122da3ae9638d5525aa3bc8646941e677efc9",
         "securityDefiner": true
       },
       "private.leave_request_quantity(uuid,date,date,time,time,numeric)": {
@@ -16124,14 +16124,14 @@
       "version": "20261008150000",
       "name": "annual_source_bank_reconciliation",
       "statementHashes": [
-        "ab7a5140999a768298455afb0e25f35e4d36d3b6451efa5c3227c9344634a990"
+        "45393c11e860c424ad719aafcaae514d070b21ca4375cb1a5643dab414f6e0c4"
       ],
       "ndims": 1,
       "lower": 1,
       "upper": 1,
       "cardinality": 1,
       "isNull": false,
-      "rawHash": "2ca08bc7470815abf7bbb1c953d3288fee73b5f021cf1887d6289fd6094655cd"
+      "rawHash": "4c75b203ff7ed2f8735402b51df26fbc14210117360200a53059bdfa84577ac1"
     }
   ],
   "localPredecessors": [

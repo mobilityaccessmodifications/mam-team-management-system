@@ -14,7 +14,7 @@ create temporary table annual_source_function_spec(signature text primary key,is
 insert into annual_source_function_spec values
 ('private.calculate_employee_leave_accrual(uuid,date)',true,'1006d839cb1f2019acea176d2b0e16ee6a0d923a81c9bdc0f46284797338b1ee','c798f362037f8e9e074b227d42a78574d924195dfe1f05e64a0a6c02dca5e4ab',null),
 ('private.payroll_request_hours_after(uuid,date)',true,'3f4505db5271b025109f00cb7915435e852c5fa46fa20aabdd499e17786cf541','fa4c121210ae3c9dddb8007460f0d5b633299592ef680ed7579c499f5cd68e0f',null),
-('private.approved_leave_hours_after(uuid,text[],date)',true,'251bfea3140b47d8067928c2daf65801555b118a612c3cfa5989fae52141648b','39061290da2ab38cd8985d771195bf4372090f0e8c4bffbf031e2165d5dae906',null),
+('private.approved_leave_hours_after(uuid,text[],date)',true,'251bfea3140b47d8067928c2daf65801555b118a612c3cfa5989fae52141648b','03833b5e9266e4da7386994162bed27660c583b8f21eac95143046a4d3936f65',null),
 ('private.project_annual_leave_balance(uuid,date)',true,'ee185baa6a8dfa834b77cdfeb60339e70d39f42915ec00112142536126c4de4a','b88e6a78a3c43681496f9649611cc06df507955bf10929f1b27970cd2ff848d0',null),
 ('private.enforce_banked_annual_leave_request()',true,'ae1525bd291ea9265dd731a91eefb00b9f33dc3693577c1e73c3a2edb5186350','8443b5e62134cf6cb797743b36418b9a4b332f1f205c814522d47ccd6ca1b684',null),
 ('private.leave_payroll_balance_sufficient(uuid)',true,'c38b9655a39149fc1d8b6c4d1f538f1cca22cf248ea61c2b9ba18f0022c56814','3ca926e6db700a3cae42341a738413ee5ce4eba03ac3d09bb671e44373af5619',null),
@@ -33,7 +33,7 @@ insert into annual_source_function_spec values
 ('private.fill_leave_balance_required_hours()',true,'0eb04e084d523170f5c8840de52601156c969c214303086991f31b0120b7d966','d815207f35ecc6808d08a5f997ab3a5c1019f03f6a2524cbcdc58b690a797951',null),
 ('private.leave_bank_basis(uuid,text)',false,null,'b6ad67f7ad0b2c11c51c70c91fa7276abc469a3ac9ed305e1b0357394aa01faf','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
 ('private.leave_payroll_day_hours(uuid,date)',false,null,'c404ccc94bd8967bf47d4d58188ca4e9e9e02bf4f2a8d690418a2b515a00e5bc','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
-('private.calculate_leave_entitlement(uuid,text,date)',false,null,'7e5156169f5079119cdc98072940b9df9d08f1f7b055fa1e6075868d07bb65e6','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
+('private.calculate_leave_entitlement(uuid,text,date)',false,null,'32843b768f85879c6d158f5b0e4122da3ae9638d5525aa3bc8646941e677efc9','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
 ('private.leave_request_quantity(uuid,date,date,time,time,numeric)',false,null,'bbd035ddbad9d5afdc7ab4105e0c4aed449d42923f1d71330aeb3bd0daaadb61','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
 ('private.adopt_leave_bank_sources(text,text,jsonb)',false,null,'3abf4e9666d95e464a3799f5896321cbd25571e67dab0761037eb161d39e7263','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":false}'::jsonb),
 ('private.reject_leave_bank_source_mutation()',false,null,'c7582653b887df78b36e447364aa428504e6f401772362aa0477192728afb296','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":false}'::jsonb),
@@ -295,7 +295,7 @@ create or replace function private.payroll_request_hours_after(p_request uuid,p_
 $$;
 
 create or replace function private.approved_leave_hours_after(p_person_id uuid,p_leave_types text[],p_after date) returns numeric language plpgsql stable security definer set search_path='' as $$
-declare r public.leave_requests%rowtype; total numeric:=0; qty numeric; kind text; basis jsonb; cutoff date; pending numeric; carry record; included numeric; window_from date; window_through date;
+declare r public.leave_requests%rowtype; total numeric:=0; qty numeric; kind text; basis jsonb; cutoff date; pending numeric; carry record; included numeric; window_from date; window_through date; review private.leave_accrual_day_reviews%rowtype; consumed numeric; day_qty numeric; taken_qty numeric; matching_requests integer;
 begin
  if p_after is null then return null; end if;
  kind:=case when 'Annual leave'=any(p_leave_types) then 'annual' when 'Sick leave'=any(p_leave_types) or 'Carer''s leave'=any(p_leave_types) then 'personal' end;
@@ -331,7 +331,22 @@ begin
    elsif window_through<=cutoff then total:=total+pending;
    elsif window_from>cutoff then
     qty:=private.payroll_request_hours_after(carry.request_id,cutoff);if qty is null then return null;end if;
-    total:=total+greatest(0,pending-qty);
+    consumed:=0;
+    for review in select distinct on(service_date) * from private.leave_accrual_day_reviews
+     where person_id=p_person_id and service_date>cutoff and service_date between carry.start_date and carry.end_date
+      and service_date<=(now() at time zone 'Australia/Melbourne')::date-1 order by service_date,created_at desc,id desc loop
+     if review.request_fingerprint<>private.leave_accrual_request_fingerprint(p_person_id,review.service_date) then return null;end if;
+     taken_qty:=case when kind='annual' then review.annual_taken_hours else review.personal_taken_hours end;
+     if taken_qty>0 then
+      day_qty:=private.leave_payroll_day_hours(carry.request_id,review.service_date);if day_qty is null then return null;end if;
+      select count(*) into matching_requests from public.leave_requests req where req.employee_person_id=p_person_id and req.status='approved'
+       and req.pay_treatment='paid_entitlement' and req.request_type_label=any(p_leave_types) and review.service_date between req.start_date and req.end_date;
+      if matching_requests<>1 then return null;end if;
+      consumed:=consumed+least(taken_qty,day_qty);
+     end if;
+    end loop;
+    if consumed>qty then return null;end if;
+    total:=total+greatest(0,pending-greatest(0,qty-consumed));
    else return null;end if;
   end loop;
  else
@@ -379,7 +394,6 @@ begin
  if cutoff is not null and p_through is not null then
   usage_through:=greatest(cutoff,least(p_through,(now() at time zone 'Australia/Melbourne')::date-1));
   for rev in select distinct on(service_date) * from private.leave_accrual_day_reviews where person_id=p_person and service_date>cutoff and service_date<=usage_through order by service_date,created_at desc,id desc loop
-   if rev.service_date<coalesce(start_day,rev.service_date) or rev.service_date>coalesce(end_day,rev.service_date) then continue;end if;
    if rev.request_fingerprint<>private.leave_accrual_request_fingerprint(p_person,rev.service_date) then
     usage_review_day:=least(usage_review_day,rev.service_date);continue;
    end if;
