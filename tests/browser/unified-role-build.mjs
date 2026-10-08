@@ -1,4 +1,7 @@
 import { build } from 'esbuild';
+import postcss from 'postcss';
+import tailwindcss from '@tailwindcss/postcss';
+import postcssConfig from '../../postcss.config.mjs';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
@@ -42,7 +45,13 @@ export async function buildUnifiedRoleFixture(sourceRoot, scratch) {
       'process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY': '"synthetic-unused-key"',
       UNIFIED_ROLE_FIXTURE_RESULTS: JSON.stringify(results),
     },
-    plugins: [{ name: 'unified-role-action-boundaries', setup(builder) {
+    plugins: [{ name: 'production-global-styles', setup(builder) {
+      builder.onLoad({ filter: /[/\\]src[/\\]app[/\\]globals\.css$/ }, async ({ path: filename }) => {
+        const result = await postcss([tailwindcss({ ...postcssConfig.plugins['@tailwindcss/postcss'], base: sourceRoot })])
+          .process(readFileSync(filename, 'utf8'), { from: filename, map: false });
+        return { contents: result.css, loader: 'css', resolveDir: path.dirname(filename) };
+      });
+    } }, { name: 'unified-role-action-boundaries', setup(builder) {
       builder.onResolve({ filter: /^@\/app\/.*actions$/ }, ({ path: id }) => ({ path: id, namespace: 'unified-role-action' }));
       builder.onLoad({ filter: /.*/, namespace: 'unified-role-action' }, ({ path: id }) => {
         const filename = path.join(sourceRoot, 'src', `${id.slice(2)}.ts`);

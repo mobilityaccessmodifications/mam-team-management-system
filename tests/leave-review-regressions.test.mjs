@@ -48,7 +48,7 @@ const controls = compile(readFileSync("src/components/leave-priority-controls.ts
   "@/components/leave-accrual-controls": { LeaveAccrualControls: blank, LeaveAccrualNotice: blank },
 });
 const icons = Object.fromEntries(["CalendarDays", "Clock3", "ClipboardList", "CheckCircle2", "ChevronRight", "XCircle", "Search", "Flag", "Gift", "WalletCards", "FileSpreadsheet", "X"].map((name) => [name, blank]));
-const { ApprovalsView, RequestsView } = selected("src/components/leave-demo.tsx", ["ApprovalsView", "RequestsView", "getLeaveRegisterPage"], {
+const { ApprovalsView, RequestsView } = selected("src/components/leave-demo.tsx", ["ApprovalsView", "RequestsView", "getLeaveRegisterPage", "getLeaveRegisterStatus"], {
   ...icons, ...priority, ...controls, styles, registerToolbar: styles,
   useState: React.useState, useRef: React.useRef, useEffect: React.useEffect, useDialogFocus: blank,
   StatusPill: ({ status }) => React.createElement("span", null, status), PanelHeader: blank,
@@ -130,7 +130,7 @@ test("U07: leave records render a named list with native, actionable detail butt
     assert.match(html, /<li><button[^>]*type="button"[^>]*aria-label="View leave details for Synthetic Employee: Annual leave, 23 Sept 2026, 1 days, Approved/);
     assert.doesNotMatch(html, /role="(?:table|row)"/);
     // Execute the same rendered list's callback with inert hooks.
-    const { RequestsView: render } = selected("src/components/leave-demo.tsx", ["RequestsView"], {
+    const { RequestsView: render } = selected("src/components/leave-demo.tsx", ["RequestsView", "getLeaveRegisterStatus"], {
       ...icons, ...priority, styles, registerToolbar: styles, getLeaveRegisterPage: selected("src/components/leave-demo.tsx", ["getLeaveRegisterPage"]).getLeaveRegisterPage, useState: (initial) => [typeof initial === "function" ? initial() : initial, blank], useRef: () => ({ current: null }), useEffect: blank, useDialogFocus: blank,
       StatusPill: blank, RequestDetail: blank, formatDuration: () => "1 day",
     });
@@ -167,7 +167,7 @@ test("Leave register renders search, sort and a bounded page for every status ta
 test("changing pages never renders another request's actionable details", () => {
   let stateIndex = 0;
   const rows = Array.from({ length: 25 }, (_, index) => ({ ...request, id: `request-${index}`, employee: `Synthetic ${index}` }));
-  const { RequestsView: render } = selected("src/components/leave-demo.tsx", ["RequestsView", "getLeaveRegisterPage"], {
+  const { RequestsView: render } = selected("src/components/leave-demo.tsx", ["RequestsView", "getLeaveRegisterPage", "getLeaveRegisterStatus"], {
     ...icons, ...priority, styles, registerToolbar: styles,
     useState: (initial) => [++stateIndex === 4 ? { selectedId: rows[0].id, page: 2 } : typeof initial === "function" ? initial() : initial, blank],
     useRef: () => ({ current: null }), useEffect: blank, useDialogFocus: blank,

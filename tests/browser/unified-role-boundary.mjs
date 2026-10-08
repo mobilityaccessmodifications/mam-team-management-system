@@ -1,4 +1,7 @@
 import { syntheticRolePeople, syntheticRoleOrgRows, syntheticRoleDirectoryRecord, syntheticRoleSubscription } from './unified-role-data.mjs';
+import { completedFixtureToday, leaveCompletedRequests } from './leave-completed-data.mjs';
+
+const completedMode = new URLSearchParams(location.search).has('leave-completed');
 
 const calls = [], unexpected = [];
 const roleById = Object.fromEntries(syntheticRolePeople.map(person => [person.id, person.role]));
@@ -13,6 +16,7 @@ export const actorCapabilities = UNIFIED_ROLE_FIXTURE_RESULTS.actor.capabilities
 const failures = new Map(), held = new Set(), pending = new Map(), responses = [];
 window.unifiedRoleFixture = {
   calls, unexpected, responses,
+  leaveSnapshot(id) { const workspace = leaveWorkspace(id); return { today: completedFixtureToday, requests: workspace.requests, calendarEntries: workspace.calendarEntries }; },
   setRole(id, role) {
     if (!Object.hasOwn(UNIFIED_ROLE_FIXTURE_RESULTS.roles[id], role)) throw new Error('Invalid synthetic role');
     roleById[id] = role;
@@ -46,7 +50,7 @@ function leaveWorkspace(id) {
   const role = id ? roleById[id] : 'system_admin';
   const people = role === 'manager' ? syntheticRolePeople.filter(person => person.id === id || person.role === 'employee')
     : role === 'employee' ? [personFor(id)] : syntheticRolePeople;
-  const requests = people.map(person => ({
+  let requests = people.map(person => ({
     id: person.id.replace(/^11/, '22'), personId: person.id, employee: person.name, company: person.company,
     leaveType: 'Annual leave', startDate: '2026-10-12', endDate: '2026-10-12', days: 1, hours: 7.6,
     fullDayHours: 7.6, approvalRequired: true, status: 'Pending', submittedAt: '2026-10-01T00:00:00Z',
@@ -58,6 +62,7 @@ function leaveWorkspace(id) {
     const request = requests.find(request => request.personId === syntheticRolePeople[3].id);
     requests.push({ ...request, id: `23000000-0000-4000-8000-00000000000${index}`, status });
   }
+  if (completedMode) requests = leaveCompletedRequests(people, id, role);
   const attachments = requests.some(request => request.id === syntheticRolePeople[3].id.replace(/^11/, '22')) ? [{
     id: '44000000-0000-4000-8000-000000000001', leaveRequestId: syntheticRolePeople[3].id.replace(/^11/, '22'),
     fileName: 'synthetic-evidence.pdf', mimeType: 'application/pdf', sizeBytes: 128, createdAt: '2026-10-01T00:00:00Z', canDelete: role === 'employee',
