@@ -90,7 +90,7 @@ test('waiting and ready conditional approvals never ask reviewers to re-enter ho
         personId: 'employee', requestId: 'request', busy: false, async onSaved() {},
       }));
       assert.doesNotMatch(html, /<form|<input|Save required hours|Paid hours required/);
-      assert.match(html, balanceSufficient ? /Balance sufficient — ready for review/ : /Waiting for enough leave/);
+      assert.match(html, requiredHours == null ? /Check balance — refresh the request/ : balanceSufficient ? /Balance sufficient — ready for review/ : /Waiting for enough leave/);
     }
   }
 });
@@ -186,6 +186,17 @@ test('approval hours use the full-time 7.6-hour snapshot and retain recorded hou
   assert.equal(approvalRequestHours({ days: 0 }), null);
   assert.equal(approvalRequestHours({ days: 2, hours: NaN }), null);
 });
+test('approval quantity uses canonical metadata and keeps unknown quantities unavailable', () => {
+  assert.equal(approvalRequestHours({ days: 1, fullDayHours: 7.5 }, { requiredHours: 6 }), 6);
+  assert.equal(approvalRequestHours({ days: 1, hours: 7.6 }, { requiredHours: 12.5 }), 12.5);
+  for (const requiredHours of [null, undefined, NaN, Infinity, 0, -1]) {
+    assert.equal(approvalRequestHours({ days: 1, hours: 7.6 }, { requiredHours }), null);
+    assert.equal(approvalBalanceCoverage(person, 'Annual leave', 7.6, { requiredHours, pendingBalance: true, balanceSufficient: true }), 'Check balance');
+  }
+  assert.equal(approvalRequestHours({ days: 2 }, {}), 15);
+  assert.equal(approvalRequestHours({ days: 2, hours: 3.25 }, {}), 3.25);
+});
+
 test('coverage compares full precision, respects visibility and review holds', () => {
   assert.equal(approvalBalanceCoverage({ ...person, hours: 15 }, 'Annual leave', 15), 'Enough balance');
   assert.equal(approvalBalanceCoverage({ ...person, hours: 30, annualAvailableHours: 14.9999 }, 'Annual leave', 15), 'Not enough balance');

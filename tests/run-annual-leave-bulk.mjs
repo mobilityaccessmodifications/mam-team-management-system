@@ -8,7 +8,7 @@ const [socket,database]=process.argv.slice(2);
 assert.match(database??'',/^mam_test_annual_/);
 const employee='b1000000-0000-4000-8000-000000000002';
 const seed=readFileSync('tests/annual-leave-all-submitters.sql','utf8').split('DO $$ BEGIN\n  BEGIN')[0]
-  .replace('\\ir sql-test-auth.sql',`\\ir ${path.resolve('tests/sql-test-auth.sql')}`);
+  .replace('\\ir sql-test-auth.sql',`\\ir '${path.resolve('tests/sql-test-auth.sql').replaceAll("'","''")}'`);
 const file=path.join(socket,`${database}-bulk-seed.sql`);
 writeFileSync(file,seed+`update private.employee_annual_leave_balances set hours=10 where person_id::text like 'b1000000-%';
 update private.leave_accrual_policies set enabled=false,requires_review=false where person_id::text like 'b1000000-%'; commit;`,{mode:0o600});
