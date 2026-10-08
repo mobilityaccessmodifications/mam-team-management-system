@@ -34,6 +34,7 @@ import {
   createEmployeeDirectoryRecord,
   archiveEmployeeDirectoryRecord,
   deleteEmployeeDirectoryRecord,
+  getEmployeeTeamManagerDefault,
   listEmployeeDirectoryRecords,
   listEmployeeDirectoryRoles,
   updateEmployeeDirectoryRole,
@@ -54,6 +55,7 @@ import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryDraft,
   EmployeeDirectoryRecord,
+  EmployeeTeamManagerDefaultResult,
   EmployeeWorkingDayTime,
   EmployeeWorkingWeekday,
   UpdateEmployeeDirectoryInput,
@@ -351,6 +353,14 @@ export function EmployeeDirectory({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<DirectorySort>("name");
   const [editor, setEditor] = useState<EditorState | null>(null);
+  const [teamManagerScope, setTeamManagerScope] = useState(0);
+  const teamManagerScopeRef = useRef(0);
+  const [teamManagerPreview, setTeamManagerPreview] = useState<{
+    scope: number;
+    company: EmployeeDirectoryDraft["company"];
+    teamName: string;
+    result: EmployeeTeamManagerDefaultResult;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [committedPersonId, setCommittedPersonId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState("");
@@ -492,6 +502,33 @@ export function EmployeeDirectory({
   const editorHasUnsavedChanges = hasUnsavedChanges(currentRecord, activeEditor);
   const selectedDirectoryPersonId = activeEditor?.mode === "edit" ? activeEditor.personId : null;
   const employeeListKey = `${selectedDirectoryPersonId ?? "none"}:${sortedRecords.map((record) => record.personId).join(",")}`;
+  const creatingEmployee = activeEditor?.mode === "create";
+  const selectedCompany = activeEditor?.draft.company;
+  const selectedTeam = activeEditor?.draft.teamName;
+  const teamManagerDefault = creatingEmployee && teamManagerPreview?.scope === teamManagerScope
+    && teamManagerPreview.company === selectedCompany && teamManagerPreview.teamName === selectedTeam
+    ? teamManagerPreview.result : null;
+  const managerOptions = records.filter((record) => record.isActive && record.company === selectedCompany);
+  const managerSelectionBlocked = creatingEmployee && (activeEditor.draft.managerId
+    ? !managerOptions.some((record) => record.personId === activeEditor.draft.managerId)
+    : !teamManagerDefault || "error" in teamManagerDefault || teamManagerDefault.status === "invalid");
+
+  useEffect(() => {
+    if (!creatingEmployee || !selectedCompany || !selectedTeam) return;
+    let cancelled = false;
+    const scope = teamManagerScope;
+    void getEmployeeTeamManagerDefault({ company: selectedCompany, teamName: selectedTeam }).then((result) => {
+      if (!cancelled && teamManagerScopeRef.current === scope) {
+        setTeamManagerPreview({ scope, company: selectedCompany, teamName: selectedTeam, result });
+      }
+    }).catch(() => {
+      if (!cancelled && teamManagerScopeRef.current === scope) {
+        setTeamManagerPreview({ scope, company: selectedCompany, teamName: selectedTeam,
+          result: { error: "Team Manager could not be checked. Refresh and try again." } });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [creatingEmployee, selectedCompany, selectedTeam, teamManagerScope]);
 
   useDialogFocus(
     Boolean(activeEditor) && isMobileSheet && !endDatePrompt && !deleteTarget,
@@ -503,12 +540,14 @@ export function EmployeeDirectory({
 
   function closeEditor() {
     if (saving) return;
+    invalidateTeamManagerScope();
     setEditor(null);
     setSaveError("");
     onSelectedPersonId?.(null);
   }
 
   function openRecord(record: EmployeeDirectoryRecord) {
+    invalidateTeamManagerScope();
     setEditor(editEditor(record));
     setSaveError("");
     setNotice("");
@@ -517,10 +556,16 @@ export function EmployeeDirectory({
 
   function openCreate() {
     if (committedPersonId) return;
+    invalidateTeamManagerScope();
     setEditor({ mode: "create", draft: { ...emptyDraft } });
     setSaveError("");
     setNotice("");
     onSelectedPersonId?.(null);
+  }
+
+  function invalidateTeamManagerScope() {
+    teamManagerScopeRef.current += 1;
+    setTeamManagerScope(teamManagerScopeRef.current);
   }
 
   function handleDraftChange(
@@ -529,7 +574,13 @@ export function EmployeeDirectory({
   ) {
     const base = editor ?? activeEditor;
     if (!base) return;
-    setEditor(updateDraft(base, key, value));
+    const changed = updateDraft(base, key, value);
+    if (base.mode === "create" && (key === "teamName" || key === "company")) {
+      invalidateTeamManagerScope();
+      setEditor({ ...changed, draft: { ...changed.draft, managerId: null } });
+    } else {
+      setEditor(changed);
+    }
   }
 
   function handleScheduleChange(
@@ -633,6 +684,10 @@ export function EmployeeDirectory({
     event.preventDefault();
     const editorToSave = editor ?? activeEditor;
     if (!editorToSave || saving || committedPersonId) return;
+    if (editorToSave.mode === "create" && managerSelectionBlocked) {
+      setSaveError("Check the Team Manager or choose a valid manager before saving.");
+      return;
+    }
 
     setSaving(true);
     setSaveError("");
@@ -771,6 +826,9 @@ export function EmployeeDirectory({
           mobileModal={isMobileSheet}
           editor={activeEditor}
           currentRecord={currentRecord}
+          managerOptions={managerOptions}
+          teamManagerDefault={teamManagerDefault}
+          managerSelectionBlocked={managerSelectionBlocked}
           role={activeEditor.mode === "edit" ? roles[activeEditor.personId] : null}
           roleLoaded={activeEditor.mode === "edit" && Object.hasOwn(roles, activeEditor.personId)}
           roleLoadError={roleLoadError}
@@ -908,6 +966,9 @@ function EmployeeEditor({
   mobileModal,
   editor,
   currentRecord,
+  managerOptions = [],
+  teamManagerDefault = null,
+  managerSelectionBlocked = false,
   role,
   roleLoaded,
   roleLoadError,
@@ -930,6 +991,9 @@ function EmployeeEditor({
   mobileModal: boolean;
   editor: EditorState;
   currentRecord: EmployeeDirectoryRecord | null;
+  managerOptions?: EmployeeDirectoryRecord[];
+  teamManagerDefault?: EmployeeTeamManagerDefaultResult | null;
+  managerSelectionBlocked?: boolean;
   role: DirectoryStoredRole | null | undefined;
   roleLoaded: boolean;
   roleLoadError: string;
@@ -1014,6 +1078,19 @@ function EmployeeEditor({
               {EMPLOYEE_TEAMS.map((team) => <option key={team} value={team}>{team}</option>)}
             </select>
           </Field>
+          {isCreate ? <Field label="Reports to">
+            <select aria-label="Reports to" value={editor.draft.managerId ?? ""} onChange={(event) => onChange("managerId", event.target.value || null)}>
+              <option value="" disabled={!teamManagerDefault || "error" in teamManagerDefault || teamManagerDefault.status === "invalid"}>
+                {!editor.draft.teamName ? "Select a team" : !teamManagerDefault ? "Checking Team Manager…"
+                  : "error" in teamManagerDefault ? "Team Manager unavailable"
+                  : teamManagerDefault.status === "valid" ? `Team Manager: ${teamManagerDefault.managerName}`
+                  : teamManagerDefault.status === "missing" ? "No Team Manager — saved unassigned" : "Configured Team Manager unavailable"}
+              </option>
+              {managerOptions.map((manager) => <option key={manager.personId} value={manager.personId}>{manager.fullName}</option>)}
+            </select>
+            {!editor.draft.managerId && teamManagerDefault && ("error" in teamManagerDefault || teamManagerDefault.status === "invalid")
+              ? <span role="alert">{"error" in teamManagerDefault ? teamManagerDefault.error : "Choose a valid manager before saving."}</span> : null}
+          </Field> : null}
           {!isCreate && roleEditable ? <div className={styles.pickerField}>
             <button type="button" className={styles.secondaryAction} aria-expanded={editingRole} onClick={() => setEditingRole(!editingRole)} disabled={saving || roleSaving}>Role</button>
             {editingRole ? <select aria-label="Role" id={managerInputId} value={selectedRole ?? ""} disabled={!currentRecord?.isActive || !roleLoaded || !role || saving || roleSaving} onChange={(event) => { setRoleSelection({ base: role ?? null, selected: event.target.value as DirectoryRole }); setRoleError(""); }}>
@@ -1195,7 +1272,7 @@ function EmployeeEditor({
           {onRequestArchive ? <button type="button" className={styles.dangerAction} onClick={onRequestArchive} disabled={saving || archiveDisabled} aria-describedby={archiveDisabled ? "save-before-ending-employment" : undefined}><UserMinus size={14} /> End employment</button> : null}
           {onRequestDelete ? <button type="button" className={styles.dangerAction} onClick={onRequestDelete} disabled={saving}><Trash2 size={14} /> Delete archived profile</button> : null}
           <button type="button" className={styles.secondaryAction} onClick={onClose} disabled={saving}>Cancel</button>
-          <button type="submit" className={styles.primaryAction} disabled={saving || refreshRequired}>{saving ? "Saving…" : isCreate ? "Create employee" : "Save changes"}</button>
+          <button type="submit" className={styles.primaryAction} disabled={saving || refreshRequired || managerSelectionBlocked}>{saving ? "Saving…" : isCreate ? "Create employee" : "Save changes"}</button>
         </div>
       </footer>
     </form>

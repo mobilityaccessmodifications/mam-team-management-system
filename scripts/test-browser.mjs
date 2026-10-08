@@ -33,6 +33,15 @@ for (const [name, rows] of Object.entries({ list: [rowFixture], empty: [], refre
 }
 const directoryInput = { ...draft, personId, personVersion: 1, detailVersion: 1 };
 const directoryResults = {};
+const directoryManagerResults = {};
+for (const [name, teamManagerDefault] of Object.entries({
+  mam: { status: 'valid', managerId: '10000000-0000-4000-8000-000000000002', managerName: 'Morgan Synthetic' },
+  equipsy: { status: 'valid', managerId: '10000000-0000-4000-8000-000000000003', managerName: 'Casey Synthetic' },
+  missing: { status: 'missing', managerId: null, managerName: '' },
+  invalid: { status: 'invalid', managerId: null, managerName: '' },
+})) directoryManagerResults[name] = await loadActions({ teamManagerDefault, sourceRoot }).actions.getEmployeeTeamManagerDefault({
+  company: name === 'equipsy' ? 'equipsy' : 'mam', teamName: name === 'equipsy' ? 'Equipsy' : 'Warehouse',
+});
 for (const [name, dbError] of Object.entries({
   lock: { code: "55000", message: "Onboarding credential delivery in progress" },
   stale: { code: "40001", message: "synthetic private detail" },
@@ -66,7 +75,7 @@ try {
     entryPoints: ["tests/browser/fixture.jsx"], bundle: true, outdir: scratch,
     platform: "browser", jsx: "automatic", sourcemap: false, minify: false,
     alias: { "@/app/leave/actions": path.join(sourceRoot, "tests/browser/payroll-display-actions.jsx"), "@/app/people/actions": path.join(sourceRoot, "tests/browser/directory-actions.jsx"), "@/components/employee-device-assignments": path.join(sourceRoot, "tests/browser/directory-fixture.jsx"), "@/app/people/team-directory-actions": path.join(sourceRoot, "tests/browser/team-directory-actions.jsx"), "@": path.join(sourceRoot, "src"), react: path.resolve("node_modules/react"), "react-dom": path.resolve("node_modules/react-dom") },
-    define: { "process.env.NODE_ENV": '"production"', DIRECTORY_FIXTURE_RESULTS: JSON.stringify(directoryResults), ONBOARDING_REVIEW_RESULTS: JSON.stringify(onboardingReviewResults) },
+    define: { "process.env.NODE_ENV": '"production"', DIRECTORY_FIXTURE_RESULTS: JSON.stringify(directoryResults), DIRECTORY_MANAGER_FIXTURE_RESULTS: JSON.stringify(directoryManagerResults), ONBOARDING_REVIEW_RESULTS: JSON.stringify(onboardingReviewResults) },
     plugins: [{ name: "onboarding-review-action-boundary", setup(builder) {
       builder.onResolve({ filter: /^\.\/actions$/ }, ({ importer }) => {
         if (/[/\\]src[/\\]app[/\\]onboarding-review[/\\]review-list\.tsx$/.test(importer)) return { path: path.join(sourceRoot, "tests/browser/onboarding-review-actions.mjs") };

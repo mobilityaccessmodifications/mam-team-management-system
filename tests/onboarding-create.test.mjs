@@ -11,6 +11,7 @@ function fixture({ startDate = '2020-01-01', workEmail = 'work@example.test', pe
   const created = { personId, personVersion: 1 };
   const client = { rpc: async (name) => {
     calls.push(name);
+    if (name === 'get_employee_team_manager_default') return { data: { status: 'missing', managerId: null, managerName: '' }, error: null };
     if (name.startsWith('create_employee_directory_record')) return { data: [{ person_id: personId }], error: null };
     throw new Error(`Unexpected ${name}`);
   } };
@@ -28,7 +29,7 @@ function fixture({ startDate = '2020-01-01', workEmail = 'work@example.test', pe
     '@/lib/portal-account-status': {},
     '@/app/accounts/actions': { createPortalAccount: account },
   })[id] ?? require(id), mod, mod.exports);
-  const input = { firstName:'Synthetic',lastName:'Employee',workEmail,personalEmail,phone:'',positionTitle:'Tester',teamName:'MAM admin',managerId:personId,country:'',address:'',dateOfBirth:'',startedDate:startDate,scheduledEmploymentEndDate:'',workingWeekdays:null,workingDayTimes:[],archiveReason:'',employmentType:'full_time',laptopSupplied:'',laptopId:'',mouseId:'',keyboardId:'',assetTags:[],company:'mam',isActive:true };
+  const input = { firstName:'Synthetic',lastName:'Employee',workEmail,personalEmail,phone:'',positionTitle:'Tester',teamName:'Operation & Accounts',managerId:null,country:'',address:'',dateOfBirth:'',startedDate:startDate,scheduledEmploymentEndDate:'',workingWeekdays:null,workingDayTimes:[],archiveReason:'',employmentType:'full_time',laptopSupplied:'',laptopId:'',mouseId:'',keyboardId:'',assetTags:[],company:'mam',isActive:true };
   return { ...mod.exports, input, calls };
 }
 test('creating employee provisions unprivileged login with work email and keeps password out of result', async () => {
