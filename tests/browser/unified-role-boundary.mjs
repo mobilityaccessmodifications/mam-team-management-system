@@ -7,6 +7,12 @@ const calls = [], unexpected = [];
 const roleById = Object.fromEntries(syntheticRolePeople.map(person => [person.id, person.role]));
 const personFor = id => syntheticRolePeople.find(person => person.id === id);
 const grantsById = {};
+const delegationPeople = Array.from({ length: 80 }, (_, index) => ({
+  personId: `77000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+  fullName: `Synthetic ${index === 0 ? 'Manager' : 'Employee'} ${String(index + 1).padStart(2, '0')}`,
+  positionTitle: index === 0 ? 'Manager' : 'Employee',
+}));
+let delegationManagement = [], delegationVault = [];
 const outcomeFor = id => {
   const result = UNIFIED_ROLE_FIXTURE_RESULTS.roles[id][roleById[id]];
   if (roleById[id] !== 'manager' || !grantsById[id]) return result;
@@ -121,7 +127,16 @@ const handlers = {
     listSubscriptions: () => [syntheticRoleSubscription],
     listSubscriptionPeople: () => syntheticRolePeople.map(person => ({ personId: person.id, fullName: person.name, positionTitle: person.title, teamName: 'Operation & Accounts', company: person.company })),
   },
-  '@/app/subscription-credentials/actions': { listSubscriptionCredentialCatalogue: () => [{ subscriptionId: syntheticRoleSubscription.id, credentialsSaved: false }] },
+  '@/app/subscriptions/delegation-actions': {
+    listSubscriptionManagementDelegates: () => ({ ok: true, delegates: delegationPeople.filter(person => delegationManagement.includes(person.personId)) }),
+    replaceSubscriptionManagementDelegates: ids => { delegationManagement = [...ids]; return { ok: true }; },
+  },
+  '@/app/subscription-credentials/actions': {
+    listSubscriptionCredentialCatalogue: () => [{ subscriptionId: syntheticRoleSubscription.id, credentialsSaved: false }],
+    listSubscriptionCredentialGrantCandidates: () => delegationPeople,
+    listSubscriptionCredentialAccessGrants: () => delegationPeople.filter(person => delegationVault.includes(person.personId)),
+    replaceSubscriptionCredentialAccessGrants: ids => { delegationVault = [...ids]; return { ok: true }; },
+  },
   '@/app/subscriptions/employee-actions': { listEmployeeSubscriptionsForPreview: () => [], listMySubscriptions: () => [] },
 };
 

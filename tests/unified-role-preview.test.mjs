@@ -263,3 +263,42 @@ test('Manager subscription register management and vault capabilities stay indep
     assert.equal(panel.props.canManageManagementGrants,false);
   }
 });
+test('Employee subscription preview uses only its independent grants, never P0 actor authority', async () => {
+  for (const management of [false,true]) for (const vault of [false,true]) {
+    const ui = portal({targetRole:'employee',grants:{can_view_subscription_register:management,can_manage_subscriptions:management,can_manage_subscription_credentials:vault}});
+    await ui.settle(); ui.select(targetId); const tree = await ui.settle();
+    const people = component(tree,'PeopleOperationsDemo').props;
+    assert.equal(people.activeProfile.accessRole,'employee');
+    const panel = people.renderSubscriptionRegister;
+    assert.equal(Boolean(panel),management || vault);
+    if (management) {
+      assert.equal(panel.props.readOnly,false);
+      assert.equal(panel.props.canManageCredentials,vault);
+      assert.equal(panel.props.canManageCredentialGrants,false);
+      assert.equal(panel.props.canManageManagementGrants,false);
+    } else if (vault) {
+      assert.equal(panel.type,'SubscriptionCredentialVault');
+      assert.equal(panel.props.canManageCredentialGrants,false);
+      assert.equal(panel.props.canManageManagementGrants,undefined);
+    }
+    assert.ok(!people.renderAccounts && !people.renderAssetRegister && !people.renderAnalyticsApiManagement);
+  }
+});
+test('late Employee delegation capabilities cannot grant the newer selected Employee access', async () => {
+  const old = deferred();
+  let ui;
+  ui = portal({targetRole:'employee',capabilityResult:async () => {
+    const id = ui.calls.filter(([name])=>name==='capabilities').at(-1)[1];
+    if (id===targetId) return await old.promise;
+    return {ok:true,capabilities:capabilities(id ? 'employee' : 'system_admin',id ?? null)};
+  }});
+  await ui.settle();ui.select(targetId);await ui.settle();
+  ui.select(secondId);let tree=await ui.settle();
+  assert.ok(!component(tree,'PeopleOperationsDemo').props.renderSubscriptionRegister);
+  old.resolve({ok:true,capabilities:{...capabilities('employee',targetId),can_view_subscription_register:true,can_manage_subscriptions:true,can_manage_subscription_credentials:true}});
+  tree=await ui.settle();
+  const people=component(tree,'PeopleOperationsDemo').props;
+  assert.equal(people.activeProfile.id,secondId);
+  assert.equal(people.activeProfile.accessRole,'employee');
+  assert.ok(!people.renderSubscriptionRegister && !people.renderAccounts && !people.renderAnalyticsApiManagement);
+});

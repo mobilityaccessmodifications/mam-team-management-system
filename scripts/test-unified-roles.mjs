@@ -10,7 +10,7 @@ let passed = false;
 console.log(`Disposable PostgreSQL socket: ${socket}`);
 try {
   const regressions = ['capabilities', 'policy', 'business', 'calendar', 'reset', 'control', 'delegation', 'payroll', 'security',
-    'preview-freshness', 'preview-policy', 'payroll-grant-retirement']
+    'preview-freshness', 'preview-policy', 'payroll-grant-retirement', 'subscription-employee-delegation']
     .map((name) => `tests/unified-role-${name}.sql`);
   const replay = spawnSync(process.execPath, [fileURLToPath(new URL('./test-migration-replay.mjs', import.meta.url)),
     socket, 'mam_test_unified_roles', ...regressions,

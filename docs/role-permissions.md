@@ -20,8 +20,8 @@ This is the canonical approved permission model. It supersedes historical role l
 | Write payroll/leave balances and accrual policy | No | No | No | Operational administration | Operational administration |
 | Portal account creation, login/password/status changes | No | No | No | Operational administration | Operational administration |
 | Asset inventory | Own assigned devices only | Own assigned devices only | Own assigned devices only | Full operational inventory | Full operational inventory |
-| Subscription register | Own assigned minimised resources | Read-only by default; separate management delegation below | Own assigned minimised resources | Full operational management | Full operational management |
-| Subscription credential vault | No | Separate explicit delegation only | No | Operational credential access | Operational credential access |
+| Subscription register | Own assigned minimised resources; separate explicit management delegation | Read-only by default; separate management delegation below | Own assigned minimised resources | Full operational management | Full operational management |
+| Subscription credential vault | Separate explicit delegation only | Separate explicit delegation only | No | Operational credential access | Operational credential access |
 | Role assignment | No | No | No | No | Four ordinary roles only; P0 is not assignable here |
 | Change profile | No | No | No | No | Yes; presentation preview, not Auth impersonation |
 | Subscription delegate and system/security configuration | No | No | No | No | Yes |
@@ -50,7 +50,7 @@ Two capabilities remain independent:
 1. **Manage subscription register:** edit the credential-free company register, billing/membership and review records.
 2. **Access subscription credentials:** use the separately encrypted service-credential catalogue and explicit reveal/save/remove workflow.
 
-A current active linked Manager may receive either, both or neither through the audited P0 control. Granting register management must not grant password access; granting credentials must not grant HR, portal accounts, payroll or leave approval. Default Managers remain register readers. Account and Team member cannot recover elevated access from stale grant rows. Admin and P0 obtain their ordinary operational subscription rights by role; only P0 configures delegates.
+A current active linked Employee or Manager may receive either, both or neither through the audited P0 control. Granting register management must not grant password access; granting credentials must not grant register management, HR, portal accounts, payroll or leave approval. Default Managers remain register readers. Default Employees retain only their assigned minimised resources. Historical Employee grant rows remain ineffective until P0 explicitly saves the corresponding selection; the forward migration initializes neither Employee grant. Account remains excluded. Admin and P0 obtain their ordinary operational subscription rights by role; only P0 configures delegates.
 
 The interface must state which capabilities are role-derived and which are explicit delegation. Revocation or demotion must take effect in database authorization, not wait for the browser's displayed role label to update. Existing legitimate subscription delegation and audit are retained.
 
