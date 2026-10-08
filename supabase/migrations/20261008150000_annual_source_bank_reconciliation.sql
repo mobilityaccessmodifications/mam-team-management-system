@@ -14,7 +14,7 @@ create temporary table annual_source_function_spec(signature text primary key,is
 insert into annual_source_function_spec values
 ('private.calculate_employee_leave_accrual(uuid,date)',true,'1006d839cb1f2019acea176d2b0e16ee6a0d923a81c9bdc0f46284797338b1ee','c798f362037f8e9e074b227d42a78574d924195dfe1f05e64a0a6c02dca5e4ab',null),
 ('private.payroll_request_hours_after(uuid,date)',true,'3f4505db5271b025109f00cb7915435e852c5fa46fa20aabdd499e17786cf541','fa4c121210ae3c9dddb8007460f0d5b633299592ef680ed7579c499f5cd68e0f',null),
-('private.approved_leave_hours_after(uuid,text[],date)',true,'251bfea3140b47d8067928c2daf65801555b118a612c3cfa5989fae52141648b','5a4fc5021ba4c613cb9031514ad362b5910ab8aea6d808e46522f1680ef04155',null),
+('private.approved_leave_hours_after(uuid,text[],date)',true,'251bfea3140b47d8067928c2daf65801555b118a612c3cfa5989fae52141648b','39061290da2ab38cd8985d771195bf4372090f0e8c4bffbf031e2165d5dae906',null),
 ('private.project_annual_leave_balance(uuid,date)',true,'ee185baa6a8dfa834b77cdfeb60339e70d39f42915ec00112142536126c4de4a','b88e6a78a3c43681496f9649611cc06df507955bf10929f1b27970cd2ff848d0',null),
 ('private.enforce_banked_annual_leave_request()',true,'ae1525bd291ea9265dd731a91eefb00b9f33dc3693577c1e73c3a2edb5186350','8443b5e62134cf6cb797743b36418b9a4b332f1f205c814522d47ccd6ca1b684',null),
 ('private.leave_payroll_balance_sufficient(uuid)',true,'c38b9655a39149fc1d8b6c4d1f538f1cca22cf248ea61c2b9ba18f0022c56814','3ca926e6db700a3cae42341a738413ee5ce4eba03ac3d09bb671e44373af5619',null),
@@ -304,8 +304,7 @@ begin
   if basis->>'status'='needs_review' then return null; end if;
   if basis->>'sourceId' is not null then
    if basis->>'coveredThrough' is null then
-    if exists(select 1 from public.leave_requests where employee_person_id=p_person_id and status='approved' and request_type_label=any(p_leave_types) and pay_treatment='paid_entitlement' and start_date<=(basis->>'reportDate')::date
-      and end_date>coalesce((select min(effective_from)-1 from private.leave_accrual_policies where person_id=p_person_id),date '1900-01-01')) then return null; end if;
+    if exists(select 1 from public.leave_requests where employee_person_id=p_person_id and status='approved' and request_type_label=any(p_leave_types) and pay_treatment='paid_entitlement' and start_date<=(basis->>'reportDate')::date) then return null; end if;
     cutoff:=(basis->>'reportDate')::date;
    else cutoff:=(basis->>'coveredThrough')::date; end if;
   else cutoff:=p_after; end if;
@@ -330,7 +329,9 @@ begin
    window_from:=greatest(carry.start_date,carry.origin_after+1);window_through:=least(carry.end_date,carry.through_date);
    if window_through<window_from then return null;
    elsif window_through<=cutoff then total:=total+pending;
-   elsif window_from>cutoff then continue;
+   elsif window_from>cutoff then
+    qty:=private.payroll_request_hours_after(carry.request_id,cutoff);if qty is null then return null;end if;
+    total:=total+greatest(0,pending-qty);
    else return null;end if;
   end loop;
  else

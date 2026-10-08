@@ -397,4 +397,89 @@ END $$;
 ROLLBACK TO source_bank_luke_like_included_usage;
 \echo PASS: explicit included usage with zero pending carry remains auditable without fabricated history
 
+SAVEPOINT source_bank_postcutoff_holiday_shrink;
+INSERT INTO private.payroll_closing_receipts(id,owner_key,actor_user_id,operation,provenance,note,payload,result)
+VALUES('98400000-0000-4000-8000-000000000080','synthetic-postcutoff-holiday-shrink',pg_temp.source_person(900),'closing','owner_estimate','Synthetic retained holiday allocation','[]','{}');
+INSERT INTO private.leave_bank_sources(person_id,leave_kind,hours,report_date,covered_service_through,source_kind,source_fingerprint,note,operator_role)
+VALUES(pg_temp.source_person(13),'annual',100,'2026-10-01','2026-09-24','payslip',repeat('a',64),'Synthetic cutoff before retained holiday','postgres');
+INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
+VALUES(pg_temp.source_request(80),pg_temp.source_person(13),pg_temp.source_person(13),'annual','Annual leave','2026-09-25','2026-09-25',1,NULL,'approved',now(),'historical_import',repeat('b',64),'full_time','paid_entitlement');
+INSERT INTO private.payroll_carryforward_events(receipt_id,request_id,person_id,company_key,leave_kind,origin_after,through_date,total_hours,accounted_hours,pending_hours,request_fingerprint)
+VALUES('98400000-0000-4000-8000-000000000080',pg_temp.source_request(80),pg_temp.source_person(13),'mam','annual','2026-09-24','2026-09-25',7.6,0,7.6,
+ (SELECT private.payroll_request_fingerprint(to_jsonb(r)) FROM public.leave_requests r WHERE id=pg_temp.source_request(80)));
+DO $$ BEGIN
+ ASSERT private.payroll_request_hours_after(pg_temp.source_request(80),'2026-09-24')=7.6;
+ ASSERT private.approved_leave_hours_after(pg_temp.source_person(13),ARRAY['Annual leave'],'2026-10-01')=7.6, 'Unchanged post-cutoff quantity counts the retained obligation once';
+END $$;
+UPDATE private.leave_payroll_calendars SET calendar_key='victoria' WHERE person_id=pg_temp.source_person(13);
+DO $$ DECLARE b jsonb; p jsonb; c jsonb; BEGIN
+ b:=private.leave_bank_basis(pg_temp.source_person(13),'annual');
+ ASSERT b->>'status'='current' AND (b->>'retainedHours')::numeric=7.6;
+ ASSERT private.payroll_request_hours_after(pg_temp.source_request(80),'2026-09-24')=0;
+ ASSERT private.approved_leave_hours_after(pg_temp.source_person(13),ARRAY['Annual leave'],'2026-10-01')=7.6, 'Canonical holiday quantity zero cannot discard an immutable 7.6-hour pending obligation';
+ c:=private.calculate_leave_entitlement(pg_temp.source_person(13),'annual','2026-10-07');
+ p:=private.project_annual_leave_balance(pg_temp.source_person(13),'2026-10-08');
+ ASSERT (p->>'approvedHours')::numeric=7.6;
+ ASSERT abs((p->>'availableHours')::numeric-(100+(c->>'earned')::numeric-7.6))<0.000000000001;
+ ASSERT private.payroll_retained_hours(pg_temp.source_person(13),'annual')=7.6;
+END $$;
+ROLLBACK TO source_bank_postcutoff_holiday_shrink;
+\echo PASS: unchanged post-cutoff pending counts once; holiday quantity shrink retains the entire pending obligation
+
+SAVEPOINT source_bank_postcutoff_smaller_quantity;
+INSERT INTO private.payroll_closing_receipts(id,owner_key,actor_user_id,operation,provenance,note,payload,result)
+VALUES('98400000-0000-4000-8000-000000000081','synthetic-postcutoff-smaller-quantity',pg_temp.source_person(900),'closing','owner_estimate','Synthetic retained allocations and explicit inclusion','[]','{}');
+INSERT INTO private.leave_bank_sources(person_id,leave_kind,hours,report_date,covered_service_through,source_kind,source_fingerprint,note,operator_role)
+VALUES(pg_temp.source_person(15),'annual',100,'2026-10-01','2026-09-24','payslip',repeat('a',64),'Synthetic cutoff before retained changed ordinary hours','postgres');
+INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
+VALUES
+ (pg_temp.source_request(81),pg_temp.source_person(15),pg_temp.source_person(15),'annual','Annual leave','2026-09-25','2026-09-25',1,NULL,'approved',now(),'historical_import',repeat('b',64),'full_time','paid_entitlement'),
+ (pg_temp.source_request(82),pg_temp.source_person(15),pg_temp.source_person(15),'annual','Annual leave','2026-09-23','2026-09-23',1,NULL,'approved',now(),'historical_import',repeat('c',64),'full_time','paid_entitlement');
+INSERT INTO private.payroll_carryforward_events(receipt_id,request_id,person_id,company_key,leave_kind,origin_after,through_date,total_hours,accounted_hours,pending_hours,request_fingerprint)
+SELECT '98400000-0000-4000-8000-000000000081',r.id,r.employee_person_id,'mam','annual',r.start_date-1,r.end_date,7.6,0,7.6,private.payroll_request_fingerprint(to_jsonb(r))
+FROM public.leave_requests r WHERE r.id IN(pg_temp.source_request(81),pg_temp.source_request(82));
+INSERT INTO private.leave_accrual_policies(person_id,effective_from,weekly_hours,weekdays,annual_weeks,personal_weeks,enabled,note,actor_user_id)
+VALUES(pg_temp.source_person(15),'2026-09-12',19,ARRAY[1,2,3,4,5],4,2,true,'Synthetic smaller ordinary quantity with unchanged request evidence',pg_temp.source_person(900));
+DO $$ BEGIN
+ ASSERT private.payroll_request_hours_after(pg_temp.source_request(81),'2026-09-24')=3.8;
+ ASSERT private.approved_leave_hours_after(pg_temp.source_person(15),ARRAY['Annual leave'],'2026-10-01')=15.2, 'Canonical 3.8 plus retained excess 3.8 counts post-cutoff 7.6 once, alongside pre-cutoff 7.6';
+END $$;
+DO $$ DECLARE before_carry jsonb; r public.leave_requests%rowtype; b jsonb; BEGIN
+ SELECT jsonb_agg(to_jsonb(e) ORDER BY id) INTO before_carry FROM private.payroll_carryforward_events e WHERE person_id=pg_temp.source_person(15);
+ SELECT * INTO STRICT r FROM public.leave_requests WHERE id=pg_temp.source_request(82);
+ INSERT INTO private.leave_bank_sources(person_id,leave_kind,hours,report_date,covered_service_through,source_kind,source_fingerprint,note,operator_role,included_usage)
+ VALUES(pg_temp.source_person(15),'annual',100,'2026-10-01','2026-09-24','payslip',repeat('d',64),'Synthetic explicit pre-cutoff pending portion with a separate post-cutoff shrink','postgres',
+  jsonb_build_array(jsonb_build_object('requestId',r.id,'includedHours','3.8','includedPendingHours','3.8','requestFingerprint',private.payroll_request_fingerprint(to_jsonb(r)),'evidenceHash',repeat('e',64))));
+ b:=private.leave_bank_basis(pg_temp.source_person(15),'annual');
+ ASSERT b->>'status'='current' AND (b->>'retainedHours')::numeric=11.4;
+ ASSERT private.approved_leave_hours_after(pg_temp.source_person(15),ARRAY['Annual leave'],'2026-10-01')=11.4, 'Explicit pre-cutoff inclusion removes only 3.8; smaller post-cutoff quantity does not erase its pending excess or double-count it';
+ ASSERT private.payroll_retained_hours(pg_temp.source_person(15),'annual')=15.2;
+ ASSERT (SELECT jsonb_agg(to_jsonb(e) ORDER BY id) FROM private.payroll_carryforward_events e WHERE person_id=pg_temp.source_person(15))=before_carry;
+END $$;
+ROLLBACK TO source_bank_postcutoff_smaller_quantity;
+\echo PASS: smaller post-cutoff canonical quantity retains its pending excess once; explicit included pending and immutable history remain exact
+
+SAVEPOINT source_bank_unknown_coverage_before_policy;
+INSERT INTO private.leave_accrual_policies(person_id,effective_from,weekly_hours,weekdays,annual_weeks,personal_weeks,enabled,note,actor_user_id)
+VALUES(pg_temp.source_person(14),'2026-09-01',38,ARRAY[1,2,3,4,5],4,2,true,'Synthetic original policy for an older approved request',pg_temp.source_person(900));
+INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
+VALUES(pg_temp.source_request(83),pg_temp.source_person(14),pg_temp.source_person(14),'annual','Annual leave','2026-09-10','2026-09-10',1,NULL,'approved',now(),'historical_import',repeat('f',64),'full_time','paid_entitlement');
+DELETE FROM private.leave_accrual_policies WHERE person_id=pg_temp.source_person(14) AND effective_from='2026-09-01';
+INSERT INTO private.leave_bank_sources(person_id,leave_kind,hours,report_date,covered_service_through,source_kind,source_fingerprint,note,operator_role)
+VALUES(pg_temp.source_person(14),'annual',100,'2026-10-01',NULL,'payroll_report',repeat('a',64),'Synthetic unknown report coverage with earlier approved usage','postgres');
+DO $$ DECLARE b jsonb; p jsonb; c jsonb; BEGIN
+ ASSERT (SELECT min(effective_from) FROM private.leave_accrual_policies WHERE person_id=pg_temp.source_person(14))='2026-09-11';
+ ASSERT private.payroll_request_hours_after(pg_temp.source_request(83),'2026-09-09') IS NULL;
+ b:=private.leave_bank_basis(pg_temp.source_person(14),'annual');
+ ASSERT b->>'status'='coverage_unconfirmed' AND b->>'coveredThrough' IS NULL AND (b->>'bankHours')::numeric=100;
+ ASSERT private.approved_leave_hours_after(pg_temp.source_person(14),ARRAY['Annual leave'],'2026-10-01') IS NULL, 'Old approved usage before the first configured policy cannot be presumed covered by an unknown report period';
+ c:=private.calculate_leave_entitlement(pg_temp.source_person(14),'annual','2026-10-07');
+ ASSERT (c->>'exactHours')::numeric=100 AND (c->>'earned')::numeric=0;
+ p:=private.project_annual_leave_balance(pg_temp.source_person(14),'2026-10-08');
+ ASSERT p->>'status'='unavailable' AND p->>'availableHours' IS NULL;
+ ASSERT (p->>'payrollHours')::numeric=100;
+END $$;
+ROLLBACK TO source_bank_unknown_coverage_before_policy;
+\echo PASS: unknown coverage with approved usage before the first configured policy fails closed without changing the authoritative bank
+
 ROLLBACK;

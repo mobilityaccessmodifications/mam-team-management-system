@@ -3,7 +3,7 @@
   "organization": "fwlmbmospuwoaosffvmw",
   "baseHead": "9ff635a92568eee29b58192405bcfa0b45cce8f2",
   "version": "20261008150000",
-  "migrationSha256": "84a62945f9fecfc7b036c14d4d3f45f1d5dd4f6ca03fc496b4f9e28f1ed21fa3",
+  "migrationSha256": "ab7a5140999a768298455afb0e25f35e4d36d3b6451efa5c3227c9344634a990",
   "before": {
     "roles": [
       {
@@ -6173,7 +6173,7 @@
       {
         "version": "20261008150000",
         "name": "annual_source_bank_reconciliation",
-        "sourceHash": "99324ef84b85f41a80d842ad6768c464f2c31e74576b71a71f80d7f44e9ffc48"
+        "sourceHash": "971f6e22c270f2ef5f11ea0103467a5b740a219799174edb0e5c6db4e6d026b2"
       }
     ],
     "tables": {
@@ -10920,7 +10920,7 @@
         "config": [
           "search_path=\"\""
         ],
-        "sha256": "5a4fc5021ba4c613cb9031514ad362b5910ab8aea6d808e46522f1680ef04155",
+        "sha256": "39061290da2ab38cd8985d771195bf4372090f0e8c4bffbf031e2165d5dae906",
         "securityDefiner": true
       },
       "private.confirmed_test_retained_leave_receipt(jsonb)": {
@@ -16124,14 +16124,14 @@
       "version": "20261008150000",
       "name": "annual_source_bank_reconciliation",
       "statementHashes": [
-        "84a62945f9fecfc7b036c14d4d3f45f1d5dd4f6ca03fc496b4f9e28f1ed21fa3"
+        "ab7a5140999a768298455afb0e25f35e4d36d3b6451efa5c3227c9344634a990"
       ],
       "ndims": 1,
       "lower": 1,
       "upper": 1,
       "cardinality": 1,
       "isNull": false,
-      "rawHash": "dc241f57a35b497efa9837a1a9888e325df6f81649e915646e4ae6d03ca9de17"
+      "rawHash": "2ca08bc7470815abf7bbb1c953d3288fee73b5f021cf1887d6289fd6094655cd"
     }
   ],
   "localPredecessors": [
