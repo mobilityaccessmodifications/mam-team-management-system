@@ -255,6 +255,7 @@ test('active directory-only create without email skips portal-account provisioni
   }).outputText;
   const accountCalls = [];
   const supabase = { rpc: async (name) => {
+    if (name === 'get_employee_team_manager_default') return { data: { status: 'missing', managerId: null, managerName: '' }, error: null };
     assert.equal(name,'create_employee_directory_record_with_work_schedule_times');
     return { data:[{ person_id:reminderId }],error:null };
   } };

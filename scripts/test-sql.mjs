@@ -125,6 +125,10 @@ try {
   if (requestNotifications.status !== 0) throw new Error('Subscription request persisted notification envelopes failed');
   const requestCatalog = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/subscription-requests-catalog.mjs'), socket, 'all'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
   if (requestCatalog.status !== 0) throw new Error('Subscription request exact catalog and deferred-ledger rollback tests failed');
+  for (const regression of ['new-starter-team-manager.sql', 'new-starter-team-manager-creation.sql', 'new-starter-team-manager-resolution.sql', 'new-starter-team-manager-schema.sql', 'new-starter-team-manager-matrix.sql', 'new-starter-team-manager-parent-effects.sql']) {
+    command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests', regression)]);
+    console.log(`PASS: Team Manager ${regression}`);
+  }
   const onboardingReview = spawnSync(process.execPath, [path.join(sourceRoot, "tests/run-onboarding-review-sql.mjs"), socket], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (onboardingReview.status !== 0) throw new Error("Onboarding review PostgreSQL authorization, CAS, concurrency and catalog rollback tests failed");
   command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests/operator-session-proof.sql')]);

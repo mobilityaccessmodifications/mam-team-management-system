@@ -8,7 +8,23 @@ export const record = {
 };
 window.directoryCalls = [];
 window.directoryRoleReads = 0;
-export async function listEmployeeDirectoryRecords() { return [record]; }
+window.directoryManagerReads = [];
+export const managerRecords = [
+  { ...record, personId: '10000000-0000-4000-8000-000000000002', firstName: 'Morgan', fullName: 'Morgan Synthetic', positionTitle: 'Manager' },
+  { ...record, personId: '10000000-0000-4000-8000-000000000003', firstName: 'Casey', fullName: 'Casey Synthetic', positionTitle: 'Manager', company: 'equipsy', teamName: 'Equipsy' },
+  { ...record, personId: '10000000-0000-4000-8000-000000000004', firstName: 'Riley', fullName: 'Riley Synthetic', positionTitle: 'Manager' },
+];
+export async function getEmployeeTeamManagerDefault(input) {
+  window.directoryManagerReads.push(input);
+  const params = new URLSearchParams(location.search);
+  const state = params.get('managerState');
+  const result = DIRECTORY_MANAGER_FIXTURE_RESULTS[state === 'missing' || state === 'invalid' ? state : input.company];
+  if (state === 'held' && input.company === 'mam' && input.teamName === 'Warehouse') {
+    return new Promise(resolve => { window.releaseOldTeamManager = () => resolve(result); });
+  }
+  return params.has('teamManager') ? result : DIRECTORY_MANAGER_FIXTURE_RESULTS.missing;
+}
+export async function listEmployeeDirectoryRecords() { return new URLSearchParams(location.search).has('teamManager') ? [record, ...managerRecords] : [record]; }
 export async function listEmployeeDirectoryRoles() {
   window.directoryRoleReads++;
   return { [record.personId]: new URLSearchParams(location.search).get('storedRole') ?? 'employee' };
@@ -17,6 +33,14 @@ async function mutate(method, input) {
   window.directoryCalls.push({ method, input });
   const outcome = new URLSearchParams(location.search).get('outcome') ?? 'lock';
   if (outcome === 'transport') throw new Error('private synthetic provider details');
+  if (outcome === 'success' && method === 'create' && new URLSearchParams(location.search).has('teamManager')) {
+    const state = new URLSearchParams(location.search).get('managerState');
+    const configured = DIRECTORY_MANAGER_FIXTURE_RESULTS[state === 'missing' || state === 'invalid' ? state : input.company];
+    const managerId = input.managerId ?? (configured.status === 'valid' ? configured.managerId : null);
+    return { record: { ...record, ...input, personVersion: 2, detailVersion: 2,
+      fullName: [input.firstName, input.lastName].filter(Boolean).join(' '), managerId,
+      managerName: managerRecords.find(manager => manager.personId === managerId)?.fullName ?? '' } };
+  }
   if (outcome === 'success' || outcome === 'warning') return { record: { ...record, ...input, personVersion: 2, detailVersion: 2 }, ...(outcome === 'warning' ? { warning: 'Employee details were saved, but the contract type was not. Choose it again and save.' } : {}) };
   return DIRECTORY_FIXTURE_RESULTS[outcome];
 }

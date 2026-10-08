@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createDatabase, sql, command, target } from "./local-test-postgres.mjs";
+import { runTeamManagerMigrationGuards } from "../tests/run-team-manager-migration-guards.mjs";
 
 const [socket, database = "mam_test_replay", ...regressions] = process.argv.slice(2);
 const annualLegacy = regressions.includes("--annual-legacy-fixture");
@@ -9,6 +10,9 @@ sql(socket, database, readFileSync(new URL("../tests/migrations/0001-supabase-pl
 const files = readdirSync("supabase/migrations").filter((file) => file.endsWith(".sql")).sort();
 for (const file of files) {
   console.log(`Replay ${file}`);
+  if (file === '20261008140000_employee_team_manager_defaults.sql') {
+    runTeamManagerMigrationGuards(socket, database, readFileSync(path.join('supabase/migrations', file), 'utf8'));
+  }
   if (annualLegacy && file === "20261006106000_annual_leave_all_submitter_gate.sql") {
     command('createdb', ['-h', target(socket, database)[2], '-p', '55439', '-U', 'postgres', `--template=${database}`, `${database}_predecessor`]);
     sql(socket, database, readFileSync(new URL("../tests/annual-leave-legacy-setup.sql", import.meta.url), "utf8"));

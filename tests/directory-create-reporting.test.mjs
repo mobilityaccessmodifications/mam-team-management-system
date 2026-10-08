@@ -38,7 +38,7 @@ function loadActions() {
     'next/cache': { revalidatePath: () => {} },
     '@/lib/employee-directory': {
       requireEmployeeDirectoryManager: async () => ({ supabase }),
-      findEmployeeDirectoryRecord: async () => ({ personId, managerId, personVersion: 2, detailVersion: 2 }),
+      findEmployeeDirectoryRecord: async (_client, id) => ({ personId: id, company: 'mam', isActive: true, managerId, personVersion: 2, detailVersion: 2 }),
       listEmployeeDirectoryRecordsForManager: async () => [],
     },
     '@/lib/organisation-directory': { getOrganisationPersonWorkEmailForMember: async () => null },
@@ -51,12 +51,12 @@ function loadActions() {
   return { actions: mod.exports, calls };
 }
 
-test('active Directory create leaves reporting unassigned even if a caller supplies a manager', async () => {
+test('active Directory create preserves an explicitly selected same-company active manager', async () => {
   const { actions, calls } = loadActions();
   await actions.createEmployeeDirectoryRecord({ ...draft, managerId });
   const create = calls.find(({ name }) => name === 'create_employee_directory_record_with_work_schedule_times');
   assert.ok(create);
-  assert.equal(create.args.p_manager_id, null);
+  assert.equal(create.args.p_manager_id, managerId);
 });
 
 test('Directory edit uses the current reporting link rather than a stale draft', async () => {
@@ -67,8 +67,8 @@ test('Directory edit uses the current reporting link rather than a stale draft',
   assert.equal(update.args.p_manager_id, managerId);
 });
 
-test('Directory create form does not offer a reporting picker', () => {
+test('Directory reporting override is offered only during creation', () => {
   const source = readFileSync('src/components/employee-directory.tsx', 'utf8');
   assert.doesNotMatch(source, /<EmployeePicker\b/);
-  assert.doesNotMatch(source, /<label htmlFor=\{managerInputId\}>Reports to/);
+  assert.match(source, /\{isCreate \? <Field label="Reports to"/);
 });
