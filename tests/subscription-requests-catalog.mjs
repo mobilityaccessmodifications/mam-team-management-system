@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {command,createDatabase,sql,target} from '../scripts/local-test-postgres.mjs';
 
 export function runSubscriptionRequestCatalog(socket,group='all') {
-  const migration='supabase/migrations/20261008150000_subscription_requests_milestone1.sql';
+  const migration='supabase/migrations/20261008160000_subscription_requests_milestone1.sql';
   const source=readFileSync(migration,'utf8');
   const sourceHash=createHash('sha256').update(source).digest('hex');
   const refresh=source.includes('do $sr_refresh$')?'do $sr_refresh$':'update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;';
