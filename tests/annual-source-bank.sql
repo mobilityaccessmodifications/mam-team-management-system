@@ -203,7 +203,7 @@ SAVEPOINT source_bank_actual_personal_no_double_debit;
 INSERT INTO private.leave_accrual_day_reviews(person_id,service_date,annual_eligible_hours,personal_eligible_hours,annual_taken_hours,personal_taken_hours,request_fingerprint,note,actor_user_id)
 VALUES(pg_temp.source_person(6),'2026-10-05',7.6,7.6,0,5,private.leave_accrual_request_fingerprint(pg_temp.source_person(6),'2026-10-05'),'Synthetic confirmed personal actual usage',pg_temp.source_person(900));
 SELECT pg_temp.set_test_actor(pg_temp.source_person(900));
-DO $$ DECLARE c jsonb; w jsonb; person jsonb; BEGIN
+DO $$ DECLARE c jsonb; w jsonb; person jsonb; completed_service_hours numeric; BEGIN
   c:=private.calculate_leave_entitlement(pg_temp.source_person(6),'personal','2026-10-07');
   ASSERT c->>'status'='current';
   ASSERT (c->>'taken')::numeric=5;
@@ -211,7 +211,10 @@ DO $$ DECLARE c jsonb; w jsonb; person jsonb; BEGIN
   w:=public.get_leave_priority_workspace();
   SELECT value INTO STRICT person FROM jsonb_array_elements(w->'people') WHERE value->>'personId'=pg_temp.source_person(6)::text;
   ASSERT (person->>'sickApprovedHours')::numeric=5;
-  ASSERT abs((person->>'sickAvailableHours')::numeric-(40+30.4/26-5))<0.000000000001, 'Reviewed approved personal usage is deducted once';
+  SELECT count(*)*7.6 INTO completed_service_hours
+  FROM generate_series(timestamp '2026-10-02',(now() AT TIME ZONE 'Australia/Melbourne')::date-1,interval '1 day') service(service_date)
+  WHERE extract(isodow FROM service_date)<6;
+  ASSERT abs((person->>'sickAvailableHours')::numeric-(40+completed_service_hours/26-5))<0.000000000001, 'Reviewed approved personal usage is deducted once';
 END $$;
 ROLLBACK TO source_bank_actual_personal_no_double_debit;
 \echo PASS: reviewed personal usage does not get charged again as an approval reservation
