@@ -1519,7 +1519,8 @@ declare inventory jsonb; observed text; expected text; begin
     current_setting('server_version_num')::integer/10000=17
     and current_user='postgres'
     and not (select r.rolsuper from pg_catalog.pg_roles r where r.rolname=current_user)
-    and observed='bce85bd12dba8274c0a488074b2c18d0ed1fc55b09590b4119ec85981232c53f',false) then
+    and (observed='bce85bd12dba8274c0a488074b2c18d0ed1fc55b09590b4119ec85981232c53f'
+      or observed='6d36df0f3fc60ccefc847c8af667e0f43f3d43018500cd6996b75f383b8d720c'),false) then
     raise exception 'Initial expanded catalog is not reviewed for this platform.' using errcode='55000';
   end if;
   return query select c.kind,c.object_identity,c.definition
