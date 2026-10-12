@@ -3,8 +3,11 @@ import copy
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import re
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -13,14 +16,52 @@ ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / 'scripts/deploy-employee-removal-reporting-splice.py'
 
 
-def load_helper():
-    if not HELPER.is_file():
+def load_helper(path=HELPER):
+    if not path.is_file():
         raise AssertionError('Targeted source-bound reporting-splice release helper is missing')
-    spec = importlib.util.spec_from_file_location('reporting_release', HELPER)
+    spec = importlib.util.spec_from_file_location('reporting_release', path)
     assert spec is not None and spec.loader is not None
     helper = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helper)
     return helper
+
+
+@contextlib.contextmanager
+def release_source_fixture():
+    paths = [HELPER.relative_to(ROOT), Path('scripts/deploy-staff-leave-calendar.py'),
+             Path('supabase/migrations/20261012170000_employee_removal_reporting_splice.sql'),
+             Path('supabase/migrations/20261012110000_trade_school_leave.sql')]
+    with tempfile.TemporaryDirectory(prefix='reporting-source-unit-') as directory:
+        parent = Path(directory).resolve()
+        root = parent / 'repo'
+        root.mkdir()
+        home = parent / 'home'
+        home.mkdir()
+        for path in paths:
+            target = root / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((ROOT / path).read_bytes())
+        environment = {'PATH': os.environ.get('PATH', os.defpath), 'HOME': str(home),
+                       'TMPDIR': tempfile.gettempdir(), 'LANG': 'C', 'LC_ALL': 'C',
+                       'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull}
+        with patch.dict(os.environ, environment, clear=True), patch.object(sys, 'dont_write_bytecode', True):
+            def git(*args):
+                return subprocess.check_output(['git', *args], cwd=root)
+            git('-c', 'init.templateDir=', 'init', '-q')
+            git('config', '--local', 'user.name', 'mobilityaccessmodifications')
+            git('config', '--local', 'user.email', '310802599+mobilityaccessmodifications@users.noreply.github.com')
+            git('config', '--local', 'core.autocrlf', 'false')
+            git('remote', 'add', 'origin', 'https://github.com/mobilityaccessmodifications/mam-team-management-system.git')
+            git('add', '--', *map(str, paths))
+            git('commit', '-q', '-m', 'Synthetic reporting release source fixture')
+            head = git('rev-parse', 'HEAD').decode().strip()
+            helper = load_helper(root / HELPER.relative_to(ROOT))
+            cwd = Path.cwd()
+            os.chdir(root)
+            try:
+                yield helper, head
+            finally:
+                os.chdir(cwd)
 
 
 def synthetic_before(source):
@@ -157,32 +198,50 @@ class ReportingSpliceReleaseTests(unittest.TestCase):
 
 
     def test_clean_git_requires_explicit_head_source_helper_and_exact_target(self):
-        helper = load_helper()
-        head = 'a' * 40
-        def git(args, **kwargs):
-            command = args[1:]
-            if command == ['rev-parse', 'HEAD']:
-                return (head + '\n').encode()
-            if command == ['status', '--porcelain']:
-                return b''
-            if command == ['remote', 'get-url', 'origin']:
-                return b'https://github.com/mobilityaccessmodifications/mam-team-management-system.git\n'
-            if command == ['show', '-s', '--format=%an <%ae>', 'HEAD']:
-                return b'mobilityaccessmodifications <310802599+mobilityaccessmodifications@users.noreply.github.com>\n'
-            if command[0] == 'show' and command[1].startswith(head + ':'):
-                return (ROOT / command[1].split(':', 1)[1]).read_bytes()
-            raise AssertionError(command)
-        source_sha, helper_sha = helper.sha(helper.MIGRATION.read_bytes()), helper.sha(HELPER.read_bytes())
-        with patch.object(helper.Path, 'cwd', return_value=ROOT), patch.object(helper.subprocess, 'check_output', side_effect=git):
+        cwd, environment, bytecode = Path.cwd(), dict(os.environ), sys.dont_write_bytecode
+        with release_source_fixture() as (helper, head):
+            fixture = helper.ROOT
+            assert helper.__file__ is not None and helper.SHARED.__file__ is not None
+            source_sha = helper.sha(helper.MIGRATION.read_bytes())
+            helper_sha = helper.sha(Path(helper.__file__).read_bytes())
+            self.assertEqual(fixture, Path.cwd().resolve())
+            self.assertEqual(Path(helper.__file__).read_bytes(), HELPER.read_bytes())
+            self.assertEqual(Path(helper.SHARED.__file__).read_bytes(), (ROOT / 'scripts/deploy-staff-leave-calendar.py').read_bytes())
+            self.assertEqual(helper.PREDECESSOR.read_bytes(), (ROOT / helper.PREDECESSOR.relative_to(fixture)).read_bytes())
+            helper.state_expression(helper.candidate(source_sha))
             helper.clean_source(head, source_sha, helper_sha)
-            for arguments in [(head[:-1], source_sha, helper_sha), (head, '0' * 64, helper_sha), (head, source_sha, None)]:
+            for arguments in [(head[:-1], source_sha, helper_sha), (head, '0' * 64, helper_sha), (head, source_sha, None),
+                              (None, source_sha, helper_sha), ('0' * 40, source_sha, helper_sha), (head, source_sha, '0' * 64)]:
                 with self.subTest(arguments=arguments), self.assertRaises(SystemExit):
                     helper.clean_source(*arguments)
-        for rejected in [b'?? unrelated-file\n', b'M source.sql\n']:
-            def dirty(args, **kwargs):
-                return rejected if args[1:] == ['status', '--porcelain'] else git(args, **kwargs)
-            with patch.object(helper.Path, 'cwd', return_value=ROOT), patch.object(helper.subprocess, 'check_output', side_effect=dirty), self.assertRaises(SystemExit):
+            os.chdir(fixture.parent)
+            try:
+                with self.assertRaisesRegex(SystemExit, 'Exact approved root and full reviewed HEAD required'):
+                    helper.clean_source(head, source_sha, helper_sha)
+            finally:
+                os.chdir(fixture)
+            for path in [fixture / 'unrelated-file', helper.MIGRATION]:
+                raw = path.read_bytes() if path.exists() else None
+                path.write_bytes((raw or b'') + b'\nsynthetic dirty source\n')
+                try:
+                    self.assertTrue(subprocess.check_output(['git', 'status', '--porcelain'], cwd=fixture).strip())
+                    with self.subTest(path=path), self.assertRaisesRegex(SystemExit, 'Release tree must be clean'):
+                        helper.clean_source(head, source_sha, helper_sha)
+                finally:
+                    path.unlink() if raw is None else path.write_bytes(raw)
+            subprocess.check_output(['git', 'remote', 'set-url', 'origin', 'https://github.com/example/synthetic.git'], cwd=fixture)
+            with self.assertRaisesRegex(SystemExit, 'Wrong MAM Git remote'):
                 helper.clean_source(head, source_sha, helper_sha)
+            subprocess.check_output(['git', 'remote', 'set-url', 'origin', 'https://github.com/mobilityaccessmodifications/mam-team-management-system.git'], cwd=fixture)
+            subprocess.check_output(['git', 'config', '--local', 'user.email', 'ai@mobilityaccess.com.au'], cwd=fixture)
+            subprocess.check_output(['git', 'commit', '--amend', '--reset-author', '--no-edit', '-q'], cwd=fixture)
+            rejected_head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=fixture).decode().strip()
+            with self.assertRaisesRegex(SystemExit, 'Wrong MAM source author'):
+                helper.clean_source(rejected_head, source_sha, helper_sha)
+        self.assertEqual(Path.cwd(), cwd)
+        self.assertEqual(dict(os.environ), environment)
+        self.assertEqual(sys.dont_write_bytecode, bytecode)
+        self.assertFalse(fixture.parent.exists())
 
 
     def test_raw_ledger_shapes_are_finite_and_malformed_shapes_fail_closed(self):
@@ -200,29 +259,53 @@ class ReportingSpliceReleaseTests(unittest.TestCase):
                 helper.validate_before(invalid, source)
 
     def test_source_bytes_known_pins_json_and_actual_dirty_tree_reject_before_transport(self):
-        helper = load_helper()
-        raw = helper.MIGRATION.read_bytes()
-        source = helper.candidate(helper.sha(raw))
-        for sig, pin in helper.BEFORE_SHAS.items():
-            with self.subTest(signature=sig), self.assertRaises(SystemExit):
-                helper.function_spec(source.replace(pin, '0' * 64))
-        with tempfile.TemporaryDirectory(prefix='reporting-source-unit-') as directory:
-            file = Path(directory) / 'source.sql'
-            file.write_bytes(raw.replace(b'\n', b'\r\n'))
-            with patch.object(helper, 'MIGRATION', file), self.assertRaises(SystemExit):
-                helper.candidate(helper.sha(raw))
-            with patch.object(helper, 'MIGRATION', file), self.assertRaises(SystemExit):
-                helper.candidate(helper.sha(file.read_bytes()))
-        for raw_json in ['{"x":1,"x":2}', '{"x":NaN}', '{"x":Infinity}', '{"x":-Infinity}']:
-            with self.subTest(raw_json=raw_json), self.assertRaises(SystemExit):
-                helper.load_json(raw_json)
-        head = helper.subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT).decode().strip()
-        status = helper.subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT)
-        if status.strip():
-            with patch.object(helper.Path, 'cwd', return_value=ROOT), patch.object(helper, 'api', side_effect=AssertionError('Dirty source must stop before credentials/transport')), self.assertRaisesRegex(SystemExit, 'Release tree must be clean'):
-                helper.main(['apply', '--source-sha', helper.sha(raw), '--snapshot', str(ROOT / 'synthetic-not-created.json'), '--head', head, '--helper-sha', helper.sha(HELPER.read_bytes())])
-        else:
-            helper.clean_source(head, helper.sha(raw), helper.sha(HELPER.read_bytes()))
+        with release_source_fixture() as (helper, head):
+            raw = helper.MIGRATION.read_bytes()
+            source = helper.candidate(helper.sha(raw))
+            for sig, pin in helper.BEFORE_SHAS.items():
+                with self.subTest(signature=sig), self.assertRaises(SystemExit):
+                    helper.function_spec(source.replace(pin, '0' * 64))
+            with tempfile.TemporaryDirectory(prefix='reporting-source-corrupt-unit-') as directory:
+                file = Path(directory) / 'source.sql'
+                file.write_bytes(raw.replace(b'\n', b'\r\n'))
+                with patch.object(helper, 'MIGRATION', file), self.assertRaises(SystemExit):
+                    helper.candidate(helper.sha(raw))
+                with patch.object(helper, 'MIGRATION', file), self.assertRaises(SystemExit):
+                    helper.candidate(helper.sha(file.read_bytes()))
+            for raw_json in ['{"x":1,"x":2}', '{"x":NaN}', '{"x":Infinity}', '{"x":-Infinity}']:
+                with self.subTest(raw_json=raw_json), self.assertRaises(SystemExit):
+                    helper.load_json(raw_json)
+            fixture_helper = helper.ROOT / HELPER.relative_to(ROOT)
+            helper_sha = helper.sha(fixture_helper.read_bytes())
+            self.assertEqual(raw, (ROOT / helper.MIGRATION.relative_to(helper.ROOT)).read_bytes())
+            self.assertEqual(subprocess.check_output(['git', 'status', '--porcelain'], cwd=helper.ROOT), b'')
+            helper.clean_source(head, helper.sha(raw), helper_sha)
+            dirty = helper.ROOT / 'unrelated-file'
+            dirty.write_text('synthetic only\n')
+            self.assertNotIn('SUPABASE_ACCESS_TOKEN', os.environ)
+            with patch.object(helper, 'api', side_effect=AssertionError('Dirty source must stop before credentials/transport')) as transport, \
+                 patch.object(helper, 'query', side_effect=AssertionError('Dirty source must stop before query dispatch')) as queries, \
+                 self.assertRaisesRegex(SystemExit, 'Release tree must be clean'):
+                helper.main(['apply', '--source-sha', helper.sha(raw), '--snapshot', str(helper.ROOT / 'synthetic-not-created.json'), '--head', head, '--helper-sha', helper_sha])
+            transport.assert_not_called()
+            queries.assert_not_called()
+            self.assertFalse((helper.ROOT / 'synthetic-not-created.json').exists())
+            dirty.unlink()
+            self.assertEqual(subprocess.check_output(['git', 'status', '--porcelain'], cwd=helper.ROOT), b'')
+            helper.clean_source(head, helper.sha(raw), helper_sha)
+
+    def test_full_migration_job_installs_git_for_unprivileged_release_tests(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        job = workflow.split('  full-migration-replay-and-openclaw:\n', 1)[1].split('\n  annual-leave-all-submitters:', 1)[0]
+        packages = re.findall(r'^\s+apt-get install -y --no-install-recommends ([^\n]+)$', job, re.MULTILINE)
+        self.assertEqual(len(packages), 1)
+        self.assertIn('python3', packages[0].split())
+        self.assertIn('git', packages[0].split())
+        self.assertIn('runuser -u postgres -- python3 --version', job)
+        self.assertIn('runuser -u postgres -- git --version', job)
+        self.assertIn("postgres: ['16', '17']", job)
+        self.assertIn('container: postgres:${{ matrix.postgres }}', job)
+        self.assertIn('runuser -u postgres -- node scripts/test-sql.mjs', job)
 
     def test_unknown_dispatch_spends_journal_and_only_reconciles_read_only(self):
         helper = load_helper()

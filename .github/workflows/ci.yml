@@ -55,11 +55,12 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Install Python for the pinned release-helper rehearsal
+      - name: Install Python and Git for the pinned release-helper rehearsal
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends python3
+          apt-get install -y --no-install-recommends python3 git
           runuser -u postgres -- python3 --version
+          runuser -u postgres -- git --version
       - name: Prepare private onboarding review evidence directory
         run: install -d -m 0700 -o postgres -g postgres output/onboarding-review-fixes
       - name: Full ordered replay, effective ACLs, real concurrency and rollback
