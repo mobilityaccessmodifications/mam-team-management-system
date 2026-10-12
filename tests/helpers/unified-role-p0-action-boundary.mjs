@@ -20,12 +20,17 @@ export async function runP0ActionBoundary(socket,database,actorId,targetId,only=
  const ok=data=>({data,error:null});
  const client={auth:{getUser:async()=>{actorSessionAuthCalls++;return ok({user:{id:actorId}});}},rpc:rpc('authenticated')};
  const admin={rpc:rpc('service_role'),from(table){
-  assert.ok(['profiles','internal_org_people'].includes(table));let fields='*',filters=[],head=false;
+  assert.ok(['profiles','internal_org_people'].includes(table));let fields='*',filters=[],head=false,rowLimit=null;
   const query={select(columns,options){fields=columns;head=options?.head===true;return query;},eq(column,value){assert.match(column,/^[a-z_]+$/);filters.push(column+'='+literal(value));return query;},
+   limit(count){assert.ok(Number.isSafeInteger(count)&&count>0);rowLimit=count;return query;},
    async single(){return query.read();},async maybeSingle(){return query.read();},async read(){
     const where=filters.length?' where '+filters.join(' and '):'';
     if(head)return {data:null,error:null,count:Number(sql(socket,database,`select count(*) from public.${table}${where};`).trim())};
     assert.match(fields,/^(?:\*|[a-z_,]+)$/);
+    if(rowLimit!==null){
+     const rows=sql(socket,database,`select coalesce(json_agg(row_to_json(r)),'[]') from (select ${fields} from public.${table}${where} limit ${rowLimit}) r;`).trim();
+     return ok(JSON.parse(rows));
+    }
     const row=sql(socket,database,`select row_to_json(r) from (select ${fields} from public.${table}${where}) r;`).trim();
     return ok(row?JSON.parse(row):null);
    },then(resolve,reject){return query.read().then(resolve,reject);}};return query;
