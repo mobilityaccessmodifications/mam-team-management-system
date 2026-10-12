@@ -19,6 +19,14 @@ for (const file of files) {
     command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
     console.log(command('python3', [path.resolve('tests/run-trade-school-release.py'), socket, predecessor, `${prefix}_release`]));
   }
+  if (file === '20261012170000_employee_removal_reporting_splice.sql') {
+    const prefix = `mam_test_splice_${database.replace(/^mam_test_/, '')}`;
+    const predecessor = `${prefix}_pred`;
+    command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
+    console.log(command('python3', [path.resolve('tests/run-reporting-splice-release.py'), socket, predecessor, `${prefix}_rel`]));
+    console.log(command('python3', [path.resolve('tests/run-reporting-splice-security-probes.py'), socket, predecessor, `${prefix}_sec`]));
+    command('dropdb', ['-h', socket, '-p', '55439', '-U', 'postgres', predecessor]);
+  }
   if (annualLegacy && file === "20261006106000_annual_leave_all_submitter_gate.sql") {
     command('createdb', ['-h', target(socket, database)[2], '-p', '55439', '-U', 'postgres', `--template=${database}`, `${database}_predecessor`]);
     sql(socket, database, readFileSync(new URL("../tests/annual-leave-legacy-setup.sql", import.meta.url), "utf8"));

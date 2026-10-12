@@ -3,9 +3,11 @@ import { realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startCluster, createDatabase, stopCluster, sql, target, command, postgresEnv } from "./local-test-postgres.mjs";
+import { runReportingSpliceSql } from "../tests/run-reporting-splice-sql.mjs";
 
 const powerBiOnly = process.argv[2] === "--powerbi-hr-directory";
-const sourceRoot = realpathSync((powerBiOnly ? process.argv[3] : process.argv[2]) ?? process.cwd());
+const reportingSpliceOnly = process.argv[2] === "--reporting-splice";
+const sourceRoot = realpathSync(((powerBiOnly || reportingSpliceOnly) ? process.argv[3] : process.argv[2]) ?? process.cwd());
 const socket = startCluster();
 let passed = false;
 console.log(`Disposable PostgreSQL socket: ${socket}`);
@@ -118,6 +120,8 @@ try {
   if (!powerBiOnly) {
   const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql", "tests/unified-role-subscription-employee-delegation.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (replay.status !== 0) throw new Error("Full migration replay failed");
+  runReportingSpliceSql(socket, "mam_test_replay", sourceRoot);
+  if (!reportingSpliceOnly) {
   const tradeReleaseUnit = spawnSync('python3', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_trade_school_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
   if (tradeReleaseUnit.status !== 0) throw new Error('Trade-school release helper tests failed');
   for (const regression of ['new-starter-team-manager.sql', 'new-starter-team-manager-creation.sql', 'new-starter-team-manager-resolution.sql', 'new-starter-team-manager-schema.sql', 'new-starter-team-manager-matrix.sql', 'new-starter-team-manager-parent-effects.sql']) {
@@ -190,7 +194,8 @@ try {
   createDatabase(socket, "mam_test_staff_calendar");
   command("psql", [...target(socket, "mam_test_staff_calendar"), "-f", path.join(sourceRoot, "tests/calendar-staff-details.sql")]);
   }
-  runPowerBiContract();
+  }
+  if (!reportingSpliceOnly) runPowerBiContract();
   passed = true;
 } finally {
   stopCluster(socket);
