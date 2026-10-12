@@ -706,17 +706,28 @@ export async function archiveEmployeeDirectoryRecord(input: {
     }
 
     if (person.is_active) {
-      const { data: reports, error: reportsError } = await admin
-        .from("internal_org_people")
-        .select("id")
-        .eq("parent_id", inputValue.personId)
-        .eq("is_active", true)
-        .limit(1);
-      if (reportsError || !Array.isArray(reports)) {
+      let reportingPreflight;
+      try {
+        reportingPreflight = await supabase.rpc("preflight_employee_removal_reporting_splice", {
+          p_person_id: inputValue.personId,
+          p_expected_person_version: expectedPersonVersion,
+          p_expected_detail_version: expectedDetailVersion,
+          p_end_date: endDate,
+          p_archive_reason: reason,
+        });
+      } catch {
         return { ok: false, message: "The employee's reporting links could not be checked. Refresh and try again." };
       }
-      if (reports.length > 0) {
-        return { ok: false, message: "Move or archive this employee's active direct reports first." };
+      if (reportingPreflight.error || reportingPreflight.data !== true) {
+        const error = reportingPreflight.error;
+        const message = error?.code === "55000" && error.message === "Onboarding credential delivery in progress"
+          ? "Reporting links are protected while onboarding credential delivery is in progress or awaiting administrator review."
+          : error?.code === "40001"
+            ? mutationErrorMessage(error)
+            : error?.code === "42501"
+              ? "You do not have permission to reconnect this employee's reporting links."
+              : "The employee's reporting links could not be checked. Refresh and try again.";
+        return { ok: false, message };
       }
     }
 
@@ -802,6 +813,9 @@ export async function archiveEmployeeDirectoryRecord(input: {
         ? `${message} The portal account remains disabled with a pending claim; retry the archive after resolving this issue.`
         : message;
       const message = error.message?.toLocaleLowerCase() ?? "";
+      if (error.code === "55000" && error.message === "Onboarding credential delivery in progress") {
+        return { ok: false, message: withAccountNotice("Reporting links are protected while onboarding credential delivery is in progress or awaiting administrator review.") };
+      }
       if (message === "move or archive this employee's active direct reports first.") {
         return { ok: false, message: withAccountNotice("Move or archive this employee's active direct reports first.") };
       }

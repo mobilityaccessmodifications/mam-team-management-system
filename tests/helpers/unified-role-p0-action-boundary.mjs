@@ -11,7 +11,7 @@ export async function runP0ActionBoundary(socket,database,actorId,targetId,only=
  function rpc(role){return async(name,args={})=>{
   assert.match(name,/^[a-z][a-z0-9_]*$/);calls.push(name);events.push(name);
   const expression=`public.${name}(${Object.values(args).map(literal).join(',')})`;
-  const boolean=name.startsWith('can_')||['claim_portal_account_status_execution','record_portal_account_status_execution'].includes(name);
+  const boolean=name.startsWith('can_')||['claim_portal_account_status_execution','record_portal_account_status_execution','preflight_employee_removal_reporting_splice'].includes(name);
   try{
    const raw=sql(socket,database,`begin;${identity(role)}${boolean?'select to_jsonb('+expression+');':`select coalesce(jsonb_agg(to_jsonb(r)),'[]') from ${expression} r;`}commit;`).trim().split('\n').at(-1);
    return {data:JSON.parse(raw),error:null};
