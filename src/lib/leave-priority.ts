@@ -14,6 +14,7 @@ export type LeaveBalancePerson = {
   name: string;
   canSubmit: boolean;
   paidLeave: boolean;
+  tradeSchoolEligible?: boolean;
   requestFullDayHours?: number;
   requestWorkPolicy?: LeaveRequestWorkPolicy | null;
   canViewBalance: boolean;

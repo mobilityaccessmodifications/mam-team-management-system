@@ -25,3 +25,7 @@ test('notice boundary crosses DST, year and leap-day using calendar dates',()=>{
  assert.equal(check({startDate:'2028-03-01'},'2028-02-16'),false);
  assert.equal(check({startDate:'2026-10-05'}),false);
 });
+
+test('trade school has no minimum notice period for self-service or on-behalf requests',()=>{
+ for(const onBehalfOf of [false,true]) assert.equal(check({leaveType:'trade school',onBehalfOf}),false);
+});

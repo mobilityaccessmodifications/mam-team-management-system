@@ -125,6 +125,8 @@ try {
   if (requestNotifications.status !== 0) throw new Error('Subscription request persisted notification envelopes failed');
   const requestCatalog = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/subscription-requests-catalog.mjs'), socket, 'all'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
   if (requestCatalog.status !== 0) throw new Error('Subscription request exact catalog and deferred-ledger rollback tests failed');
+  const tradeReleaseUnit = spawnSync('python3', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_trade_school_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (tradeReleaseUnit.status !== 0) throw new Error('Trade-school release helper tests failed');
   for (const regression of ['new-starter-team-manager.sql', 'new-starter-team-manager-creation.sql', 'new-starter-team-manager-resolution.sql', 'new-starter-team-manager-schema.sql', 'new-starter-team-manager-matrix.sql', 'new-starter-team-manager-parent-effects.sql']) {
     command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests', regression)]);
     console.log(`PASS: Team Manager ${regression}`);

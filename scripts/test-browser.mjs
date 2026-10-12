@@ -11,6 +11,7 @@ import { spawn } from "node:child_process";
 import { buildUnifiedRoleFixture } from "../tests/browser/unified-role-build.mjs";
 import { applyDayflowDstPatch } from "./apply-dayflow-dst-patch.mjs";
 import { reviewActionHarness, deliveryId, updatedAt, rowFixture } from "../tests/helpers/onboarding-review-action-harness.mjs";
+import { archivePreflightFixture, archivePreflightInput } from "../tests/helpers/archive-preflight-harness.mjs";
 
 // This harness does not start Next or read a .env. Production components are
 // compiled unchanged; only server-action boundaries receive synthetic data.
@@ -33,6 +34,15 @@ for (const [name, rows] of Object.entries({ list: [rowFixture], empty: [], refre
 }
 const directoryInput = { ...draft, personId, personVersion: 1, detailVersion: 1 };
 const directoryResults = {};
+const directoryArchiveResults = {};
+for (const readError of [false, true]) {
+  const fixture = archivePreflightFixture({ sourceRoot, readError });
+  const result = await fixture.action(archivePreflightInput);
+  if (result.ok !== false || fixture.state.reportReads !== 1 || fixture.state.mutations.length) {
+    throw new Error("Archive preflight fixture did not stop before mutations");
+  }
+  directoryArchiveResults[readError ? "readError" : "reports"] = result;
+}
 const directoryManagerResults = {};
 for (const [name, teamManagerDefault] of Object.entries({
   mam: { status: 'valid', managerId: '10000000-0000-4000-8000-000000000002', managerName: 'Morgan Synthetic' },
@@ -75,7 +85,7 @@ try {
     entryPoints: ["tests/browser/fixture.jsx"], bundle: true, outdir: scratch,
     platform: "browser", jsx: "automatic", sourcemap: false, minify: false,
     alias: { "@/app/leave/actions": path.join(sourceRoot, "tests/browser/payroll-display-actions.jsx"), "@/app/people/actions": path.join(sourceRoot, "tests/browser/directory-actions.jsx"), "@/components/employee-device-assignments": path.join(sourceRoot, "tests/browser/directory-fixture.jsx"), "@/app/people/team-directory-actions": path.join(sourceRoot, "tests/browser/team-directory-actions.jsx"), "@": path.join(sourceRoot, "src"), react: path.resolve("node_modules/react"), "react-dom": path.resolve("node_modules/react-dom") },
-    define: { "process.env.NODE_ENV": '"production"', DIRECTORY_FIXTURE_RESULTS: JSON.stringify(directoryResults), DIRECTORY_MANAGER_FIXTURE_RESULTS: JSON.stringify(directoryManagerResults), ONBOARDING_REVIEW_RESULTS: JSON.stringify(onboardingReviewResults) },
+    define: { "process.env.NODE_ENV": '"production"', DIRECTORY_FIXTURE_RESULTS: JSON.stringify(directoryResults), DIRECTORY_ARCHIVE_FIXTURE_RESULTS: JSON.stringify(directoryArchiveResults), DIRECTORY_MANAGER_FIXTURE_RESULTS: JSON.stringify(directoryManagerResults), ONBOARDING_REVIEW_RESULTS: JSON.stringify(onboardingReviewResults) },
     plugins: [{ name: "onboarding-review-action-boundary", setup(builder) {
       builder.onResolve({ filter: /^\.\/actions$/ }, ({ importer }) => {
         if (/[/\\]src[/\\]app[/\\]onboarding-review[/\\]review-list\.tsx$/.test(importer)) return { path: path.join(sourceRoot, "tests/browser/onboarding-review-actions.mjs") };

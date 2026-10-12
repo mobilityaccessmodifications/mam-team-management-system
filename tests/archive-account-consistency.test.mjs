@@ -14,31 +14,45 @@ const userId = "10000000-0000-4000-8000-000000000002";
 const actorId = "10000000-0000-4000-8000-000000000003";
 const changeToken = "10000000-0000-4000-8000-000000000004";
 
-function loadArchiveAction({ archiveOutcome, failInspection = false, providerTimeout = false, failFinalise = false }) {
+function loadArchiveAction({ archiveOutcome, failInspection = false, providerTimeout = false, failFinalise = false, reports = [], reportReadError = null, reportReadThrows = false, malformedReportData = false, linkedUserId = userId, existingDisable = false, authError = null }) {
   const state = {
     personActive: true,
     accountStatus: "active",
     accountVersion: 1,
-    banned: false,
-    claimStatus: null,
+    banned: existingDisable,
+    claimStatus: existingDisable ? "pending" : null,
     providerUpdates: 0,
-    providerStatus: "not_started",
+    providerStatus: existingDisable ? "succeeded" : "not_started",
     archiveCalls: 0,
     scheduleCalls: 0,
+    reportReads: [],
+    adminReads: [],
   };
 
   const admin = {
     from(table) {
+      state.adminReads.push(table);
       let selected = "";
+      const filters = [];
       const query = {
         select(columns) { selected = columns; return query; },
-        eq() { return query; },
+        eq(column, value) { filters.push([column, value]); return query; },
+        async limit(count) {
+          assert.equal(table, "internal_org_people");
+          assert.equal(selected, "id");
+          state.reportReads.push({ filters, count });
+          if (reportReadThrows) throw new Error("private synthetic reporting query details");
+          return {
+            data: reportReadError || malformedReportData ? null : reports.filter(row => filters.every(([column, value]) => row[column] === value)).slice(0, count).map(row => ({ id: row.id })),
+            error: reportReadError,
+          };
+        },
         async maybeSingle() {
           if (failInspection && selected === "is_active") {
             return { data: null, error: { message: "transport failure" } };
           }
           if (table === "internal_org_people" && selected === "auth_user_id,is_active") {
-            return { data: { auth_user_id: userId, is_active: state.personActive }, error: null };
+            return { data: { auth_user_id: linkedUserId, is_active: state.personActive }, error: null };
           }
           if (table === "internal_org_people" && selected === "is_active") {
             return { data: { is_active: state.personActive }, error: null };
@@ -99,6 +113,9 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
       }
       if (name === "archive_employee_directory_record") {
         state.archiveCalls += 1;
+        if (archiveOutcome === "direct_reports" || reports.some(row => row.parent_id === personId && row.is_active)) {
+          return { data: null, error: { code: "23503", message: "Move or archive this employee's active direct reports first." } };
+        }
         if (archiveOutcome === "rejected") return { data: null, error: { message: "Record the return of this employee's active IT devices" } };
         if (archiveOutcome === "committed") {
           state.personActive = false;
@@ -147,7 +164,10 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
       if (id === "@/lib/portal-account-status") return helper.exports;
       if (id === "@/lib/employee-directory") {
         return {
-          requireEmployeeDirectoryManager: async () => ({ supabase, actorUserId: actorId }),
+          requireEmployeeDirectoryManager: async () => {
+            if (authError) throw authError;
+            return { supabase, actorUserId: actorId };
+          },
           findEmployeeDirectoryRecord: async () => ({ id: personId }),
           listEmployeeDirectoryRecordsForManager: async () => [],
         };
@@ -171,8 +191,42 @@ const archiveInput = {
   reason: "Resigned",
 };
 
+test("active direct reports stop offboarding before a claim or Auth ban", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
+    archiveOutcome: "committed",
+    reports: [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true }],
+  });
+  const result = await archiveEmployeeDirectoryRecord(archiveInput);
+  assert.equal(result.ok, false);
+  assert.match(result.message, /active direct reports first/);
+  assert.equal(state.providerUpdates, 0);
+  assert.equal(state.archiveCalls, 0);
+  assert.equal(state.claimStatus, null);
+  assert.equal(state.banned, false);
+  assert.equal(state.personActive, true);
+  assert.equal(state.accountStatus, "active");
+  assert.deepEqual(state.reportReads, [{ filters: [["parent_id", personId], ["is_active", true]], count: 1 }]);
+});
+
+test("a report added after preflight keeps the confirmed ban and shows the blocker", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "direct_reports" });
+  const result = await archiveEmployeeDirectoryRecord(archiveInput);
+  assert.equal(result.ok, false);
+  assert.match(result.message, /active direct reports first/);
+  assert.match(result.message, /remains disabled with a pending claim/);
+  assert.equal(state.providerUpdates, 1);
+  assert.equal(state.archiveCalls, 1);
+  assert.equal(state.claimStatus, "pending");
+  assert.equal(state.providerStatus, "succeeded");
+  assert.equal(state.banned, true);
+  assert.equal(state.personActive, true);
+});
+
 test("future end date schedules offboarding without disabling sign-in", async () => {
-  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed" });
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
+    archiveOutcome: "committed",
+    reports: [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true }],
+  });
   const result = await archiveEmployeeDirectoryRecord({ ...archiveInput, endDate: "2099-01-09" });
   assert.equal(result.ok, true);
   assert.equal(state.scheduleCalls, 1);
@@ -180,6 +234,101 @@ test("future end date schedules offboarding without disabling sign-in", async ()
   assert.equal(state.providerUpdates, 0);
   assert.equal(state.accountStatus, "active");
   assert.equal(state.personActive, true);
+  assert.deepEqual(state.reportReads, []);
+});
+
+for (const [label, options] of [
+  ["database error", { reportReadError: { message: "private synthetic database details" } }],
+  ["transport error", { reportReadThrows: true }],
+  ["malformed response", { malformedReportData: true }],
+]) test(`reporting preflight ${label} stops all mutations and sanitizes feedback`, async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed", ...options });
+  const result = await archiveEmployeeDirectoryRecord(archiveInput);
+  assert.equal(result.ok, false);
+  assert.doesNotMatch(result.message, /private synthetic/);
+  assert.equal(state.providerUpdates, 0);
+  assert.equal(state.archiveCalls, 0);
+  assert.equal(state.claimStatus, null);
+  assert.equal(state.banned, false);
+});
+
+test("inactive and unrelated reports do not block a valid archive", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
+    archiveOutcome: "committed",
+    reports: [
+      { id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: false },
+      { id: "10000000-0000-4000-8000-000000000006", parent_id: actorId, is_active: true },
+    ],
+  });
+  assert.equal((await archiveEmployeeDirectoryRecord(archiveInput)).ok, true);
+  assert.equal(state.archiveCalls, 1);
+  assert.equal(state.providerUpdates, 1);
+  assert.equal(state.claimStatus, "finalised");
+});
+
+test("active structural children retain the same database prerequisite", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
+    archiveOutcome: "committed",
+    reports: [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true, node_kind: "team" }],
+  });
+  assert.match((await archiveEmployeeDirectoryRecord(archiveInput)).message, /active direct reports first/);
+  assert.equal(state.providerUpdates, 0);
+  assert.equal(state.archiveCalls, 0);
+});
+
+test("blocked retries preserve an existing successful disable receipt without replay", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
+    archiveOutcome: "committed", existingDisable: true,
+    reports: [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true }],
+  });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.match((await archiveEmployeeDirectoryRecord(archiveInput)).message, /active direct reports first/);
+  }
+  assert.equal(state.providerUpdates, 0);
+  assert.equal(state.archiveCalls, 0);
+  assert.equal(state.claimStatus, "pending");
+  assert.equal(state.providerStatus, "succeeded");
+  assert.equal(state.banned, true);
+  assert.equal(state.accountStatus, "active");
+});
+
+test("an existing disable receipt completes after the reporting blocker is resolved without another Auth call", async () => {
+  const reports = [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true }];
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed", existingDisable: true, reports });
+  assert.equal((await archiveEmployeeDirectoryRecord(archiveInput)).ok, false);
+  reports[0].parent_id = actorId;
+  assert.equal((await archiveEmployeeDirectoryRecord(archiveInput)).ok, true);
+  assert.equal(state.providerUpdates, 0);
+  assert.equal(state.archiveCalls, 1);
+  assert.equal(state.claimStatus, "finalised");
+  assert.equal(state.banned, true);
+  assert.equal(state.personActive, false);
+});
+
+test("directory-only employees must also resolve active reporting links", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
+    archiveOutcome: "committed", linkedUserId: null,
+    reports: [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true }],
+  });
+  assert.match((await archiveEmployeeDirectoryRecord(archiveInput)).message, /active direct reports first/);
+  assert.equal(state.providerUpdates, 0);
+  assert.equal(state.archiveCalls, 0);
+});
+
+test("self-offboarding rejects before reading reports or calling Auth", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed", linkedUserId: actorId });
+  assert.match((await archiveEmployeeDirectoryRecord(archiveInput)).message, /your own portal account/);
+  assert.deepEqual(state.reportReads, []);
+  assert.equal(state.providerUpdates, 0);
+});
+
+test("an unauthorized archive never uses privileged reporting reads", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed", authError: new Error("private synthetic authorization details") });
+  const result = await archiveEmployeeDirectoryRecord(archiveInput);
+  assert.equal(result.ok, false);
+  assert.doesNotMatch(result.message, /private synthetic/);
+  assert.deepEqual(state.adminReads, []);
+  assert.equal(state.providerUpdates, 0);
 });
 
 test("an archive response failure does not restore Auth after the database committed", async () => {

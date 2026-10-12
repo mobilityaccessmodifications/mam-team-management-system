@@ -52,5 +52,10 @@ export async function updateEmployeeDirectoryRole(input) {
   if (outcome === 'roleSuccess') return DIRECTORY_FIXTURE_RESULTS.roleSuccess[input.role];
   return DIRECTORY_FIXTURE_RESULTS[outcome === 'partialRole' ? 'partialRole' : 'role'];
 }
-export async function archiveEmployeeDirectoryRecord() { throw new Error('Unexpected archive'); }
+export async function archiveEmployeeDirectoryRecord(input) {
+  const scenario = new URLSearchParams(location.search).get('archivePreflight');
+  if (scenario !== 'reports' && scenario !== 'readError') throw new Error('Unexpected archive');
+  window.directoryCalls.push({ method: 'archive', input });
+  return DIRECTORY_ARCHIVE_FIXTURE_RESULTS[scenario];
+}
 export async function deleteEmployeeDirectoryRecord() { throw new Error('Unexpected delete'); }
