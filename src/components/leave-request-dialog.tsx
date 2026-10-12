@@ -75,6 +75,10 @@ export function LeaveRequestDialog({
   const leaveRequestInitialFocusRef = useRef<HTMLSelectElement>(null);
   useDialogFocus(true, leaveRequestDialogRef, leaveRequestInitialFocusRef, closeLeaveRequestForm);
   const requestedTeamMember = teamRequestPeople.find((person) => person.personId === requestForPersonId);
+  const requestLeaveTypes = requestForPersonId ? requestedTeamMember ? [
+    ...(requestedTeamMember.paidLeave ? ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"] : ["Unpaid leave"]),
+    ...(requestedTeamMember.paidLeave && requestedTeamMember.tradeSchoolEligible === true ? ["trade school"] : []),
+  ].map((value) => ({ value, label: value })) : [] : availableLeaveTypes;
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const dateRangeError = leaveDateRangeError(formStartDate, formEndDate);
@@ -139,6 +143,11 @@ export function LeaveRequestDialog({
         </div>
         {formLeaveType === "Annual leave" ? <LeaveRequestBalance workspace={leavePriority} personId={personId} self={!requestForPersonId} requestedHours={requestedHours} projection={projection} loading={projectionLoading} limitGuidance={limitGuidance} /> : null}
         <form className={styles.form} onSubmit={(event) => {
+          if (formLeaveType === "trade school" && !requestLeaveTypes.some((option) => option.value === "trade school")) {
+            event.preventDefault();
+            setFormError("Choose a valid leave type.");
+            return;
+          }
           if (dateRangeError) {
             event.preventDefault();
             setFormError(dateRangeError);
@@ -162,7 +171,7 @@ export function LeaveRequestDialog({
           }
           submitRequest(event);
         }} onChange={() => setFormError("")}>
-          <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" value={formLeaveType} onChange={(event) => setFormLeaveType(event.target.value)} required>{(requestedTeamMember ? (requestedTeamMember.paidLeave ? ["Annual leave", "Sick leave", "Carer's leave", "Unpaid leave"] : ["Unpaid leave"]).map((value) => ({ value, label: value })) : availableLeaveTypes).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+          <label><span>Leave type</span><select ref={leaveRequestInitialFocusRef} name="leaveType" value={formLeaveType} onChange={(event) => setFormLeaveType(event.target.value)} required>{requestLeaveTypes.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
           <div className={styles.formRow}><label><span>Start date</span><input name="startDate" type="date" value={formStartDate} onChange={(event) => { const nextDate = event.target.value; setFormStartDate(nextDate); setFormEndDate(nextDate); }} required /></label><label><span>End date</span><input name="endDate" type="date" min={formStartDate} value={formEndDate} onChange={(event) => setFormEndDate(event.target.value)} required /></label></div>
           {formLeaveType === "Sick leave" ? <SickEvidenceNotice dueDate={sickEvidenceDeadline(formEndDate, VICTORIAN_PUBLIC_HOLIDAY_DATES)} hasEvidence={false} /> : null}
           <details className={styles.timeRange}><summary>Part-day leave</summary><div className={styles.formRow}><label><span>Starts</span><select name="startTime" value={startTime} onChange={(event) => setStartTime(event.target.value)}><option value="">Select time</option>{START_TIME_OPTIONS.map((option) => <option value={option.value} key={`start-${option.value}`}>{option.label}</option>)}</select></label><label><span>Ends</span><select name="endTime" value={endTime} onChange={(event) => setEndTime(event.target.value)}><option value="">Select time</option>{END_TIME_OPTIONS.map((option) => <option value={option.value} key={`end-${option.value}`}>{option.label}</option>)}</select></label></div><p>First and last day only.</p></details>

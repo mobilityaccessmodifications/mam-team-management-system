@@ -21,6 +21,15 @@ test('submission reviewer copy excludes employee addresses and includes HR',()=>
   assert.equal(out.outcome,'send'); assert.equal(out.deliveryRecipient,'manager@example.test,hr@mobilityaccess.com.au');
   assert.equal(out.ccRecipients,'');
 });
+test('trade school uses the existing notification contract without balance amounts',()=>{
+  for(const [event,status] of [['leave-submitted','Pending'],['leave-approved','Approved'],['leave-declined','Declined'],['leave-cancelled','Cancelled']]){
+    const out=run(event,{leaveType:'trade school',status,wasApproved:event==='leave-cancelled'});
+    assert.equal(out.outcome,'send');
+    assert(out.emailHtml.includes('trade school'));
+    assert(!out.emailHtml.toLowerCase().includes('balance'));
+    assert(!out.emailSubject.toLowerCase().includes('balance'));
+  }
+});
 test('missing employee email never blocks the manager submission notice',()=>{
   const out=run('leave-submitted',{employeeEmail:null,employeeEmails:[]});
   assert.equal(out.outcome,'send');assert.equal(out.deliveryRecipient,'manager@example.test,hr@mobilityaccess.com.au');

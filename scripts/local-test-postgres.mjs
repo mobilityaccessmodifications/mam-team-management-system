@@ -9,6 +9,7 @@ export const postgresEnv = {
   PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, LANG: "C", LC_ALL: "C",
   PGPASSFILE: "/dev/null", PGSERVICEFILE: "/dev/null", PGCONNECT_TIMEOUT: "5",
   PGPASSWORD: "synthetic-local-unused",
+  PYTHONDONTWRITEBYTECODE: "1",
 };
 export function command(binary, args, options = {}) {
   const result = spawnSync(binary, args, { env: postgresEnv, encoding: "utf8", ...options });

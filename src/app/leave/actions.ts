@@ -159,7 +159,7 @@ export type LeaveWorkspaceData = {
   employmentType: "abn" | "casual" | "full_time" | "part_time" | "overseas" | null;
   hasPaidLeaveEntitlement: boolean;
   availableLeaveTypes: Array<{
-    value: "Annual leave" | "Sick leave" | "Carer's leave" | "Unpaid leave";
+    value: "Annual leave" | "Sick leave" | "Carer's leave" | "Unpaid leave" | "trade school";
     label: string;
   }>;
   /** True when Super Admin has requested a server-scoped Change Profile view. */
@@ -307,6 +307,8 @@ type LeaveEntitlementPolicyRpcRow = {
   has_paid_leave_entitlement: boolean;
 };
 
+type BaseLeaveWorkspaceData = LeaveWorkspaceData & { leavePolicyPersonId: string | null };
+
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^(?:(?:0[6-9]|1[0-7]):(?:00|15|30|45)|18:00)$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -317,6 +319,7 @@ const LEAVE_TYPES = new Set([
   "Sick leave",
   "Carer's leave",
   "Unpaid leave",
+  "trade school",
 ]);
 const PAID_ENTITLEMENT_LEAVE_TYPES: LeaveWorkspaceData["availableLeaveTypes"] = [
   { value: "Annual leave", label: "Annual leave" },
@@ -742,10 +745,11 @@ function userFacingSubmitError(error: unknown) {
 function leaveEntitlementPolicy(
   value: unknown,
   error: unknown,
-): Pick<LeaveWorkspaceData, "employmentType" | "hasPaidLeaveEntitlement" | "availableLeaveTypes"> {
+): Pick<BaseLeaveWorkspaceData, "employmentType" | "hasPaidLeaveEntitlement" | "availableLeaveTypes" | "leavePolicyPersonId"> {
   if (error || !Array.isArray(value)) throw new Error(LOAD_ERROR);
   if (!value.length) {
     return {
+      leavePolicyPersonId: null,
       employmentType: null,
       hasPaidLeaveEntitlement: false,
       availableLeaveTypes: [],
@@ -768,6 +772,7 @@ function leaveEntitlementPolicy(
   const hasPaidLeaveEntitlement = employmentType === "full_time" || employmentType === "part_time";
   if (row.has_paid_leave_entitlement !== hasPaidLeaveEntitlement) throw new Error(LOAD_ERROR);
   return {
+    leavePolicyPersonId: personId,
     employmentType,
     hasPaidLeaveEntitlement,
     // An unclassified active employee also fails closed to Unpaid leave until
@@ -776,6 +781,16 @@ function leaveEntitlementPolicy(
       ? PAID_ENTITLEMENT_LEAVE_TYPES
       : UNPAID_ONLY_LEAVE_TYPES,
   };
+}
+
+function tradeSchoolEntitlements(value: unknown, error: unknown): Set<string> {
+  if (error || !Array.isArray(value)) return new Set();
+  const ids = new Set<string>();
+  for (const row of value) {
+    if (!row || typeof row.person_id !== "string" || !UUID_PATTERN.test(row.person_id) || ids.has(row.person_id)) return new Set();
+    ids.add(row.person_id);
+  }
+  return ids;
 }
 
 function userFacingDecisionError(error: unknown) {
@@ -888,7 +903,7 @@ async function getSelectedEmployeeLeaveWorkspacePreview(
   };
 }
 
-async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<LeaveWorkspaceData> {
+async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<BaseLeaveWorkspaceData> {
   const supabase = await requireLeaveSession();
   const checkedPreviewPersonId = previewPersonId ? selectedPersonId(previewPersonId) : null;
 
@@ -1057,14 +1072,28 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Leav
 }
 
 export async function getLeaveWorkspaceData(previewPersonId?: string): Promise<LeaveWorkspaceData> {
-  const base = await getBaseLeaveWorkspaceData(previewPersonId);
+  const { leavePolicyPersonId, ...base } = await getBaseLeaveWorkspaceData(previewPersonId);
   const supabase = await requireLeaveSession();
-  const { data, error } = await supabase.rpc("get_leave_priority_workspace", { p_preview_person_id: previewPersonId ? selectedPersonId(previewPersonId) : null });
+  const args = { p_preview_person_id: previewPersonId ? selectedPersonId(previewPersonId) : null };
+  const [{ data, error }, tradeSchool] = await Promise.all([
+    supabase.rpc("get_leave_priority_workspace", args),
+    supabase.rpc("list_trade_school_leave_entitlements", args),
+  ]);
+  const tradeSchoolPeople = tradeSchoolEntitlements(tradeSchool.data, tradeSchool.error);
+  if (base.hasPaidLeaveEntitlement && leavePolicyPersonId && tradeSchoolPeople.has(leavePolicyPersonId)) {
+    base.availableLeaveTypes = [...base.availableLeaveTypes, { value: "trade school", label: "trade school" }];
+  }
   // Keep the existing workspace usable during a staged database deployment.
   if (error || !data || !Array.isArray(data.people) || !Array.isArray(data.requests) || !Array.isArray(data.pendingBalanceCalendarIds)) {
     return { ...base, warning: [base.warning, "Leave balances and team requests are temporarily unavailable."].filter(Boolean).join(" ") };
   }
-  const priority = data as LeavePriorityWorkspace;
+  const priority: LeavePriorityWorkspace = {
+    ...data,
+    people: (data as LeavePriorityWorkspace).people.map((person) => ({
+      ...person,
+      tradeSchoolEligible: person.paidLeave === true && tradeSchoolPeople.has(person.personId),
+    })),
+  };
   const metadata = new Map(priority.requests.map((row) => [row.id, row]));
   const conditionalCalendar = new Set(priority.pendingBalanceCalendarIds);
   return {
