@@ -705,6 +705,21 @@ export async function archiveEmployeeDirectoryRecord(input: {
       return { ok: false, message: "You cannot end employment and disable your own portal account." };
     }
 
+    if (person.is_active) {
+      const { data: reports, error: reportsError } = await admin
+        .from("internal_org_people")
+        .select("id")
+        .eq("parent_id", inputValue.personId)
+        .eq("is_active", true)
+        .limit(1);
+      if (reportsError || !Array.isArray(reports)) {
+        return { ok: false, message: "The employee's reporting links could not be checked. Refresh and try again." };
+      }
+      if (reports.length > 0) {
+        return { ok: false, message: "Move or archive this employee's active direct reports first." };
+      }
+    }
+
     if (targetAuthUserId) {
       const { data: profile, error: profileError } = await admin
         .from("profiles")
@@ -787,6 +802,9 @@ export async function archiveEmployeeDirectoryRecord(input: {
         ? `${message} The portal account remains disabled with a pending claim; retry the archive after resolving this issue.`
         : message;
       const message = error.message?.toLocaleLowerCase() ?? "";
+      if (message === "move or archive this employee's active direct reports first.") {
+        return { ok: false, message: withAccountNotice("Move or archive this employee's active direct reports first.") };
+      }
       if (message.includes("return of this employee") || message.includes("active it devices")) {
         return { ok: false, message: withAccountNotice("Record the employee’s hardware return date in Registered devices before ending employment.") };
       }

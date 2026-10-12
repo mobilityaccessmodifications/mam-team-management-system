@@ -211,7 +211,11 @@ DO $$ DECLARE c jsonb; w jsonb; person jsonb; BEGIN
   w:=public.get_leave_priority_workspace();
   SELECT value INTO STRICT person FROM jsonb_array_elements(w->'people') WHERE value->>'personId'=pg_temp.source_person(6)::text;
   ASSERT (person->>'sickApprovedHours')::numeric=5;
-  ASSERT abs((person->>'sickAvailableHours')::numeric-(40+30.4/26-5))<0.000000000001, 'Reviewed approved personal usage is deducted once';
+  ASSERT abs((person->>'sickAvailableHours')::numeric-(40+
+    (SELECT count(*)::numeric*7.6/26
+     FROM generate_series(date '2026-10-02',(now() at time zone 'Australia/Melbourne')::date-1,interval '1 day') service_day
+     WHERE extract(isodow FROM service_day) BETWEEN 1 AND 5)-5))<0.000000000001,
+    'Reviewed approved personal usage is deducted once';
 END $$;
 ROLLBACK TO source_bank_actual_personal_no_double_debit;
 \echo PASS: reviewed personal usage does not get charged again as an approval reservation
