@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { downloadRequestEvidence, loadSubscriptionRequests, mutateSubscriptionRequest } from "@/app/subscription-requests/actions";
-import { validateRequestPayload, type RequestEvidence, type RequestOperation, type RequestPayload, type RequestWorkspace, type SubscriptionRequest } from "@/lib/subscription-request-types";
+import { validateRequestPayload, type RequestEvidence, type RequestOperation, type RequestPayload, type RequestResult, type RequestWorkspace, type SubscriptionRequest } from "@/lib/subscription-request-types";
 import styles from "./subscription-requests.module.css";
 
 const initialPayload: RequestPayload = {kind:"new_purchase",company:"mam",billing:"annual",currency:"AUD",payment:"non_card"};
@@ -24,23 +24,33 @@ export function SubscriptionRequests({ initial, selectedId }: { initial: Request
   const [isError,setIsError]=useState(false);
   const [busy,setBusy]=useState(false);
   const [uncertain,setUncertain]=useState(false);
+  const [denied,setDenied]=useState(false);
   const busyRef=useRef(false);
+  const deniedRef=useRef(false);
   const editable=workspace.enabled && (selected?.canEdit ?? (workspace.canApply && newId!==null));
   const blocked=busy||uncertain;
+  function failure(result: Extract<RequestResult<unknown>,{ok:false}>) {
+    if(result.denied) {
+      deniedRef.current=true;setDenied(true);
+      setWorkspace({enabled:false,canApply:false,requests:[],people:[]});
+      setSelected(null);setNewId(null);setPayload({...initialPayload});setFiles(null);setReason("");setUncertain(false);
+    }
+    setIsError(true);setMessage(result.message);
+  }
   function choose(row: SubscriptionRequest) {
-    if(busyRef.current || uncertain) return;
+    if(busyRef.current || deniedRef.current || uncertain) return;
     setSelected(row);setNewId(null);setPayload(row.payload);setFiles(null);setReason("");setMessage("");
   }
   function create() {
-    if(busyRef.current || uncertain) return;
+    if(busyRef.current || deniedRef.current || uncertain) return;
     setNewId(crypto.randomUUID());setSelected(null);setPayload({...initialPayload});setFiles(null);setReason("");setMessage("");
   }
   async function reload() {
-    if(busyRef.current) return;
+    if(busyRef.current || deniedRef.current) return;
     busyRef.current=true;setBusy(true);
     try {
       const result=await loadSubscriptionRequests();
-      if(!result.ok) {setIsError(true);setMessage(result.message);return;}
+      if(!result.ok) {failure(result);return;}
       setWorkspace(result.data);
       const row=result.data.requests.find(r=>r.id===(selected?.id??newId));
       if(row) {setSelected(row);setNewId(null);setPayload(row.payload);setFiles(null);}
@@ -50,7 +60,7 @@ export function SubscriptionRequests({ initial, selectedId }: { initial: Request
     finally {busyRef.current=false;setBusy(false);}
   }
   async function run(operation: RequestOperation) {
-    if(busyRef.current||uncertain||!workspace.enabled) return;
+    if(busyRef.current||deniedRef.current||uncertain||!workspace.enabled) return;
     const id=selected?.id??newId; if(!id) return;
     busyRef.current=true;setBusy(true);setMessage("");setIsError(false);
     let dispatched=false;
@@ -59,18 +69,18 @@ export function SubscriptionRequests({ initial, selectedId }: { initial: Request
       const evidence=files===null?undefined:await evidenceFiles(files);
       dispatched=true;
       const result=await mutateSubscriptionRequest({id,version:selected?.version??0,operation,payload,reason,evidence});
-      if(!result.ok) {setMessage(result.message);setIsError(true);setUncertain(result.uncertain===true);return;}
+      if(!result.ok) {setUncertain(result.uncertain===true);failure(result);return;}
       setWorkspace(current=>({...current,requests:[result.data,...current.requests.filter(r=>r.id!==id)]}));
       setSelected(result.data);setNewId(null);setPayload(result.data.payload);setFiles(null);setReason("");setMessage(operation==="save"?"Saved.":"Request updated.");
     } catch(error) {setMessage(dispatched?"The request could not be confirmed. Reload before retrying.":error instanceof Error?error.message:"Check the request fields.");setIsError(true);setUncertain(dispatched);}
     finally {busyRef.current=false;setBusy(false);}
   }
   async function download(version: number,index: number) {
-    if(busyRef.current||!selected) return;
+    if(busyRef.current||deniedRef.current||!selected) return;
     busyRef.current=true;setBusy(true);
     try {
       const result=await downloadRequestEvidence(selected.id,version,index);
-      if(!result.ok) {setIsError(true);setMessage(result.message);return;}
+      if(!result.ok) {failure(result);return;}
       const bytes=Uint8Array.from(atob(result.data.base64),char=>char.charCodeAt(0));
       const url=URL.createObjectURL(new Blob([bytes],{type:result.data.mime}));
       const link=document.createElement("a");link.href=url;link.download=result.data.name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -85,7 +95,7 @@ export function SubscriptionRequests({ initial, selectedId }: { initial: Request
     return <label>{label}<select aria-label={label} value={String(payload[key]??"")} disabled={!editable||blocked} onChange={e=>setPayload(p=>({...p,[key]:e.target.value}))}>{options.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>;
   }
   return <section className={styles.workspace} aria-label="Subscription requests" aria-busy={busy}>
-    <header className={styles.toolbar}><h1>Requests</h1><button type="button" onClick={()=>void reload()} disabled={busy}>Reload</button>{workspace.canApply&&workspace.enabled?<button type="button" onClick={create} disabled={blocked}>New request</button>:null}</header>
+    <header className={styles.toolbar}><h1>Requests</h1><button type="button" onClick={()=>void reload()} disabled={busy||denied}>Reload</button>{workspace.canApply&&workspace.enabled?<button type="button" onClick={create} disabled={blocked}>New request</button>:null}</header>
     {!workspace.enabled?<p role="status">Subscription requests are not enabled.</p>:null}
     {message?<p role={isError?"alert":"status"}>{message}</p>:null}
     <div className={styles.columns}>

@@ -1,5 +1,6 @@
 "use server";
 
+import { isAuthApiError, isAuthSessionMissingError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { UUID, validateRequestPayload, type RequestEvidence, type RequestOperation, type RequestResult, type RequestWorkspace, type SubscriptionRequest } from "@/lib/subscription-request-types";
 
@@ -7,12 +8,13 @@ const generic = "The request could not be confirmed. Reload before retrying.";
 function failure(error: unknown, uncertain = false): RequestResult<never> {
   const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
   const messages: Record<string, string> = { PT409:"Request changed. Reload before retrying.", "42501":"You do not have permission for this request.", "22023":"Check the request fields and decision reason.", "55000":"Requests or the designated approver are unavailable." };
-  return { ok:false, message:messages[code] ?? generic, uncertain:uncertain && !(code in messages) };
+  return { ok:false, message:messages[code] ?? generic, denied:code === "42501", uncertain:uncertain && !(code in messages) };
 }
 async function client() {
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) throw { code:"42501" };
+  const { data, error } = await supabase.auth.getUser().catch((error: unknown) => ({data:{user:null},error:error || {}}));
+  if (error) throw { code:isAuthSessionMissingError(error) || (isAuthApiError(error) && [401,403].includes(error.status)) ? "42501" : "" };
+  if (!data.user) throw { code:"42501" };
   return supabase;
 }
 function validRequest(value: unknown): value is SubscriptionRequest {

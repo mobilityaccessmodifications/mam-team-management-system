@@ -11,7 +11,7 @@ export type RequestEvidence = { name: string; mime: string; base64: string };
 export type RequestEvent = { version: number; operation: string; actor: string; at: string; payload: RequestPayload; reason: string; evidence: { name: string; mime: string; bytes: number }[] };
 export type SubscriptionRequest = { id: string; applicant: string; status: RequestStatus; version: number; revision: number; evidenceVersion: number; payload: RequestPayload; events: RequestEvent[]; evidence: { name: string; mime: string; bytes: number }[]; canEdit: boolean; canDecide: boolean; canWithdraw: boolean };
 export type RequestWorkspace = { canApply: boolean; enabled: boolean; requests: SubscriptionRequest[]; people: { id: string; name: string }[] };
-export type RequestResult<T> = { ok: true; data: T; committed?: boolean } | { ok: false; message: string; uncertain?: boolean };
+export type RequestResult<T> = { ok: true; data: T; committed?: boolean } | { ok: false; message: string; denied: boolean; uncertain?: boolean };
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const fields = ["kind","service","plan","purpose","company","payer","duration","billing","currency","tax","quoteCents","noQuoteReason","audEstimateCents","payment","cardLabel","cardHolder","responsiblePersonId","intendedUsers"];
 export function validateRequestPayload(input: unknown, submission: boolean): RequestPayload {
