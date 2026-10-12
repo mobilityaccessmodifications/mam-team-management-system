@@ -121,6 +121,10 @@ try {
   const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql", "tests/unified-role-subscription-employee-delegation.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (replay.status !== 0) throw new Error("Full migration replay failed");
   runReportingSpliceSql(socket, "mam_test_replay", sourceRoot);
+  const finalizerUnit = spawnSync('python3', ['-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_archived_account_finalizer_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (finalizerUnit.status !== 0) throw new Error('Archived account finalizer release helper tests failed');
+  command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests/archived-account-finalizer.sql')]);
+  console.log('PASS: archived account finalizer SQL and exact-source release helper contract');
   if (!reportingSpliceOnly) {
   const tradeReleaseUnit = spawnSync('python3', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_trade_school_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
   if (tradeReleaseUnit.status !== 0) throw new Error('Trade-school release helper tests failed');

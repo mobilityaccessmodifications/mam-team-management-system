@@ -27,6 +27,13 @@ for (const file of files) {
     console.log(command('python3', [path.resolve('tests/run-reporting-splice-security-probes.py'), socket, predecessor, `${prefix}_sec`]));
     command('dropdb', ['-h', socket, '-p', '55439', '-U', 'postgres', predecessor]);
   }
+  if (file === '20261013081500_archived_account_status_finalizer.sql') {
+    const prefix = `mam_test_finalizer_${database.replace(/^mam_test_/, '')}`;
+    const predecessor = `${prefix}_pred`;
+    command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
+    console.log(command('python3', [path.resolve('tests/run-archived-account-finalizer-release.py'), socket, predecessor, `${prefix}_rel`]));
+    command('dropdb', ['-h', socket, '-p', '55439', '-U', 'postgres', predecessor]);
+  }
   if (annualLegacy && file === "20261006106000_annual_leave_all_submitter_gate.sql") {
     command('createdb', ['-h', target(socket, database)[2], '-p', '55439', '-U', 'postgres', `--template=${database}`, `${database}_predecessor`]);
     sql(socket, database, readFileSync(new URL("../tests/annual-leave-legacy-setup.sql", import.meta.url), "utf8"));
