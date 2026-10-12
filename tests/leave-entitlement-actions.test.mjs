@@ -30,6 +30,7 @@ function workspace({
   preview = false, company = "mam", employmentType = "overseas",
   paid = employmentType === "full_time" || employmentType === "part_time",
   policyPersonId = personId, policyData, policyError = null,
+  tradeSchoolData = [], tradeSchoolError = null,
   priorityData = { people: [], requests: [], pendingBalanceCalendarIds: [] },
   priorityError = null, previewAllowed = true, authenticated = true, coreError = null,
 } = {}) {
@@ -62,6 +63,7 @@ function workspace({
         error: policyError,
       };
       if (name === "get_leave_priority_workspace") return { data: priorityData, error: priorityError };
+      if (name === "list_trade_school_leave_entitlements") return { data: tradeSchoolData, error: tradeSchoolError };
       if (capabilityRpcs.has(name)) return { data: false, error: null };
       if (listRpcs.has(name)) return { data: [], error: null };
       throw new Error(`Unexpected RPC: ${name}`);
@@ -211,3 +213,44 @@ test("selected-profile preview cannot bypass Change Profile permission", async (
   await assert.rejects(fixture.load(), { message: "The selected employee leave request could not be saved. Refresh and try again." });
   assert.deepEqual(fixture.calls, [{ name: "can_change_employee_view", args: undefined }]);
 });
+
+test("self: trade school appears only for the database-entitled employee", async () => {
+  const eligible = await workspace({ employmentType: "full_time", tradeSchoolData: [{ person_id: personId }] }).load();
+  assert.deepEqual(eligible.availableLeaveTypes.map(({ value }) => value), [...paidTypes, "trade school"]);
+  const other = await workspace({ employmentType: "full_time", tradeSchoolData: [{ person_id: actorId }] }).load();
+  assert.deepEqual(other.availableLeaveTypes.map(({ value }) => value), paidTypes);
+});
+
+for (const preview of [false, true]) {
+  test(`${preview ? "preview" : "self"}: trade school eligibility uses the exact selected scope`, async () => {
+    const fixture = workspace({ preview, employmentType: "full_time", tradeSchoolData: [{ person_id: personId }], priorityData: {
+      people: [{ personId, paidLeave: true, canSubmit: true }, { personId: actorId, paidLeave: true, canSubmit: true }], requests: [], pendingBalanceCalendarIds: [],
+    } });
+    const result = await fixture.load();
+    assert.deepEqual(result.availableLeaveTypes.map(({ value }) => value), [...paidTypes, "trade school"]);
+    assert.deepEqual(result.priority.people.map((person) => person.tradeSchoolEligible), [true, false]);
+    assert.equal(Object.hasOwn(result, "leavePolicyPersonId"), false);
+    assert.deepEqual(fixture.calls.find(({ name }) => name === "list_trade_school_leave_entitlements"), {
+      name: "list_trade_school_leave_entitlements", args: { p_preview_person_id: preview ? personId : null },
+    });
+  });
+
+  for (const [label, tradeSchoolData, tradeSchoolError] of [
+    ["missing", null, null], ["object", {}, null], ["null row", [null], null],
+    ["bad ID", [{ person_id: "bad" }], null], ["duplicate", [{ person_id: personId }, { person_id: personId }], null],
+    ["mixed invalid rows", [{ person_id: personId }, {}], null],
+    ["transport denial", [{ person_id: personId }], { code: "42501", message: "Synthetic private detail" }],
+  ]) {
+    test(`${preview ? "preview" : "self"}: ${label} trade school entitlement fails closed without altering ordinary leave`, async () => {
+      const result = await workspace({ preview, employmentType: "full_time", tradeSchoolData, tradeSchoolError }).load();
+      assert.deepEqual(result.availableLeaveTypes.map(({ value }) => value), paidTypes);
+    });
+  }
+
+  for (const employmentType of [null, "abn", "casual", "overseas"]) {
+    test(`${preview ? "preview" : "self"}: trade school flag does not expand ${employmentType ?? "unclassified"} paid eligibility`, async () => {
+      const result = await workspace({ preview, employmentType, tradeSchoolData: [{ person_id: personId }] }).load();
+      assert.deepEqual(result.availableLeaveTypes.map(({ value }) => value), ["Unpaid leave"]);
+    });
+  }
+}

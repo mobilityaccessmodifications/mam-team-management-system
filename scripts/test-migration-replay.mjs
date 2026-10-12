@@ -13,6 +13,12 @@ for (const file of files) {
   if (file === '20261008140000_employee_team_manager_defaults.sql') {
     runTeamManagerMigrationGuards(socket, database, readFileSync(path.join('supabase/migrations', file), 'utf8'));
   }
+  if (file === '20261012110000_trade_school_leave.sql') {
+    const prefix = `mam_test_trade_${database.replace(/^mam_test_/, '')}`;
+    const predecessor = `${prefix}_pred`;
+    command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
+    console.log(command('python3', [path.resolve('tests/run-trade-school-release.py'), socket, predecessor, `${prefix}_release`]));
+  }
   if (annualLegacy && file === "20261006106000_annual_leave_all_submitter_gate.sql") {
     command('createdb', ['-h', target(socket, database)[2], '-p', '55439', '-U', 'postgres', `--template=${database}`, `${database}_predecessor`]);
     sql(socket, database, readFileSync(new URL("../tests/annual-leave-legacy-setup.sql", import.meta.url), "utf8"));
