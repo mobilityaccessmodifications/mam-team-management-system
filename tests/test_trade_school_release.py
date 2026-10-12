@@ -37,6 +37,13 @@ def synthetic_before(source):
 
 
 class TradeSchoolReleaseTests(unittest.TestCase):
+    def test_eligibility_audit_constraint_is_in_the_exact_release_scope(self):
+        helper = load_helper()
+        source = helper.candidate(helper.sha(helper.MIGRATION.read_bytes()))
+        constraints = helper.constraint_spec(source)
+        self.assertIn('employee_directory_audit_events_changed_fields_check', constraints)
+        self.assertIn("'trade_school_enabled'::text", constraints['employee_directory_audit_events_changed_fields_check']['definition'])
+
     def setUp(self):
         self.no_network = patch('urllib.request.urlopen', side_effect=AssertionError('Offline tests forbid network'))
         self.no_network.start()

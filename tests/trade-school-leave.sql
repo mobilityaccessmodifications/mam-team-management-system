@@ -303,4 +303,7 @@ DO $$ DECLARE r uuid; day date:=current_date+(8-extract(isodow from current_date
 END $$;
 RESET ROLE;
 \echo PASS TS10 ordinary categories and notice exemptions remain unchanged
+INSERT INTO private.employee_directory_audit_events(person_id,actor_user_id,event_type,changed_fields)
+VALUES('d1000000-0000-4000-8000-000000000002','d1000000-0000-4000-8000-000000000001','updated',ARRAY['trade_school_enabled']);
+\echo PASS TS11 explicit eligibility field can be recorded in the existing private audit
 ROLLBACK;

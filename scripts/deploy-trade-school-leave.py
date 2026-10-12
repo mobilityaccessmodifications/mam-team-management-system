@@ -31,6 +31,7 @@ SIGNATURES = {
 CONSTRAINTS = {
     'leave_requests_pay_treatment_check', 'leave_requests_request_type_label_check',
     'leave_requests_trade_school_classification_check',
+    'employee_directory_audit_events_changed_fields_check',
 }
 TRIGGER = 'CREATE TRIGGER zz_leave_requests_trade_school_policy BEFORE INSERT OR UPDATE ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.enforce_trade_school_leave()'
 
@@ -84,7 +85,7 @@ def constraint_spec(source):
     require(source.count(start) == 1, 'Unsupported constraint specification')
     section = source.split(start, 1)[1].split('\ndo $trade_school_functions_before$', 1)[0]
     rows = re.findall(r"\('([^']+)',(null|'(?:[^']|'')+'),'((?:[^']|'')+)'\)[,;]", section)
-    require(len(rows) == 3 and {row[0] for row in rows} == CONSTRAINTS, 'Exact three constraint specifications required')
+    require(len(rows) == 4 and {row[0] for row in rows} == CONSTRAINTS, 'Exact four constraint specifications required')
     return {name: {'definition': after.replace("''", "'"), 'validated': True, 'deferrable': False, 'deferred': False, 'noinherit': False, 'kind': 'c'} for name, before, after in rows}
 
 
@@ -115,7 +116,7 @@ def state_expression(source):
  'columnValid',exists(select 1 from pg_attribute a join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum where a.attrelid='private.employee_directory_details'::regclass and a.attname='trade_school_enabled' and a.atttypid='boolean'::regtype and a.atttypmod=-1 and a.attnotnull and a.atthasdef and a.atthasmissing and a.attmissingval::text='{{f}}' and a.attacl is null and a.attidentity='' and a.attgenerated='' and a.attcollation=0 and not a.attisdropped and pg_get_expr(d.adbin,d.adrelid)='false'),
  'enabledCount',(select count(*) from private.employee_directory_details d where coalesce((to_jsonb(d)->>'trade_school_enabled')::boolean,false)),
  'trigger',(select jsonb_build_object('definition',pg_get_triggerdef(oid),'enabled',tgenabled) from pg_trigger where tgrelid='public.leave_requests'::regclass and tgname='zz_leave_requests_trade_school_policy' and not tgisinternal),
- 'constraints',(select coalesce(jsonb_object_agg(conname,jsonb_build_object('definition',pg_get_constraintdef(oid),'validated',convalidated,'deferrable',condeferrable,'deferred',condeferred,'noinherit',connoinherit,'kind',contype)),'{{}}') from pg_constraint where conrelid='public.leave_requests'::regclass and conname in ({constraints})))"""
+ 'constraints',(select coalesce(jsonb_object_agg(conname,jsonb_build_object('definition',pg_get_constraintdef(oid),'validated',convalidated,'deferrable',condeferrable,'deferred',condeferred,'noinherit',connoinherit,'kind',contype)),'{{}}') from pg_constraint where conrelid=case when conname='employee_directory_audit_events_changed_fields_check' then 'private.employee_directory_audit_events'::regclass else 'public.leave_requests'::regclass end and conname in ({constraints})))"""
 
 
 def ledger_bound():

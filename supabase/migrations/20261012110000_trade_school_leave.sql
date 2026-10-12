@@ -1,7 +1,7 @@
 begin;
 set local search_path='';
 lock table private.confirmed_test_identity_purges,private.confirmed_test_purge_schema in share row exclusive mode nowait;
-lock table private.employee_directory_details,public.leave_requests in access exclusive mode nowait;
+lock table private.employee_directory_details,private.employee_directory_audit_events,public.leave_requests in access exclusive mode nowait;
 do $trade_school_predecessor$ begin
  if encode(extensions.digest(pg_get_functiondef('private.confirmed_test_purge_schema_hash()'::regprocedure),'sha256'),'hex') is distinct from '3385d5a0140df3995e3196ffea442b4829f9a5357de3ccf5a8d521fbe9011a54'
  or (select count(*) from private.confirmed_test_purge_schema)<>1
@@ -21,7 +21,8 @@ create temporary table trade_school_constraint_spec(name text primary key,before
 insert into trade_school_constraint_spec values
 ('leave_requests_pay_treatment_check','CHECK (((pay_treatment IS NULL) OR (pay_treatment = ANY (ARRAY[''paid_entitlement''::text, ''unpaid''::text]))))','CHECK (((pay_treatment IS NULL) OR (pay_treatment = ANY (ARRAY[''paid_entitlement''::text, ''unpaid''::text, ''paid_other''::text]))))'),
 ('leave_requests_request_type_label_check','CHECK ((request_type_label = ANY (ARRAY[''Annual leave''::text, ''Sick leave''::text, ''Carer''''s leave''::text, ''Unpaid leave''::text, ''Other leave''::text])))','CHECK ((request_type_label = ANY (ARRAY[''Annual leave''::text, ''Sick leave''::text, ''Carer''''s leave''::text, ''Unpaid leave''::text, ''Other leave''::text, ''trade school''::text])))'),
-('leave_requests_trade_school_classification_check',null,'CHECK ((((request_type_label = ''trade school''::text) AND (leave_type = ''other''::text) AND (NOT (pay_treatment IS DISTINCT FROM ''paid_other''::text))) OR ((request_type_label <> ''trade school''::text) AND (pay_treatment IS DISTINCT FROM ''paid_other''::text))))');
+('leave_requests_trade_school_classification_check',null,'CHECK ((((request_type_label = ''trade school''::text) AND (leave_type = ''other''::text) AND (NOT (pay_treatment IS DISTINCT FROM ''paid_other''::text))) OR ((request_type_label <> ''trade school''::text) AND (pay_treatment IS DISTINCT FROM ''paid_other''::text))))'),
+('employee_directory_audit_events_changed_fields_check','CHECK ((changed_fields <@ ARRAY[''first_name''::text, ''last_name''::text, ''work_email''::text, ''personal_email''::text, ''phone''::text, ''position_title''::text, ''team_name''::text, ''manager_id''::text, ''country''::text, ''address''::text, ''date_of_birth''::text, ''started_date''::text, ''scheduled_employment_end_date''::text, ''company_key''::text, ''is_active''::text, ''sort_order''::text, ''laptop_supplied''::text, ''laptop_id''::text, ''mouse_id''::text, ''keyboard_id''::text, ''asset_tags''::text, ''employment_type''::text, ''working_weekdays''::text, ''working_day_times''::text, ''app_role''::text]))','CHECK ((changed_fields <@ ARRAY[''first_name''::text, ''last_name''::text, ''work_email''::text, ''personal_email''::text, ''phone''::text, ''position_title''::text, ''team_name''::text, ''manager_id''::text, ''country''::text, ''address''::text, ''date_of_birth''::text, ''started_date''::text, ''scheduled_employment_end_date''::text, ''company_key''::text, ''is_active''::text, ''sort_order''::text, ''laptop_supplied''::text, ''laptop_id''::text, ''mouse_id''::text, ''keyboard_id''::text, ''asset_tags''::text, ''employment_type''::text, ''working_weekdays''::text, ''working_day_times''::text, ''app_role''::text, ''trade_school_enabled''::text]))');
 do $trade_school_functions_before$ declare item record; begin
  for item in select * from trade_school_function_spec loop
   if item.is_existing then
@@ -32,7 +33,7 @@ do $trade_school_functions_before$ declare item record; begin
    raise exception 'Trade-school function already exists: %',item.signature using errcode='55000';
   end if;
  end loop;
- if exists(select 1 from trade_school_constraint_spec s left join pg_constraint k on k.conrelid='public.leave_requests'::regclass and k.conname=s.name
+ if exists(select 1 from trade_school_constraint_spec s left join pg_constraint k on k.conrelid=case when s.name='employee_directory_audit_events_changed_fields_check' then 'private.employee_directory_audit_events'::regclass else 'public.leave_requests'::regclass end and k.conname=s.name
   where (s.before_definition is null and k.oid is not null) or (s.before_definition is not null and pg_get_constraintdef(k.oid) is distinct from s.before_definition)) then
   raise exception 'Trade-school predecessor constraint differs.' using errcode='55000';
  end if;
@@ -62,7 +63,7 @@ select jsonb_build_object(
  'roles',(select jsonb_agg(to_jsonb(r) order by r.oid) from pg_roles r),
  'columns',(select jsonb_agg(to_jsonb(a) order by a.attrelid,a.attnum) from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','auth','storage') and not a.attisdropped and a.attnum>0 and not(a.attrelid='private.employee_directory_details'::regclass and a.attname='trade_school_enabled')),
  'relations',(select jsonb_agg(jsonb_build_object('oid',c.oid,'owner',c.relowner,'acl',c.relacl,'rls',c.relrowsecurity,'force_rls',c.relforcerowsecurity,'options',c.reloptions) order by c.oid) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','auth','storage')),
- 'constraints',(select jsonb_agg(to_jsonb(k) order by k.oid) from pg_constraint k where not exists(select 1 from pg_namespace n where n.oid=k.connamespace and (n.nspname ~ '^pg_temp_' or n.nspname ~ '^pg_toast_temp_')) and not(k.conrelid='public.leave_requests'::regclass and k.conname in(select name from trade_school_constraint_spec))),
+ 'constraints',(select jsonb_agg(to_jsonb(k) order by k.oid) from pg_constraint k where not exists(select 1 from pg_namespace n where n.oid=k.connamespace and (n.nspname ~ '^pg_temp_' or n.nspname ~ '^pg_toast_temp_')) and not(k.conrelid=case when k.conname='employee_directory_audit_events_changed_fields_check' then 'private.employee_directory_audit_events'::regclass else 'public.leave_requests'::regclass end and k.conname in(select name from trade_school_constraint_spec))),
  'indexes',(select jsonb_agg(to_jsonb(i) order by i.indexrelid) from pg_index i join pg_class c on c.oid=i.indexrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname !~ '^pg_temp_' and n.nspname !~ '^pg_toast_temp_')
 );
 $$;
@@ -293,6 +294,10 @@ alter table public.leave_requests
  add constraint leave_requests_trade_school_classification_check check(
   (request_type_label='trade school' and leave_type='other' and pay_treatment is not distinct from 'paid_other')
   or (request_type_label<>'trade school' and pay_treatment is distinct from 'paid_other'));
+alter table private.employee_directory_audit_events
+ drop constraint employee_directory_audit_events_changed_fields_check,
+ add constraint employee_directory_audit_events_changed_fields_check check(changed_fields <@ array[
+  'first_name','last_name','work_email','personal_email','phone','position_title','team_name','manager_id','country','address','date_of_birth','started_date','scheduled_employment_end_date','company_key','is_active','sort_order','laptop_supplied','laptop_id','mouse_id','keyboard_id','asset_tags','employment_type','working_weekdays','working_day_times','app_role','trade_school_enabled']);
 CREATE OR REPLACE FUNCTION private.enforce_leave_request_employment_policy()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -876,7 +881,7 @@ create temporary table trade_school_catalog_added on commit drop as
  select definition from trade_school_function_after
  union all select p.oid::regprocedure::text||':'||p.proowner::text||':'||coalesce(p.proacl::text,'default') from trade_school_function_spec s join pg_proc p on p.oid=to_regprocedure(s.signature) where not s.is_existing
  union all select 'private.employee_directory_details:trade_school_enabled:boolean:true'
- union all select 'public.leave_requests:'||s.after_definition from trade_school_constraint_spec s
+ union all select (case when s.name='employee_directory_audit_events_changed_fields_check' then 'private.employee_directory_audit_events:' else 'public.leave_requests:' end)||s.after_definition from trade_school_constraint_spec s
  union all select 'public.leave_requests:O:CREATE TRIGGER zz_leave_requests_trade_school_policy BEFORE INSERT OR UPDATE ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.enforce_trade_school_leave()';
 create function pg_temp.trade_school_assert_delta() returns void language plpgsql set search_path='' as $$
 begin
@@ -886,7 +891,7 @@ begin
   or (not s.is_existing and jsonb_build_object('owner',pg_get_userbyid(p.proowner),'acl',p.proacl::text,'security_definer',p.prosecdef,'config',p.proconfig) is distinct from s.new_metadata))
  or exists(select 1 from trade_school_function_before b left join pg_proc p on p.oid=to_regprocedure(b.signature)
   where p.oid is null or b.metadata is distinct from ((to_jsonb(p)-array['prosrc','prosqlbody','proargdefaults'])||jsonb_build_object('parameter_defaults',pg_get_expr(p.proargdefaults,0))))
- or exists(select 1 from trade_school_constraint_spec s left join pg_constraint k on k.conrelid='public.leave_requests'::regclass and k.conname=s.name
+ or exists(select 1 from trade_school_constraint_spec s left join pg_constraint k on k.conrelid=case when s.name='employee_directory_audit_events_changed_fields_check' then 'private.employee_directory_audit_events'::regclass else 'public.leave_requests'::regclass end and k.conname=s.name
   where pg_get_constraintdef(k.oid) is distinct from s.after_definition or k.contype<>'c' or not k.convalidated or k.condeferrable or k.condeferred or k.connoinherit)
  or not exists(select 1 from pg_attribute a join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum
   where a.attrelid='private.employee_directory_details'::regclass and a.attname='trade_school_enabled'
@@ -902,11 +907,11 @@ begin
  if exists((select definition collate "C" from trade_school_catalog_before except all
   (select definition collate "C" from pg_temp.trade_school_catalog() except all select definition collate "C" from trade_school_catalog_added
    union all select definition collate "C" from trade_school_function_before
-   union all select 'public.leave_requests:'||before_definition collate "C" from trade_school_constraint_spec where before_definition is not null))
+   union all select (case when name='employee_directory_audit_events_changed_fields_check' then 'private.employee_directory_audit_events:' else 'public.leave_requests:' end)||before_definition collate "C" from trade_school_constraint_spec where before_definition is not null))
  union all
  ((select definition collate "C" from pg_temp.trade_school_catalog() except all select definition collate "C" from trade_school_catalog_added
    union all select definition collate "C" from trade_school_function_before
-   union all select 'public.leave_requests:'||before_definition collate "C" from trade_school_constraint_spec where before_definition is not null)
+   union all select (case when name='employee_directory_audit_events_changed_fields_check' then 'private.employee_directory_audit_events:' else 'public.leave_requests:' end)||before_definition collate "C" from trade_school_constraint_spec where before_definition is not null)
   except all select definition collate "C" from trade_school_catalog_before)) then
   raise exception 'Trade-school leave includes unknown catalog drift.' using errcode='55000';
  end if;
