@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export const postgresEnv = {
-  PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, LANG: "C", LC_ALL: "C",
+  PATH: process.env.PATH, TMPDIR: realpathSync(os.tmpdir()), LANG: "C", LC_ALL: "C",
   PGPASSFILE: "/dev/null", PGSERVICEFILE: "/dev/null", PGCONNECT_TIMEOUT: "5",
   PGPASSWORD: "synthetic-local-unused",
   PYTHONDONTWRITEBYTECODE: "1",
