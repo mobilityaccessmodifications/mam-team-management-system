@@ -10,8 +10,8 @@ startup or general policy questions. No standalone profile tool is registered.
 
 Preparation reads a complete authoritative People snapshot, defaults casual/ABN
 to Unpaid leave where no type was supplied, and asks only for missing fields.
-An unavailable explicitly requested type is not silently changed. Notes are
-optional. The server renders Name, Dates, Type and Note, plus times/timezone for
+An unavailable explicitly requested type is not silently changed. A nonblank
+employee note is required; missing notes return `needs_input`. The server renders Name, Dates, Type and Note, plus times/timezone for
 part-day requests. The summary contains no repeated submission instructions.
 
 Preparation also checks the portal's 14-calendar-day notice policy using the

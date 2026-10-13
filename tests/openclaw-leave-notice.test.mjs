@@ -8,7 +8,7 @@ for (const employmentType of ['full_time', 'part_time', 'casual']) {
       const f = fixture();
       f.setRows([{ ...employee(), employmentType }]);
       for (const startDate of ['2026-09-21', '2026-09-24', '2026-10-04']) {
-        // An end date, optional note and part-day end time need not be collected.
+        // A blocked request needs no more end-date, note or part-day details.
         const r = await f.call(f.packet('prepare', { leaveType, startDate, startTime: '12:00' }));
         assert.equal(r.status, 200);
         assert.deepEqual(r.body.missing, []);
@@ -17,7 +17,7 @@ for (const employmentType of ['full_time', 'part_time', 'casual']) {
         assert.match(r.body.instruction, /do not collect more details/);
         assert.deepEqual(Object.keys(r.body).sort(), ['code', 'instruction', 'missing']);
       }
-      const allowed = await f.call(f.packet('prepare', { leaveType, startDate: '2026-10-05', endDate: '2026-10-05' }));
+      const allowed = await f.call(f.packet('prepare', { leaveType, startDate: '2026-10-05', endDate: '2026-10-05', employeeNote: 'Synthetic employee note' }));
       assert.equal(allowed.body.code, 'prepared');
       assert.equal(f.writes(), 0);
       assert.equal(f.nonces.size, 0);
@@ -27,7 +27,7 @@ for (const employmentType of ['full_time', 'part_time', 'casual']) {
 }
 
 test('casual default unpaid is checked; ABN unpaid and sick/carer remain available', async () => {
-  const f = fixture(), dates = { startDate: '2026-09-24', endDate: '2026-09-24' };
+  const f = fixture(), dates = { startDate: '2026-09-24', endDate: '2026-09-24', employeeNote: 'Synthetic employee note' };
   f.setRows([{ ...employee(), employmentType: 'casual' }]);
   assert.equal((await f.call(f.packet('prepare', dates))).body.code, 'needs_input');
   f.setRows([{ ...employee(), employmentType: 'abn' }]);
@@ -42,7 +42,7 @@ test('casual default unpaid is checked; ABN unpaid and sick/carer remain availab
 });
 
 test('unknown type asks rather than assuming restricted category; identity cannot grant exceptions', async () => {
-  const f = fixture(), dates = { startDate: '2026-09-24', endDate: '2026-09-24' };
+  const f = fixture(), dates = { startDate: '2026-09-24', endDate: '2026-09-24', employeeNote: 'Synthetic employee note' };
   const missing = await f.call(f.packet('prepare', dates));
   assert.deepEqual(missing.body.missing, ['leaveType']);
   for (const extra of [{ employmentType: 'abn' }, { onBehalfOf: true }, { managerApproved: true }]) {
@@ -61,7 +61,7 @@ test('Melbourne midnight and DST use calendar days rather than UTC or elapsed ho
     ['2026-10-04T13:00:00Z', '2026-10-19', 'prepared'],
     ['2026-10-04T13:00:00Z', '2026-10-16', 'needs_input'],
   ]) {
-    const r = await f.call(f.packet('prepare', { leaveType: 'Annual leave', startDate, endDate: startDate }), Date.parse(instant));
+    const r = await f.call(f.packet('prepare', { leaveType: 'Annual leave', startDate, endDate: startDate, employeeNote: 'Synthetic employee note' }), Date.parse(instant));
     assert.equal(r.body.code, expected, instant);
   }
 });

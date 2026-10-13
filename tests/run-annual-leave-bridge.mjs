@@ -65,7 +65,7 @@ function counts(){
 try {
   const before=counts();
   const day=sql(socket,database,"select ((current_date+28)-(extract(isodow from current_date+28)::integer-1))::text;").trim();
-  const prepared=await call(packet('prepare',{leaveType:'Annual leave',startDate:day,endDate:day,employeeNote:''}));
+  const prepared=await call(packet('prepare',{leaveType:'Annual leave',startDate:day,endDate:day,employeeNote:'Synthetic annual leave note'}));
   assert.equal(prepared.status,200);
   assert.equal(prepared.body.code,'prepared');
   const confirmation=packet('confirm',{draftToken:prepared.body.draftToken,shownMessageId:'synthetic-provider-1',replyToMessageId:null,text:'Confirm'});
@@ -88,7 +88,7 @@ try {
   assert.deepEqual(counts(),committed,'T05: bridge replay duplicated database state');
   assert.equal(dispatches,2);
   sql(socket,database,`update private.employee_annual_leave_balances set hours=0 where person_id='${employee}';`);
-  const deniedLeaf=spawnSync('psql',[...target(socket,database),'-Atq','-c',`begin; select * from private.openclaw_submit_self('${employee}','Annual leave','${day}','${day}',null,null,null); rollback;`],{env:postgresEnv,encoding:'utf8'});
+  const deniedLeaf=spawnSync('psql',[...target(socket,database),'-Atq','-c',`begin; select * from private.openclaw_submit_self('${employee}','Annual leave','${day}','${day}',null,null,'Synthetic annual leave note'); rollback;`],{env:postgresEnv,encoding:'utf8'});
   assert.notEqual(deniedLeaf.status,0);
   assert.match(deniedLeaf.stderr,/Not enough balance|Future accrual could not be confirmed/);
   assert.deepEqual(counts(),committed);
@@ -97,7 +97,7 @@ try {
     update private.employee_annual_leave_balances set hours=5.9999 where person_id='${employee}';`);
   const weekendBefore=counts(),weekendDispatches=dispatches,weekendRejects=rejects;
   const weekendDay=sql(socket,database,"select ((current_date+28)+(6-extract(isodow from current_date+28)::integer))::text;").trim();
-  const weekendPrepared=await call(packet('prepare',{leaveType:'Annual leave',startDate:weekendDay,endDate:weekendDay,employeeNote:''}));
+  const weekendPrepared=await call(packet('prepare',{leaveType:'Annual leave',startDate:weekendDay,endDate:weekendDay,employeeNote:'Synthetic annual leave note'}));
   assert.equal(weekendPrepared.status,200,'Saved-policy annual weekend reaches the actual database producer');
   assert.equal(weekendPrepared.body.code,'prepared');
   const weekendConfirmation=packet('confirm',{draftToken:weekendPrepared.body.draftToken,shownMessageId:'synthetic-provider-weekend',replyToMessageId:null,text:'Confirm'});
@@ -123,7 +123,7 @@ try {
   assert.deepEqual(counts(),weekendCommitted,'Weekend confirmation replay creates no additional canonical or audit state');
   assert.equal(dispatches,weekendDispatches+2);
   const unscheduledDay=sql(socket,database,`select (date '${weekendDay}'-1)::text;`).trim();
-  const unscheduledPrepared=await call(packet('prepare',{leaveType:'Annual leave',startDate:unscheduledDay,endDate:unscheduledDay,employeeNote:''}));
+  const unscheduledPrepared=await call(packet('prepare',{leaveType:'Annual leave',startDate:unscheduledDay,endDate:unscheduledDay,employeeNote:'Synthetic annual leave note'}));
   assert.equal(unscheduledPrepared.status,200);
   assert.equal(unscheduledPrepared.body.code,'prepared');
   const unscheduledDenied=await call(packet('confirm',{draftToken:unscheduledPrepared.body.draftToken,shownMessageId:'synthetic-provider-unscheduled',replyToMessageId:null,text:'Confirm'}));

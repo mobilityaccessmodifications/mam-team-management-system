@@ -89,10 +89,10 @@ for(const invalid of [
  const f=fixture();const r=await f.call(f.packet('prepare',{...input(),...invalid}));
  assert.equal(r.status,400);assert.equal(f.writes(),0);
 });
-test('one missing time asks for its pair; no optional note required',async()=>{
+test('one missing time asks for its pair with a supplied employee note',async()=>{
  const f=fixture(); const r=await f.call(f.packet('prepare',{...input(),startTime:'12:00'}));
  assert.deepEqual(r.body,{code:'needs_input',missing:['endTime']});
- const p=await f.call(f.packet('prepare',input()));assert.match(p.body.summary,/Note \(optional\): None/);
+ const p=await f.call(f.packet('prepare',input()));assert.match(p.body.summary,/Note: Synthetic employee note/);
 });
 
 test('annual weekend reaches authoritative saved-policy validation without changing consent rules',async()=>{

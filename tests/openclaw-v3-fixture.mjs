@@ -18,7 +18,7 @@ export const now=Date.parse('2026-09-21T01:00:00Z');
 export const employee=()=>({personId:'10000000-0000-4000-8000-000000000001',userId:'20000000-0000-4000-8000-000000000001',
   company:'mam',active:true,nodeKind:'person',accountActive:true,phone:'+61400000001',country:null,
   phoneIdentityVersion:'30000000-0000-4000-8000-000000000001',fullName:'Synthetic Employee',employmentType:'full_time'});
-export const input=()=>({leaveType:'Annual leave',startDate:'2026-10-12',endDate:'2026-10-12',employeeNote:''});
+export const input=()=>({leaveType:'Annual leave',startDate:'2026-10-12',endDate:'2026-10-12',employeeNote:'Synthetic employee note'});
 export function fixture(customStore) {
   let rows=[employee()], reads=0, writes=0, sequence=0;
   const receipts=new Map(), nonces=new Map();

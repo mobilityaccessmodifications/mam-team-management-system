@@ -67,7 +67,7 @@ UPDATE private.employee_annual_leave_balances SET hours=0 WHERE person_id='b1000
 SET LOCAL ROLE authenticated;
 DO $$ BEGIN
   BEGIN
-    PERFORM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09');
+    PERFORM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
     RAISE EXCEPTION 'T01: insufficient self submission accepted' USING ERRCODE='ZX001';
   EXCEPTION WHEN invalid_parameter_value THEN ASSERT SQLERRM LIKE ANY(array['Not enough balance.%','Future accrual could not be confirmed%']); END;
 END $$;
@@ -75,7 +75,7 @@ RESET ROLE;
 UPDATE private.employee_annual_leave_balances SET hours=7.6 WHERE person_id='b1000000-0000-4000-8000-000000000002';
 SET LOCAL ROLE authenticated;
 DO $$ DECLARE r uuid; BEGIN
-  SELECT id INTO r FROM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09');
+  SELECT id INTO r FROM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
   ASSERT r IS NOT NULL;
 END $$;
 RESET ROLE;
@@ -87,21 +87,21 @@ DO $$ DECLARE actor uuid; r uuid; BEGIN
     PERFORM pg_temp.set_test_actor(actor);
     UPDATE private.employee_annual_leave_balances SET hours=0 WHERE person_id='b1000000-0000-4000-8000-000000000002';
     BEGIN
-      PERFORM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000002','Annual leave','2030-12-09','2030-12-09');
+      PERFORM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000002','Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
       RAISE EXCEPTION 'T02: delegated submission bypassed balance' USING ERRCODE='ZX001';
     EXCEPTION WHEN invalid_parameter_value THEN ASSERT SQLERRM LIKE ANY(array['Not enough balance.%','Future accrual could not be confirmed%']); END;
     UPDATE private.employee_annual_leave_balances SET hours=10 WHERE person_id='b1000000-0000-4000-8000-000000000002';
-    SELECT id INTO r FROM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000002','Annual leave','2030-12-09','2030-12-09');
+    SELECT id INTO r FROM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000002','Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
     ASSERT r IS NOT NULL;
   END LOOP;
   PERFORM pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000004');
   BEGIN
-    PERFORM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000002','Annual leave','2030-12-09','2030-12-09');
+    PERFORM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000002','Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
     RAISE EXCEPTION 'T02: Account gained delegated submission' USING ERRCODE='ZX001';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   UPDATE private.employee_annual_leave_balances SET hours=0 WHERE person_id='b1000000-0000-4000-8000-000000000004';
   BEGIN
-    PERFORM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09');
+    PERFORM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
     RAISE EXCEPTION 'T02: Account self submission bypassed balance' USING ERRCODE='ZX001';
   EXCEPTION WHEN invalid_parameter_value THEN ASSERT SQLERRM LIKE ANY(array['Not enough balance.%','Future accrual could not be confirmed%']); END;
 END $$;
@@ -110,11 +110,11 @@ ROLLBACK TO delegated_submission;
 SAVEPOINT idempotent_submission;
 SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000002');
 DO $$ DECLARE r uuid; replay uuid; key uuid:=gen_random_uuid(); BEGIN
-  SELECT id INTO r FROM public.submit_leave_request_once(key,NULL,'Annual leave','2030-12-09','2030-12-09');
-  SELECT id INTO replay FROM public.submit_leave_request_once(key,NULL,'Annual leave','2030-12-09','2030-12-09');
+  SELECT id INTO r FROM public.submit_leave_request_once(key,NULL,'Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
+  SELECT id INTO replay FROM public.submit_leave_request_once(key,NULL,'Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
   ASSERT replay=r;
   BEGIN
-    PERFORM public.submit_leave_request_once(key,NULL,'Annual leave','2030-12-10','2030-12-10');
+    PERFORM public.submit_leave_request_once(key,NULL,'Annual leave','2030-12-10','2030-12-10',p_employee_note => 'Synthetic annual leave note');
     RAISE EXCEPTION 'T03: changed submission payload reused key' USING ERRCODE='ZX001';
   EXCEPTION WHEN invalid_parameter_value THEN ASSERT SQLERRM LIKE 'This submission was already used%'; END;
   ASSERT (SELECT count(*)=1 FROM private.leave_submission_receipts WHERE actor_user_id='b1000000-0000-4000-8000-000000000002');
@@ -127,7 +127,7 @@ SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000002');
 UPDATE private.employee_annual_leave_balances SET hours=0 WHERE person_id='b1000000-0000-4000-8000-000000000002';
 SET LOCAL ROLE authenticated;
 DO $$ BEGIN
-  BEGIN PERFORM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09');
+  BEGIN PERFORM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
     RAISE EXCEPTION 'T04: direct authenticated RPC bypassed balance' USING ERRCODE='ZX001';
   EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
 END $$;
@@ -255,7 +255,7 @@ ROLLBACK TO own_commitment;
 SAVEPOINT ordinary_approval;
 SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000003');
 DO $$ DECLARE r uuid; before_events bigint; before_outbox bigint; BEGIN
-  SELECT id INTO r FROM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000002','Annual leave','2030-12-09','2030-12-09');
+  SELECT id INTO r FROM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000002','Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
   SELECT count(*) INTO before_events FROM public.leave_request_events WHERE leave_request_id=r;
   SELECT count(*) INTO before_outbox FROM private.leave_notification_outbox WHERE request_id=r;
   UPDATE private.employee_annual_leave_balances SET hours=0 WHERE person_id='b1000000-0000-4000-8000-000000000002';
@@ -358,7 +358,7 @@ DO $$ DECLARE person uuid:='b1000000-0000-4000-8000-000000000002'; r uuid; label
       kind,label,pg_temp.annual_fixture_weekday(current_date),pg_temp.annual_fixture_weekday(current_date),1,4);
   END LOOP;
   PERFORM pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000003');
-  BEGIN PERFORM public.submit_selected_employee_leave_request(person,'Annual leave',pg_temp.annual_fixture_weekday(current_date),pg_temp.annual_fixture_weekday(current_date));
+  BEGIN PERFORM public.submit_selected_employee_leave_request(person,'Annual leave',pg_temp.annual_fixture_weekday(current_date),pg_temp.annual_fixture_weekday(current_date),p_employee_note => 'Synthetic annual leave note');
     RAISE EXCEPTION 'T18: notice exemption became balance exemption' USING ERRCODE='ZX001';
   EXCEPTION WHEN invalid_parameter_value THEN ASSERT SQLERRM LIKE ANY(array['Not enough balance.%','Future accrual could not be confirmed%']); END;
 END $$;
@@ -404,7 +404,7 @@ SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000006');
 SET LOCAL ROLE authenticated;
 DO $$ DECLARE day date:=(current_date+28)+(6-extract(isodow from current_date+28)::integer); BEGIN
   BEGIN
-    PERFORM public.submit_my_leave_request('Annual leave',day,day);
+    PERFORM public.submit_my_leave_request('Annual leave',day,day,p_employee_note => 'Synthetic annual leave note');
     RAISE EXCEPTION 'Weekend self request rounded insufficient balance into funding' USING ERRCODE='ZX001';
   EXCEPTION WHEN invalid_parameter_value THEN
     ASSERT SQLERRM LIKE ANY(array['Not enough balance.%','Future accrual could not be confirmed%']);
@@ -416,18 +416,18 @@ UPDATE private.employee_annual_leave_balances SET hours=6 WHERE person_id='b1000
 SET LOCAL ROLE authenticated;
 DO $$ DECLARE day date:=(current_date+28)+(6-extract(isodow from current_date+28)::integer); r uuid; replay uuid;
   key constant uuid:='b6000000-0000-4000-8000-000000000066'; BEGIN
-  SELECT id INTO r FROM public.submit_my_leave_request('Annual leave',day,day);
+  SELECT id INTO r FROM public.submit_my_leave_request('Annual leave',day,day,p_employee_note => 'Synthetic annual leave note');
   ASSERT r IS NOT NULL;
   ASSERT (SELECT business_days=1 AND hours IS NULL FROM public.leave_requests WHERE id=r), 'Full weekend request uses the policy quantity, without rounded stored hours';
-  SELECT id INTO r FROM public.submit_leave_request_once(key,NULL,'Annual leave',day+1,day+1);
-  SELECT id INTO replay FROM public.submit_leave_request_once(key,NULL,'Annual leave',day+1,day+1);
+  SELECT id INTO r FROM public.submit_leave_request_once(key,NULL,'Annual leave',day+1,day+1,p_employee_note => 'Synthetic annual leave note');
+  SELECT id INTO replay FROM public.submit_leave_request_once(key,NULL,'Annual leave',day+1,day+1,p_employee_note => 'Synthetic annual leave note');
   ASSERT replay=r, 'Weekend idempotent producer has one canonical request';
   BEGIN
-    PERFORM public.submit_leave_request_once(key,NULL,'Annual leave',day+7,day+7);
+    PERFORM public.submit_leave_request_once(key,NULL,'Annual leave',day+7,day+7,p_employee_note => 'Synthetic annual leave note');
     RAISE EXCEPTION 'Weekend replay accepted changed request details' USING ERRCODE='ZX001';
   EXCEPTION WHEN invalid_parameter_value THEN ASSERT SQLERRM LIKE 'This submission was already used%'; END;
   BEGIN
-    PERFORM public.submit_my_leave_request('Annual leave',day-1,day-1);
+    PERFORM public.submit_my_leave_request('Annual leave',day-1,day-1,p_employee_note => 'Synthetic annual leave note');
     RAISE EXCEPTION 'Weekend employee acquired Friday annual leave' USING ERRCODE='ZX001';
   EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
   BEGIN
@@ -447,7 +447,7 @@ END $$;
 SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000003');
 SET LOCAL ROLE authenticated;
 DO $$ DECLARE day date:=(current_date+28)+(6-extract(isodow from current_date+28)::integer); r uuid; BEGIN
-  SELECT id INTO r FROM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000006','Annual leave',day+7,day+7);
+  SELECT id INTO r FROM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000006','Annual leave',day+7,day+7,p_employee_note => 'Synthetic annual leave note');
   ASSERT r IS NOT NULL, 'Direct manager can submit a funded saved-policy weekend';
 END $$;
 RESET ROLE;
@@ -455,7 +455,7 @@ SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000004');
 SET LOCAL ROLE authenticated;
 DO $$ DECLARE day date:=(current_date+28)+(6-extract(isodow from current_date+28)::integer); BEGIN
   BEGIN
-    PERFORM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000006','Annual leave',day+14,day+14);
+    PERFORM public.submit_selected_employee_leave_request('b1000000-0000-4000-8000-000000000006','Annual leave',day+14,day+14,p_employee_note => 'Synthetic annual leave note');
     RAISE EXCEPTION 'Account acquired delegated weekend submission' USING ERRCODE='ZX001';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
@@ -465,7 +465,7 @@ SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000006');
 SET LOCAL ROLE authenticated;
 DO $$ DECLARE day date:=(current_date+28)+(6-extract(isodow from current_date+28)::integer); BEGIN
   BEGIN
-    PERFORM public.submit_my_leave_request('Annual leave',day+20,day+22);
+    PERFORM public.submit_my_leave_request('Annual leave',day+20,day+22,p_employee_note => 'Synthetic annual leave note');
     RAISE EXCEPTION 'Friday through Sunday annual request rounded twelve hours into funding' USING ERRCODE='ZX001';
   EXCEPTION WHEN invalid_parameter_value THEN
     ASSERT SQLERRM LIKE ANY(array['Not enough balance.%','Future accrual could not be confirmed%']);
@@ -475,7 +475,7 @@ RESET ROLE;
 UPDATE private.employee_annual_leave_balances SET hours=12 WHERE person_id='b1000000-0000-4000-8000-000000000006';
 SET LOCAL ROLE authenticated;
 DO $$ DECLARE day date:=(current_date+28)+(6-extract(isodow from current_date+28)::integer); r uuid; BEGIN
-  SELECT id INTO r FROM public.submit_my_leave_request('Annual leave',day+20,day+22);
+  SELECT id INTO r FROM public.submit_my_leave_request('Annual leave',day+20,day+22,p_employee_note => 'Synthetic annual leave note');
   ASSERT r IS NOT NULL;
   ASSERT (SELECT business_days=2 AND hours IS NULL FROM public.leave_requests WHERE id=r), 'Friday through Sunday contains two scheduled days';
 END $$;
@@ -498,7 +498,7 @@ UPDATE private.employee_annual_leave_balances SET hours=20 WHERE person_id='b100
 SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000002');
 SET LOCAL ROLE authenticated;
 INSERT INTO pg_temp.annual_precision_request
-SELECT id FROM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09');
+SELECT id FROM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
 RESET ROLE;
 SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000003');
 SET LOCAL ROLE authenticated;
@@ -554,7 +554,7 @@ UPDATE private.employee_annual_leave_balances SET hours=20 WHERE person_id='b100
 SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000002');
 SET LOCAL ROLE authenticated;
 INSERT INTO pg_temp.annual_precision_request
-SELECT id FROM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09');
+SELECT id FROM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
 RESET ROLE;
 SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000003');
 SET LOCAL ROLE authenticated;
@@ -587,7 +587,7 @@ UPDATE private.employee_annual_leave_balances SET hours=20 WHERE person_id='b100
 SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000006');
 SET LOCAL ROLE authenticated;
 INSERT INTO pg_temp.annual_precision_request
-SELECT id FROM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09');
+SELECT id FROM public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-09',p_employee_note => 'Synthetic annual leave note');
 RESET ROLE;
 SELECT pg_temp.set_test_actor('b1000000-0000-4000-8000-000000000003');
 SET LOCAL ROLE authenticated;

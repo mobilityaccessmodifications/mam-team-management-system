@@ -28,7 +28,7 @@ export function TradeSchoolLeaveFixture() {
       formStartDate={startDate} formEndDate={endDate} formError={error}
       closeLeaveRequestForm={() => {}}
       changeLeaveRequestPerson={(id) => { setPersonId(id); setLeaveType(id === otherId ? "Unpaid leave" : "trade school"); setError(""); }}
-      submitRequest={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); setSubmitted({ personId: personId || learnerId, leaveType: data.get("leaveType"), startDate: data.get("startDate") }); }}
+      submitRequest={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); setSubmitted({ personId: personId || learnerId, leaveType: data.get("leaveType"), startDate: data.get("startDate"), employeeNote: data.get("employeeNote") }); }}
       setFormError={setError} setFormLeaveType={setLeaveType} setFormStartDate={setStartDate} setFormEndDate={setEndDate}
     />
     <output data-testid="trade-school-submission">{submitted ? JSON.stringify(submitted) : "Not submitted"}</output>

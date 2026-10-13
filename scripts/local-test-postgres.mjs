@@ -55,7 +55,7 @@ export function startCluster() {
   const data = path.join(socket, "data");
   command("initdb", ["-D", data, "-U", "postgres", "--auth-local=trust", "--auth-host=reject", "--no-locale", "--encoding=UTF8"]);
   writeFileSync(path.join(socket, "mam-test-cluster.json"), JSON.stringify({ owner: "mam-local-tests-v1", socket, port: 55439 }));
-  command("pg_ctl", ["-D", data, "-l", path.join(socket, "postgres.log"), "-o", `-k ${socket} -p 55439 -c listen_addresses='' -c unix_socket_permissions=0700`, "-w", "start"]);
+  command("pg_ctl", ["-D", data, "-l", path.join(socket, "postgres.log"), "-o", `-k ${socket} -p 55439 -c listen_addresses='' -c unix_socket_permissions=0700 -c autovacuum=off`, "-w", "start"]);
   return socket;
 }
 
