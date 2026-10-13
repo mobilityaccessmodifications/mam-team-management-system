@@ -137,7 +137,7 @@ const handlers = {
     activePersonId: id ?? null, activePersonName: personFor(id)?.name ?? null, workingWeekdays: id ? [1, 2, 3, 4, 5] : null,
     workingDayTimes: [], initialSetupAvailable: false, canRequestChange: Boolean(id), isProfilePreview: Boolean(previewPersonId),
     history: scheduleTasks && id === reviewOwnerId ? [{ ...scheduleRequest }] : [],
-    reviews: scheduleTasks && !id ? [{ ...scheduleRequest, personId: reviewOwnerId, employeeName: 'Synthetic Employee' }] : [],
+    reviews: scheduleTasks && (!id || roleById[id] === 'manager') ? [{ ...scheduleRequest, personId: reviewOwnerId, employeeName: 'Synthetic Employee' }] : [],
   } }; }, reviewEmployeeWorkScheduleChange: input => {
     if (input.requestId !== scheduleRequest.id || scheduleRequest.status !== 'submitted' || !input.reason.trim()) return { ok: false, message: 'Enter a valid decision reason for this request.' };
     scheduleRequest = { ...scheduleRequest, status: input.decision, decisionReason: input.reason, reviewerName: 'Synthetic Admin' };

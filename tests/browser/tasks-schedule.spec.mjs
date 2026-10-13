@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const scheduleId = '88000000-0000-4000-8000-000000000001';
+const checkInId = '66000000-0000-4000-8000-000000000001';
 const ownRoute = '/?fixture=unified-roles&tasks=combined&schedule-tasks&subscription-reviews=employee';
 const reviewerRoute = '/?fixture=unified-roles&tasks=combined&schedule-tasks';
 const scheduleRowName = "Open Synthetic Employee's Work schedule change";
@@ -55,6 +56,27 @@ test('pending own work schedule tasks show request details and save Notes across
   await expect(notes(page)).toHaveValue('Synthetic saved work schedule notes');
 });
 
+test('Change Profile preserves scoped schedule decisions while Notes stay read-only', async ({ page }) => {
+  const managerId = '11000000-0000-4000-8000-000000000004';
+  await page.goto(reviewerRoute);
+  await page.getByRole('region', { name: 'Employee access preview' }).locator('button[aria-haspopup="dialog"]').click();
+  await page.getByRole('dialog', { name: 'Change profile', exact: true }).getByRole('button', { name: /Synthetic Manager/ }).click();
+  await openTasks(page);
+  await expect(notes(page)).toHaveJSProperty('readOnly', true);
+  await expect(details(page).getByRole('button', { name: 'Save notes', exact: true })).toHaveCount(0);
+  await details(page).getByLabel('Decision reason', { exact: true }).fill('Synthetic manager preview decision');
+  await details(page).getByRole('button', { name: 'Approve request', exact: true }).click();
+  await expect(details(page)).toHaveCount(0);
+  expect((await calls(page, 'reviewEmployeeWorkScheduleChange'))[0].args).toEqual([{
+    requestId: scheduleId, decision: 'approved', reason: 'Synthetic manager preview decision',
+  }]);
+  const noteReads = await calls(page, 'getTaskNotes');
+  expect(noteReads).toHaveLength(1);
+  expect(noteReads[0].args).toEqual([{ kind: 'work_schedule', taskId: scheduleId }, managerId]);
+  expect(await calls(page, 'saveTaskNotes')).toEqual([]);
+  expect((await calls(page, 'loadEmployeeWorkScheduleWorkspace')).some(call => call.args[0] === managerId)).toBe(true);
+});
+
 for (const [buttonName, decision] of [['Approve request', 'approved'], ['Decline', 'declined']]) {
   test(`standalone reviewers require a reason and dispatch ${decision} once`, async ({ page }) => {
     await page.goto(reviewerRoute);
@@ -106,4 +128,47 @@ test('a disappearing task releases a held Notes save so the list remains usable'
   await page.evaluate(id => window.unifiedRoleFixture.finish('saveTaskNotes', id), scheduleId);
   await expect(notes(page)).toHaveValue('');
   await expect(workspace(page).getByRole('button', { name: 'Refresh tasks', exact: true })).toBeEnabled();
+});
+
+test('a late schedule decision cannot close a newer task or release its pending Notes save', async ({ page }) => {
+  await page.goto(reviewerRoute);
+  await openTasks(page);
+  await details(page).getByLabel('Decision reason', { exact: true }).fill('Synthetic decision completing after request removal');
+  await page.evaluate(id => window.unifiedRoleFixture.holdNext('reviewEmployeeWorkScheduleChange', id), scheduleId);
+  await details(page).getByRole('button', { name: 'Approve request', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain(`reviewEmployeeWorkScheduleChange:${scheduleId}`);
+  await page.evaluate(() => {
+    window.unifiedRoleFixture.removeScheduleRequest();
+    window.dispatchEvent(new Event('focus'));
+  });
+  await expect(details(page)).toHaveCount(0);
+  await expect(workspace(page).getByRole('searchbox', { name: 'Search tasks', exact: true })).toBeFocused();
+  await workspace(page).getByRole('combobox', { name: 'Status', exact: true }).selectOption('all');
+  await workspace(page).getByRole('combobox', { name: 'Type', exact: true }).selectOption('all');
+  const row = workspace(page).getByRole('button', { name: checkInRowName, exact: true });
+  await expect(row).toBeEnabled();
+  await row.click();
+  await expect(notes(page)).toBeEditable();
+  await notes(page).fill('Synthetic newer task note still saving');
+  await page.evaluate(id => window.unifiedRoleFixture.holdNext('saveTaskNotes', id), checkInId);
+  await details(page).getByRole('button', { name: 'Save notes', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain(`saveTaskNotes:${checkInId}`);
+  const workspaceReads = (await calls(page, 'loadEmployeeWorkScheduleWorkspace')).length;
+  await page.evaluate(id => window.unifiedRoleFixture.finish('reviewEmployeeWorkScheduleChange', id), scheduleId);
+  await expect.poll(async () => (await calls(page, 'loadEmployeeWorkScheduleWorkspace')).length).toBeGreaterThan(workspaceReads);
+  await expect(details(page)).toContainText('1-month check-in');
+  await expect(notes(page)).toHaveValue('Synthetic newer task note still saving');
+  await expect(notes(page)).toBeDisabled();
+  await expect(details(page).getByRole('button', { name: 'Saving…', exact: true })).toBeDisabled();
+  await expect(details(page).getByRole('button', { name: 'Close task details', exact: true })).toBeDisabled();
+  await expect(row).toBeDisabled();
+  await expect(workspace(page).getByRole('button', { name: 'Refresh tasks', exact: true })).toBeDisabled();
+  await expect(workspace(page).getByRole('status').filter({ hasText: 'Schedule request approved.' })).toHaveCount(0);
+  await page.evaluate(id => window.unifiedRoleFixture.finish('saveTaskNotes', id), checkInId);
+  await expect(details(page).getByRole('status').filter({ hasText: 'Notes saved.' })).toHaveCount(1);
+  await expect(notes(page)).toBeEditable();
+  await expect(row).toBeEnabled();
+  await expect(workspace(page).getByRole('button', { name: 'Refresh tasks', exact: true })).toBeEnabled();
+  expect(await calls(page, 'reviewEmployeeWorkScheduleChange')).toHaveLength(1);
+  expect(await calls(page, 'saveTaskNotes')).toHaveLength(1);
 });
