@@ -56,7 +56,7 @@ def clone(name, template):
 with tempfile.TemporaryDirectory(prefix='notes-helper-', dir=socket) as copy:
     root = Path(copy)
     paths = ['scripts/deploy-task-notes.py', 'scripts/deploy-staff-leave-calendar.py',
-             'supabase/migrations/20261013213724_task_follow_up_notes.sql', 'supabase/migrations/20261013200000_day_one_reporting_splice_claims.sql']
+             'supabase/migrations/20261013223556_task_follow_up_notes.sql', 'supabase/migrations/20261013223523_reconcile_storage_0073_catalog.sql']
     for name in paths:
         target = root/name
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -100,6 +100,7 @@ with tempfile.TemporaryDirectory(prefix='notes-helper-', dir=socket) as copy:
     helper.query = query
     before = helper.read_state(source, predecessor_source, helper.query)
     helper.validate_before(before, source)
+    assert before['major'] in helper.TABLE_SHA256_BY_MAJOR
     release = helper.transaction(source, before, predecessor_source)
     boundary = '\nset constraints all immediate;\ndo $task_notes_release_final$'
     assert release.count(boundary) == 1
@@ -197,10 +198,20 @@ with tempfile.TemporaryDirectory(prefix='notes-helper-', dir=socket) as copy:
         assert writes == [release], 'Actual entrypoint dispatched a different query than the frozen builder'
         after = helper.read_state(source, predecessor_source, query)
         helper.validate_target(after, source)
+        assert after['notesSchemaHash'] == helper.TABLE_SHA256_BY_MAJOR[before['major']]
+        for wrong_major in helper.TABLE_SHA256_BY_MAJOR:
+            if wrong_major != after['major']:
+                wrong_shape = {**after, 'notesSchemaHash': helper.TABLE_SHA256_BY_MAJOR[wrong_major]}
+                try:
+                    helper.validate_target(wrong_shape, source)
+                    raise AssertionError('Wrong-major table ACL shape accepted')
+                except SystemExit as failure:
+                    assert 'private ACLs or RLS differ' in str(failure)
         assert all(before[field] == after[field] for field in ('major','securityHash','dataHash','predecessorExact'))
         assert after['ledger'][:-1] == before['ledger']
         if evidence is not None:
             (evidence/'readback.json').write_text(json.dumps({'before':before,'after':after,'exactDispatchSha256':hashlib.sha256(writes[0].encode()).hexdigest(),'writeCount':calls['writes']}, indent=2))
+        print('PASS: PostgreSQL '+str(after['major'])+' exact private table ACL shape accepted; other-major ACL rejected')
         print('PASS: actual helper inspect is read-only; apply commits one exact migration, ledger and ACL readback; repeated apply is read-only')
         database = prefix+'_custody'
         clone(database, predecessor)

@@ -51,7 +51,7 @@ for (const file of files) {
     command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, `${database}_note_predecessor`]);
     console.log(command('python3', [path.resolve('tests/run-required-note-release.py'), socket, `${database}_note_predecessor`, `mam_test_note_${database.replace(/^mam_test_/, '')}`]));
   }
-  if (file === '20261013213724_task_follow_up_notes.sql') {
+  if (file === '20261013223556_task_follow_up_notes.sql') {
     const predecessor = `${database}_task_notes_pred`;
     command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
     console.log(command('python3', [path.resolve('tests/run-task-notes-release.py'), socket, predecessor]));
