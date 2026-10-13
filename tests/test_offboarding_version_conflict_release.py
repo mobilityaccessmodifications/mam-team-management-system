@@ -39,12 +39,21 @@ def dirty_source_fixture():
   environment={'PATH':os.environ['PATH'],'TMPDIR':tempfile.gettempdir(),'LANG':'C','LC_ALL':'C','HOME':str(parent),'GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':os.devnull,'PYTHONDONTWRITEBYTECODE':'1'}
   cwd=Path.cwd()
   with patch.dict(os.environ,environment,clear=True):
-   subprocess.run(['git','clone','--local','--shared','--no-checkout','--quiet',str(ROOT),str(root)],check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+   root.mkdir()
+   def git(*args):
+    return subprocess.check_output(['git',*args],cwd=root,stderr=subprocess.PIPE)
+   git('init','--quiet')
+   git('config','--local','user.name','mobilityaccessmodifications')
+   git('config','--local','user.email','310802599+mobilityaccessmodifications@users.noreply.github.com')
+   git('remote','add','origin','https://github.com/mobilityaccessmodifications/mam-team-management-system.git')
    for relative in paths:
     destination=root/relative
     destination.parent.mkdir(parents=True,exist_ok=True)
     destination.write_bytes((ROOT/relative).read_bytes())
-   head=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root).decode().strip()
+   git('add','--',*map(str,paths))
+   git('commit','--quiet','-m','Synthetic version-conflict source fixture')
+   head=git('rev-parse','HEAD').decode().strip()
+   (root/'uncommitted-source-marker').write_text('synthetic dirty source\n')
    os.chdir(root)
    try:yield load(root/HELPER.relative_to(ROOT)),head
    finally:os.chdir(cwd)
@@ -77,6 +86,25 @@ class VersionConflictReleaseTests(unittest.TestCase):
   with dirty_source_fixture() as (helper,head):
    context=runner.source_context(helper.ROOT)
    self.assertEqual(context,{'git':True,'dirty':True,'head':head,'cleanCommittedApply':'BLOCKED_UNCOMMITTED_SOURCE'})
+
+ def test_native_runner_foreign_git_has_no_clean_committed_acceptance(self):
+  runner=load(ROOT/'tests/run-offboarding-version-conflict-release.py')
+  with dirty_source_fixture() as (helper,_):
+   root=helper.ROOT
+   original=Path.stat
+   for foreign in (root,root/'.git'):
+    def stat(path,*args,**kwargs):
+     result=original(path,*args,**kwargs)
+     if path==foreign:
+      values=list(result)
+      values[4]=os.geteuid()+1
+      return os.stat_result(values)
+     return result
+    with self.subTest(foreign=foreign),patch.object(Path,'stat',new=stat),patch.object(runner.subprocess,'check_output',side_effect=AssertionError('Foreign Git context cannot inspect Git')) as git,patch.object(runner.helper,'api',side_effect=AssertionError('Foreign Git context cannot call API')) as api,patch.object(runner.helper,'query',side_effect=AssertionError('Foreign Git context cannot dispatch')) as query:
+     self.assertEqual(runner.source_context(root),{'git':True,'cleanCommittedApply':'UNAVAILABLE_FOREIGN_GIT_SOURCE'})
+     git.assert_not_called()
+     api.assert_not_called()
+     query.assert_not_called()
 
  def setUp(self):
   guard=patch('urllib.request.urlopen',side_effect=AssertionError('Offline release unit tests forbid network'))

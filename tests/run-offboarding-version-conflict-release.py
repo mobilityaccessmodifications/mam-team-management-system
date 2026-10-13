@@ -20,8 +20,11 @@ exec(compile(RAW_HELPER, str(HELPER_PATH), 'exec'), helper.__dict__)
 
 
 def source_context(root):
-    if not (root / '.git').exists():
+    metadata = root / '.git'
+    if not metadata.exists():
         return {'git': False, 'cleanCommittedApply': 'UNAVAILABLE_NON_GIT_SOURCE'}
+    if root.stat().st_uid != os.geteuid() or metadata.stat().st_uid != os.geteuid():
+        return {'git': True, 'cleanCommittedApply': 'UNAVAILABLE_FOREIGN_GIT_SOURCE'}
     dirty = bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=root).strip())
     head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root).decode().strip()
     return {'git': True, 'dirty': dirty, 'head': head,
