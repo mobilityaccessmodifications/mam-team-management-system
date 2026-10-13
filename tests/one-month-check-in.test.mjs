@@ -30,7 +30,7 @@ function payload(overrides = {}) {
   };
 }
 
-test('Marketing test workflow hard-routes the 1-Month email and attaches the supplied record from HR', () => {
+test('Marketing test workflow hard-routes the 1-Month email and attaches the supplied record from AI', () => {
   const nodes = nodeMap(buildCheckInReminderWorkflow({ mode: 'test' }));
   const validate = new Function('$input', nodes['Validate Check-In Request'].parameters.jsCode);
   const [result] = validate({ first: () => ({ json: { body: payload() } }) });
@@ -44,7 +44,7 @@ test('Marketing test workflow hard-routes the 1-Month email and attaches the sup
   assert.match(email.json.bodyContent, /actions, owners and due dates/);
   assert.equal(email.binary.record.fileName, '1 Month New Starter Check-In Record.docx');
   assert.equal(Buffer.from(email.binary.record.data, 'base64').length, readFileSync(ONE_MONTH_RECORD_PATH).length);
-  assert.equal(nodes['Send 1-Month Email from HR'].credentials.microsoftOutlookOAuth2Api.name, 'Microsoft Outlook account - hr@mobilityaccess.com.au');
+  assert.equal(nodes['Send 1-Month Email from HR'].credentials.microsoftOutlookOAuth2Api.name, 'Microsoft Outlook - ai@mobilityaccess.com.au');
 });
 
 test('Live 1-Month workflow sends once to both employee addresses and the direct manager', () => {

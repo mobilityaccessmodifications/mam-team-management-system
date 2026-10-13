@@ -54,7 +54,7 @@ function reviewPayload(overrides = {}) {
   };
 }
 
-test('Marketing test workflow hard-routes the 5-Month email and attaches the supplied review from HR', () => {
+test('Marketing test workflow hard-routes the 5-Month email and attaches the supplied review from AI', () => {
   const workflow = buildCheckInReminderWorkflow({ mode: 'test' });
   const nodes = nodeMap(workflow);
   const validate = new Function('$input', nodes['Validate Check-In Request'].parameters.jsCode);
@@ -73,7 +73,7 @@ test('Marketing test workflow hard-routes the 5-Month email and attaches the sup
   assert.deepEqual(Buffer.from(email.binary.record.data, 'base64'), readFileSync(FIVE_MONTH_RECORD_PATH));
   assert.equal(
     nodes['Send 5-Month No-Surprises Review Email from HR'].credentials.microsoftOutlookOAuth2Api.name,
-    'Microsoft Outlook account - hr@mobilityaccess.com.au',
+    'Microsoft Outlook - ai@mobilityaccess.com.au',
   );
   assert.equal(workflow.settings.saveDataErrorExecution, 'none');
 });
@@ -163,7 +163,7 @@ test('People & Culture escalation is fixed to marketing in test and HR in live',
   assert.match(email.json.bodyContent, /Needs &lt;HR&gt; follow-up &amp; support/);
   assert.equal(
     testNodes['Send People & Culture Review Email from HR'].credentials.microsoftOutlookOAuth2Api.name,
-    'Microsoft Outlook account - hr@mobilityaccess.com.au',
+    'Microsoft Outlook - ai@mobilityaccess.com.au',
   );
 
   const liveNodes = nodeMap(buildCheckInReminderWorkflow({ mode: 'live' }));

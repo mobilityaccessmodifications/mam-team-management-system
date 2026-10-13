@@ -50,7 +50,7 @@ return [{ json: send ? { ...context, deliveryToken: token, shouldSend: true }
     node('c1000000-0000-4000-8000-000000000005', 'Send Credential Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [220,-80], {
       resource: 'message', operation: 'send', toRecipients: '={{ $json.toRecipient }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
       additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.bccRecipient }}', saveToSentItems: false },
-    }, { credentials: { microsoftOutlookOAuth2Api: { id: 'vFEolsXoEOOxNyan', name: 'Microsoft Outlook account - hr@mobilityaccess.com.au' } } }),
+    }, { credentials: { microsoftOutlookOAuth2Api: { id: 'Ug5bTBjvF1vCSdhQ', name: 'Microsoft Outlook - ai@mobilityaccess.com.au' } } }),
     node('c1000000-0000-4000-8000-000000000011', 'Build Provider Receipt', 'n8n-nodes-base.code', 2, [900,-120], { jsCode: `const context = $('Build Credential Email').first().json;
 const provider = $input.first().json;
 if (provider?.success !== true) throw new Error('Provider acceptance unavailable');

@@ -37,7 +37,7 @@ function payload(overrides = {}) {
   };
 }
 
-test('Marketing test workflow hard-routes the 2-Week email and attaches the supplied record from HR', () => {
+test('Marketing test workflow hard-routes the 2-Week email and attaches the supplied record from AI', () => {
   const workflow = buildCheckInReminderWorkflow({ mode: 'test' });
   const nodes = nodeMap(workflow);
   const validate = new Function('$input', nodes['Validate Check-In Request'].parameters.jsCode);
@@ -56,7 +56,7 @@ test('Marketing test workflow hard-routes the 2-Week email and attaches the supp
   const send = nodes['Send 2-Week Email from HR'];
   assert.equal(send.parameters.toRecipients, '={{ $json.deliveryTo }}');
   assert.equal(send.parameters.additionalFields.bccRecipients, '={{ $json.deliveryBcc }}');
-  assert.equal(send.credentials.microsoftOutlookOAuth2Api.name, 'Microsoft Outlook account - hr@mobilityaccess.com.au');
+  assert.equal(send.credentials.microsoftOutlookOAuth2Api.name, 'Microsoft Outlook - ai@mobilityaccess.com.au');
 });
 
 test('Live 2-Week workflow de-duplicates employee work, personal and direct-manager recipients', () => {

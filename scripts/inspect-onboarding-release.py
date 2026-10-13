@@ -18,7 +18,7 @@ PROJECT_ID = 'prj_FRkEjfAFHj2FKfoYaowGMgicl1hu'
 WORKFLOW = 'MAM People Hub - Onboarding Credentials (Live)'
 WEBHOOK_CREDENTIAL = 'MAM People Hub - Onboarding Webhook Header'
 CREDENTIALS = {
-    'vFEolsXoEOOxNyan': ('Microsoft Outlook account - hr@mobilityaccess.com.au', 'microsoftOutlookOAuth2Api'),
+    'Ug5bTBjvF1vCSdhQ': ('Microsoft Outlook - ai@mobilityaccess.com.au', 'microsoftOutlookOAuth2Api'),
     'tGtpwegru8OxtdCt': ('MAM Team Management - Notification Webhook Header', 'httpHeaderAuth'),
 }
 VARIABLES = (

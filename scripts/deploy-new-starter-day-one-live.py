@@ -16,7 +16,7 @@ TEST_NAME = 'MAM People Hub - Day 1 New Starter Email (Marketing Test)'
 LIVE_NAME = 'MAM People Hub - Day 1 New Starter Email (Live)'
 LIVE_PATH = 'mam-people-hub-new-starter-day-one-live-v1'
 WEBHOOK_CREDENTIAL = 'b5WWH2Mm2r1QTCHp'
-OUTLOOK_CREDENTIAL = 'vFEolsXoEOOxNyan'
+OUTLOOK_CREDENTIAL = 'Ug5bTBjvF1vCSdhQ'
 RECEIPT_CREDENTIAL = 'tGtpwegru8OxtdCt'
 
 
@@ -52,7 +52,7 @@ def assert_receiver(workflow, name, path):
     send = node(workflow, 'Send Day 1 Email from HR')
     require(send.get('type') == 'n8n-nodes-base.microsoftOutlook'
             and send.get('credentials', {}).get('microsoftOutlookOAuth2Api', {}).get('id') == OUTLOOK_CREDENTIAL,
-            'Unexpected Day 1 HR Outlook credential')
+            'Unexpected Day 1 AI Outlook credential')
     for name in ('Reserve Durable Day 1 Delivery', 'Confirm Durable Day 1 Delivery'):
         require(node(workflow, name).get('credentials', {}).get('httpHeaderAuth', {}).get('id')
                 == RECEIPT_CREDENTIAL, 'Unexpected Day 1 receipt credential')

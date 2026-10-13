@@ -38,7 +38,7 @@ function request() {
   });
 }
 
-test('Day 1 test workflow hard-routes to Marketing and attaches the reviewed checklist from HR Outlook', () => {
+test('Day 1 test workflow hard-routes to Marketing and attaches the reviewed checklist from AI Outlook', () => {
   const workflow = buildNewStarterDayOneWorkflow({ mode: 'test' });
   const byName = Object.fromEntries(workflow.nodes.map((node) => [node.name,node]));
   const validator = new Function('$input',byName['Validate Day 1 Request'].parameters.jsCode);
@@ -58,7 +58,7 @@ test('Day 1 test workflow hard-routes to Marketing and attaches the reviewed che
   const [rejected] = validator({ first: () => ({ json: { body: { ...testPayload, mode: 'live', deliveryId: `new-starter:${reminderId}:day-one:live` } } }) });
   assert.equal(rejected.json.valid,false);
   const send = byName['Send Day 1 Email from HR'];
-  assert.equal(send.credentials.microsoftOutlookOAuth2Api.name,'Microsoft Outlook account - hr@mobilityaccess.com.au');
+  assert.equal(send.credentials.microsoftOutlookOAuth2Api.name,'Microsoft Outlook - ai@mobilityaccess.com.au');
   assert.deepEqual(send.parameters.additionalFields.attachments.attachments,[{ binaryPropertyName: 'checklist' }]);
   assert.equal(send.retryOnFail,undefined);
   const build = byName['Build Day 1 Email and Attachment'].parameters.jsCode;
