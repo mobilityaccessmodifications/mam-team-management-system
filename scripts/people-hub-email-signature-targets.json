@@ -1,0 +1,191 @@
+[
+  {
+    "id": "D6UG5ACZGILCpsOk",
+    "name": "MAM People System - Leave Email Delivery",
+    "version": "9e6247ad-af9c-44e0-9de1-83db95dc7d0c",
+    "baselineHash": "3f1c9850fb1311896e486d8926d547070263522d617a10554b9102423142ffde",
+    "sendCount": 1,
+    "fields": [
+      {
+        "node": "Send Leave Notification to HR",
+        "field": "bodyContent",
+        "kind": "expression",
+        "beforeHash": "917f2602efcda3449b508f13e81c8d9f2015a53e4264b81a46231eea475b2408",
+        "afterHash": "85db456e1a6d262f40bece2a32241ea45e388c9ff7fc99f72590cfae60dc52af"
+      }
+    ]
+  },
+  {
+    "id": "zXBU666FFCjAhD87",
+    "name": "MAM People System - Check-In Reminder Email Delivery",
+    "version": "2429e55d-0986-43d0-9adb-f465e08cd287",
+    "baselineHash": "77a5b3d6535321843f51b7328a38309ef122fdaba3026b9350bb678d591e37bc",
+    "sendCount": 5,
+    "fields": [
+      {
+        "node": "Send 2-Week Email from HR",
+        "field": "bodyContent",
+        "kind": "expression",
+        "beforeHash": "4376ba71a8925aa0042ef303f50c192c185a7a359746c896515b29d70cde2542",
+        "afterHash": "17f9f525a1a662da1b6a71d40bd9cc20c415189aa2936b251f5aa9cc33801a33"
+      },
+      {
+        "node": "Send Existing Check-In Email from HR",
+        "field": "bodyContent",
+        "kind": "expression",
+        "beforeHash": "4376ba71a8925aa0042ef303f50c192c185a7a359746c896515b29d70cde2542",
+        "afterHash": "17f9f525a1a662da1b6a71d40bd9cc20c415189aa2936b251f5aa9cc33801a33"
+      },
+      {
+        "node": "Send 1-Month Email from HR",
+        "field": "bodyContent",
+        "kind": "expression",
+        "beforeHash": "4376ba71a8925aa0042ef303f50c192c185a7a359746c896515b29d70cde2542",
+        "afterHash": "17f9f525a1a662da1b6a71d40bd9cc20c415189aa2936b251f5aa9cc33801a33"
+      },
+      {
+        "node": "Send 2-Month Stay Interview Email from HR",
+        "field": "bodyContent",
+        "kind": "expression",
+        "beforeHash": "4376ba71a8925aa0042ef303f50c192c185a7a359746c896515b29d70cde2542",
+        "afterHash": "17f9f525a1a662da1b6a71d40bd9cc20c415189aa2936b251f5aa9cc33801a33"
+      },
+      {
+        "node": "Send 3-Month Midpoint Review Email from HR",
+        "field": "bodyContent",
+        "kind": "expression",
+        "beforeHash": "4376ba71a8925aa0042ef303f50c192c185a7a359746c896515b29d70cde2542",
+        "afterHash": "17f9f525a1a662da1b6a71d40bd9cc20c415189aa2936b251f5aa9cc33801a33"
+      }
+    ]
+  },
+  {
+    "id": "LkLlS67zCHQeenIy",
+    "name": "MAM Team Management - Synthetic Email Notifications (Marketing Test)",
+    "version": "e0a62fdf-3257-40c8-a3d4-885f66320a9a",
+    "baselineHash": "65022f8a18ae08088a3feeb46abcc7c4f61f37e2283980b6f492e0310d36ea90",
+    "sendCount": 1,
+    "fields": [
+      {
+        "node": "Send to MAM HR Test Inbox",
+        "field": "bodyContent",
+        "kind": "expression",
+        "beforeHash": "917f2602efcda3449b508f13e81c8d9f2015a53e4264b81a46231eea475b2408",
+        "afterHash": "85db456e1a6d262f40bece2a32241ea45e388c9ff7fc99f72590cfae60dc52af"
+      }
+    ]
+  },
+  {
+    "id": "NyBSwt8xT4cWZ8Jh",
+    "name": "MAM People Hub - Day 1 New Starter Email (Live)",
+    "version": "8be7e6c9-26d1-4e65-accc-36ff54cbda65",
+    "baselineHash": "0ba9acded96699a747d04fec1159267c606a7bad64ae6beaf03b2bca4655db75",
+    "sendCount": 1,
+    "fields": [
+      {
+        "node": "Build Day 1 Email and Attachment",
+        "field": "jsCode",
+        "kind": "html",
+        "beforeHash": "88784d6c13cd7f1be7955cb5142eb4825b92cf69a3ef6a9a52c810460e9e2d13",
+        "afterHash": "8f0235af384dac29ddc124f39dc7e65f67fe784efbc4d36154c7cb1ae0257f51"
+      }
+    ]
+  },
+  {
+    "id": "lDe4pksbh4SegkvS",
+    "name": "MAM People Hub - Day 1 New Starter Email (Marketing Test)",
+    "version": "ac299f29-a8fc-48af-b29e-608d49f12d6d",
+    "baselineHash": "ce0c758d23c82e0a42f34c0ae90a5a225f61a7bf67703154ad35fe09aa40121a",
+    "sendCount": 1,
+    "fields": [
+      {
+        "node": "Build Day 1 Email and Attachment",
+        "field": "jsCode",
+        "kind": "html",
+        "beforeHash": "88784d6c13cd7f1be7955cb5142eb4825b92cf69a3ef6a9a52c810460e9e2d13",
+        "afterHash": "8f0235af384dac29ddc124f39dc7e65f67fe784efbc4d36154c7cb1ae0257f51"
+      }
+    ]
+  },
+  {
+    "id": "bNyzWxzblY7VOSSk",
+    "name": "MAM People Hub - Check-In Emails (Live)",
+    "version": "53d53678-e643-41a5-886d-8525dbef24a3",
+    "baselineHash": "a07c8dd09bf0b5c0d46ea44f3f437842de543c9ffd313fc51762226d93de49d0",
+    "sendCount": 8,
+    "fields": [
+      {
+        "node": "Build People & Culture Review Email",
+        "field": "jsCode",
+        "kind": "html",
+        "beforeHash": "1b64e42fce9d9b832746d7699e4cf1309d105857b307e8e26d459dc9d118172f",
+        "afterHash": "766381e0d934fe900df562aa86cb46dfeef45c14d2a530e2eaec75e44624986d"
+      },
+      {
+        "node": "Build 2-Week Email and Attachment",
+        "field": "jsCode",
+        "kind": "html",
+        "beforeHash": "d418d5fb7f75734657bc08ad3321f4f3d86c889fdb59dcc62dd26bfd5ebe7194",
+        "afterHash": "7a3412e63837fb5317e6e9c1f0983276770fcc870e894cb372c580fc1211850b"
+      },
+      {
+        "node": "Build 5-Month No-Surprises Review Email and Attachment",
+        "field": "jsCode",
+        "kind": "html",
+        "beforeHash": "8804a019e1a7459164c8d6ad9109fbf736cb0e14ee5d26ae3120406d7d27eb88",
+        "afterHash": "f29bb8a9f3cb1f47871420f92ecc68a0ca6364dc2dc882fc8091436555945675"
+      },
+      {
+        "node": "Build 1-Month Email and Attachment",
+        "field": "jsCode",
+        "kind": "html",
+        "beforeHash": "c85839711103ae8cac22ac97bbd1ac1ac0486c44b0d56f93454c30f1712ad0db",
+        "afterHash": "0298ca75556f9833fb7bb159cf8e81ad4e7515f408cf1f73c032ef79b3d54ae2"
+      },
+      {
+        "node": "Build 2-Month Stay Interview Email and Attachment",
+        "field": "jsCode",
+        "kind": "html",
+        "beforeHash": "6c8fc052a5742758636cdee8cb620a21dd7df54c2b420718eaf2309a6f5b2af5",
+        "afterHash": "2c3bb261cb69cc1099bf0b1df9eff8502955a971bc8aba84b06e7e3b49d6a53a"
+      },
+      {
+        "node": "Build 3-Month Midpoint Review Email and Attachment",
+        "field": "jsCode",
+        "kind": "html",
+        "beforeHash": "42bed8984cbde03199c6ff7d7aa744e5483637f2068df343f0c4bd201db32091",
+        "afterHash": "c3ea4f536ef1a0242fed69f5d630e8ed0e92fa47c7a26ece78b91a7df15d75ad"
+      },
+      {
+        "node": "Build 6-Month Check-In Email and Attachment",
+        "field": "jsCode",
+        "kind": "html",
+        "beforeHash": "6548b39a05345dd9aa36bfb0a4b3703c5561894973e63b18ee2ea4755679c84e",
+        "afterHash": "477ba7dc79d1e57c03e40accf7eecc30c20c614fba88567e6d1e7eb47c75a049"
+      },
+      {
+        "node": "Build 6-Month Casual Check-In Email and Attachment",
+        "field": "jsCode",
+        "kind": "html",
+        "beforeHash": "4040557221e8cea60e7339fc3bed17c9371bdfd4b049b3ab549130b45d6902ea",
+        "afterHash": "63109a1a67c04f4e062914229efa5b5f1453172644af7d353c422fd4adaff586"
+      }
+    ]
+  },
+  {
+    "id": "P83EzWq8pjiLZrWE",
+    "name": "MAM People Hub - Onboarding Credentials (Live)",
+    "version": "bb00b730-e998-4540-80d2-e08d409c4aa5",
+    "baselineHash": "c6db9a9421e619ebf1ea5240eaa5297788ce09575046c4d5e6d7025444dd80b9",
+    "sendCount": 1,
+    "fields": [
+      {
+        "node": "Build Credential Email",
+        "field": "jsCode",
+        "kind": "credential",
+        "beforeHash": "1fc8e33445f434356fdcf9cdebbb3089056e878d8a4c854408ea8fb67ba2f1f0",
+        "afterHash": "c7b0c46ad55455e169c3042e302c6b86d7293bcd428efd80f4d0971c92add39d"
+      }
+    ]
+  }
+]
