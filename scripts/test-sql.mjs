@@ -3,9 +3,11 @@ import { realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startCluster, createDatabase, stopCluster, sql, target, command, postgresEnv } from "./local-test-postgres.mjs";
+import { runReportingSpliceSql } from "../tests/run-reporting-splice-sql.mjs";
 
 const powerBiOnly = process.argv[2] === "--powerbi-hr-directory";
-const sourceRoot = realpathSync((powerBiOnly ? process.argv[3] : process.argv[2]) ?? process.cwd());
+const reportingSpliceOnly = process.argv[2] === "--reporting-splice";
+const sourceRoot = realpathSync(((powerBiOnly || reportingSpliceOnly) ? process.argv[3] : process.argv[2]) ?? process.cwd());
 const socket = startCluster();
 let passed = false;
 console.log(`Disposable PostgreSQL socket: ${socket}`);
@@ -116,7 +118,7 @@ function runPowerBiContract() {
 }
 try {
   if (!powerBiOnly) {
-  const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql", "tests/unified-role-subscription-employee-delegation.sql", "tests/subscription-requests.sql", "tests/subscription-requests-security.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
+  const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql", "tests/unified-role-subscription-employee-delegation.sql", "tests/subscription-requests.sql", "tests/subscription-requests-security.sql", "tests/subscription-request-mail.sql", "tests/annual-continuous-accrual.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (replay.status !== 0) throw new Error("Full migration replay failed");
   command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', '--template=mam_test_replay', 'mam_test_sr_concurrency']);
   const requestRace = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/subscription-requests-concurrency.mjs'), socket, 'mam_test_sr_concurrency'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
@@ -125,6 +127,22 @@ try {
   if (requestNotifications.status !== 0) throw new Error('Subscription request persisted notification envelopes failed');
   const requestCatalog = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/subscription-requests-catalog.mjs'), socket, 'all'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
   if (requestCatalog.status !== 0) throw new Error('Subscription request exact catalog and deferred-ledger rollback tests failed');
+  runReportingSpliceSql(socket, "mam_test_replay", sourceRoot);
+  const finalizerUnit = spawnSync('python3', ['-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_archived_account_finalizer_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (finalizerUnit.status !== 0) throw new Error('Archived account finalizer release helper tests failed');
+  command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests/archived-account-finalizer.sql')]);
+  console.log('PASS: archived account finalizer SQL and exact-source release helper contract');
+  const versionConflictUnit = spawnSync('python3', ['-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_offboarding_version_conflict_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (versionConflictUnit.status !== 0) throw new Error('Offboarding version-conflict release helper tests failed');
+  command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests/offboarding-version-conflicts.sql')]);
+  console.log('PASS: offboarding version-conflict native action contract and exact-source release helper');
+  const afterAnnualUnit = spawnSync('python3', ['-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_after_annual_offboarding_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (afterAnnualUnit.status !== 0) throw new Error('After-annual offboarding portable release adapter tests failed');
+  console.log('PASS: after-annual offboarding portable MODEL source, query, dispatch and readback controls');
+  if (!reportingSpliceOnly) {
+  console.log(command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests/subscription-review-tasks.sql')]));
+  const reviewReleaseUnit = spawnSync('python3', ['-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_subscription_review_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (reviewReleaseUnit.status !== 0) throw new Error('Subscription review release helper tests failed');
   const tradeReleaseUnit = spawnSync('python3', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_trade_school_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
   if (tradeReleaseUnit.status !== 0) throw new Error('Trade-school release helper tests failed');
   for (const regression of ['new-starter-team-manager.sql', 'new-starter-team-manager-creation.sql', 'new-starter-team-manager-resolution.sql', 'new-starter-team-manager-schema.sql', 'new-starter-team-manager-matrix.sql', 'new-starter-team-manager-parent-effects.sql']) {
@@ -197,7 +215,8 @@ try {
   createDatabase(socket, "mam_test_staff_calendar");
   command("psql", [...target(socket, "mam_test_staff_calendar"), "-f", path.join(sourceRoot, "tests/calendar-staff-details.sql")]);
   }
-  runPowerBiContract();
+  }
+  if (!reportingSpliceOnly) runPowerBiContract();
   passed = true;
 } finally {
   stopCluster(socket);

@@ -11,8 +11,8 @@ where id in('a1000000-0000-4000-8000-000000000004','a1000000-0000-4000-8000-0000
 select pg_temp.set_test_actor('a1000000-0000-4000-8000-000000000009');
 insert into public.internal_org_people(id,full_name,position_title,company_key,parent_id)
 values('a2000000-0000-4000-8000-000000000001','Synthetic parent-change subject','Synthetic role','mam','a1000000-0000-4000-8000-000000000002');
-insert into public.leave_requests(id,user_id,employee_person_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,approval_required,employment_type_snapshot)
-select ('a3000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,p.id,p.id,'unpaid','Unpaid leave','2030-12-09','2030-12-09',1,8,'submitted',clock_timestamp(),true,'full_time'
+insert into public.leave_requests(id,user_id,employee_person_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,approval_required,employment_type_snapshot,reason)
+select ('a3000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,p.id,p.id,'unpaid','Unpaid leave','2030-12-09','2030-12-09',1,8,'submitted',clock_timestamp(),true,'full_time','Synthetic employee note'
 from (values(1,'a1000000-0000-4000-8000-000000000002'::uuid),(2,'a1000000-0000-4000-8000-000000000014'::uuid))s(n,person)join public.profiles p on p.id=s.person;
 select private.reroute_pending_leave_requests_to_current_manager();
 create temporary table parent_before_requests as select id,to_jsonb(r)as raw from public.leave_requests r;

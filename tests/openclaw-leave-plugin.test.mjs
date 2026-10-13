@@ -13,7 +13,7 @@ const identity = { messageChannel: "whatsapp", requesterSenderId: "+61400000001"
   sessionKey: "agent:main:whatsapp:direct:synthetic", agentAccountId: "default",
   deliveryContext: { channel: "whatsapp", accountId: "default", to: "+61400000001" } };
 const hookContext = { channelId: "whatsapp", accountId: "default", sessionKey: identity.sessionKey };
-const params = { leaveType: "Unpaid leave", startDate: "2030-10-14", endDate: "2030-10-14" };
+const params = { leaveType: "Unpaid leave", startDate: "2030-10-14", endDate: "2030-10-14", employeeNote: "Synthetic employee note" };
 
 // Offline shims only. The separate native harness verifies installed SDK,
 // send-policy and WhatsApp adapter behavior without sockets or real identities.
@@ -31,7 +31,7 @@ function fixture(options = {}) {
     String: extra => ({ type: "string", ...extra }), Null: () => ({ type: "null" }),
     Union: (anyOf, extra) => ({ anyOf, ...extra }), Optional: value => value };
   const prepared = (packet, extra = {}) => {
-    const summary = `Please review your leave request:\nName: Synthetic Employee\nDates: ${packet.payload.startDate}\nType: Unpaid leave\nNote (optional): ${packet.payload.employeeNote || "None"}`;
+    const summary = `Please review your leave request:\nName: Synthetic Employee\nDates: ${packet.payload.startDate}\nType: Unpaid leave\nNote: ${packet.payload.employeeNote}`;
     return { code: "prepared", consentVersion: 3, draftId: randomUUID(), draftToken: `opaque-synthetic-token-${randomUUID()}`,
       summary, digest: createHash("sha256").update(summary).digest("hex"), expiresAt: new Date(clock + 600000).toISOString(), ...extra };
   };
@@ -82,6 +82,8 @@ test("only preparation is model-visible; identity and confirmation cannot be sel
   assert.match(f.tools[0].description, /trusted sender phone number is the sole employee identity/);
   assert.match(f.tools[0].description, /never for greetings, ordinary conversation, startup/);
   assert.match(f.tools[0].description, /Never call this tool in response to Confirm/);
+  assert.match(f.tools[0].description, /nonblank note is required/);
+  assert.doesNotMatch(f.tools[0].description, /note is optional|empty note without an extra question/);
 });
 
 test("disabled, untrusted, group and wrong-account tool contexts fail closed", () => {
@@ -112,7 +114,7 @@ test("identical same-turn prepares share one summary and original confirmation r
   const f = fixture(); await f.start();
   await f.dispatch(f.event({ content: 'I want leave' }));
   const first = await f.tool().execute('a', params);
-  const again = await f.tool().execute('b', { endDate: params.endDate, startDate: params.startDate, leaveType: params.leaveType, startTime: null, endTime: null, employeeNote: '' });
+  const again = await f.tool().execute('b', { endDate: params.endDate, startDate: params.startDate, leaveType: params.leaveType, startTime: null, endTime: null, employeeNote: params.employeeNote });
   assert.deepEqual(again, first);
   assert.equal(f.calls.length, 1); assert.equal(f.sent.length, 1);
   await f.dispatch(f.event());

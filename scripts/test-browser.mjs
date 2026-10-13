@@ -38,10 +38,10 @@ const directoryArchiveResults = {};
 for (const readError of [false, true]) {
   const fixture = archivePreflightFixture({ sourceRoot, readError });
   const result = await fixture.action(archivePreflightInput);
-  if (result.ok !== false || fixture.state.reportReads !== 1 || fixture.state.mutations.length) {
+  if (result.ok !== false || fixture.state.preflightReads !== 1 || fixture.state.mutations.length) {
     throw new Error("Archive preflight fixture did not stop before mutations");
   }
-  directoryArchiveResults[readError ? "readError" : "reports"] = result;
+  directoryArchiveResults[readError ? "readError" : "protected"] = result;
 }
 const directoryManagerResults = {};
 for (const [name, teamManagerDefault] of Object.entries({

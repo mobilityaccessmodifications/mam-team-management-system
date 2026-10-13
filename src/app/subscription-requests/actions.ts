@@ -1,5 +1,8 @@
 "use server";
 
+import { after } from "next/server";
+import { dispatchSubscriptionRequestMail } from "@/lib/subscription-request-mail";
+
 import { isAuthApiError, isAuthSessionMissingError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { UUID, validateRequestPayload, type RequestEvidence, type RequestOperation, type RequestResult, type RequestWorkspace, type SubscriptionRequest } from "@/lib/subscription-request-types";
@@ -51,6 +54,7 @@ export async function mutateSubscriptionRequest(input: { id: string; version: nu
     const { data, error } = await supabase.rpc("sr_mutate", { p_id:input.id, p_version:input.version, p_operation:input.operation, p_payload:payload, p_reason:input.reason ?? "", p_evidence:input.evidence ?? null });
     if (error) return failure(error,true);
     if (!validRequest(data)) return failure(null,true);
+    if (input.operation === "submit") after(() => dispatchSubscriptionRequestMail(data.id).then(() => undefined));
     return { ok:true, data, committed:true };
   } catch (error) { return failure(error,dispatched); }
 }

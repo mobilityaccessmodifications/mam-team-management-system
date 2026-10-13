@@ -9,5 +9,5 @@ export function requestNotification(input: unknown) {
     || typeof row.event !== "string" || !["submit","approve","return","reject","withdraw"].includes(row.event)) throw new Error("Invalid request notification.");
   const subjects: Record<string,string>={submit:"Subscription request submitted",approve:"Subscription request approved",return:"Subscription request returned",reject:"Subscription request rejected",withdraw:"Subscription request withdrawn"};
   return { eventKey:`subscription-request:${row.request_id}:${row.version}`, toUserId:row.to_user_id, ccUserIds:[] as string[],
-    subject:subjects[row.event], link:`https://mam-team-management-system-ten.vercel.app/subscription-requests?request=${row.request_id}` };
+    subject:subjects[row.event], link:row.event === "submit" ? "https://mam-team-management-system-ten.vercel.app/?view=people&tab=tasks" : `https://mam-team-management-system-ten.vercel.app/subscription-requests?request=${row.request_id}` };
 }

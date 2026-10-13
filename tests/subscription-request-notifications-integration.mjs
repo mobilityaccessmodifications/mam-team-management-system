@@ -31,7 +31,7 @@ assert.deepEqual(rows,expected,'Every persisted event must target the correct di
 const {requestNotification}=loadModule('src/lib/subscription-request-notifications.ts');
 const subjects={submit:'Subscription request submitted',approve:'Subscription request approved',return:'Subscription request returned',reject:'Subscription request rejected',withdraw:'Subscription request withdrawn'};
 for (const row of rows) {
-  assert.deepEqual(requestNotification(row),{eventKey:`subscription-request:${row.request_id}:${row.version}`,toUserId:row.to_user_id,ccUserIds:[],subject:subjects[row.event],link:`https://mam-team-management-system-ten.vercel.app/subscription-requests?request=${row.request_id}`});
+  assert.deepEqual(requestNotification(row),{eventKey:`subscription-request:${row.request_id}:${row.version}`,toUserId:row.to_user_id,ccUserIds:[],subject:subjects[row.event],link:row.event==='submit'?'https://mam-team-management-system-ten.vercel.app/?view=people&tab=tasks':`https://mam-team-management-system-ten.vercel.app/subscription-requests?request=${row.request_id}`});
 }
 assert.equal(sql(socket,database,'select private.confirmed_test_purge_schema_hash();').trim(),before,'Notification fixture must fully roll back');
 assert.equal(sql(socket,database,'select private.confirmed_test_purge_schema_hash()=(select schema_hash from private.confirmed_test_purge_schema where singleton);').trim(),'t');

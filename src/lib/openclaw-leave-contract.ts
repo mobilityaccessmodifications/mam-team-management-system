@@ -78,7 +78,7 @@ function date(value: unknown): string {
   if (!Number.isFinite(+d) || d.toISOString().slice(0, 10) !== s || s < "2000-01-01" || s > "2100-12-31") fail("invalid_request");
   return s;
 }
-function fields(value: unknown, employee?: Employee, now = Date.now()): LeaveFields | { missing: string[]; availableLeaveTypes?: string[]; instruction?: string } {
+function fields(value: unknown, employee?: Employee, now = Date.now(), requiredNote = true): LeaveFields | { missing: string[]; availableLeaveTypes?: string[]; instruction?: string } {
   let v = object(value);
   const allowed = ["leaveType", "startDate", "endDate", "startTime", "endTime", "employeeNote"];
   if (Object.keys(v).some(k => !allowed.includes(k))) fail("invalid_request");
@@ -104,7 +104,10 @@ function fields(value: unknown, employee?: Employee, now = Date.now()): LeaveFie
       return { missing: [], instruction: `${LEAVE_NOTICE_MESSAGE} Explain this to the employee in English. This request is blocked: do not collect more details, send a confirmation summary, ask for Confirm, or claim submission. Do not change the dates or leave type to bypass the rule. Only prepare again if the employee explicitly changes their request. You cannot log leave on their behalf or grant an exception.` };
     }
   }
+  if (v.employeeNote !== undefined && v.employeeNote !== null && typeof v.employeeNote !== "string") fail("invalid_request");
+  const employeeNote = (v.employeeNote as string | null | undefined)?.trim() ?? "";
   const missing = ["leaveType", "startDate", "endDate"].filter(k => v[k] === undefined || v[k] === "");
+  if (requiredNote && !employeeNote) missing.push("employeeNote");
   if (missing.length) return { missing, ...(availableLeaveTypes && missing.includes("leaveType") ? { availableLeaveTypes } : {}) };
   if (typeof v.leaveType !== "string" || !TYPES.includes(v.leaveType)) fail("invalid_request");
   const startDate = date(v.startDate), endDate = date(v.endDate);
@@ -116,8 +119,6 @@ function fields(value: unknown, employee?: Employee, now = Date.now()): LeaveFie
   const weekday = (s: string) => new Date(s).getUTCDay() % 6 !== 0;
   if (startTime && endTime && ((v.leaveType !== "Annual leave" && (!weekday(startDate) || !weekday(endDate))) || (v.leaveType === "Annual leave" && days !== 0) || startTime === "18:00" || endTime === "06:00" || (days === 0 && endTime <= startTime))) fail("invalid_request");
   if (v.leaveType !== "Annual leave" && days < 2 && !weekday(startDate) && !weekday(endDate)) fail("invalid_request");
-  if (v.employeeNote !== undefined && typeof v.employeeNote !== "string") fail("invalid_request");
-  const employeeNote = (v.employeeNote as string | undefined)?.trim() ?? "";
   // Control/bidi characters cannot visually hide altered confirmation fields.
   if (employeeNote.length > 2000 || /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(employeeNote)) fail("invalid_request");
   return { leaveType: v.leaveType as string, startDate, endDate, startTime, endTime, employeeNote };
@@ -127,7 +128,7 @@ function summary(input: LeaveFields, employee: Employee) {
     const dates = input.startDate === input.endDate ? input.startDate : `${input.startDate} to ${input.endDate}`;
     return ["Please review your leave request:", `Name: ${name}`, `Dates: ${dates}`,
       ...(input.startTime && input.endTime ? [`Times: ${input.startTime} to ${input.endTime} (Australia/Melbourne)`] : []),
-      `Type: ${input.leaveType}`, `Note (optional): ${input.employeeNote || "None"}`].join("\n");
+      `Type: ${input.leaveType}`, `Note: ${input.employeeNote}`].join("\n");
 }
 function sameIdentity(a: Identity, b: Identity) { return a.account === b.account && a.sender === b.sender && a.session === b.session; }
 async function resolve<T extends Employee>(tx: EmployeeSource<T>, sender: string): Promise<T> {
@@ -175,7 +176,7 @@ function unseal(value: unknown, secret: string): LeaveDraft {
     const identity = object(d.identity); exact(identity, ["account", "sender", "session"]);
     text(identity.account, ID); text(identity.session, ID); text(identity.sender, /^\+[1-9][0-9]{7,14}$/);
     if (typeof d.summary !== "string" || hash(d.summary) !== d.digest || typeof d.fullName !== "string") return fail("invalid_request");
-    const parsed = fields(d.fields);
+    const parsed = fields(d.fields, undefined, Date.now(), false);
     if ("missing" in parsed || JSON.stringify(parsed) !== JSON.stringify(d.fields)) return fail("invalid_request");
     return d as unknown as LeaveDraft;
   } catch { return fail("invalid_request"); }
@@ -245,6 +246,7 @@ export async function handleLeaveBridge(
     if (submitted && (submitted.tokenHash !== tokenHash || submitted.personId !== employee.personId || submitted.userId !== employee.userId || !sameIdentity(submitted.identity, identity))) fail("conflict");
     if (!previous && !submitted) {
       if (draft.expiresAt <= now) fail("expired");
+      if (!draft.fields.employeeNote.trim()) return { status: 200, body: { code: "needs_input", missing: ["employeeNote"] } };
       if (draft.employmentType !== employee.employmentType || draft.fullName !== profile({ ...employee, fullName: employee.fullName ?? null }).name || summary(draft.fields, employee) !== draft.summary) fail("conflict");
       eligible(employee, draft.fields);
     }

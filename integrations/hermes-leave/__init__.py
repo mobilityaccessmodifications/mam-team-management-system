@@ -34,7 +34,7 @@ PREPARE_DESCRIPTION = (
     "not by tool arguments or the message text. Pass only the leave details already supplied. "
     "Do not ask paid versus unpaid first; the server resolves eligible types and defaults casual/ABN to Unpaid. "
     "Never accept another person's name, phone, ID, manager, approver, status, or confirmation. "
-    "A note is optional. On edits, prepare the complete updated details again. "
+    "A nonblank note is required. Ask for the employee's own note when it is missing; never invent it. On edits, prepare the complete updated details again. "
     "Only a later standalone Confirm from the same WhatsApp sender can submit. Never call this tool for Confirm."
 )
 SCHEMA = {
@@ -445,14 +445,14 @@ class _Owner:
             return {"code": "unavailable"}
         display = f"```\n{summary}\n```"
         if len(display) > 4000 or "```" in summary:
-            return {"code": "needs_input", "missing": ["employeeNote"], "message": "Please shorten the optional note or remove special formatting. Nothing has been submitted."}
+            return {"code": "needs_input", "missing": ["employeeNote"], "message": "Please shorten the note or remove special formatting. Nothing has been submitted."}
         adapter = self.gateway._delivery_adapter_for(identity["source"])
         try:
             exact_chunks = adapter.truncate_message(adapter.format_message(display), adapter._outgoing_chunk_limit())
         except (AttributeError, TypeError, ValueError):
             return {"code": "unavailable"}
         if exact_chunks != [display]:
-            return {"code": "needs_input", "missing": ["employeeNote"], "message": "Please remove unusual spaces or invisible characters from the optional note. Nothing has been submitted."}
+            return {"code": "needs_input", "missing": ["employeeNote"], "message": "Please remove unusual spaces or invisible characters from the note. Nothing has been submitted."}
         item = {"identity": identity, "token": token, "summary": summary, "digest": digest, "expires": expires, "created_at": time.time(), "response": result, "turn_id": bound[2], "payload_hash": payload_hash, "shown": False}
         _write_state(_state_path(key), {"version": 1, "status": "awaiting_receipt", "created_at": int(item["created_at"]), "session": identity["session"], "inbound_id": bound[2], "token": token, "expires": expires})
         self.pending[key] = item

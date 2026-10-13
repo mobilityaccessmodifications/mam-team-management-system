@@ -729,6 +729,7 @@ function userFacingSubmitError(error: unknown) {
     || message === UNAVAILABLE_BALANCE_MESSAGE
     || message === UNCONFIRMED_ACCRUAL_MESSAGE
     || message === "Choose a valid leave type."
+    || message === "Add a leave note before submitting this request."
     || message === "End date must be on or after start date."
     || message === `A leave request cannot span more than ${MAX_LEAVE_SPAN_DAYS} days.`
     || message === "Choose at least one weekday for this request."

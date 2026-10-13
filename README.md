@@ -177,6 +177,10 @@ See `docs/environment-management.md` for the complete environment model.
 6. For any future production change, verify the applicable migration history in the exact MAM project. Test leave persistence and privacy, plus automatic check-in scheduling, weekend due-date forward adjustment, weekend advance-notification backward adjustment, Calendar visibility, role scope, manager-view data minimisation and the pre-1-July-2026 completed backfill.
 7. Deploy without changing the established production URL.
 
+### Responsible-person subscription review tasks
+
+Apply `20261013170000_subscription_review_tasks.sql` before releasing the matching Tasks UI. Through the MAM Supabase credential wrapper, run `python3 scripts/deploy-subscription-review-tasks.py inspect <reviewed-head> <helper-sha256> <transport-sha256> <migration-sha256> <predecessor-sha256>`, then use the same five explicit pins with `apply` only after migration approval. The HEAD must be the full reviewed commit; hashes pin the raw helper, `deploy-staff-leave-calendar.py` transport, migration and `20261013120000_annual_continuous_accrual.sql` predecessor bytes. Inspect is read-only; apply verifies the exact MAM target and predecessor, records only this migration's exact source in one Management API transaction, preserves the purge fingerprint, and reads back function definitions and ACLs. Responsible employees can mark due quarterly reviews Done; Change Profile remains read-only. Merge and production deployment are separate release gates.
+
 ### Analytics API employee names
 
 The `employees` dataset includes `first_name` and `last_name`, sourced only

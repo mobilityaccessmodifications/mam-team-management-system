@@ -8,7 +8,7 @@ import { archivePreflightFixture, archivePreflightInput } from './helpers/archiv
 const require = createRequire(import.meta.url);
 
 for (const readError of [false, true]) {
-  test(`archive preflight ${readError ? 'read failure' : 'direct-report blocker'} survives production Flight without a mutation`, async () => {
+  test(`archive preflight ${readError ? 'read failure' : 'protected reporting links'} survives production Flight without a mutation`, async () => {
     const script = `
       import assert from 'node:assert/strict';
       import { createRequire } from 'node:module';
@@ -16,7 +16,7 @@ for (const readError of [false, true]) {
       const require = createRequire(import.meta.url);
       const fixture = archivePreflightFixture({ readError: ${readError} });
       const result = fixture.action(archivePreflightInput).then(result => {
-        assert.equal(fixture.state.reportReads, 1);
+        assert.equal(fixture.state.preflightReads, 1);
         assert.deepEqual(fixture.state.mutations, []);
         return result;
       });

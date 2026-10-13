@@ -51,10 +51,10 @@ set local role authenticated;
 do $$ declare request_id uuid; begin
   assert (select employment_type='overseas' and not has_paid_leave_entitlement from public.get_my_leave_entitlement_policy()), 'Self entitlement fails closed';
   begin
-    perform public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-13');
+    perform public.submit_my_leave_request('Annual leave','2030-12-09','2030-12-13',null,null,'Synthetic employee note');
     raise exception 'Overseas paid request accepted';
   exception when invalid_parameter_value then null; end;
-  select id into request_id from public.submit_my_leave_request('Unpaid leave','2030-12-09','2030-12-13');
+  select id into request_id from public.submit_my_leave_request('Unpaid leave','2030-12-09','2030-12-13',null,null,'Synthetic employee note');
   assert request_id is not null, 'Overseas unpaid request submitted';
 end $$;
 reset role;
@@ -63,16 +63,16 @@ do $$ begin
 end $$;
 create temporary table policy_probe (
   user_id uuid, employee_person_id uuid, request_type_label text, record_origin text default 'portal',
-  employment_type_snapshot text, pay_treatment text
+  employment_type_snapshot text, pay_treatment text, reason text
 );
 create trigger policy_probe_employment before insert on policy_probe for each row
 execute function private.enforce_leave_request_employment_policy();
 do $$ begin
   begin
-    insert into policy_probe(user_id,request_type_label) values ('93000000-0000-4000-8000-000000000002','Annual leave');
+    insert into policy_probe(user_id,request_type_label,reason) values ('93000000-0000-4000-8000-000000000002','Annual leave','Synthetic employee note');
     raise exception 'Overseas paid leave accepted';
   exception when invalid_parameter_value then null; end;
-  insert into policy_probe(user_id,request_type_label) values ('93000000-0000-4000-8000-000000000002','Unpaid leave');
+  insert into policy_probe(user_id,request_type_label,reason) values ('93000000-0000-4000-8000-000000000002','Unpaid leave','Synthetic employee note');
   assert (select employment_type_snapshot='overseas' and pay_treatment='unpaid' from policy_probe), 'Unpaid snapshot preserved';
   assert private.normalise_employee_employment_type(' Overseas ')='overseas', 'SQL normaliser supports Overseas';
   begin

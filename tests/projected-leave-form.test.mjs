@@ -24,22 +24,23 @@ function render({available=8,status='projected',key,loading=false}={}) {
     formLeaveType:'Annual leave',availableLeaveTypes:[],hasPaidLeaveEntitlement:true,formStartDate:'2026-10-12',formEndDate:'2026-10-12',formError:'',
     setFormError:error=>calls.push(error),submitRequest:()=>calls.push('submitted')});
   const nodes=x=>!x||typeof x!=='object'?[]:Array.isArray(x)?x.flatMap(nodes):[x,...nodes(x.props?.children)];
-  return {calls,nodes:nodes(root)};
+  const submit = nodes => nodes.find(n=>n.type==='form').props.onSubmit({preventDefault(){},currentTarget:{elements:{namedItem:name=>name==='employeeNote'?{value:'Synthetic leave note'}:null}}});
+  return {calls,nodes:nodes(root),submit};
 }
 test('form permits projected coverage rather than blocking on banked-only balance',()=>{
-  const {calls,nodes}=render();nodes.find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
+  const {calls,nodes,submit}=render();submit(nodes);
   assert.deepEqual(calls,['submitted']);
 });
 test('form blocks insufficient projection and preserves banked-only diagnostic',()=>{
   for(const [status,error] of [['projected',balance.INSUFFICIENT_BALANCE_MESSAGE],['banked_only',balance.UNCONFIRMED_ACCRUAL_MESSAGE]]){
-    const {calls,nodes}=render({status,available:7.59});nodes.find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
+    const {calls,nodes,submit}=render({status,available:7.59});submit(nodes);
     assert.deepEqual(calls,[error]);
   }
 });
 test('form never submits with a projection for an older person/date or while loading',()=>{
   for(const options of [{key:'old person/date'},{loading:true}]){
-    const {calls,nodes}=render(options);assert.equal(nodes.find(n=>n.props?.type==='submit').props.disabled,true);
-    nodes.find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
+    const {calls,nodes,submit}=render(options);assert.equal(nodes.find(n=>n.props?.type==='submit').props.disabled,true);
+    submit(nodes);
     assert.deepEqual(calls,[balance.UNAVAILABLE_BALANCE_MESSAGE]);
   }
 });

@@ -49,7 +49,7 @@ export function actionHarness(scenario='success') {
     if(name==='sr_download') return {data:{name:evidence.name,mime:evidence.mime,base64:bytes.toString('base64')},error:null};
     throw new Error('Unexpected RPC');
   };
-  const actual = loadModule('src/app/subscription-requests/actions.ts', {'@/lib/supabase/server':{createClient:async()=>({auth:{getUser:auth},rpc})}});
+  const actual = loadModule('src/app/subscription-requests/actions.ts', {'next/server':{after:()=>{}},'@/lib/subscription-request-mail':{dispatchSubscriptionRequestMail:async()=>({ok:true})},'@/lib/supabase/server':{createClient:async()=>({auth:{getUser:auth},rpc})}});
   assert.deepEqual(Object.keys(actual).sort(),[...actionNames].sort());
   const actions = Object.fromEntries(actionNames.map(name=>[name,async(...args)=>{ const result=await actual[name](...args); results.push({name,result}); return result; }]));
   return {actions,calls,authCalls,results,setScenario(value){current=value;}};

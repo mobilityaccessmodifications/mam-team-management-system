@@ -35,7 +35,7 @@ insert into private.leave_approval_grants(reviewer_user_id,scope_kind,reviewer_l
 values ('10000000-0000-4000-8000-000000000001','global','Synthetic Admin',100);
 insert into private.manager_leave_reviewers values ('10000000-0000-4000-8000-000000000001',1);
 select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000004');
-create temp table core_request as select id from public.submit_my_leave_request('Unpaid leave','2030-12-09','2030-12-13');
+create temp table core_request as select id from public.submit_my_leave_request('Unpaid leave','2030-12-09','2030-12-13',null,null,'Synthetic employee note');
 do $$ declare r uuid:=(select id from core_request); begin
   assert (select count(*)=2 from private.leave_request_reviewer_assignments where leave_request_id=r), 'Nearest manager plus global only';
   assert private.is_current_leave_request_reviewer(r,'10000000-0000-4000-8000-000000000003');
@@ -53,8 +53,8 @@ end $$;
 -- the selected-person delegation patch also survives the date guard update.
 select pg_temp.set_test_actor('10000000-0000-4000-8000-000000000003');
 create temp table delegated_request as select id from public.submit_selected_employee_leave_request(
-  '10000000-0000-4000-8000-000000000004','Unpaid leave','2032-12-06','2032-12-10');
-create temp table manager_request as select id from public.submit_my_leave_request('Unpaid leave','2031-12-08','2031-12-12');
+  '10000000-0000-4000-8000-000000000004','Unpaid leave','2032-12-06','2032-12-10',null,null,'Synthetic employee note');
+create temp table manager_request as select id from public.submit_my_leave_request('Unpaid leave','2031-12-08','2031-12-12',null,null,'Synthetic employee note');
 do $$ begin
   assert (select count(*)=1 from private.leave_request_reviewer_assignments where leave_request_id=(select id from manager_request));
   assert private.is_current_leave_request_reviewer((select id from manager_request),'10000000-0000-4000-8000-000000000001');

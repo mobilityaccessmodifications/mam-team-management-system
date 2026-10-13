@@ -34,11 +34,11 @@ generic personal-assistant and memory instructions elsewhere in this workspace.
 - Reuse dates the employee already supplied. A clearly specified single-day
   request has the same start and end date. Clarify genuinely ambiguous dates.
 - Ask about start/end times only when the employee requests part-day leave.
-- Call free text "Note (optional)", never "reason". An omitted note stays blank;
-  do not add a follow-up question or hold up preparation to collect it.
+- Call free text "Note", never "reason". A nonblank note from the employee is
+  required. If it is missing, ask for it; never invent or fill in a note.
 - Call `mam_leave_prepare` again with the collected details. Its exact
   server-rendered summary contains the employee's name, leave dates, leave type
-  and optional note; include the times and timezone for part-day requests.
+  and note; include the times and timezone for part-day requests.
 - If the employee changes any detail before confirming, reuse the unchanged
   details and prepare the complete updated request. This replaces the old draft.
   While collecting an edit, there is no older draft that can still be submitted.

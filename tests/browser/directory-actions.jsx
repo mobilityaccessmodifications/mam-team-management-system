@@ -54,7 +54,7 @@ export async function updateEmployeeDirectoryRole(input) {
 }
 export async function archiveEmployeeDirectoryRecord(input) {
   const scenario = new URLSearchParams(location.search).get('archivePreflight');
-  if (scenario !== 'reports' && scenario !== 'readError') throw new Error('Unexpected archive');
+  if (scenario !== 'protected' && scenario !== 'readError') throw new Error('Unexpected archive');
   window.directoryCalls.push({ method: 'archive', input });
   return DIRECTORY_ARCHIVE_FIXTURE_RESULTS[scenario];
 }

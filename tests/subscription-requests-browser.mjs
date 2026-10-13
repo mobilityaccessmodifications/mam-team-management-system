@@ -16,7 +16,7 @@ try {
   assert.equal(replay.status,0,replay.stderr);
   const fixture=readFileSync('tests/unified-role-fixture.sql','utf8').replace('\\ir sql-test-auth.sql',()=>readFileSync('tests/sql-test-auth.sql','utf8'));
   sql(socket,database,fixture+"\nupdate private.subscription_request_config set enabled=true,approver_user_id='a1000000-0000-4000-8000-000000000004',approver_person_id='a1000000-0000-4000-8000-000000000004';");
-  const actions=loadModule('src/app/subscription-requests/actions.ts',{'@/lib/supabase/server':{createClient:async()=>({auth:{getUser:async()=>({data:{user:{id:'a1000000-0000-4000-8000-000000000004'}},error:null})},rpc:async(name,args={})=>{
+  const actions=loadModule('src/app/subscription-requests/actions.ts',{'next/server':{after:()=>{}},'@/lib/subscription-request-mail':{dispatchSubscriptionRequestMail:async()=>({ok:true})},'@/lib/supabase/server':{createClient:async()=>({auth:{getUser:async()=>({data:{user:{id:'a1000000-0000-4000-8000-000000000004'}},error:null})},rpc:async(name,args={})=>{
     assert.ok(['sr_workspace','sr_mutate','sr_download'].includes(name));
     const literal=value=>value==null?'null':typeof value==='number'?String(value):"'"+(typeof value==='object'?JSON.stringify(value):value).replaceAll("'","''")+"'";
     const parameters=Object.entries(args).map(([key,value])=>key+'=>'+literal(value)).join(',');

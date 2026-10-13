@@ -30,7 +30,7 @@ do $$declare pid uuid:='96000000-0000-4000-8000-000000000003'; p jsonb; r jsonb;
   perform public.reconcile_payroll_closing('synthetic-next-closing',next_payload);
   assert private.approved_leave_hours_after(pid,array['Annual leave'],'2026-09-25')=30.4;
   assert (private.project_annual_leave_balance(pid,'2026-09-26')->>'availableHours')::numeric=94.6;
-  assert (private.calculate_employee_leave_accrual(pid,'2026-09-25')->>'annualTaken')::numeric=0;
+  assert (private.calculate_employee_leave_accrual(pid,'2026-09-25')->>'annualTaken')::numeric=case when pg_temp.closing_continuous() then 30.4 else 0 end;
   select hours into before_hours from private.employee_annual_leave_balances where person_id=pid;
   update public.leave_requests set status='cancelled' where id='96000000-0000-4000-8000-000000000013';
   assert private.approved_leave_hours_after(pid,array['Annual leave'],'2026-09-25')=0;

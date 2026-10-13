@@ -69,6 +69,10 @@ def event(source, text, message_id, timestamp=None, reply_to=None):
 
 
 class HermesLeaveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_description_requires_the_employees_note_without_inventing_one(self):
+        self.assertIn('nonblank note is required', plugin.PREPARE_DESCRIPTION)
+        self.assertNotIn('note is optional', plugin.PREPARE_DESCRIPTION)
+
     async def asyncSetUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addAsyncCleanup(self.temp.cleanup)

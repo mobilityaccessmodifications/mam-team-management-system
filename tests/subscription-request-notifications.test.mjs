@@ -9,7 +9,8 @@ test('subscription notification contract is metadata-only and has no added audie
   const result=requestNotification(input);
   assert.deepEqual(result.ccUserIds,[]);assert.equal(result.toUserId,input.to_user_id);
   assert.equal(result.eventKey,'subscription-request:'+input.request_id+':2');
-  assert.match(result.link,/^https:\/\/mam-team-management-system-ten\.vercel\.app\/subscription-requests\?request=/);
+  assert.equal(result.link,"https://mam-team-management-system-ten.vercel.app/?view=people&tab=tasks");
+  for(const event of ['approve','return','reject','withdraw'])assert.equal(requestNotification({...input,event}).link,'https://mam-team-management-system-ten.vercel.app/subscription-requests?request='+input.request_id);
   assert.throws(()=>requestNotification({...input,cc_user_ids:[input.to_user_id]}));
   assert.throws(()=>requestNotification({...input,payload:{password:'DO NOT COPY'}}));
   assert.throws(()=>requestNotification({...input,event:'activate'}));

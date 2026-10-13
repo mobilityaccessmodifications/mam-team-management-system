@@ -85,3 +85,9 @@ Earlier failed compatibility observations and review-process verdicts remain ret
 `npm run check`
 
 All fixtures use synthetic identities. The source baseline above preserves the current confirmation and does not fabricate the missing historical interview.
+
+### 14 October 2026 — approved release and submission email routing
+
+The owner authorizes progressing this milestone to production, subject to the existing release checks. Submission emails now target `marketing@mobilityaccess.com.au` and copy the applicant's database-resolved work email. The mailbox does not receive approval authority. The sole configured approver and all request permissions remain unchanged. The email is a new-application notification, uses the existing MAM leave-email theme and signature, and links directly to `/?view=people&tab=tasks`, including after sign-in. Other event delivery and procurement remain outside this email addition.
+
+Delivery uses a private token-bound submission queue and the existing durable notification-receipt bridge. Missing applicant work email keeps the event unsent. A successful request submission does not depend on immediate email success. Configure the authenticated n8n receiver at `/webhook/mam-subscription-request-mail-v1`, using the existing MAM notification header and a verified MAM Outlook credential; the worker uses the existing MAM webhook origin and secret. The protected `/api/cron/subscription-requests` endpoint is the retry fallback. Workflow publication, queue migration, approver configuration, production deployment and actual Inbox acceptance remain unperformed until verified individually.

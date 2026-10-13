@@ -119,7 +119,7 @@ check('successful canonical own-history read retains readable metadata without r
   const actual=actionHarness();
   const actions=actual.actions;
   const expected={...structuredClone(workspace),canApply:false,people:[],requests:[own]};
-  const resultModule=(await import('./helpers/contact-lifetime-harness.mjs')).loadModule('src/app/subscription-requests/actions.ts',{'@/lib/supabase/server':{createClient:async()=>({auth:{getUser:async()=>({data:{user:{id:row.applicant}},error:null})},rpc:async()=>({data:expected,error:null})})}});
+  const resultModule=(await import('./helpers/contact-lifetime-harness.mjs')).loadModule('src/app/subscription-requests/actions.ts',{'next/server':{after:()=>{}},'@/lib/subscription-request-mail':{dispatchSubscriptionRequestMail:async()=>({ok:true})},'@/lib/supabase/server':{createClient:async()=>({auth:{getUser:async()=>({data:{user:{id:row.applicant}},error:null})},rpc:async()=>({data:expected,error:null})})}});
   const result=await resultModule.loadSubscriptionRequests();assert.equal(result.ok,true);
   const hooks=(await import('./helpers/contact-lifetime-harness.mjs')).hooksHarness((await import('react')).default);
   const {SubscriptionRequests}=(await import('./helpers/contact-lifetime-harness.mjs')).loadModule('src/components/subscription-requests.tsx',{'react':hooks.react,'@/app/subscription-requests/actions':{...actions,loadSubscriptionRequests:async()=>result}});

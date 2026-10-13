@@ -29,7 +29,7 @@ export const archivePreflightInput = {
 
 export function archivePreflightFixture({ sourceRoot = process.cwd(), readError = false } = {}) {
   sourceRoot = path.resolve(sourceRoot);
-  const state = { mutations: [], reportReads: 0 };
+  const state = { mutations: [], preflightReads: 0 };
   const forbidden = name => {
     state.mutations.push(name);
     throw new Error('Unexpected synthetic mutation: ' + name);
@@ -47,15 +47,7 @@ export function archivePreflightFixture({ sourceRoot = process.cwd(), readError 
           assert.deepEqual(filters, [['id', archivePreflightInput.personId], ['node_kind', 'person']]);
           return { data: { auth_user_id: '10000000-0000-4000-8000-000000000002', is_active: true }, error: null };
         },
-        async limit(count) {
-          assert.equal(columns, 'id');
-          assert.deepEqual(filters, [['parent_id', archivePreflightInput.personId], ['is_active', true]]);
-          assert.equal(count, 1);
-          state.reportReads++;
-          return readError
-            ? { data: null, error: { message: 'private synthetic database details' } }
-            : { data: [{ id: '10000000-0000-4000-8000-000000000005' }], error: null };
-        },
+
       };
       return query;
     },
@@ -64,7 +56,23 @@ export function archivePreflightFixture({ sourceRoot = process.cwd(), readError 
   };
   const supabase = {
     auth: { getUser: async () => ({ data: { user: { id: '10000000-0000-4000-8000-000000000003' } }, error: null }) },
-    rpc: async name => forbidden(name),
+    async rpc(name, args) {
+      if (name !== 'preflight_employee_removal_reporting_splice') return forbidden(name);
+      assert.deepEqual(args, {
+        p_person_id: archivePreflightInput.personId,
+        p_expected_person_version: archivePreflightInput.personVersion,
+        p_expected_detail_version: archivePreflightInput.detailVersion,
+        p_end_date: archivePreflightInput.endDate,
+        p_archive_reason: archivePreflightInput.reason,
+      });
+      state.preflightReads++;
+      return {
+        data: null,
+        error: readError
+          ? { message: 'private synthetic database details' }
+          : { code: '55000', message: 'Onboarding credential delivery in progress' },
+      };
+    },
   };
   const actions = loadSourceModule(path.join(sourceRoot, 'src/app/people/actions.ts'), sourceRoot, {
     'next/cache': { revalidatePath() { forbidden('revalidation'); } },
