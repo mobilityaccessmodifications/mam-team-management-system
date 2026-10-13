@@ -7,10 +7,10 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '20261013120000'
+VERSION = '20261013170000'
 NAME = 'subscription_review_tasks'
-PREDECESSOR_VERSION = '20261012110000'
-PREDECESSOR_NAME = 'trade_school_leave'
+PREDECESSOR_VERSION = '20261013120000'
+PREDECESSOR_NAME = 'annual_continuous_accrual'
 MIGRATION = ROOT / 'supabase/migrations' / (VERSION + '_' + NAME + '.sql')
 PREDECESSOR = MIGRATION.parent / (PREDECESSOR_VERSION + '_' + PREDECESSOR_NAME + '.sql')
 TRANSPORT = ROOT / 'scripts/deploy-staff-leave-calendar.py'

@@ -41,7 +41,7 @@ def clone(name, template):
 with tempfile.TemporaryDirectory(prefix='review-helper-', dir=socket) as copy:
     root = Path(copy)
     paths = ['scripts/deploy-subscription-review-tasks.py', 'scripts/deploy-staff-leave-calendar.py',
-             'supabase/migrations/20261013120000_subscription_review_tasks.sql', 'supabase/migrations/20261012110000_trade_school_leave.sql']
+             'supabase/migrations/20261013170000_subscription_review_tasks.sql', 'supabase/migrations/20261013120000_annual_continuous_accrual.sql']
     for name in paths:
         target = root/name
         target.parent.mkdir(parents=True, exist_ok=True)

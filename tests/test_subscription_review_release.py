@@ -16,6 +16,17 @@ class SubscriptionReviewReleaseTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
+    def test_candidate_has_unique_version_after_latest_predecessor(self):
+        helper=self.helper()
+        migrations=sorted((ROOT/'supabase/migrations').glob('*.sql'))
+        versions=[path.stem.split('_',1)[0] for path in migrations]
+        self.assertEqual(len(versions),len(set(versions)),'migration versions must be unique')
+        predecessors=[path for path in migrations if path.stem.split('_',1)[0] < helper.VERSION]
+        latest=predecessors[-1]
+        self.assertGreater(helper.VERSION,latest.stem.split('_',1)[0])
+        self.assertEqual(helper.PREDECESSOR,latest)
+        self.assertEqual((helper.PREDECESSOR_VERSION,helper.PREDECESSOR_NAME),('20261013120000','annual_continuous_accrual'))
+
     def test_reviewed_hash_required_before_any_remote_call(self):
         helper=self.helper()
         with patch.object(helper,'api',side_effect=AssertionError('remote call')),patch.object(helper,'query',side_effect=AssertionError('remote call')):

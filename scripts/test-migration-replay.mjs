@@ -19,7 +19,7 @@ for (const file of files) {
     command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
     console.log(command('python3', [path.resolve('tests/run-trade-school-release.py'), socket, predecessor, `${prefix}_release`]));
   }
-  if (file === '20261013120000_subscription_review_tasks.sql') {
+  if (file === '20261013170000_subscription_review_tasks.sql') {
     const predecessor = `${database}_review_pred`;
     command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
     console.log(command('python3', [path.resolve('tests/run-subscription-review-release.py'), socket, predecessor]));

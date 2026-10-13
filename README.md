@@ -179,7 +179,7 @@ See `docs/environment-management.md` for the complete environment model.
 
 ### Responsible-person subscription review tasks
 
-Apply `20261013120000_subscription_review_tasks.sql` before releasing the matching Tasks UI. Through the MAM Supabase credential wrapper, run `python3 scripts/deploy-subscription-review-tasks.py inspect`, then `apply <reviewed-sha256>` only after migration approval. Inspect is read-only; apply verifies the exact MAM target and predecessor, records only this migration's exact source in one Management API transaction, preserves the purge fingerprint, and reads back function definitions and ACLs. Responsible employees can mark due quarterly reviews Done; Change Profile remains read-only. Merge and production deployment are separate release gates.
+Apply `20261013170000_subscription_review_tasks.sql` before releasing the matching Tasks UI. Through the MAM Supabase credential wrapper, run `python3 scripts/deploy-subscription-review-tasks.py inspect`, then `apply <reviewed-sha256>` only after migration approval. Inspect is read-only; apply verifies the exact MAM target and predecessor, records only this migration's exact source in one Management API transaction, preserves the purge fingerprint, and reads back function definitions and ACLs. Responsible employees can mark due quarterly reviews Done; Change Profile remains read-only. Merge and production deployment are separate release gates.
 
 ### Analytics API employee names
 
