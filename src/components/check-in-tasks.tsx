@@ -145,8 +145,8 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
   const dialogRef = useRef<HTMLElement>(null);
   const [drafts] = useState(() => new Map<string, TaskNoteDraft>());
   const mobile = useMediaQuery("(max-width: 900px)");
-  const effectiveReadOnly = readOnly || Boolean(previewPersonId);
-  const subscriptions = useSubscriptionReviewTasks({ previewPersonId, readOnly: effectiveReadOnly, enabled: showSubscriptionReviewTasks });
+  const notesReadOnly = readOnly || Boolean(previewPersonId);
+  const subscriptions = useSubscriptionReviewTasks({ previewPersonId, readOnly: notesReadOnly, enabled: showSubscriptionReviewTasks });
   const busy = notesBusy || Boolean(pendingId) || Boolean(subscriptions.pendingId);
 
   const load = useCallback(async () => {
@@ -201,11 +201,16 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
       .sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) || a.date.localeCompare(b.date) : a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
   }, [tasks, query, typeFilter, statusFilter, sort]);
   const selected = tasks.find((task) => task.key === selectedKey);
-  const close = useCallback(() => { if (!busy) setSelectedKey(""); }, [busy]);
+  const close = useCallback(() => { if (!busy) { setSelectedKey(""); if (!mobile) searchRef.current?.focus(); } }, [busy, mobile]);
+  useEffect(() => {
+    if (!selectedKey || selected) return;
+    const timer = window.setTimeout(() => { setSelectedKey(""); searchRef.current?.focus(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [selected, selectedKey]);
   useDialogFocus(Boolean(selected) && mobile, dialogRef, null, close, searchRef);
 
   async function completeCheckIn(task: CheckInTask) {
-    if (effectiveReadOnly || pending.current || busy || notesDirty || !task.canComplete) return;
+    if (readOnly || pending.current || busy || notesDirty || !task.canComplete) return;
     pending.current = true;
     setPendingId(task.reminderId);
     setError(""); setNotice("");
@@ -254,10 +259,10 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
             <dl className={styles.facts}><div><dt>{selected.schedule ? "Submitted" : "Due date"}</dt><dd>{formatDate(selected.date)}</dd></div><div><dt>Status</dt><dd><span className={styles.rowStatus} data-status={selected.status}>{statusLabel(selected.status)}</span></dd></div>{selected.checkIn ? <div><dt>Employee</dt><dd>{selected.name}</dd></div> : null}{selected.subscription ? <div><dt>Service</dt><dd>{selected.name}</dd></div> : null}</dl>
             {selected.checkIn?.status === "needs_review" ? <div className={styles.reviewPanel}><strong>{reviewReasonCopyFor(selected.checkIn).title}</strong><p>{reviewReasonCopyFor(selected.checkIn).detail}</p><small>{reviewReasonCopyFor(selected.checkIn).nextStep}</small></div> : null}
             {selected.schedule ? <><dl className={styles.scheduleFacts}><div><dt>Current schedule</dt><dd>{scheduleSummary(selected.schedule.originalWorkingWeekdays, selected.schedule.originalWorkingDayTimes)}</dd></div><div><dt>Requested schedule</dt><dd>{scheduleSummary(selected.schedule.requestedWorkingWeekdays, selected.schedule.requestedWorkingDayTimes)}</dd></div><div><dt>Request reason</dt><dd>{selected.schedule.requestReason}</dd></div><div><dt>Submitted by</dt><dd>{selected.schedule.submittedByName}</dd></div></dl></> : null}
-            <TaskNotesEditor key={`${selected.key}:${previewPersonId ?? "self"}`} target={selected.target} previewPersonId={previewPersonId} readOnly={effectiveReadOnly} drafts={drafts} onBusyChange={setNotesBusy} onDirtyChange={setNotesDirty} />
-            {!effectiveReadOnly && selected.checkIn ? <div className={styles.detailActions}><button className={toolbar.primary} type="button" disabled={busy || notesDirty || !selected.checkIn.canComplete} aria-busy={pendingId === selected.checkIn.reminderId} aria-label={`Mark ${selected.name}'s ${selected.title} complete`} onClick={() => void completeCheckIn(selected.checkIn!)}><CalendarCheck2 size={17} aria-hidden="true" />{pendingId ? "Completing…" : "Complete check-in"}</button></div> : null}
-            {!effectiveReadOnly && selected.subscription ? <div className={styles.detailActions}><button className={toolbar.primary} type="button" disabled={busy || notesDirty || !selected.subscription.canComplete} aria-busy={subscriptions.pendingId === selected.subscription.subscriptionId} aria-label={`Mark ${selected.name}'s subscription review done`} onClick={() => subscriptions.complete(selected.subscription!)}><CheckCircle2 size={17} aria-hidden="true" />{subscriptions.pendingId ? "Completing…" : "Done"}</button></div> : null}
-            {!effectiveReadOnly && selected.schedule && selected.canReview && onScheduleReview ? <ScheduleDecision key={selected.key} task={selected} blocked={busy || notesDirty} onBusyChange={setNotesBusy} onReview={onScheduleReview} onSaved={(message) => { setNotice(message); setSelectedKey(""); searchRef.current?.focus(); }} /> : null}
+            <TaskNotesEditor key={`${selected.key}:${previewPersonId ?? "self"}`} target={selected.target} previewPersonId={previewPersonId} readOnly={notesReadOnly} drafts={drafts} onBusyChange={setNotesBusy} onDirtyChange={setNotesDirty} />
+            {!readOnly && selected.checkIn ? <div className={styles.detailActions}><button className={toolbar.primary} type="button" disabled={busy || notesDirty || !selected.checkIn.canComplete} aria-busy={pendingId === selected.checkIn.reminderId} aria-label={`Mark ${selected.name}'s ${selected.title} complete`} onClick={() => void completeCheckIn(selected.checkIn!)}><CalendarCheck2 size={17} aria-hidden="true" />{pendingId ? "Completing…" : "Complete check-in"}</button></div> : null}
+            {!notesReadOnly && selected.subscription ? <div className={styles.detailActions}><button className={toolbar.primary} type="button" disabled={busy || notesDirty || !selected.subscription.canComplete} aria-busy={subscriptions.pendingId === selected.subscription.subscriptionId} aria-label={`Mark ${selected.name}'s subscription review done`} onClick={() => subscriptions.complete(selected.subscription!)}><CheckCircle2 size={17} aria-hidden="true" />{subscriptions.pendingId ? "Completing…" : "Done"}</button></div> : null}
+            {!readOnly && selected.schedule && selected.canReview && onScheduleReview ? <ScheduleDecision key={selected.key} task={selected} blocked={busy || notesDirty} onBusyChange={setNotesBusy} onReview={onScheduleReview} onSaved={(message) => { setNotice(message); setSelectedKey(""); searchRef.current?.focus(); }} /> : null}
           </div>
         </section>
       </> : <div className={styles.emptyDetail}><ListChecks size={26} aria-hidden="true" /><strong>Select a task</strong></div>}
@@ -270,16 +275,20 @@ function ScheduleDecision({ task, blocked, onBusyChange, onReview, onSaved }: { 
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const pending = useRef(false);
+  const generation = useRef(0);
+  useEffect(() => () => { generation.current += 1; onBusyChange(false); }, [onBusyChange]);
   async function decide(decision: "approved" | "declined") {
     if (!onReview || blocked || pending.current) return;
     if (!reason.trim()) { setError(`Enter a reason to ${decision === "approved" ? "approve" : "decline"} this request.`); return; }
     pending.current = true; setSaving(true); onBusyChange(true); setError("");
+    const request = generation.current;
     try {
       const result = await onReview(task.target.taskId, decision, reason);
+      if (request !== generation.current) return;
       if (!result.ok) { setError(result.message); return; }
       onSaved(`Schedule request ${decision}.`);
-    } catch { setError("The decision could not be saved. Try again."); }
-    finally { pending.current = false; setSaving(false); onBusyChange(false); }
+    } catch { if (request === generation.current) setError("The decision could not be saved. Try again."); }
+    finally { pending.current = false; if (request === generation.current) { setSaving(false); onBusyChange(false); } }
   }
   return <div className={styles.scheduleDecision}><label><span>Decision reason</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={1000} rows={3} disabled={saving} /></label>{error ? <p className={styles.error} role="alert">{error}</p> : null}<div className={styles.detailActions}><button className={toolbar.button} type="button" disabled={blocked || saving} onClick={() => void decide("declined")}>Decline</button><button className={toolbar.primary} type="button" disabled={blocked || saving} onClick={() => void decide("approved")}>Approve request</button></div></div>;
 }

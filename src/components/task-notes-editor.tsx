@@ -22,6 +22,7 @@ export function TaskNotesEditor({ target, previewPersonId, readOnly, drafts, onB
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
   const [notice, setNotice] = useState("");
   const generation = useRef(0);
   const pending = useRef(false);
@@ -31,12 +32,14 @@ export function TaskNotesEditor({ target, previewPersonId, readOnly, drafts, onB
   const load = useCallback(async (discardDraft = false) => {
     const request = ++generation.current;
     setLoading(true);
+    setLoadFailed(false);
     setError("");
     setNotice("");
     try {
       const result = await getTaskNotes({ kind, taskId, ...(reviewOn ? { reviewOn } : {}) }, previewPersonId);
       if (request !== generation.current) return;
       if (!result.ok) {
+        setLoadFailed(true);
         setDraft({ text: "", savedText: "", version: 0 });
         setError(result.error);
         return;
@@ -49,6 +52,7 @@ export function TaskNotesEditor({ target, previewPersonId, readOnly, drafts, onB
       if (next.version !== result.notes.version) setError("Notes have changed. Reload notes before saving your changes.");
     } catch {
       if (request !== generation.current) return;
+      setLoadFailed(true);
       setDraft({ text: "", savedText: "", version: 0 });
       setError("Notes could not be loaded. Try again.");
     } finally {
@@ -96,7 +100,7 @@ export function TaskNotesEditor({ target, previewPersonId, readOnly, drafts, onB
       setDraft(next);
       setNotice("");
     }} />
-    {error ? <div className={styles.noteError} role="alert"><span>{error}</span><button className={toolbar.button} type="button" disabled={saving} onClick={() => void load(true)}>Reload notes</button></div> : null}
+    {error ? <div className={styles.noteError} role="alert"><span>{error}</span><button className={toolbar.button} type="button" disabled={saving} onClick={() => void load(!loadFailed)}>{loadFailed ? "Retry notes" : "Reload notes"}</button></div> : null}
     {notice ? <p className={styles.noteNotice} role="status">{notice}</p> : null}
     {!readOnly ? <div className={styles.noteActions}><button className={toolbar.primary} type="button" disabled={loading || saving || !dirty || Boolean(error)} aria-busy={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save notes"}</button></div> : null}
   </section>;
