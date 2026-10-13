@@ -63,7 +63,7 @@ test('Marketing test workflow sends the Casual Check-In wording and exact attach
   assert.equal(nodes['Send 6-Month Casual Check-In Email from HR'].parameters.toRecipients, '={{ $json.deliveryTo }}');
   assert.equal(
     nodes['Send 6-Month Casual Check-In Email from HR'].credentials.microsoftOutlookOAuth2Api.name,
-    'Microsoft Outlook account - hr@mobilityaccess.com.au',
+    'Microsoft Outlook - ai@mobilityaccess.com.au',
   );
   assert.equal(workflow.settings.saveDataErrorExecution, 'none');
 });

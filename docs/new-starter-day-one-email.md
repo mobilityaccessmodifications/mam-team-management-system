@@ -7,7 +7,7 @@ People Hub schedules one welcome email one published Victorian business day befo
 - The first welcome email includes both the employee work email and personal email when both are recorded. Duplicate addresses are collapsed.
 - At least one employee email is required for a new active employee.
 - The direct manager's work email is included. A direct manager and start date are required for a new active employee.
-- n8n sends from the stored `hr@mobilityaccess.com.au` Outlook credential.
+- n8n sends from the stored `ai@mobilityaccess.com.au` Outlook credential.
 - The attached file is `assets/checklists/Day 1 New Starter Readiness Checklist.docx`.
 
 These recipient rules apply only to this first Day 1 message. Existing Check-In reminders keep their current manager/HR routing.
