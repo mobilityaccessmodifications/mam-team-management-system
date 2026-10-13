@@ -279,7 +279,7 @@ type InitialNavigation = {
   view: AppView;
   section: LeaveSection;
   requestId?: string;
-  peopleSection?: "assets" | "accounts" | "subscriptions";
+  peopleSection?: "assets" | "accounts" | "subscriptions" | "tasks";
 };
 
 function businessDaysBetween(start: string, end: string) {

@@ -73,7 +73,8 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
-    const assetReturnPath = assetLoginReturnPath(pathname);
+    const assetReturnPath = assetLoginReturnPath(pathname)
+      ?? assetLoginReturnPath(pathname + request.nextUrl.search);
     if (assetReturnPath) url.searchParams.set("next", assetReturnPath);
     return NextResponse.redirect(url);
   }
