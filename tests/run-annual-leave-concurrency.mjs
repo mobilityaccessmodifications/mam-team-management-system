@@ -21,9 +21,9 @@ select set_config('request.jwt.claims',jsonb_build_object('sub','${manager}','ia
 const requests=JSON.parse(sql(socket,database,`begin; ${claims} set local role authenticated;
 select coalesce(jsonb_agg(id),'[]') from (
 select id from public.submit_selected_employee_leave_request('${employee}','Annual leave',
-(current_date+28)-(extract(isodow from current_date+28)::integer-1),(current_date+28)-(extract(isodow from current_date+28)::integer-1),'08:00','16:00')
+(current_date+28)-(extract(isodow from current_date+28)::integer-1),(current_date+28)-(extract(isodow from current_date+28)::integer-1),'08:00','16:00',p_employee_note => 'Synthetic annual leave note')
 union all select id from public.submit_selected_employee_leave_request('${employee}','Annual leave',
-(current_date+35)-(extract(isodow from current_date+35)::integer-1),(current_date+35)-(extract(isodow from current_date+35)::integer-1),'08:00','16:00')) r;
+(current_date+35)-(extract(isodow from current_date+35)::integer-1),(current_date+35)-(extract(isodow from current_date+35)::integer-1),'08:00','16:00',p_employee_note => 'Synthetic annual leave note')) r;
 commit;`).trim().split('\n').filter(x=>x.startsWith('['))[0]);
 assert.equal(requests.length,2);
 let serial=0;
