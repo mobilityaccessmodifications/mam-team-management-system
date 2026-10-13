@@ -33,7 +33,7 @@ class SubscriptionReviewReleaseTests(unittest.TestCase):
         predecessors=[path for path in migrations if path.stem.split('_',1)[0] < helper.VERSION]
         latest=predecessors[-1]
         self.assertGreater(helper.VERSION,latest.stem.split('_',1)[0])
-        self.assertEqual(helper.PREDECESSOR,latest)
+        self.assertIn(helper.PREDECESSOR,predecessors)
         self.assertEqual((helper.PREDECESSOR_VERSION,helper.PREDECESSOR_NAME),('20261013120000','annual_continuous_accrual'))
 
     def test_reviewed_hash_required_before_any_remote_call(self):

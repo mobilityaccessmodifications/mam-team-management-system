@@ -163,6 +163,9 @@ with tempfile.TemporaryDirectory(prefix='review-helper-', dir=socket) as copy:
             finally:
                 sql(fault_database, 'revoke service_role from authenticated;' if category == 'role_membership' else 'alter role authenticated in database '+fault_database+' reset search_path;')
     assert not failures, '; '.join(failures)
+    before = helper.read_state(source, predecessor_source, query)
+    helper.validate_before(before, source)
+    release = helper.transaction(source, before, predecessor_source)
     submitted = []
     def remote(request, **kwargs):
         if request.full_url == 'https://api.supabase.com/v1/projects/xtwlrjqbusadghavchqm':

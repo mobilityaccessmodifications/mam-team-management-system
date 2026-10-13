@@ -55,7 +55,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Install Python for the pinned release-helper rehearsal
+      - name: Install Python and Git for the pinned release-helper rehearsal
         run: |
           apt-get update
           apt-get install -y --no-install-recommends python3 git

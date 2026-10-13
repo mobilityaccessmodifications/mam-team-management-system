@@ -38,15 +38,6 @@ update private.employee_directory_details set scheduled_employment_end_date='209
 update public.internal_org_people set parent_id='92000000-0000-4000-8000-000000000002' where id='92000000-0000-4000-8000-000000000004';
 set local role service_role;
 do $$ begin
- begin
-  perform public.run_scheduled_employee_offboarding('92000000-0000-4000-8000-000000000002','2099-01-09 13:00:00+00');
-  raise exception 'Active direct reports were ignored' using errcode='ZX001';
- exception when foreign_key_violation then null; end;
-end $$;
-reset role;
-update public.internal_org_people set parent_id=null where id='92000000-0000-4000-8000-000000000004';
-set local role service_role;
-do $$ begin
  assert not public.run_scheduled_employee_offboarding('92000000-0000-4000-8000-000000000002','2099-01-09 12:59:59+00'), 'Friday 23:59:59 AEDT remains employed';
  assert public.run_scheduled_employee_offboarding('92000000-0000-4000-8000-000000000002','2099-01-09 13:00:00+00'), 'Saturday midnight AEDT closes employment';
  assert not public.run_scheduled_employee_offboarding('92000000-0000-4000-8000-000000000002','2099-01-09 13:00:00+00'), 'Repeated run is idempotent';
@@ -54,6 +45,8 @@ do $$ begin
 end $$;
 reset role;
 do $$ begin
+ assert (select parent_id is null from public.internal_org_people where id='92000000-0000-4000-8000-000000000004'), 'Due execution splices direct child to root';
+ assert (select count(*)=1 from private.employee_directory_audit_events where person_id='92000000-0000-4000-8000-000000000004' and changed_fields=array['manager_id']::text[] and actor_user_id='92000000-0000-4000-8000-000000000001'), 'Scheduled splice attributed once to scheduler';
  assert (select account_status='disabled' and disabled_at is not null from public.profiles where id='92000000-0000-4000-8000-000000000002'), 'Linked account disabled';
  assert (select not is_active from public.internal_org_people where id='92000000-0000-4000-8000-000000000002'), 'Archived';
  assert (select archive_reason='Resigned' from private.employee_directory_details where person_id='92000000-0000-4000-8000-000000000002'), 'Reason retained';
