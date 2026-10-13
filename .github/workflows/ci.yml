@@ -83,7 +83,9 @@ jobs:
       - name: Install runtime for the real bridge and release boundaries
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends python3
+          apt-get install -y --no-install-recommends python3 git
+          runuser -u postgres -- python3 --version
+          runuser -u postgres -- git --version
           npm ci --ignore-scripts --no-audit --no-fund
           install -d -o postgres -g postgres output/annual-gate-resume
       - name: Twenty annual-leave groups with COPY, bridge and concurrency

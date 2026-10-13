@@ -42,6 +42,11 @@ for (const file of files) {
     console.log(command('python3', [path.resolve('tests/run-offboarding-version-conflict-release.py'), socket, predecessor, `${prefix}_rel`]));
     command('dropdb', ['-h', socket, '-p', '55439', '-U', 'postgres', predecessor]);
   }
+  if (file === '20261013170000_subscription_review_tasks.sql') {
+    const predecessor = `${database}_review_pred`;
+    command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
+    console.log(command('python3', [path.resolve('tests/run-subscription-review-release.py'), socket, predecessor]));
+  }
   if (annualLegacy && file === "20261006106000_annual_leave_all_submitter_gate.sql") {
     command('createdb', ['-h', target(socket, database)[2], '-p', '55439', '-U', 'postgres', `--template=${database}`, `${database}_predecessor`]);
     sql(socket, database, readFileSync(new URL("../tests/annual-leave-legacy-setup.sql", import.meta.url), "utf8"));
