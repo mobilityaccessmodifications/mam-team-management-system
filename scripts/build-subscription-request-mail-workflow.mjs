@@ -2,8 +2,9 @@ import { HR_EMAIL_SIGNATURE_HTML } from './hr-email-signature.mjs';
 const TO = 'marketing@mobilityaccess.com.au';
 const RECEIPTS = 'https://mam-team-management-system-ten.vercel.app/api/internal/integrations/notifications/receipts';
 const AUTH = { id:'tGtpwegru8OxtdCt',name:'MAM Team Management - Notification Webhook Header' };
-export function buildSubscriptionRequestMailWorkflow({outlookCredential}={}) {
+export function buildSubscriptionRequestMailWorkflow({outlookCredential,cronCredential}={}) {
   if (!outlookCredential?.id || !outlookCredential?.name) throw Error('Verified MAM Outlook credential required.');
+  if (!cronCredential?.id || !cronCredential?.name) throw Error('Scoped subscription-request cron credential required.');
   let sequence=0;
   const identifier=()=>"e5140000-0000-4000-8000-"+String(++sequence).padStart(12,'0');
   const node=(name,type,parameters,credentials={})=>({id:identifier(),name,type:'n8n-nodes-base.'+type,typeVersion:{webhook:2.1,code:2,if:2.2,httpRequest:4.2,microsoftOutlook:2}[type],position:[0,0],parameters,credentials});
@@ -58,7 +59,7 @@ return [{json:ok?{ok:true,sent:true,alreadySent:false,deliveryId:c.deliveryId,ac
   connect('Build Subscription Email','Send Subscription Email');connect('Send Subscription Email','Build Subscription Confirmation');connect('Build Subscription Confirmation','Confirm Subscription Delivery');connect('Confirm Subscription Delivery','Validate Subscription Confirmation');connect('Already Delivered?','Return Subscription Duplicate','Return Subscription Rejection');
   nodes.push(node('Retry queued submissions every five minutes','scheduleTrigger',{rule:{interval:[{field:'minutes',minutesInterval:5}]}}));
   nodes.at(-1).typeVersion=1.2;
-  nodes.push(node('Dispatch queued subscription mail','httpRequest',{method:'GET',url:'https://mam-team-management-system-ten.vercel.app/api/cron/subscription-requests',authentication:'genericCredentialType',genericAuthType:'httpHeaderAuth',options:{timeout:300000,redirect:{redirect:{followRedirects:false}}}},{httpHeaderAuth:{id:'Fa0hGUfG9sTqnZXP',name:'MAM People System - Check-In Reminder Cron Bearer v2'}}));
+  nodes.push(node('Dispatch queued subscription mail','httpRequest',{method:'GET',url:'https://mam-team-management-system-ten.vercel.app/api/cron/subscription-requests',authentication:'genericCredentialType',genericAuthType:'httpHeaderAuth',options:{timeout:300000,redirect:{redirect:{followRedirects:false}}}},{httpHeaderAuth:cronCredential}));
   connect('Retry queued submissions every five minutes','Dispatch queued subscription mail');
   nodes.forEach((n,i)=>{n.position=[i*180,0];});
   return {name:'MAM People Hub - Subscription Request Email (Marketing)',nodes,connections,settings:{executionOrder:'v1',timezone:'Australia/Melbourne',saveDataSuccessExecution:'none',saveDataErrorExecution:'none',saveExecutionProgress:false}};

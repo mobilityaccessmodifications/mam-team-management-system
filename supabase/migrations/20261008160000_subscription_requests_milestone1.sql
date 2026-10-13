@@ -1590,7 +1590,7 @@ insert into sr_catalog_delta values
   ('function','private.sr_evidence(jsonb)','2d149e09b5b0a5316ccc08548c35723c80ebf323dab77f168147638d06c056f0'),
   ('function','private.sr_immutable()','324143847b465479d1e43d85fe29a189fce7ae80ef687da78f14036625062651'),
   ('function','private.sr_read(uuid)','3967c1bdcc609ef1a55f64545217e0a071c063f4239bfa1121e97aeb22dc4b49'),
-  ('function','private.sr_register_gate()','b52f624e46e97611df25ea787b4e5e0c23ddd866758d62df0461b39ffae2b336'),
+  ('function','private.sr_register_gate()','dc03916527f45db9640e3602f4372123f7845d1ad748934122dbdbeae947bf79'),
   ('function','private.sr_validate(jsonb, boolean)','624bda44dc234a8dfe9bd23b3e8724a865e586efce471ebae6586f063ea1483b'),
   ('function','private.sr_visible(uuid)','c82df0545e807a214e07e4891c09ce1d68332625d9b26f071baa98aff1d60459'),
   ('function','public.sr_download(uuid, bigint, integer)','361b3d2f966ae175b8d45c58bc46d7f47b7bbf33dc855a80ed9e3bd8f24e47d9'),
@@ -1847,7 +1847,7 @@ end $$;
 
 create function private.sr_register_gate() returns trigger language plpgsql security definer set search_path='' as $$
 begin
-  if (select enabled from private.subscription_request_config where singleton) and new.pricing_model='paid' and
+  if (select enabled from private.subscription_request_config where singleton) and (new.pricing_model='paid' or (tg_op='UPDATE' and old.pricing_model='paid')) and
     (tg_op='INSERT' or old.pricing_model is distinct from new.pricing_model or old.service_name is distinct from new.service_name or old.billing_anchor_date is distinct from new.billing_anchor_date or old.plan_name is distinct from new.plan_name or old.seat_count is distinct from new.seat_count or old.renewal_date is distinct from new.renewal_date or old.billing_cycle is distinct from new.billing_cycle or old.amount_cents is distinct from new.amount_cents
       or (old.subscription_status='cancelled' and new.subscription_status in ('active','paused'))) then
     raise exception 'Paid procurement and activation are not available in this milestone.' using errcode='55000';

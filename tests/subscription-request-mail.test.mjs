@@ -3,7 +3,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import { buildSubscriptionRequestMailWorkflow } from '../scripts/build-subscription-request-mail-workflow.mjs';
 import { loadModule } from './helpers/contact-lifetime-harness.mjs';
-const workflow=buildSubscriptionRequestMailWorkflow({outlookCredential:{id:'synthetic-credential',name:'Synthetic MAM Outlook'}});
+const workflow=buildSubscriptionRequestMailWorkflow({outlookCredential:{id:'synthetic-credential',name:'Synthetic MAM Outlook'},cronCredential:{id:'synthetic-subscription-cron',name:'Synthetic subscription-only cron'}});
 const run=(name,input,context={})=>vm.runInNewContext(workflow.nodes.find(n=>n.name===name).parameters.jsCode.replace(/^/,'(function(){')+'})()',{
   $input:{first:()=>({json:input})},$:(name)=>({first:()=>({json:context[name]})}),$json:input,Intl,
 })[0].json;
@@ -35,4 +35,12 @@ test('worker confirms only exact To/CC receipts and retains failures for retry w
    const result=await worker.dispatchSubscriptionRequestMail();assert.equal(result.sent,mismatch?0:1);assert.equal(calls.filter(c=>c.name==='finish_subscription_request_mail').length,mismatch?0:1);
   }
  }finally{globalThis.fetch=oldFetch;if(oldOrigin===undefined)delete process.env.MAM_N8N_LEAVE_WEBHOOK_ORIGIN;else process.env.MAM_N8N_LEAVE_WEBHOOK_ORIGIN=oldOrigin;if(oldSecret===undefined)delete process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET;else process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET=oldSecret;}
+});
+
+test('mail cron accepts only its separately scoped credential',async()=>{
+ const oldCron=process.env.CRON_SECRET,oldScoped=process.env.MAM_SUBSCRIPTION_REQUEST_CRON_SECRET;process.env.CRON_SECRET='synthetic-other-worker';process.env.MAM_SUBSCRIPTION_REQUEST_CRON_SECRET='synthetic-subscription-worker';let calls=0;
+ try{const route=loadModule('src/app/api/cron/subscription-requests/route.ts',{'@/lib/subscription-request-mail':{dispatchSubscriptionRequestMail:async()=>{calls++;return {ok:true,claimed:0,sent:0};}}});
+ for(const token of ['',process.env.CRON_SECRET])assert.equal((await route.GET(new Request('https://example.test/api/cron/subscription-requests',{headers:{authorization:'Bearer '+token}}))).status,401);
+ assert.equal(calls,0);assert.equal((await route.GET(new Request('https://example.test/api/cron/subscription-requests',{headers:{authorization:'Bearer '+process.env.MAM_SUBSCRIPTION_REQUEST_CRON_SECRET}}))).status,200);assert.equal(calls,1);
+ }finally{if(oldCron===undefined)delete process.env.CRON_SECRET;else process.env.CRON_SECRET=oldCron;if(oldScoped===undefined)delete process.env.MAM_SUBSCRIPTION_REQUEST_CRON_SECRET;else process.env.MAM_SUBSCRIPTION_REQUEST_CRON_SECRET=oldScoped;}
 });

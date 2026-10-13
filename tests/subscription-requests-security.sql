@@ -64,6 +64,33 @@ rollback;
 
 begin;
 \ir unified-role-fixture.sql
+update private.subscription_request_config set enabled=true;
+select pg_temp.set_test_actor('a1000000-0000-4000-8000-000000000013');
+set local role authenticated;
+select set_config('mam.sr_free_record',public.create_subscription_v4(
+  'Synthetic free service','Free plan','free',null,null,null,1,false,null,
+  null,'a1000000-0000-4000-8000-000000000013','mam','{}'::uuid[])::text,true);
+do $$ declare r jsonb:=current_setting('mam.sr_free_record')::jsonb; result jsonb; begin
+  result:=public.update_subscription_v4((r->>'subscription_id')::uuid,(r->>'version')::bigint,
+    'Synthetic renamed free service','Updated free plan','active','free',null,null,null,2,false,null,
+    null,'a1000000-0000-4000-8000-000000000013','mam','{}'::uuid[]);
+  perform set_config('mam.sr_free_record',result::text,true);
+end $$;
+reset role;
+do $$ declare r jsonb:=current_setting('mam.sr_free_record')::jsonb; begin
+  assert (select service_name='Synthetic renamed free service' and plan_name='Updated free plan'
+    and pricing_model='free' and amount_cents is null and version=(r->>'version')::bigint
+    from private.subscription_register where id=(r->>'subscription_id')::uuid),
+    'Free subscriptions must be added and edited directly';
+  assert not exists(select 1 from private.subscription_requests);
+  assert not exists(select 1 from private.subscription_request_events);
+  assert not exists(select 1 from private.subscription_request_notifications);
+end $$;
+rollback;
+\echo PASS: free subscriptions are added and edited directly without requests, approvals or application mail
+
+begin;
+\ir unified-role-fixture.sql
 select pg_temp.set_test_actor('a1000000-0000-4000-8000-000000000013');
 set local role authenticated;
 select set_config('mam.sr_gate_record',public.create_subscription_v4(
@@ -79,6 +106,11 @@ do $$ declare r jsonb:=current_setting('mam.sr_gate_record')::jsonb; id uuid:=(r
     perform public.update_subscription_v4(id,version,'Replacement paid service','Existing plan','active','paid','annual',12000,null,1,false,null,
       date '2026-01-01','a1000000-0000-4000-8000-000000000013','mam','{}'::uuid[]);
     raise exception 'Legacy service-identity update bypassed the request boundary';
+  exception when object_not_in_prerequisite_state then null; end;
+  begin
+    perform public.update_subscription_v4(id,version,'Replacement paid service','Replacement plan','active','free',null,null,null,1,false,null,
+      null,'a1000000-0000-4000-8000-000000000013','mam','{}'::uuid[]);
+    raise exception 'Paid-to-free update bypassed the request boundary';
   exception when object_not_in_prerequisite_state then null; end;
   begin
     perform public.update_subscription_v4(id,version,'Synthetic existing paid service','Existing plan','active','paid','annual',12000,null,1,false,null,

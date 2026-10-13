@@ -128,7 +128,7 @@ test('Account preview uses comparison-only payroll and no other-owner write cont
   const people = component(tree,'PeopleOperationsDemo').props;
   assert.equal(people.activeProfile.accessRole,'account');
   assert.equal(people.renderEmployeeDirectory.type,'EmployeeTeamDirectory');
-  assert.equal(people.renderCheckInTasks().props.previewPersonId,targetId);
+  assert.equal(component(people.renderCheckInTasks(),'CheckInTasks').props.previewPersonId,targetId);
   assert.ok(!people.renderAccounts && !people.renderAssetRegister && !people.renderSubscriptionRegister);
   component(tree,'HomeView').props.onNavigate('leave','balance'); tree = ui.render();
   const leave = component(tree,'LeaveView').props;
@@ -159,7 +159,9 @@ test('Manager check-in controls do not inherit P0 employment decisions',async()=
 test('Team member and Account keep their own target-scoped check-in tasks',async()=>{
   for(const role of ['employee','account']){
     const ui=portal({targetRole:role});await ui.settle();ui.select(targetId);const tree=await ui.settle();
-    const tasks=component(tree,'PeopleOperationsDemo').props.renderCheckInTasks();
+    const taskTree=component(tree,'PeopleOperationsDemo').props.renderCheckInTasks();
+    assert.equal(component(taskTree,'SubscriptionRequestTasks'),undefined);
+    const tasks=component(taskTree,'CheckInTasks');
     assert.equal(tasks.props.previewPersonId,targetId);
     assert.equal(tasks.props.showCheckInTasks,true);
   }
