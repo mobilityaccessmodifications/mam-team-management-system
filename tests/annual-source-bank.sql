@@ -9,6 +9,7 @@ DO $$ BEGIN
 END $$;
 BEGIN;
 \ir sql-test-auth.sql
+CREATE FUNCTION pg_temp.source_continuous() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT to_regprocedure('private.annual_leave_accounting_day(uuid,date)') IS NOT NULL; $$;
 CREATE FUNCTION pg_temp.source_person(p_number integer) RETURNS uuid LANGUAGE sql IMMUTABLE AS $$
   SELECT ('98000000-0000-4000-8000-' || lpad(p_number::text,12,'0'))::uuid;
 $$;
@@ -113,8 +114,8 @@ END $$;
 SAVEPOINT unknown_calendar;
 DELETE FROM private.leave_payroll_calendars WHERE person_id=pg_temp.source_person(9);
 DO $$ BEGIN
-  ASSERT private.leave_payroll_day_hours(pg_temp.source_request(9),'2026-09-25') IS NULL, 'Unknown calendar must not guess holiday applicability';
-  ASSERT private.payroll_request_hours_after(pg_temp.source_request(9),'2026-09-24') IS NULL, 'Aggregate propagates uncertain day';
+  ASSERT private.leave_payroll_day_hours(pg_temp.source_request(9),'2026-09-25') IS NOT DISTINCT FROM CASE WHEN pg_temp.source_continuous() THEN 7.6 END, 'Annual weekday default is owner-confirmed only for continuous accrual';
+  ASSERT private.payroll_request_hours_after(pg_temp.source_request(9),'2026-09-24') IS NOT DISTINCT FROM CASE WHEN pg_temp.source_continuous() THEN 7.6 END, 'Aggregate follows its annual calendar contract';
 END $$;
 ROLLBACK TO unknown_calendar;
 \echo PASS: effective weekend policy; Victoria holiday; unknown and none calendars
@@ -139,8 +140,9 @@ DO $$ DECLARE c jsonb; BEGIN
   ASSERT private.approved_leave_hours_after(pg_temp.source_person(5),ARRAY['Annual leave'],'2026-10-01')=0, 'Ordinary unpaid request never debits annual bank';
   ASSERT (SELECT hours FROM private.employee_annual_leave_balances WHERE person_id=pg_temp.source_person(5))=20.5;
   c:=private.calculate_leave_entitlement(pg_temp.source_person(5),'annual','2026-10-07');
-  ASSERT c->>'status'='needs_review', 'Unreviewed unpaid absence is not confirmed actual service';
-  ASSERT (c->>'reviewDate')::date='2026-10-05';
+  ASSERT c->>'status'=CASE WHEN pg_temp.source_continuous() THEN 'current' ELSE 'needs_review' END, 'Annual unpaid service follows the applicable owner-confirmed rule';
+  ASSERT (c->>'reviewDate')::date IS NOT DISTINCT FROM CASE WHEN NOT pg_temp.source_continuous() THEN date '2026-10-05' END;
+  IF pg_temp.source_continuous() THEN ASSERT abs((c->>'earned')::numeric-22.8/13)<0.000000000001; END IF;
   ASSERT (c->>'taken')::numeric=0, 'Unpaid uncertainty never becomes annual consumption';
   c:=private.calculate_leave_entitlement(pg_temp.source_person(6),'annual','2026-10-07');
   ASSERT c->>'status'='current', 'Known paid personal service does not pause annual entitlement';
@@ -185,11 +187,11 @@ VALUES(pg_temp.source_request(10),pg_temp.source_person(10),pg_temp.source_perso
   'approved',now(),'historical_import',repeat('a',64),'full_time','paid_entitlement');
 DO $$ DECLARE c jsonb; p jsonb; BEGIN
   c:=private.calculate_leave_entitlement(pg_temp.source_person(10),'annual','2026-10-07');
-  ASSERT c->>'status'='needs_review' AND c->>'eligibilityStatus'='current', 'Unconfirmed paid annual usage does not stop eligible ordinary service';
-  ASSERT (c->>'reviewDate')::date='2026-10-05';
+  ASSERT c->>'status'=CASE WHEN pg_temp.source_continuous() THEN 'current' ELSE 'needs_review' END AND c->>'eligibilityStatus'='current', 'Paid annual service accrues independently of routine review availability';
+  ASSERT (c->>'reviewDate')::date IS NOT DISTINCT FROM CASE WHEN NOT pg_temp.source_continuous() THEN date '2026-10-05' END;
   ASSERT (c->>'asOf')::date='2026-10-07';
   ASSERT abs((c->>'earned')::numeric-30.4/13)<0.000000000001;
-  ASSERT (c->>'taken')::numeric=0, 'Approval is not manufactured actual usage';
+  ASSERT (c->>'taken')::numeric=CASE WHEN pg_temp.source_continuous() THEN 7.6 ELSE 0 END, 'Completed approved usage follows the adopted accounting rule';
   p:=private.project_annual_leave_balance(pg_temp.source_person(10),'2026-10-08');
   ASSERT p->>'status'='projected';
   ASSERT (p->>'approvedHours')::numeric=7.6;
@@ -231,15 +233,15 @@ INSERT INTO private.leave_accrual_day_reviews(person_id,service_date,annual_elig
 VALUES(pg_temp.source_person(5),'2026-10-06',7.6,7.6,7.6,0,private.leave_accrual_request_fingerprint(pg_temp.source_person(5),'2026-10-06'),'Synthetic actual approved annual usage after separate service hold',pg_temp.source_person(900));
 DO $$ DECLARE c jsonb; p jsonb; BEGIN
   c:=private.calculate_leave_entitlement(pg_temp.source_person(5),'annual','2026-10-07');
-  ASSERT c->>'status'='needs_review' AND c->>'eligibilityStatus'='needs_review';
-  ASSERT (c->>'reviewDate')::date='2026-10-05';
-  ASSERT (c->>'asOf')::date='2026-10-04';
+  ASSERT c->>'status'=CASE WHEN pg_temp.source_continuous() THEN 'current' ELSE 'needs_review' END AND c->>'eligibilityStatus'=CASE WHEN pg_temp.source_continuous() THEN 'current' ELSE 'needs_review' END;
+  ASSERT (c->>'reviewDate')::date IS NOT DISTINCT FROM CASE WHEN NOT pg_temp.source_continuous() THEN date '2026-10-05' END;
+  ASSERT (c->>'asOf')::date=CASE WHEN pg_temp.source_continuous() THEN date '2026-10-07' ELSE date '2026-10-04' END;
   ASSERT (c->>'taken')::numeric=9.6, 'Actual usage remains charged across the unpaid service hold';
   ASSERT (c->>'usageThroughDate')::date='2026-10-07';
   p:=private.project_annual_leave_balance(pg_temp.source_person(5),'2026-10-08');
   ASSERT (p->>'approvedHours')::numeric=7.6;
   ASSERT (p->>'otherTakenHours')::numeric=2, 'Later approved usage does not erase earlier unrelated actual usage';
-  ASSERT abs((p->>'availableHours')::numeric-(20.5+7.6/13-7.6-2))<0.000000000001;
+  ASSERT abs((p->>'availableHours')::numeric-(20.5+CASE WHEN pg_temp.source_continuous() THEN 22.8/13 ELSE 7.6/13 END-7.6-2))<0.000000000001;
 END $$;
 SAVEPOINT source_bank_extra_after_hold;
 INSERT INTO private.leave_accrual_day_reviews(person_id,service_date,annual_eligible_hours,personal_eligible_hours,annual_taken_hours,personal_taken_hours,request_fingerprint,note,actor_user_id)
@@ -247,10 +249,10 @@ VALUES(pg_temp.source_person(5),'2026-10-06',7.6,7.6,10.6,0,private.leave_accrua
 DO $$ DECLARE c jsonb; p jsonb; BEGIN
   c:=private.calculate_leave_entitlement(pg_temp.source_person(5),'annual','2026-10-07');
   ASSERT (c->>'taken')::numeric=12.6, 'Extra confirmed usage after a hold is still deducted';
-  ASSERT (c->>'asOf')::date='2026-10-04', 'Usage does not falsely advance eligible service';
+  ASSERT (c->>'asOf')::date=CASE WHEN pg_temp.source_continuous() THEN date '2026-10-07' ELSE date '2026-10-04' END, 'Usage does not falsely advance eligible service';
   p:=private.project_annual_leave_balance(pg_temp.source_person(5),'2026-10-08');
   ASSERT (p->>'otherTakenHours')::numeric=5;
-  ASSERT abs((p->>'availableHours')::numeric-(20.5+7.6/13-7.6-5))<0.000000000001;
+  ASSERT abs((p->>'availableHours')::numeric-(20.5+CASE WHEN pg_temp.source_continuous() THEN 22.8/13 ELSE 7.6/13 END-7.6-5))<0.000000000001;
 END $$;
 ROLLBACK TO source_bank_extra_after_hold;
 UPDATE public.leave_requests SET status='cancelled' WHERE id=pg_temp.source_request(50);
@@ -258,6 +260,9 @@ DO $$ DECLARE c jsonb; p jsonb; BEGIN
   c:=private.calculate_leave_entitlement(pg_temp.source_person(5),'annual','2026-10-07');
   ASSERT c->>'status'='needs_review';
   p:=private.project_annual_leave_balance(pg_temp.source_person(5),'2026-10-08');
+  IF pg_temp.source_continuous() THEN
+   ASSERT (c->>'taken')::numeric=9.6, 'Completed cancellation retains accounted usage while its review fingerprint is stale';
+  END IF;
   ASSERT p->>'status'='unavailable' AND p->>'availableHours' IS NULL, 'Stale usage after an eligibility hold fails closed';
   ASSERT (p->>'payrollHours')::numeric=20.5;
 END $$;

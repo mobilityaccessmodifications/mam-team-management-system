@@ -1,5 +1,6 @@
 \set ON_ERROR_STOP on
 \ir sql-test-auth.sql
+create function pg_temp.closing_continuous() returns boolean language sql stable as $$ select to_regprocedure('private.annual_leave_retained_usage(uuid)') is not null; $$;
 insert into auth.users(id,email,email_confirmed_at) values
 ('96000000-0000-4000-8000-000000000001','closing-admin@example.test',now()),
 ('96000000-0000-4000-8000-000000000002','closing-a@example.test',now()),
