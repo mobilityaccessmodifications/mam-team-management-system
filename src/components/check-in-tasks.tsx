@@ -138,7 +138,7 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
   const [statusFilter, setStatusFilter] = useState("all");
   const [sort, setSort] = useState("date");
   const [notesBusy, setNotesBusy] = useState(false);
-  const [notesDirty, setNotesDirty] = useState(false);
+  const [notesBlocked, setNotesBlocked] = useState(true);
   const pending = useRef(false);
   const generation = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -210,7 +210,7 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
   useDialogFocus(Boolean(selected) && mobile, dialogRef, null, close, searchRef);
 
   async function completeCheckIn(task: CheckInTask) {
-    if (readOnly || pending.current || busy || notesDirty || !task.canComplete) return;
+    if (readOnly || pending.current || busy || notesBlocked || !task.canComplete) return;
     pending.current = true;
     setPendingId(task.reminderId);
     setError(""); setNotice("");
@@ -245,7 +245,7 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
       <div className={styles.taskList} aria-label="Task records">
         {loading || subscriptions.loading ? <div className={styles.loading}><MotionLoader label="Loading tasks" /></div> : null}
         {!visibleTasks.length && !loading && !subscriptions.loading ? <div className={styles.empty}><ListChecks size={22} aria-hidden="true" /><strong>{tasks.length ? "No tasks match these filters." : "No tasks need your action."}</strong></div> : null}
-        {visibleTasks.map((task) => <button className={styles.taskRow} type="button" key={task.key} data-selected={task.key === selected?.key} aria-current={task.key === selected?.key ? "true" : undefined} aria-label={`Open ${task.name}'s ${task.title}`} disabled={busy} onClick={() => setSelectedKey(task.key)}>
+        {visibleTasks.map((task) => <button className={styles.taskRow} type="button" key={task.key} data-selected={task.key === selected?.key} aria-current={task.key === selected?.key ? "true" : undefined} aria-label={`Open ${task.name}'s ${task.title}`} disabled={busy} onClick={() => { if (task.key !== selectedKey) { setNotesBlocked(true); setSelectedKey(task.key); } }}>
           <span className={styles.taskIdentity}><strong>{task.name}</strong><span>{task.title}</span><small>{task.schedule ? "Submitted" : "Due"} {formatDate(task.date)}</small></span>
           <span className={styles.rowStatus} data-status={task.status}>{task.status === "needs_review" ? <CircleAlert size={14} aria-hidden="true" /> : null}{statusLabel(task.status)}</span><ChevronRight size={16} className={styles.chevron} aria-hidden="true" />
         </button>)}
@@ -259,10 +259,10 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
             <dl className={styles.facts}><div><dt>{selected.schedule ? "Submitted" : "Due date"}</dt><dd>{formatDate(selected.date)}</dd></div><div><dt>Status</dt><dd><span className={styles.rowStatus} data-status={selected.status}>{statusLabel(selected.status)}</span></dd></div>{selected.checkIn ? <div><dt>Employee</dt><dd>{selected.name}</dd></div> : null}{selected.subscription ? <div><dt>Service</dt><dd>{selected.name}</dd></div> : null}</dl>
             {selected.checkIn?.status === "needs_review" ? <div className={styles.reviewPanel}><strong>{reviewReasonCopyFor(selected.checkIn).title}</strong><p>{reviewReasonCopyFor(selected.checkIn).detail}</p><small>{reviewReasonCopyFor(selected.checkIn).nextStep}</small></div> : null}
             {selected.schedule ? <><dl className={styles.scheduleFacts}><div><dt>Current schedule</dt><dd>{scheduleSummary(selected.schedule.originalWorkingWeekdays, selected.schedule.originalWorkingDayTimes)}</dd></div><div><dt>Requested schedule</dt><dd>{scheduleSummary(selected.schedule.requestedWorkingWeekdays, selected.schedule.requestedWorkingDayTimes)}</dd></div><div><dt>Request reason</dt><dd>{selected.schedule.requestReason}</dd></div><div><dt>Submitted by</dt><dd>{selected.schedule.submittedByName}</dd></div></dl></> : null}
-            <TaskNotesEditor key={`${selected.key}:${previewPersonId ?? "self"}`} target={selected.target} previewPersonId={previewPersonId} readOnly={notesReadOnly} drafts={drafts} onBusyChange={setNotesBusy} onDirtyChange={setNotesDirty} />
-            {!readOnly && selected.checkIn ? <div className={styles.detailActions}><button className={toolbar.primary} type="button" disabled={busy || notesDirty || !selected.checkIn.canComplete} aria-busy={pendingId === selected.checkIn.reminderId} aria-label={`Mark ${selected.name}'s ${selected.title} complete`} onClick={() => void completeCheckIn(selected.checkIn!)}><CalendarCheck2 size={17} aria-hidden="true" />{pendingId ? "Completing…" : "Complete check-in"}</button></div> : null}
-            {!notesReadOnly && selected.subscription ? <div className={styles.detailActions}><button className={toolbar.primary} type="button" disabled={busy || notesDirty || !selected.subscription.canComplete} aria-busy={subscriptions.pendingId === selected.subscription.subscriptionId} aria-label={`Mark ${selected.name}'s subscription review done`} onClick={() => subscriptions.complete(selected.subscription!)}><CheckCircle2 size={17} aria-hidden="true" />{subscriptions.pendingId ? "Completing…" : "Done"}</button></div> : null}
-            {!readOnly && selected.schedule && selected.canReview && onScheduleReview ? <ScheduleDecision key={selected.key} task={selected} blocked={busy || notesDirty} onBusyChange={setNotesBusy} onReview={onScheduleReview} onSaved={(message) => { setNotice(message); setSelectedKey(""); searchRef.current?.focus(); }} /> : null}
+            <TaskNotesEditor key={`${selected.key}:${previewPersonId ?? "self"}`} target={selected.target} previewPersonId={previewPersonId} readOnly={notesReadOnly} blocked={busy} drafts={drafts} onBusyChange={setNotesBusy} onActionsBlockedChange={setNotesBlocked} />
+            {!readOnly && selected.checkIn ? <div className={styles.detailActions}><button className={toolbar.primary} type="button" disabled={busy || notesBlocked || !selected.checkIn.canComplete} aria-busy={pendingId === selected.checkIn.reminderId} aria-label={`Mark ${selected.name}'s ${selected.title} complete`} onClick={() => void completeCheckIn(selected.checkIn!)}><CalendarCheck2 size={17} aria-hidden="true" />{pendingId ? "Completing…" : "Complete check-in"}</button></div> : null}
+            {!notesReadOnly && selected.subscription ? <div className={styles.detailActions}><button className={toolbar.primary} type="button" disabled={busy || notesBlocked || !selected.subscription.canComplete} aria-busy={subscriptions.pendingId === selected.subscription.subscriptionId} aria-label={`Mark ${selected.name}'s subscription review done`} onClick={() => { if (!busy && !notesBlocked) void subscriptions.complete(selected.subscription!); }}><CheckCircle2 size={17} aria-hidden="true" />{subscriptions.pendingId ? "Completing…" : "Done"}</button></div> : null}
+            {!readOnly && selected.schedule && selected.canReview && onScheduleReview ? <ScheduleDecision key={selected.key} task={selected} blocked={busy || notesBlocked} onBusyChange={setNotesBusy} onReview={onScheduleReview} onSaved={(message) => { setNotice(message); setSelectedKey(""); searchRef.current?.focus(); }} /> : null}
           </div>
         </section>
       </> : <div className={styles.emptyDetail}><ListChecks size={26} aria-hidden="true" /><strong>Select a task</strong></div>}
