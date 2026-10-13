@@ -18,6 +18,15 @@ SUBSCRIPTION = ROOT / ('supabase/migrations/' + SUBSCRIPTION_VERSION + '_' + SUB
 SUBSCRIPTION_SHA = '6d342d3068c4d6e2eca7c17d573d7793fc78269db2bf0fa6976041c16c37f24e'
 SUBSCRIPTION_ARRAY_SHA = '8bebd98702d502f2f29d71d3c67e6be1b7f3aade4998873ff9d46ff7043d22d7'
 SUBSCRIPTION_FIELDS = ('subscriptionExact', 'subscriptionFunctionsExact', 'subscriptionStateHash')
+NOTE_VERSION = '20261013180000'
+NOTE_NAME = 'leave_required_employee_note'
+NOTE = ROOT / ('supabase/migrations/' + NOTE_VERSION + '_' + NOTE_NAME + '.sql')
+NOTE_SHA = 'ef93a9df381fca2ce4bfa932ff5b9359fadd85ea2b413f0bc8ee8559b0fd9fc0'
+NOTE_ARRAY_SHA = '5136be7f2fe371c2e48653e9973101f4de0b914346d6009eeb4210d782f456b6'
+NOTE_SIGNATURE = 'private.enforce_leave_request_employment_policy()'
+NOTE_BEFORE_SHA = '6535b99e6244c42999825fd79262d29623e109f7af701810dcf4b6b410ff9819'
+NOTE_AFTER_SHA = '129ff4a64cf0d48c021424e2f95562cee499b9c2baad32586885e6c29f03d4dc'
+NOTE_FIELDS = ('noteExact', 'noteFunctionsExact', 'noteStateHash')
 SUBSCRIPTION_SIGNATURES = {
     'private.record_subscription_review(uuid,bigint)', 'public.mark_subscription_reviewed_v2(uuid,bigint)',
     'public.list_my_subscription_review_tasks()', 'public.list_subscription_review_tasks_for_preview(uuid)',
@@ -52,18 +61,19 @@ annual = importlib.util.module_from_spec(spec)
 exec(compile(annual_raw, str(ADAPTER), 'exec'), annual.__dict__)
 sha = annual.sha
 PHASES, ANNUAL, ANNUAL_VERSION, ANNUAL_NAME, ANNUAL_ARRAY_SHA = annual.PHASES, annual.ANNUAL, annual.ANNUAL_VERSION, annual.ANNUAL_NAME, annual.ANNUAL_ARRAY_SHA
-IMMUTABLE = dict(annual.IMMUTABLE, **{str(ADAPTER.relative_to(ROOT)): ADAPTER_SHA, str(SUBSCRIPTION.relative_to(ROOT)): SUBSCRIPTION_SHA})
+IMMUTABLE = dict(annual.IMMUTABLE, **{str(ADAPTER.relative_to(ROOT)): ADAPTER_SHA, str(SUBSCRIPTION.relative_to(ROOT)): SUBSCRIPTION_SHA, str(NOTE.relative_to(ROOT)): NOTE_SHA})
 
 
 class AfterSubscriptionReviewAdapter(annual.AfterAnnualAdapter):
-    def __init__(self, phase, head, adapter_sha, helper_sha, guarded_sha, transport_sha, source_sha, annual_sha, wrapper_sha, subscription_sha):
-        require(adapter_sha == ADAPTER_SHA and subscription_sha == SUBSCRIPTION_SHA and re.fullmatch('[0-9a-f]{64}', wrapper_sha or '') is not None, 'Explicit exact wrapper/subscription/core pins required')
+    def __init__(self, phase, head, adapter_sha, helper_sha, guarded_sha, transport_sha, source_sha, annual_sha, wrapper_sha, subscription_sha, note_sha):
+        require(adapter_sha == ADAPTER_SHA and subscription_sha == SUBSCRIPTION_SHA and note_sha == NOTE_SHA and re.fullmatch('[0-9a-f]{64}', wrapper_sha or '') is not None, 'Explicit exact wrapper/subscription/note/core pins required')
         super().__init__(phase, head, adapter_sha, helper_sha, guarded_sha, transport_sha, source_sha, annual_sha)
-        for path, pin in ((WRAPPER, wrapper_sha), (SUBSCRIPTION, subscription_sha)):
+        for path, pin in ((WRAPPER, wrapper_sha), (SUBSCRIPTION, subscription_sha), (NOTE, note_sha)):
             raw = annual.source_snapshot(path)
-            require(sha(raw) == pin, 'Reviewed wrapper/subscription bytes differ')
+            require(sha(raw) == pin, 'Reviewed wrapper/subscription/note bytes differ')
             self.pins[path], self.raw[path] = pin, raw
         self.load_subscription()
+        self.load_note()
         self.check_custody()
 
     def load_subscription(self):
@@ -82,6 +92,22 @@ class AfterSubscriptionReviewAdapter(annual.AfterAnnualAdapter):
             require(set(portable) == {'owner', 'acl', 'security_definer', 'config'}, 'Complete published subscription portable metadata required')
             self.subscription_functions[signature] = {'after': after, 'portable': portable}
 
+    def load_note(self):
+        require(sha(self.raw[NOTE]) == NOTE_SHA, 'Exact published note source required')
+        section = self.raw[NOTE].decode().split('insert into required_note_function_spec values\n', 1)[1].split('\ndo $required_note_predecessor$', 1)[0]
+        expected = '(' + ','.join(self.helper.literal(value) for value in (NOTE_SIGNATURE, NOTE_BEFORE_SHA, NOTE_AFTER_SHA)) + ');'
+        require(section == expected, 'Exact singleton published note definition required')
+        self.note_function = {'after': NOTE_AFTER_SHA, 'portable': {'owner': 'postgres', 'acl': '{postgres=X/postgres}', 'security_definer': True, 'config': ['search_path=""']}}
+
+    def note_expression(self):
+        literal = self.helper.literal
+        source = self.raw[NOTE].decode()
+        portable = "jsonb_build_object('owner',pg_get_userbyid(p.proowner),'acl',p.proacl::text,'security_definer',p.prosecdef,'config',p.proconfig)"
+        expected = literal(json.dumps(self.note_function['portable'], separators=(',', ':'), allow_nan=False)) + '::jsonb'
+        function = "coalesce((select encode(extensions.digest(pg_get_functiondef(p.oid),'sha256'),'hex') is not distinct from " + literal(self.note_function['after']) + ' and ' + portable + ' is not distinct from ' + expected + ' from pg_proc p where p.oid=to_regprocedure(' + literal(NOTE_SIGNATURE) + ')),false)'
+        metadata = "(to_jsonb(p)-array['prosrc','prosqlbody','proargdefaults'])||jsonb_build_object('parameter_defaults',pg_get_expr(p.proargdefaults,0))"
+        return "jsonb_build_object('noteExact',coalesce((select name=" + literal(NOTE_NAME) + " and array_dims(statements)='[1:1]' and cardinality(statements)=1 and statements=ARRAY[" + literal(source) + ']::text[] from supabase_migrations.schema_migrations where version=' + literal(NOTE_VERSION) + "),false),'noteFunctionsExact'," + function + ",'noteStateHash',encode(extensions.digest((select jsonb_build_object('definition',pg_get_functiondef(p.oid),'metadata'," + metadata + ') from pg_proc p where p.oid=to_regprocedure(' + literal(NOTE_SIGNATURE) + "))::text,'sha256'),'hex'))"
+
     def supplementary_expression(self):
         literal = self.helper.literal
         source = self.raw[SUBSCRIPTION].decode()
@@ -92,7 +118,7 @@ class AfterSubscriptionReviewAdapter(annual.AfterAnnualAdapter):
             expected = literal(json.dumps(item['portable'], separators=(',', ':'), allow_nan=False)) + '::jsonb'
             clauses.append("coalesce((select encode(extensions.digest(pg_get_functiondef(p.oid),'sha256'),'hex') is not distinct from " + literal(item['after']) + ' and ' + portable + ' is not distinct from ' + expected + ' from pg_proc p where p.oid=to_regprocedure(' + literal(signature) + ')),false)')
         expression = "jsonb_build_object('subscriptionExact',coalesce((select name=" + literal(SUBSCRIPTION_NAME) + " and array_dims(statements)='[1:1]' and cardinality(statements)=1 and statements=ARRAY[" + literal(source) + ']::text[] from supabase_migrations.schema_migrations where version=' + literal(SUBSCRIPTION_VERSION) + "),false),'subscriptionFunctionsExact',(" + ' and '.join(clauses) + "),'subscriptionStateHash',encode(extensions.digest((select jsonb_object_agg(signature,jsonb_build_object('definition',pg_get_functiondef(p.oid),'metadata',(to_jsonb(p)-array['prosrc','prosqlbody','proargdefaults'])||jsonb_build_object('parameter_defaults',pg_get_expr(p.proargdefaults,0)))) from unnest(array[" + signatures + "]::text[]) signature join pg_proc p on p.oid=to_regprocedure(signature))::text,'sha256'),'hex'))"
-        return '(' + super().supplementary_expression() + ') || (' + expression + ')'
+        return '(' + super().supplementary_expression() + ') || (' + expression + ') || (' + self.note_expression() + ')'
 
     def subscription_state(self, frame):
         require(isinstance(frame, dict) and all(field in frame for field in SUBSCRIPTION_FIELDS), 'Complete native subscription snapshot required')
@@ -103,27 +129,37 @@ class AfterSubscriptionReviewAdapter(annual.AfterAnnualAdapter):
         require(rows == [{'version': SUBSCRIPTION_VERSION, 'name': SUBSCRIPTION_NAME, 'dimensions': '[1:1]', 'cardinality': 1, 'sourceSha256': SUBSCRIPTION_ARRAY_SHA}], 'Exact full published subscription ledger row required')
         return {field: frame[field] for field in SUBSCRIPTION_FIELDS}
 
+    def note_state(self, frame):
+        require(isinstance(frame, dict) and all(field in frame for field in NOTE_FIELDS), 'Complete native note snapshot required')
+        require(frame['noteExact'] is True and frame['noteFunctionsExact'] is True, 'Exact published note source/definition/metadata required')
+        require(isinstance(frame['noteStateHash'], str) and re.fullmatch('[0-9a-f]{64}', frame['noteStateHash']) is not None, 'Invalid protected note hash')
+        rows = [row for row in frame.get('ledger', []) if row.get('version') == NOTE_VERSION]
+        require(len(rows) == 1 and type(rows[0].get('cardinality')) is int, 'Exact integer note array cardinality required')
+        require(rows == [{'version': NOTE_VERSION, 'name': NOTE_NAME, 'dimensions': '[1:1]', 'cardinality': 1, 'sourceSha256': NOTE_ARRAY_SHA}], 'Exact full published note ledger row required')
+        return {field: frame[field] for field in NOTE_FIELDS}
+
     def annual_state(self, frame):
-        return dict(super().annual_state(frame), **self.subscription_state(frame))
+        return dict(super().annual_state(frame), **self.subscription_state(frame), **self.note_state(frame))
 
     def validation_projection(self, frame):
         self.subscription_state(frame)
-        projection = {key: value for key, value in super().validation_projection(frame).items() if key not in SUBSCRIPTION_FIELDS}
-        projection['ledger'] = [row for row in projection['ledger'] if row['version'] != SUBSCRIPTION_VERSION]
+        self.note_state(frame)
+        projection = {key: value for key, value in super().validation_projection(frame).items() if key not in (*SUBSCRIPTION_FIELDS, *NOTE_FIELDS)}
+        projection['ledger'] = [row for row in projection['ledger'] if row['version'] not in (SUBSCRIPTION_VERSION, NOTE_VERSION)]
         return projection
 
     def validate_before(self, before, source):
-        fields = self.guarded.STATE_FIELDS | set(annual.ANNUAL_FIELDS) | set(SUBSCRIPTION_FIELDS)
+        fields = self.guarded.STATE_FIELDS | set(annual.ANNUAL_FIELDS) | set(SUBSCRIPTION_FIELDS) | set(NOTE_FIELDS)
         if self.phase != 'reporting-splice':
             fields = fields | {'predecessorFunctionsExact'}
-        require(isinstance(before, dict) and set(before) == fields, 'Exact full native subscription phase fields required')
+        require(isinstance(before, dict) and set(before) == fields, 'Exact full native subscription/note phase fields required')
         versions = [row['version'] for row in before['ledger']]
-        require(0 < len(versions) <= 512 and len(versions) == len(set(versions)) and versions == sorted(versions) and max(versions) == SUBSCRIPTION_VERSION, 'Only the exact published subscription latest predecessor admitted')
+        require(0 < len(versions) <= 512 and len(versions) == len(set(versions)) and versions == sorted(versions) and max(versions) == NOTE_VERSION, 'Only the exact published note latest predecessor admitted')
         with self.measured_reads():
             self.helper.validate_before(self.validation_projection(before), source)
 
     def run(self, args):
-        require(args.wrapper_sha == self.pins[WRAPPER] and args.subscription_sha == self.pins[SUBSCRIPTION], 'Entrypoint reviewed wrapper/subscription differs')
+        require(args.wrapper_sha == self.pins[WRAPPER] and args.subscription_sha == self.pins[SUBSCRIPTION] and args.note_sha == self.pins[NOTE], 'Entrypoint reviewed wrapper/subscription/note differs')
         return super().run(args)
 
 
@@ -131,7 +167,7 @@ def arguments(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('action', choices=('prepare', 'inspect', 'apply'))
     parser.add_argument('--phase', choices=tuple(PHASES), required=True)
-    for name in ('head', 'adapter-sha', 'helper-sha', 'guarded-sha', 'transport-sha', 'source-sha', 'annual-sha', 'wrapper-sha', 'subscription-sha'):
+    for name in ('head', 'adapter-sha', 'helper-sha', 'guarded-sha', 'transport-sha', 'source-sha', 'annual-sha', 'wrapper-sha', 'subscription-sha', 'note-sha'):
         parser.add_argument('--' + name, required=True)
     parser.add_argument('--snapshot', type=Path, required=True)
     parser.add_argument('--snapshot-sha')
@@ -143,7 +179,7 @@ def arguments(argv=None):
 
 def main(argv=None):
     args = arguments(argv)
-    adapter = AfterSubscriptionReviewAdapter(args.phase, args.head, args.adapter_sha, args.helper_sha, args.guarded_sha, args.transport_sha, args.source_sha, args.annual_sha, args.wrapper_sha, args.subscription_sha)
+    adapter = AfterSubscriptionReviewAdapter(args.phase, args.head, args.adapter_sha, args.helper_sha, args.guarded_sha, args.transport_sha, args.source_sha, args.annual_sha, args.wrapper_sha, args.subscription_sha, args.note_sha)
     return adapter.run(args)
 
 
