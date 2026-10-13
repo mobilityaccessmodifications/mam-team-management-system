@@ -7,6 +7,8 @@ import io
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -16,14 +18,54 @@ HELPER=ROOT/'scripts/deploy-archived-account-finalizer.py'
 SIGNATURE='public.finalise_portal_account_status_change(uuid,uuid,uuid)'
 
 
-def load_helper():
- if not HELPER.is_file():
+def load_helper(path=HELPER):
+ if not path.is_file():
   raise AssertionError('Required exact-source archived finalizer helper is missing')
- spec=importlib.util.spec_from_file_location('archived_finalizer_release',HELPER)
+ spec=importlib.util.spec_from_file_location('archived_finalizer_release',path)
  assert spec is not None and spec.loader is not None
  helper=importlib.util.module_from_spec(spec)
  spec.loader.exec_module(helper)
  return helper
+
+
+@contextlib.contextmanager
+def release_source_fixture():
+ paths=[HELPER.relative_to(ROOT),Path('scripts/deploy-staff-leave-calendar.py'),
+        Path('supabase/migrations/20261013081500_archived_account_status_finalizer.sql'),
+        Path('supabase/migrations/20261012170000_employee_removal_reporting_splice.sql')]
+ with tempfile.TemporaryDirectory(prefix='finalizer-source-unit-') as directory:
+  parent=Path(directory).resolve()
+  root=parent/'repo'
+  root.mkdir()
+  home=parent/'home'
+  home.mkdir()
+  for path in paths:
+   raw=(ROOT/path).read_bytes()
+   target=root/path
+   target.parent.mkdir(parents=True,exist_ok=True)
+   target.write_bytes(raw)
+   assert target.read_bytes()==raw
+  environment={'PATH':os.environ.get('PATH',os.defpath),'HOME':str(home),
+               'TMPDIR':tempfile.gettempdir(),'LANG':'C','LC_ALL':'C',
+               'GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':os.devnull}
+  with patch.dict(os.environ,environment,clear=True),patch.object(sys,'dont_write_bytecode',True),patch.dict(sys.modules):
+   def git(*args):
+    return subprocess.check_output(['git',*args],cwd=root)
+   git('-c','init.templateDir=','init','-q')
+   git('config','--local','user.name','mobilityaccessmodifications')
+   git('config','--local','user.email','310802599+mobilityaccessmodifications@users.noreply.github.com')
+   git('config','--local','core.autocrlf','false')
+   git('remote','add','origin','https://github.com/mobilityaccessmodifications/mam-team-management-system.git')
+   git('add','--',*map(str,paths))
+   git('commit','-q','-m','Synthetic archived finalizer source fixture')
+   head=git('rev-parse','HEAD').decode().strip()
+   helper=load_helper(root/HELPER.relative_to(ROOT))
+   cwd=Path.cwd()
+   os.chdir(root)
+   try:
+    yield helper,head
+   finally:
+    os.chdir(cwd)
 
 
 def before_frame():
@@ -259,20 +301,86 @@ class ArchivedFinalizerReleaseTests(unittest.TestCase):
     helper.main(args+['--attestation-sha',helper.sha(bad.read_bytes())])
 
  def test_actual_explicit_head_source_custody_rejects_before_transport(self):
-  helper=load_helper()
-  source_sha=helper.sha(helper.MIGRATION.read_bytes())
-  for head in [None,'a'*39,'0'*40]:
-   with patch.object(helper,'api',side_effect=AssertionError('Invalid head must reject before target lookup')) as api,patch.object(helper,'query',side_effect=AssertionError('Invalid head must reject before SQL')) as query,self.assertRaises(SystemExit):
-    helper.main(['apply','--source-sha',source_sha,'--snapshot',str(ROOT/'not-created-finalizer-snapshot.json'),'--helper-sha',helper.sha(HELPER.read_bytes())]+(['--head',head] if head else []))
-   api.assert_not_called()
-   query.assert_not_called()
-  raw=helper.MIGRATION.read_bytes()
-  with tempfile.TemporaryDirectory(prefix='finalizer-crlf-source-') as directory:
-   path=Path(directory)/'source.sql'
-   path.write_bytes(raw.replace(bytes([10]),bytes([13,10])))
-   with patch.object(helper,'MIGRATION',path),self.assertRaises(SystemExit):
-    helper.candidate(helper.sha(path.read_bytes()))
-  self.assertFalse((ROOT/'not-created-finalizer-snapshot.json').exists())
+  cwd,environment,bytecode,modules=Path.cwd(),dict(os.environ),sys.dont_write_bytecode,dict(sys.modules)
+  with release_source_fixture() as (helper,reviewed_head):
+   fixture=helper.ROOT
+   assert helper.__file__ is not None
+   helper_path=Path(helper.__file__)
+   source_sha=helper.sha(helper.MIGRATION.read_bytes())
+   helper_sha=helper.sha(helper_path.read_bytes())
+   paths=[helper_path,helper.MIGRATION,helper.PREDECESSOR,helper.TRANSPORT]
+   for path in paths:
+    self.assertEqual(path.read_bytes(),(ROOT/path.relative_to(fixture)).read_bytes())
+   def git(*args):
+    return subprocess.check_output(['git',*args],cwd=fixture)
+   args=['apply','--source-sha',source_sha,'--snapshot',str(fixture/'not-created-finalizer-snapshot.json'),'--helper-sha',helper_sha]
+   with patch.object(helper,'api',side_effect=AssertionError('Invalid custody must reject before target lookup')) as api,patch.object(helper,'query',side_effect=AssertionError('Invalid custody must reject before SQL')) as query:
+    helper.candidate(source_sha)
+    helper.clean_source(reviewed_head,source_sha,helper_sha)
+    for head in [None,'a'*39,'0'*40]:
+     with self.subTest(head=head),self.assertRaisesRegex(SystemExit,'Reviewed HEAD differs' if head=='0'*40 else 'Exact approved root and full reviewed HEAD required'):
+      helper.main(args+(['--head',head] if head else []))
+    valid_args=args+['--head',reviewed_head]
+    for source_pin,helper_pin in [('0'*64,helper_sha),(source_sha,None),(source_sha,'0'*64)]:
+     with self.subTest(source_pin=source_pin,helper_pin=helper_pin),self.assertRaises(SystemExit):
+      helper.clean_source(reviewed_head,source_pin,helper_pin)
+    os.chdir(fixture.parent)
+    try:
+     with self.assertRaisesRegex(SystemExit,'Exact approved root and full reviewed HEAD required'):
+      helper.main(valid_args)
+    finally:
+     os.chdir(fixture)
+    for path in [fixture/'unrelated-file',helper.MIGRATION]:
+     raw=path.read_bytes() if path.exists() else None
+     path.write_bytes((raw or b'')+b'\nsynthetic dirty source\n')
+     try:
+      self.assertTrue(git('status','--porcelain').strip())
+      with self.subTest(dirty=path.name),self.assertRaisesRegex(SystemExit,'Release tree must be clean'):
+       helper.clean_source(reviewed_head,source_sha,helper_sha)
+     finally:
+      path.unlink() if raw is None else path.write_bytes(raw)
+    for path,message in [(helper.MIGRATION,'Reviewed committed bytes differ'),(helper_path,'Reviewed committed bytes differ'),(helper.PREDECESSOR,'Committed predecessor bytes differ'),(helper.TRANSPORT,'Committed scoped transport bytes differ')]:
+     raw=path.read_bytes()
+     relative=str(path.relative_to(fixture))
+     git('update-index','--assume-unchanged','--',relative)
+     try:
+      path.write_bytes(raw+b'\n')
+      self.assertEqual(git('status','--porcelain'),b'')
+      self.assertNotEqual(git('show',reviewed_head+':'+relative),path.read_bytes())
+      with self.subTest(blob=relative),self.assertRaisesRegex(SystemExit,message):
+       helper.clean_source(reviewed_head,helper.sha(helper.MIGRATION.read_bytes()),helper.sha(helper_path.read_bytes()))
+     finally:
+      path.write_bytes(raw)
+      git('update-index','--no-assume-unchanged','--',relative)
+    git('remote','set-url','origin','https://github.com/example/synthetic.git')
+    try:
+     with self.assertRaisesRegex(SystemExit,'Wrong MAM Git remote'):
+      helper.main(valid_args)
+    finally:
+     git('remote','set-url','origin','https://github.com/mobilityaccessmodifications/mam-team-management-system.git')
+    with patch.dict(os.environ,{'PATH':str(fixture.parent/'home')}),self.assertRaises(FileNotFoundError) as missing:
+     helper.main(valid_args)
+    self.assertEqual(missing.exception.filename,'git')
+    raw=helper.MIGRATION.read_bytes()
+    with tempfile.TemporaryDirectory(prefix='finalizer-crlf-source-') as directory:
+     path=Path(directory)/'source.sql'
+     path.write_bytes(raw.replace(bytes([10]),bytes([13,10])))
+     with patch.object(helper,'MIGRATION',path),self.assertRaises(SystemExit):
+      helper.candidate(helper.sha(path.read_bytes()))
+    helper.clean_source(reviewed_head,source_sha,helper_sha)
+    git('config','--local','user.email','synthetic@example.invalid')
+    git('commit','--amend','--reset-author','--no-edit','-q')
+    rejected_head=git('rev-parse','HEAD').decode().strip()
+    with self.assertRaisesRegex(SystemExit,'Wrong MAM source author'):
+     helper.main(args+['--head',rejected_head])
+    api.assert_not_called()
+    query.assert_not_called()
+   self.assertFalse((fixture/'not-created-finalizer-snapshot.json').exists())
+  self.assertEqual(Path.cwd(),cwd)
+  self.assertEqual(dict(os.environ),environment)
+  self.assertEqual(sys.dont_write_bytecode,bytecode)
+  self.assertEqual(dict(sys.modules),modules)
+  self.assertFalse(fixture.parent.exists())
 
 
  def test_model_clean_source_requires_committed_transport_dependency_bytes(self):
