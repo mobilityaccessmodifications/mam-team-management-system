@@ -37,6 +37,7 @@ test('every HR onboarding and Check-In template uses one fixed MAM signature', (
     const milestone = name.includes('5-Month') ? '5-month' : name.includes('6-Month Casual') ? '6-month-casual' : name.includes('6-Month') ? '6-month' : input.milestone;
     const result = new Function('$input', node.parameters.jsCode)({ first: () => ({ json: { ...input, milestone } }) })[0];
     assert.equal(result.json.bodyContent.split(HR_EMAIL_SIGNATURE_HTML).length, 2, name);
+    assert.doesNotMatch(result.json.bodyContent, /mailto:|hr@mobilityaccess\.com\.au/, name);
     assert.match(result.json.bodyContent, /<p>Thanks,<br>(HR Manager|People Hub)<\/p>/);
   }
 });
@@ -44,5 +45,5 @@ test('every HR onboarding and Check-In template uses one fixed MAM signature', (
 test('signature logo is a real bundled image with a readable text fallback', () => {
   assert.equal(readFileSync(new URL('../public/email/mam-logo.jpg', import.meta.url)).subarray(0, 3).toString('hex'), 'ffd8ff');
   assert.match(HR_EMAIL_SIGNATURE_HTML, /alt="MAM – Mobility Access Modifications"/);
-  assert.match(HR_EMAIL_SIGNATURE_HTML, /mailto:hr@mobilityaccess\.com\.au/);
+  assert.doesNotMatch(HR_EMAIL_SIGNATURE_HTML, /mailto:|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
 });
