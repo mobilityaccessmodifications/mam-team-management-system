@@ -23,7 +23,7 @@ const expectedReads = sourceModules.map(relativePath => {
 }).sort((a, b) => a.path.localeCompare(b.path));
 
 for (const readError of [false, true]) {
-  test(`archive preflight ${readError ? 'read failure' : 'direct-report blocker'} uses the selected action and nested sources from a different cwd`, t => {
+  test(`archive preflight ${readError ? 'read failure' : 'protected reporting links'} uses the selected action and nested sources from a different cwd`, t => {
     const cwd = mkdtempSync(path.join(tmpdir(), 'mam-archive-source-root-'));
     try {
       assert.notEqual(realpathSync(cwd), sourceRoot);
@@ -82,9 +82,9 @@ for (const readError of [false, true]) {
         ok: false,
         message: readError
           ? "The employee's reporting links could not be checked. Refresh and try again."
-          : "Move or archive this employee's active direct reports first.",
+          : "Reporting links are protected while onboarding credential delivery is in progress or awaiting administrator review.",
       });
-      assert.deepEqual(observed.state, { mutations: [], reportReads: 1 });
+      assert.deepEqual(observed.state, { mutations: [], preflightReads: 1 });
       const reads = [...new Map(observed.sourceReads.map(row => [row.path, row])).values()]
         .sort((a, b) => a.path.localeCompare(b.path));
       assert.deepEqual(reads, expectedReads);

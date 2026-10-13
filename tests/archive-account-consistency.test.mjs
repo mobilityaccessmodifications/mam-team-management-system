@@ -14,7 +14,7 @@ const userId = "10000000-0000-4000-8000-000000000002";
 const actorId = "10000000-0000-4000-8000-000000000003";
 const changeToken = "10000000-0000-4000-8000-000000000004";
 
-function loadArchiveAction({ archiveOutcome, failInspection = false, providerTimeout = false, failFinalise = false, reports = [], reportReadError = null, reportReadThrows = false, malformedReportData = false, linkedUserId = userId, existingDisable = false, authError = null }) {
+function loadArchiveAction({ archiveOutcome, failInspection = false, providerTimeout = false, failFinalise = false, reports = [], reportReadError = null, reportReadThrows = false, malformedReportData = false, preflightData = true, linkedUserId = userId, existingDisable = false, authError = null }) {
   const state = {
     personActive: true,
     accountStatus: "active",
@@ -22,10 +22,12 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
     banned: existingDisable,
     claimStatus: existingDisable ? "pending" : null,
     providerUpdates: 0,
+    providerReads: 0,
     providerStatus: existingDisable ? "succeeded" : "not_started",
     archiveCalls: 0,
     scheduleCalls: 0,
     reportReads: [],
+    preflightCalls: [],
     adminReads: [],
   };
 
@@ -70,6 +72,7 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
     },
     auth: { admin: {
       async getUserById() {
+        state.providerReads += 1;
         return { data: { user: { banned_until: null } }, error: null };
       },
       async updateUserById(_id, input) {
@@ -95,7 +98,15 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
 
   const supabase = {
     auth: { getUser: async () => ({ data: { user: { id: actorId } }, error: null }) },
-    async rpc(name) {
+    async rpc(name, args) {
+      if (name === "preflight_employee_removal_reporting_splice") {
+        state.preflightCalls.push(args);
+        if (reportReadThrows) throw new Error("private synthetic reporting query details");
+        return {
+          data: reportReadError ? null : malformedReportData ? { allowed: true } : preflightData,
+          error: reportReadError,
+        };
+      }
       if (name === "begin_portal_account_status_change") {
         state.claimStatus = "pending";
         return {
@@ -113,14 +124,19 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
       }
       if (name === "archive_employee_directory_record") {
         state.archiveCalls += 1;
-        if (archiveOutcome === "direct_reports" || reports.some(row => row.parent_id === personId && row.is_active)) {
+        if (archiveOutcome === "direct_reports") {
           return { data: null, error: { code: "23503", message: "Move or archive this employee's active direct reports first." } };
+        }
+        if (archiveOutcome === "reporting_protected") {
+          return { data: null, error: { code: "55000", message: "Onboarding credential delivery in progress" } };
         }
         if (archiveOutcome === "rejected") return { data: null, error: { message: "Record the return of this employee's active IT devices" } };
         if (archiveOutcome === "committed") {
           state.personActive = false;
-          state.accountStatus = "disabled";
-          state.accountVersion += 1;
+          if (linkedUserId) {
+            state.accountStatus = "disabled";
+            state.accountVersion += 1;
+          }
         }
         throw new Error("response connection closed");
       }
@@ -191,28 +207,48 @@ const archiveInput = {
   reason: "Resigned",
 };
 
-test("active direct reports stop offboarding before a claim or Auth ban", async () => {
+test("shared reporting preflight permits active direct children before account disable", async () => {
   const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
     archiveOutcome: "committed",
     reports: [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true }],
   });
+  assert.equal((await archiveEmployeeDirectoryRecord(archiveInput)).ok, true);
+  assert.deepEqual(state.preflightCalls, [{
+    p_person_id: personId, p_expected_person_version: 1, p_expected_detail_version: 1,
+    p_end_date: archiveInput.endDate, p_archive_reason: archiveInput.reason,
+  }]);
+  assert.deepEqual(state.reportReads, []);
+  assert.equal(state.archiveCalls, 1);
+  assert.equal(state.providerUpdates, 1);
+  assert.equal(state.claimStatus, "finalised");
+});
+
+test("protected reporting preflight stops offboarding before a claim or Auth ban", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
+    archiveOutcome: "committed",
+    reports: [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true }],
+    reportReadError: { code: "55000", message: "Onboarding credential delivery in progress" },
+  });
   const result = await archiveEmployeeDirectoryRecord(archiveInput);
   assert.equal(result.ok, false);
-  assert.match(result.message, /active direct reports first/);
+  assert.equal(result.message, "Reporting links are protected while onboarding credential delivery is in progress or awaiting administrator review.");
   assert.equal(state.providerUpdates, 0);
+  assert.equal(state.providerReads, 0);
   assert.equal(state.archiveCalls, 0);
   assert.equal(state.claimStatus, null);
   assert.equal(state.banned, false);
   assert.equal(state.personActive, true);
   assert.equal(state.accountStatus, "active");
-  assert.deepEqual(state.reportReads, [{ filters: [["parent_id", personId], ["is_active", true]], count: 1 }]);
+  assert.deepEqual(state.reportReads, []);
+  assert.equal(state.preflightCalls.length, 1);
+  assert.deepEqual(state.adminReads, ["internal_org_people"]);
 });
 
-test("a report added after preflight keeps the confirmed ban and shows the blocker", async () => {
-  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "direct_reports" });
+test("a protected report added after preflight keeps the confirmed ban and shows the blocker", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "reporting_protected" });
   const result = await archiveEmployeeDirectoryRecord(archiveInput);
   assert.equal(result.ok, false);
-  assert.match(result.message, /active direct reports first/);
+  assert.match(result.message, /Reporting links are protected/);
   assert.match(result.message, /remains disabled with a pending claim/);
   assert.equal(state.providerUpdates, 1);
   assert.equal(state.archiveCalls, 1);
@@ -221,6 +257,29 @@ test("a report added after preflight keeps the confirmed ban and shows the block
   assert.equal(state.banned, true);
   assert.equal(state.personActive, true);
 });
+
+for (const [code, expected] of [
+  ["40001", "This record has changed. Refresh it, then try again."],
+  ["42501", "You do not have permission to reconnect this employee's reporting links."],
+]) test(`reporting preflight ${code} is actionable before Auth`, async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed", reportReadError: { code, message: "private synthetic database details" } });
+  assert.deepEqual(await archiveEmployeeDirectoryRecord(archiveInput), { ok: false, message: expected });
+  assert.equal(state.providerReads, 0);
+  assert.equal(state.providerUpdates, 0);
+  assert.equal(state.archiveCalls, 0);
+  assert.equal(state.claimStatus, null);
+});
+
+for (const preflightData of [false, null, "true", [], [true], { allowed: true }]) {
+  test(`reporting preflight rejects non-boolean approval ${JSON.stringify(preflightData)}`, async () => {
+    const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed", preflightData });
+    assert.deepEqual(await archiveEmployeeDirectoryRecord(archiveInput), { ok: false, message: "The employee's reporting links could not be checked. Refresh and try again." });
+    assert.equal(state.providerReads, 0);
+    assert.equal(state.providerUpdates, 0);
+    assert.equal(state.archiveCalls, 0);
+    assert.equal(state.claimStatus, null);
+  });
+}
 
 test("future end date schedules offboarding without disabling sign-in", async () => {
   const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
@@ -235,6 +294,7 @@ test("future end date schedules offboarding without disabling sign-in", async ()
   assert.equal(state.accountStatus, "active");
   assert.equal(state.personActive, true);
   assert.deepEqual(state.reportReads, []);
+  assert.deepEqual(state.preflightCalls, []);
 });
 
 for (const [label, options] of [
@@ -247,6 +307,7 @@ for (const [label, options] of [
   assert.equal(result.ok, false);
   assert.doesNotMatch(result.message, /private synthetic/);
   assert.equal(state.providerUpdates, 0);
+  assert.equal(state.providerReads, 0);
   assert.equal(state.archiveCalls, 0);
   assert.equal(state.claimStatus, null);
   assert.equal(state.banned, false);
@@ -266,23 +327,25 @@ test("inactive and unrelated reports do not block a valid archive", async () => 
   assert.equal(state.claimStatus, "finalised");
 });
 
-test("active structural children retain the same database prerequisite", async () => {
+test("active structural children use the same shared splice preflight", async () => {
   const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
     archiveOutcome: "committed",
-    reports: [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true, node_kind: "team" }],
+    reports: [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true, node_kind: "org_unit" }],
   });
-  assert.match((await archiveEmployeeDirectoryRecord(archiveInput)).message, /active direct reports first/);
-  assert.equal(state.providerUpdates, 0);
-  assert.equal(state.archiveCalls, 0);
+  assert.equal((await archiveEmployeeDirectoryRecord(archiveInput)).ok, true);
+  assert.equal(state.preflightCalls.length, 1);
+  assert.equal(state.providerUpdates, 1);
+  assert.equal(state.archiveCalls, 1);
 });
 
 test("blocked retries preserve an existing successful disable receipt without replay", async () => {
   const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
     archiveOutcome: "committed", existingDisable: true,
     reports: [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true }],
+    reportReadError: { code: "55000", message: "Onboarding credential delivery in progress" },
   });
   for (let attempt = 0; attempt < 2; attempt++) {
-    assert.match((await archiveEmployeeDirectoryRecord(archiveInput)).message, /active direct reports first/);
+    assert.match((await archiveEmployeeDirectoryRecord(archiveInput)).message, /Reporting links are protected/);
   }
   assert.equal(state.providerUpdates, 0);
   assert.equal(state.archiveCalls, 0);
@@ -292,11 +355,9 @@ test("blocked retries preserve an existing successful disable receipt without re
   assert.equal(state.accountStatus, "active");
 });
 
-test("an existing disable receipt completes after the reporting blocker is resolved without another Auth call", async () => {
+test("an existing disable receipt can complete with direct children without another Auth call", async () => {
   const reports = [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true }];
   const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed", existingDisable: true, reports });
-  assert.equal((await archiveEmployeeDirectoryRecord(archiveInput)).ok, false);
-  reports[0].parent_id = actorId;
   assert.equal((await archiveEmployeeDirectoryRecord(archiveInput)).ok, true);
   assert.equal(state.providerUpdates, 0);
   assert.equal(state.archiveCalls, 1);
@@ -305,20 +366,23 @@ test("an existing disable receipt completes after the reporting blocker is resol
   assert.equal(state.personActive, false);
 });
 
-test("directory-only employees must also resolve active reporting links", async () => {
+test("directory-only employees use the shared splice preflight without an Auth call", async () => {
   const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
     archiveOutcome: "committed", linkedUserId: null,
     reports: [{ id: "10000000-0000-4000-8000-000000000005", parent_id: personId, is_active: true }],
   });
-  assert.match((await archiveEmployeeDirectoryRecord(archiveInput)).message, /active direct reports first/);
+  assert.equal((await archiveEmployeeDirectoryRecord(archiveInput)).ok, true);
+  assert.equal(state.preflightCalls.length, 1);
   assert.equal(state.providerUpdates, 0);
-  assert.equal(state.archiveCalls, 0);
+  assert.equal(state.providerReads, 0);
+  assert.equal(state.archiveCalls, 1);
 });
 
 test("self-offboarding rejects before reading reports or calling Auth", async () => {
   const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed", linkedUserId: actorId });
   assert.match((await archiveEmployeeDirectoryRecord(archiveInput)).message, /your own portal account/);
   assert.deepEqual(state.reportReads, []);
+  assert.deepEqual(state.preflightCalls, []);
   assert.equal(state.providerUpdates, 0);
 });
 

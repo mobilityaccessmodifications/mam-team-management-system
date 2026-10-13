@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 for (const [scenario, message] of [
-  ['reports', "Move or archive this employee's active direct reports first."],
+  ['protected', "Reporting links are protected while onboarding credential delivery is in progress or awaiting administrator review."],
   ['readError', "The employee's reporting links could not be checked. Refresh and try again."],
 ]) test(`End employment ${scenario} rejection shows the real safe action result and retains the dialog`, async ({ page }) => {
   const errors = [];
