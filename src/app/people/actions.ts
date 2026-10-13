@@ -727,11 +727,13 @@ export async function archiveEmployeeDirectoryRecord(input: {
         const error = reportingPreflight.error;
         const message = error?.code === "55000" && error.message === "Onboarding credential delivery in progress"
           ? "Reporting links are protected while onboarding credential delivery is in progress or awaiting administrator review."
-          : error?.code === "40001" || isOffboardingVersionConflict(error)
-            ? mutationErrorMessage(error)
-            : error?.code === "42501"
-              ? "You do not have permission to reconnect this employee's reporting links."
-              : "The employee's reporting links could not be checked. Refresh and try again.";
+          : error?.code === "23514" && error.message === "Record the return of this employee's active IT devices before ending employment."
+            ? "Record the employee’s hardware return date in Registered devices before ending employment."
+            : error?.code === "40001" || isOffboardingVersionConflict(error)
+              ? mutationErrorMessage(error)
+              : error?.code === "42501"
+                ? "You do not have permission to reconnect this employee's reporting links."
+                : "The employee's reporting links could not be checked. Refresh and try again.";
         return { ok: false, message };
       }
     }

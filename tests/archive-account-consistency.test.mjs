@@ -270,6 +270,22 @@ for (const [code, expected] of [
   assert.equal(state.claimStatus, null);
 });
 
+test("hardware-return preflight retains Registered devices guidance before any account mutation", async () => {
+  const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({
+    archiveOutcome: "committed",
+    reportReadError: { code: "23514", message: "Record the return of this employee's active IT devices before ending employment." },
+  });
+  assert.deepEqual(await archiveEmployeeDirectoryRecord(archiveInput), {
+    ok: false,
+    message: "Record the employee’s hardware return date in Registered devices before ending employment.",
+  });
+  assert.equal(state.providerReads, 0);
+  assert.equal(state.providerUpdates, 0);
+  assert.equal(state.archiveCalls, 0);
+  assert.equal(state.claimStatus, null);
+  assert.equal(state.banned, false);
+});
+
 for (const preflightData of [false, null, "true", [], [true], { allowed: true }]) {
   test(`reporting preflight rejects non-boolean approval ${JSON.stringify(preflightData)}`, async () => {
     const { archiveEmployeeDirectoryRecord, state } = loadArchiveAction({ archiveOutcome: "committed", preflightData });
@@ -299,6 +315,7 @@ test("future end date schedules offboarding without disabling sign-in", async ()
 
 for (const [label, options] of [
   ["database error", { reportReadError: { message: "private synthetic database details" } }],
+  ["unknown constraint error", { reportReadError: { code: "23514", message: "private synthetic database details" } }],
   ["transport error", { reportReadThrows: true }],
   ["malformed response", { malformedReportData: true }],
 ]) test(`reporting preflight ${label} stops all mutations and sanitizes feedback`, async () => {
