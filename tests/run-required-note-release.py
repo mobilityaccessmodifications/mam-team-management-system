@@ -22,9 +22,7 @@ def run(socket, predecessor, prefix):
     assert all(re.fullmatch(r'mam_test_[a-z0-9_]+', value) for value in [predecessor, prefix]) and len(prefix) < 40
     env = {key: os.environ[key] for key in ('PATH', 'HOME') if key in os.environ}
     env.update(TMPDIR=str(Path(socket).resolve().parent), LANG='C', LC_ALL='C', PGPASSFILE='/dev/null', PGSERVICEFILE='/dev/null', PGCONNECT_TIMEOUT='5', PGPASSWORD='synthetic-local-unused', PYTHONDONTWRITEBYTECODE='1')
-    output = ROOT / 'output'
-    output.mkdir(exist_ok=True)
-    evidence = Path(tempfile.mkdtemp(prefix='required-note-native-', dir=output))
+    evidence = Path(tempfile.mkdtemp(prefix='required-note-native-', dir=socket))
     evidence.chmod(0o700)
     source = helper.candidate(helper.sha(helper.MIGRATION.read_bytes()))
     bindings = {str(p.relative_to(ROOT)): helper.sha(p.read_bytes()) for p in [helper.MIGRATION, helper.PREDECESSOR, helper.TRANSPORT, ROOT/'scripts/deploy-leave-required-note.py', ROOT/'tests/leave-required-note.sql', ROOT/'tests/leave-required-note-legacy-setup.sql', ROOT/'tests/leave-required-note-legacy.sql', Path(__file__)]}
