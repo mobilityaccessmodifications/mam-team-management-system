@@ -2,6 +2,13 @@ import { syntheticRolePeople, syntheticRoleOrgRows, syntheticRoleDirectoryRecord
 import { completedFixtureToday, leaveCompletedRequests } from './leave-completed-data.mjs';
 
 const completedMode = new URLSearchParams(location.search).has('leave-completed');
+const ordinaryReviewEmployee = new URLSearchParams(location.search).get('subscription-reviews') === 'employee';
+const reviewOwnerId = syntheticRolePeople[3].id;
+let reviewRows = [
+  { subscription_id: '33000000-0000-4000-8000-000000000010', service_name: 'Synthetic due review', next_review_on: '2000-01-01', subscription_status: 'active', version: 4 },
+  { subscription_id: '33000000-0000-4000-8000-000000000011', service_name: 'Synthetic future review', next_review_on: '2500-01-01', subscription_status: 'paused', version: 1 },
+];
+
 
 const calls = [], unexpected = [];
 const roleById = Object.fromEntries(syntheticRolePeople.map(person => [person.id, person.role]));
@@ -18,7 +25,7 @@ const outcomeFor = id => {
   if (roleById[id] !== 'manager' || !grantsById[id]) return result;
   return { ...result, capabilities: { ...result.capabilities, ...grantsById[id] } };
 };
-export const actorCapabilities = UNIFIED_ROLE_FIXTURE_RESULTS.actor.capabilities;
+export const actorCapabilities = ordinaryReviewEmployee ? UNIFIED_ROLE_FIXTURE_RESULTS.roles[reviewOwnerId].employee.capabilities : UNIFIED_ROLE_FIXTURE_RESULTS.actor.capabilities;
 const failures = new Map(), held = new Set(), pending = new Map(), responses = [];
 window.unifiedRoleFixture = {
   calls, unexpected, responses,
@@ -52,7 +59,7 @@ window.unifiedRoleFixture = {
   },
 };
 
-function leaveWorkspace(id) {
+function leaveWorkspace(id = ordinaryReviewEmployee ? reviewOwnerId : undefined) {
   const role = id ? roleById[id] : 'system_admin';
   const people = role === 'manager' ? syntheticRolePeople.filter(person => person.id === id || person.role === 'employee')
     : role === 'employee' ? [personFor(id)] : syntheticRolePeople;
@@ -88,15 +95,15 @@ function leaveWorkspace(id) {
 }
 
 const handlers = {
-  '@/app/roles/actions': { getPortalRoleCapabilities: id => id ? outcomeFor(id) : UNIFIED_ROLE_FIXTURE_RESULTS.actor },
-  '@/app/profile/actions': { getSelectedEmployeeProfile: id => UNIFIED_ROLE_FIXTURE_RESULTS.contacts[id], updateSelectedEmployeeProfile: input => ({ ...UNIFIED_ROLE_FIXTURE_RESULTS.contactMutations[input.personId], phone: input.phone, personalEmail: input.personalEmail, dateOfBirth: input.dateOfBirth }) },
+  '@/app/roles/actions': { getPortalRoleCapabilities: id => id ? outcomeFor(id) : ordinaryReviewEmployee ? UNIFIED_ROLE_FIXTURE_RESULTS.roles[reviewOwnerId].employee : UNIFIED_ROLE_FIXTURE_RESULTS.actor },
+  '@/app/profile/actions': { getCurrentEmployeeSelfProfile: () => UNIFIED_ROLE_FIXTURE_RESULTS.contacts[reviewOwnerId], getSelectedEmployeeProfile: id => UNIFIED_ROLE_FIXTURE_RESULTS.contacts[id], updateSelectedEmployeeProfile: input => ({ ...UNIFIED_ROLE_FIXTURE_RESULTS.contactMutations[input.personId], phone: input.phone, personalEmail: input.personalEmail, dateOfBirth: input.dateOfBirth }) },
   '@/app/people/actions': {
     listEmployeeDirectoryRecords: () => syntheticRolePeople.map(syntheticRoleDirectoryRecord),
     listEmployeeDirectoryRoles: () => ({ ...roleById }), getOrganisationPersonWorkEmail: id => `${personFor(id).role}@example.test`,
   },
   '@/app/accounts/actions': { listPortalAccounts: () => [] },
   '@/app/leave/actions': { getLeaveWorkspaceData: leaveWorkspace },
-  '@/app/work-schedule/actions': { loadEmployeeWorkScheduleWorkspace: id => ({ ok: true, workspace: {
+  '@/app/work-schedule/actions': { loadEmployeeWorkScheduleWorkspace: (id = ordinaryReviewEmployee ? reviewOwnerId : undefined) => ({ ok: true, workspace: {
     activePersonId: id ?? null, activePersonName: personFor(id)?.name ?? null, workingWeekdays: id ? [1, 2, 3, 4, 5] : null,
     workingDayTimes: [], initialSetupAvailable: false, canRequestChange: Boolean(id), isProfilePreview: Boolean(id), history: [], reviews: [],
   } }) },
@@ -137,12 +144,18 @@ const handlers = {
     listSubscriptionCredentialAccessGrants: () => delegationPeople.filter(person => delegationVault.includes(person.personId)),
     replaceSubscriptionCredentialAccessGrants: ids => { delegationVault = [...ids]; return { ok: true }; },
   },
+  '@/app/subscriptions/review-task-actions': { completeMySubscriptionReviewTask: input => {
+    if (!ordinaryReviewEmployee || input.subscriptionId !== reviewRows[0].subscription_id || input.version !== reviewRows[0].version) return UNIFIED_ROLE_FIXTURE_RESULTS.reviewStale;
+    const result = UNIFIED_ROLE_FIXTURE_RESULTS.reviewCompleted;
+    if (result.ok && result.task) reviewRows = reviewRows.map(row => row.subscription_id === input.subscriptionId ? { ...row, next_review_on: result.task.nextReviewOn, version: result.task.version } : row);
+    return result;
+  } },
   '@/app/subscriptions/employee-actions': { listEmployeeSubscriptionsForPreview: () => [], listMySubscriptions: () => [] },
 };
 
 export async function invokeServerAction(module, name, args) {
   calls.push({ module, name, args: args.map(arg => arg instanceof FormData ? { files: arg.getAll('files').map(file => ({ name: file.name, type: file.type, size: file.size })) } : arg) });
-  const key = `${name}:${args[0]?.personId ?? args[0] ?? ''}`;
+  const key = `${name}:${args[0]?.personId ?? args[0]?.subscriptionId ?? args[0] ?? ''}`;
   const failure = failures.get(key);
   if (failure) {
     failures.delete(key);
@@ -178,6 +191,9 @@ const client = {
   },
   async rpc(name, args) {
     calls.push({ module: 'supabase', name, args: [args] });
+    if (name === 'list_my_employee_check_in_tasks' || name === 'list_employee_check_in_tasks_for_preview') return { data: [], error: null };
+    if (name === 'list_my_subscription_review_tasks') return { data: ordinaryReviewEmployee ? reviewRows : [], error: null };
+    if (name === 'list_subscription_review_tasks_for_preview') return { data: args.p_person_id === reviewOwnerId ? reviewRows : [], error: null };
     if (name === 'can_edit_internal_org' || name === 'can_manage_employee_directory') return { data: true, error: null };
     unexpected.push({ module: 'supabase', name });
     throw new Error(`Unexpected synthetic RPC ${name}`);

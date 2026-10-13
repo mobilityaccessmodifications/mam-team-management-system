@@ -13,6 +13,7 @@ import {
   completeMyEmployeeCheckInTask,
 } from "@/app/check-in-tasks/actions";
 import styles from "@/components/check-in-tasks.module.css";
+import { SubscriptionReviewTasks } from "@/components/subscription-review-tasks";
 import {
   CHECK_IN_TASK_LOAD_ERROR,
   parseCheckInTasks,
@@ -192,6 +193,7 @@ export function CheckInTasks({
     {toolbarAction ? <div className={styles.headerActions}>{toolbarAction}</div> : null}
 
     {scheduleContent}
+    <SubscriptionReviewTasks key={previewPersonId ?? "self"} previewPersonId={previewPersonId} readOnly={readOnly || Boolean(previewPersonId)} />
 
     {showCheckInTasks && error ? <p className={styles.error} role="alert"><AlertTriangle size={17} aria-hidden="true" />{error}</p> : null}
     {showCheckInTasks && notice ? <p className={styles.notice} role="status"><CheckCircle2 size={17} aria-hidden="true" />{notice}</p> : null}
