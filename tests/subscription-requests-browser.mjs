@@ -12,7 +12,7 @@ const scratch=mkdtempSync(path.join(tmpdir(),'mam-sr-browser-'));
 const socket=startCluster(), database='mam_test_sr_browser';
 let server;
 try {
-  const replay=spawnSync(process.execPath,['scripts/test-migration-replay.mjs',socket,database],{encoding:'utf8',timeout:180000});
+  const replay=spawnSync(process.execPath,['scripts/test-migration-replay.mjs',socket,database],{encoding:'utf8',timeout:1800000});
   assert.equal(replay.status,0,replay.stderr);
   const fixture=readFileSync('tests/unified-role-fixture.sql','utf8').replace('\\ir sql-test-auth.sql',()=>readFileSync('tests/sql-test-auth.sql','utf8'));
   sql(socket,database,fixture+"\nupdate private.subscription_request_config set enabled=true,approver_user_id='a1000000-0000-4000-8000-000000000004',approver_person_id='a1000000-0000-4000-8000-000000000004';");

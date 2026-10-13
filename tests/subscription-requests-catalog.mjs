@@ -16,7 +16,7 @@ export function runSubscriptionRequestCatalog(socket,group='all') {
   target(socket,predecessor);
   createDatabase(socket,predecessor);
   sql(socket,predecessor,readFileSync('tests/migrations/0001-supabase-platform.sql','utf8'));
-  const history=readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql') && f<path.basename(migration)).sort();
+  const history=readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql') && (f<path.basename(migration) || (group==='forward' && f!==path.basename(migration) && f<'20261014100000'))).sort();
   const pins=history.map(f=>[f,createHash('sha256').update(readFileSync('supabase/migrations/'+f)).digest('hex')]);
   const catalogSource=readFileSync('supabase/migrations/20261006105000_onboarding_credential_review.sql','utf8');
   const start=catalogSource.indexOf('create function pg_temp.onboarding_review_catalog()');
@@ -35,7 +35,7 @@ export function runSubscriptionRequestCatalog(socket,group='all') {
   const dataTables=['auth.users','public.profiles','public.internal_org_people','private.portal_account_admins','private.portal_account_admin_events','private.employee_team_manager_defaults',
     'private.subscription_register','private.subscription_memberships','private.subscription_audit_events','private.subscription_management_grants',
     'private.subscription_management_grant_events','private.subscription_credential_vault','private.subscription_credential_audit_events',
-    'private.subscription_credential_access_grants','private.subscription_credential_access_audit_events','private.subscription_credential_grant_changes'];
+    'private.subscription_credential_access_grants','private.subscription_credential_access_audit_events','private.subscription_credential_grant_changes',...(group==='forward'?['private.annual_leave_day_accounting']:[])];
   const dataCollector=`create function pg_temp.sr_test_data() returns text language plpgsql stable set search_path='' as $data$declare r text;rows jsonb;v jsonb:='{}';begin foreach r in array array[${dataTables.map(t=>"'"+t+"'").join(',')}] loop execute format('select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text collate "C"),''[]''::jsonb) from %s t',r::regclass) into rows;v:=v||jsonb_build_object(r,rows);end loop;return encode(extensions.digest(v::text,'sha256'),'hex');end $data$;`;
   function snapshot(database) {
     return JSON.parse(sql(socket,database,`begin;set local search_path='';${collector}\n${dataCollector}\nselect jsonb_build_object('data',pg_temp.sr_test_data(),'catalog',(select encode(extensions.digest(coalesce(jsonb_agg(to_jsonb(c) order by kind collate "C",object_identity collate "C"),'[]'::jsonb)::text,'sha256'),'hex') from pg_temp.onboarding_review_catalog() c),'actual',private.confirmed_test_purge_schema_hash(),'stored',(select schema_hash from private.confirmed_test_purge_schema where singleton));rollback;`).trim());
@@ -53,6 +53,7 @@ export function runSubscriptionRequestCatalog(socket,group='all') {
         command('psql',[...target(socket,predecessor),'-f','tests/migrations/canonical-roles-release-plan.sql','-f','supabase/migrations/'+f,'-f','tests/migrations/canonical-roles-release-readback.sql']);
       } else sql(socket,predecessor,readFileSync('supabase/migrations/'+f,'utf8'));
     }
+    if(group==='forward') console.log(command('python3',['-B',path.resolve('tests/run-subscription-requests-release.py'),socket,predecessor],{maxBuffer:16*1024*1024}));
     command('psql',[...target(socket,predecessor),'-f','tests/unified-role-fixture.sql']);
     sql(socket,predecessor,"insert into private.employee_team_manager_defaults(company_key,team_name,manager_person_id,configured_by_auth_user_id) values('mam','Operation & Accounts','a1000000-0000-4000-8000-000000000004','a1000000-0000-4000-8000-000000000004');");
     const before=snapshot(predecessor);
@@ -116,7 +117,14 @@ export function runSubscriptionRequestCatalog(socket,group='all') {
       ['main221_deferred_config_pre','before_checks',queue("update private.employee_team_manager_defaults set version=version+1 where company_key='mam'")],
       ['main221_deferred_config_post','after_refresh',queue("update private.employee_team_manager_defaults set version=version+1 where company_key='mam'")]
     ];
-    const selected=group==='all'?cases:cases.filter(c=>group==='main221'?c[0].startsWith('main221_'):c[0]===group);assert.ok(selected.length>0);
+    const forwardCases=[
+      ['forward_initial_review_acl','before_snapshot','grant execute on function public.complete_my_subscription_review_task(uuid,bigint) to anon;'],
+      ['forward_initial_accounting_rls','before_snapshot','alter table private.annual_leave_day_accounting disable row level security;'],
+      ['forward_final_review_body','after_refresh',"create or replace function public.complete_my_subscription_review_task(p_subscription_id uuid,p_expected_version bigint) returns jsonb language sql security definer set search_path='' as $$select '{}'::jsonb$$;"],
+      ['forward_accounting_data','before_checks',"insert into private.annual_leave_day_accounting(person_id,service_date,state) values('a1000000-0000-4000-8000-000000000004',date '2026-10-01','{\"status\":\"current\"}');"],
+      ['forward_deferred_accounting_data','after_refresh',queue("insert into private.annual_leave_day_accounting(person_id,service_date,state) values('a1000000-0000-4000-8000-000000000004',date '2026-10-01','{\"status\":\"current\"}')")]
+    ];
+    const selected=group==='forward'?forwardCases:group==='all'?cases:cases.filter(c=>group==='main221'?c[0].startsWith('main221_'):c[0]===group);assert.ok(selected.length>0);
     assert.equal(new Set(selected.map(c=>c[0])).size,selected.length);
     for(const [name,phase,fault,benign=false] of selected) {
       const database=predecessor+'_'+name;

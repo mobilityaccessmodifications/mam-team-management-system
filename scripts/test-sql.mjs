@@ -127,6 +127,8 @@ try {
   if (requestNotifications.status !== 0) throw new Error('Subscription request persisted notification envelopes failed');
   const requestCatalog = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/subscription-requests-catalog.mjs'), socket, 'all'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
   if (requestCatalog.status !== 0) throw new Error('Subscription request exact catalog and deferred-ledger rollback tests failed');
+  const requestForward = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/subscription-requests-catalog.mjs'), socket, 'forward'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (requestForward.status !== 0) throw new Error('Subscription request forward compatibility and atomic release rehearsal failed');
   runReportingSpliceSql(socket, "mam_test_replay", sourceRoot);
   const finalizerUnit = spawnSync('python3', ['-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_archived_account_finalizer_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
   if (finalizerUnit.status !== 0) throw new Error('Archived account finalizer release helper tests failed');

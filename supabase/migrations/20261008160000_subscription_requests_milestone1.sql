@@ -23,6 +23,34 @@ do $sr_predecessor$ declare predecessor_hash text; begin
   end if;
   perform set_config('mam.sr_predecessor_hash',predecessor_hash,true);
 end $sr_predecessor$;
+create temporary table sr_protected_relations(relation_name text primary key) on commit drop;
+insert into sr_protected_relations values
+  ('auth.users'),
+  ('private.employee_team_manager_defaults'),
+  ('private.leave_bank_adoption_receipts'),
+  ('private.leave_bank_sources'),
+  ('private.leave_payroll_calendars'),
+  ('private.portal_account_admin_events'),
+  ('private.portal_account_admins'),
+  ('private.subscription_audit_events'),
+  ('private.subscription_credential_access_audit_events'),
+  ('private.subscription_credential_access_grants'),
+  ('private.subscription_credential_audit_events'),
+  ('private.subscription_credential_grant_changes'),
+  ('private.subscription_credential_vault'),
+  ('private.subscription_management_grant_events'),
+  ('private.subscription_management_grants'),
+  ('private.subscription_memberships'),
+  ('private.subscription_register'),
+  ('public.internal_org_people'),
+  ('public.profiles');
+insert into sr_protected_relations
+  select 'private.annual_leave_day_accounting' where to_regclass('private.annual_leave_day_accounting') is not null;
+do $sr_lock_data$ begin
+  if to_regclass('private.annual_leave_day_accounting') is not null then
+    lock table private.annual_leave_day_accounting in share row exclusive mode nowait;
+  end if;
+end $sr_lock_data$;
 create function pg_temp.sr_inventory()
 returns table(kind text,object_identity text,definition text)
 language plpgsql stable set search_path = '' as $catalog$
@@ -1495,6 +1523,1459 @@ $sr_annual_before$),
   ('type','private.leave_bank_sources','299e4c22b4f4df6541540bfdaedf8c7dc4a57f276509dc9fbc678936e53f2d54',null),
   ('type','private.leave_payroll_calendars','e9bbb26e304c92977ed166ec00f96f8169adf2e7236e3cca861152702b9891cc',null);
 
+do $sr_latest_main$ begin
+  if to_regprocedure('public.complete_my_subscription_review_task(uuid,bigint)') is not null then
+    insert into pg_temp.sr_published_predecessor(kind,object_identity,after_hash,before_definition) values
+    ('column','private.annual_leave_day_accounting.created_at','be398acfa5d9d0dcb83cec2fe9670a09c1ed2d5782fe8ecb34d16a2117ac8cb1',null),
+    ('column','private.annual_leave_day_accounting.id','0f16bb55407d689a68d5bcfcbb95c0689e517f3499bf0c9697acd6a3bbe1720e',null),
+    ('column','private.annual_leave_day_accounting.person_id','bf71b2c32cd53e7cdd9e391222788131b8a4498ef022ebb8561afa4fc4fff578',null),
+    ('column','private.annual_leave_day_accounting.service_date','bf30ce096a31672a4df508741ebed4ca80e0ffee5720f889fd616b0341c79882',null),
+    ('column','private.annual_leave_day_accounting.state','7ea429683c753b5d67adb77751e66779cdfa8677a73c010e875a6a259557dc61',null),
+    ('column','private.annual_leave_day_accounting_latest.created_at','33dfe7398fdee5d9e6001f4de6e56b68b374a2067b288909294a5d6c8089eae3',null),
+    ('column','private.annual_leave_day_accounting_latest.id','9eb186c427a36fa6c6f151613ef41ebaca5cd36d39b5ab180091936248c54680',null),
+    ('column','private.annual_leave_day_accounting_latest.person_id','352d7a15f2ee1b56b2eb4d0c8b16f60f41bdf755c9bcb623898fe3d7dbea56ab',null),
+    ('column','private.annual_leave_day_accounting_latest.service_date','01ceab40c2074bb90ac97871b1ea8691cf69c94365e7738902212c7f90937d17',null),
+    ('column','private.annual_leave_day_accounting_pkey.id','352d7a15f2ee1b56b2eb4d0c8b16f60f41bdf755c9bcb623898fe3d7dbea56ab',null),
+    ('column','private.employee_directory_details.trade_school_enabled','89bace71047ef2573a7d2f84372ba1eb576cf479bfc3ab72c1d121b3a013c077',null),
+    ('constraint','private.annual_leave_day_accounting:annual_leave_day_accounting_person_id_fkey','c667c97ff1d4aaf96e577d9a1718cfacaac3c6093fcbf24b34c86b4a6ceed7a7',null),
+    ('constraint','private.annual_leave_day_accounting:annual_leave_day_accounting_pkey','ceeed3e1b6b0f71197286468986349d099d90ea1af0bc7dc10eec8147ca0bd38',null),
+    ('constraint','private.annual_leave_day_accounting:annual_leave_day_accounting_state_check','288d1ddb93f16c6f31ad902fdbcc24362d62a9380f5d27355b3036d5d1a782b3',null),
+    ('constraint','private.employee_directory_audit_events:employee_directory_audit_events_changed_fields_check','7974606df3db074df5b209058d4f7bd956d2a0524ea6bb71bf89a1fe887fc3e9','{"deferred": false, "validated": true, "deferrable": false, "definition": "CHECK ((changed_fields <@ ARRAY[''first_name''::text, ''last_name''::text, ''work_email''::text, ''personal_email''::text, ''phone''::text, ''position_title''::text, ''team_name''::text, ''manager_id''::text, ''country''::text, ''address''::text, ''date_of_birth''::text, ''started_date''::text, ''scheduled_employment_end_date''::text, ''company_key''::text, ''is_active''::text, ''sort_order''::text, ''laptop_supplied''::text, ''laptop_id''::text, ''mouse_id''::text, ''keyboard_id''::text, ''asset_tags''::text, ''employment_type''::text, ''working_weekdays''::text, ''working_day_times''::text, ''app_role''::text]))"}'),
+    ('constraint','public.leave_requests:leave_requests_pay_treatment_check','e0bd314fe9407bd85560b41c60e95f0f9ff74e9aa8f6fc1c508986c9c97dcf10','{"deferred": false, "validated": true, "deferrable": false, "definition": "CHECK (((pay_treatment IS NULL) OR (pay_treatment = ANY (ARRAY[''paid_entitlement''::text, ''unpaid''::text]))))"}'),
+    ('constraint','public.leave_requests:leave_requests_request_type_label_check','7179dc6d1d85acab05181986339d6b5e2db1666a4993f07bb2170598905321a1','{"deferred": false, "validated": true, "deferrable": false, "definition": "CHECK ((request_type_label = ANY (ARRAY[''Annual leave''::text, ''Sick leave''::text, ''Carer''''s leave''::text, ''Unpaid leave''::text, ''Other leave''::text])))"}'),
+    ('constraint','public.leave_requests:leave_requests_trade_school_classification_check','a58dbeb9877795f116d7fa09b2f0f8cc02939476efeaf7b44972e86a072016c0',null),
+    ('function','private.annual_leave_accounting_day(uuid, date)','26e40841d15dd8ec3bea036fb73657afc8399613eccae16fa2ced0dfef9557ee',null),
+    ('function','private.annual_leave_retained_usage(uuid)','18cd2d65bb202709232f23f767b1317320fbc5a11213e9a714feea4fb889c57b',null),
+    ('function','private.apply_employee_removal_reporting_splice(uuid, uuid)','a8f7ea1bce19f6224c08e158eb95cdb708d69b0567f79a408a7ede43687c6ee2',null),
+    ('function','private.approved_leave_hours_after(uuid, text[], date)','a94b51d4400a12acb82675e6a8c3db0217a295ec13adea9a365352224c83d9dc','CREATE OR REPLACE FUNCTION private.approved_leave_hours_after(p_person_id uuid, p_leave_types text[], p_after date)
+ RETURNS numeric
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare r public.leave_requests%rowtype; total numeric:=0; qty numeric; kind text; basis jsonb; cutoff date; pending numeric; carry record; included numeric; window_from date; window_through date; review private.leave_accrual_day_reviews%rowtype; consumed numeric; day_qty numeric; taken_qty numeric; matching_requests integer;
+begin
+ if p_after is null then return null; end if;
+ kind:=case when ''Annual leave''=any(p_leave_types) then ''annual'' when ''Sick leave''=any(p_leave_types) or ''Carer''''s leave''=any(p_leave_types) then ''personal'' end;
+ if kind is not null then
+  basis:=private.leave_bank_basis(p_person_id,kind);
+  if basis->>''status''=''needs_review'' then return null; end if;
+  if basis->>''sourceId'' is not null then
+   if basis->>''coveredThrough'' is null then
+    if exists(select 1 from public.leave_requests where employee_person_id=p_person_id and status=''approved'' and request_type_label=any(p_leave_types) and pay_treatment=''paid_entitlement'' and start_date<=(basis->>''reportDate'')::date) then return null; end if;
+    cutoff:=(basis->>''reportDate'')::date;
+   else cutoff:=(basis->>''coveredThrough'')::date; end if;
+  else cutoff:=p_after; end if;
+ else cutoff:=p_after; end if;
+ if exists(select 1 from (select distinct on(e.request_id,e.leave_kind) e.* from private.payroll_carryforward_events e where e.person_id=p_person_id order by e.request_id,e.leave_kind,e.id desc) e
+  join public.leave_requests req on req.id=e.request_id where (kind is null or e.leave_kind=kind) and
+   (e.request_fingerprint<>private.payroll_request_fingerprint(to_jsonb(req)) or e.company_key is distinct from(select company_key from public.internal_org_people where id=p_person_id))) then return null; end if;
+ if not exists(select 1 from private.leave_accrual_policies where person_id=p_person_id) and basis->>''sourceId'' is null then
+  return private.approved_leave_hours_after_before_carryforward(p_person_id,p_leave_types,p_after);
+ end if;
+ for r in select * from public.leave_requests where employee_person_id=p_person_id and status=''approved'' and request_type_label=any(p_leave_types) and end_date>cutoff and (kind is null or pay_treatment=''paid_entitlement'') loop
+  qty:=private.payroll_request_hours_after(r.id,cutoff); if qty is null then return null; end if; total:=total+qty;
+ end loop;
+ if basis->>''sourceId'' is not null then
+  for carry in select e.*,req.start_date,req.end_date,req.status,req.pay_treatment,req.request_type_label from
+   (select distinct on(e.request_id,e.leave_kind) e.* from private.payroll_carryforward_events e where e.person_id=p_person_id and e.leave_kind=kind order by e.request_id,e.leave_kind,e.id desc)e
+   join public.leave_requests req on req.id=e.request_id where e.pending_hours>0 loop
+   select coalesce(sum((value->>''includedPendingHours'')::numeric),0) into included from jsonb_array_elements(coalesce(basis->''includedUsage'',''[]''::jsonb)) where value->>''requestId''=carry.request_id::text;
+   pending:=carry.pending_hours-included;
+   if pending<0 then return null;elsif pending=0 then continue;end if;
+   if carry.status<>''approved'' or carry.pay_treatment is distinct from ''paid_entitlement'' or not(carry.request_type_label=any(p_leave_types)) then return null;end if;
+   window_from:=greatest(carry.start_date,carry.origin_after+1);window_through:=least(carry.end_date,carry.through_date);
+   if window_through<window_from then return null;
+   elsif window_through<=cutoff then total:=total+pending;
+   elsif window_from>cutoff then
+    qty:=private.payroll_request_hours_after(carry.request_id,cutoff);if qty is null then return null;end if;
+    consumed:=0;
+    for review in select distinct on(service_date) * from private.leave_accrual_day_reviews
+     where person_id=p_person_id and service_date>cutoff and service_date between carry.start_date and carry.end_date
+      and service_date<=(now() at time zone ''Australia/Melbourne'')::date-1 order by service_date,created_at desc,id desc loop
+     if review.request_fingerprint<>private.leave_accrual_request_fingerprint(p_person_id,review.service_date) then return null;end if;
+     taken_qty:=case when kind=''annual'' then review.annual_taken_hours else review.personal_taken_hours end;
+     if taken_qty>0 then
+      day_qty:=private.leave_payroll_day_hours(carry.request_id,review.service_date);if day_qty is null then return null;end if;
+      select count(*) into matching_requests from public.leave_requests req where req.employee_person_id=p_person_id and req.status=''approved''
+       and req.pay_treatment=''paid_entitlement'' and req.request_type_label=any(p_leave_types) and review.service_date between req.start_date and req.end_date;
+      if matching_requests<>1 then return null;end if;
+      consumed:=consumed+least(taken_qty,day_qty);
+     end if;
+    end loop;
+    if consumed>qty then return null;end if;
+    total:=total+greatest(0,pending-greatest(0,qty-consumed));
+   else return null;end if;
+  end loop;
+ else
+  select coalesce(sum(e.pending_hours),0) into pending from (select distinct on(e.request_id,e.leave_kind) e.* from private.payroll_carryforward_events e where e.person_id=p_person_id and (kind is null or e.leave_kind=kind) and e.through_date<=p_after order by e.request_id,e.leave_kind,e.id desc)e;
+  total:=total+pending;
+ end if;
+ return total;
+end $function$
+'),
+    ('function','private.calculate_leave_entitlement(uuid, text, date)','381e3e425e7a35659f8a12385eae0d3015d82fc8b4bed76406dfa8de1cc3e6c3','CREATE OR REPLACE FUNCTION private.calculate_leave_entitlement(p_person uuid, p_kind text, p_through date)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare basis jsonb; pol private.leave_accrual_policies%rowtype; rev private.leave_accrual_day_reviews%rowtype;
+ day date; cutoff date; through_day date; review_day date; start_day date; end_day date; ordinary numeric; eligible numeric; earned_numerator numeric:=0; taken numeric:=0;
+ status text; qty numeric; r record; requires_actual boolean; policy_id uuid; terms jsonb:=''{}''; term jsonb; future_unpaid numeric; eligibility_status text:=''current''; usage_review_day date; usage_through date;
+begin
+ basis:=private.leave_bank_basis(p_person,p_kind); cutoff:=(basis->>''coveredThrough'')::date; status:=basis->>''status''; through_day:=cutoff;
+ select p.started_date,d.scheduled_employment_end_date into start_day,end_day from public.internal_org_people p left join private.employee_directory_details d on d.person_id=p.id where p.id=p_person;
+ if p_through is null or basis->>''bankHours'' is null or not exists(select 1 from private.leave_accrual_policies where person_id=p_person) then status:=''not_configured'';
+ elsif status=''current'' and p_through-cutoff>3660 then status:=''needs_review'';eligibility_status:=''needs_review'';review_day:=cutoff+1;
+ elsif status=''current'' then
+  for day in select d::date from generate_series(cutoff+1,p_through,interval ''1 day'') d loop
+   if day<coalesce(start_day,day) or day>coalesce(end_day,day) then through_day:=day; continue; end if;
+   select * into pol from private.leave_accrual_policies where person_id=p_person and effective_from<=day order by effective_from desc,created_at desc,id desc limit 1;
+   if not found or cardinality(pol.weekdays)<>(select count(distinct value) from unnest(pol.weekdays) value) then status:=''needs_review'';eligibility_status:=''needs_review'';review_day:=day;exit; end if;
+   policy_id:=pol.id;
+   ordinary:=case when pol.enabled and extract(isodow from day)::integer=any(pol.weekdays) then pol.weekly_hours*(420/cardinality(pol.weekdays)) else 0 end;
+   select * into rev from private.leave_accrual_day_reviews where person_id=p_person and service_date=day order by created_at desc,id desc limit 1;
+   requires_actual:=pol.requires_review and rev.id is null; future_unpaid:=0;
+   for r in select req.* from public.leave_requests req where req.employee_person_id=p_person and req.status=''approved'' and day between req.start_date and req.end_date loop
+    qty:=private.leave_payroll_day_hours(r.id,day);
+    if ordinary>0 and (r.pay_treatment is null or r.pay_treatment not in (''paid_entitlement'',''paid_other'',''unpaid'')) then requires_actual:=true; end if;
+    if ordinary>0 and r.pay_treatment=''unpaid'' then
+     if day<=(now() at time zone ''Australia/Melbourne'')::date-1 or qty is null then requires_actual:=true; else future_unpaid:=future_unpaid+qty*420; end if;
+    end if;
+    if day<=(now() at time zone ''Australia/Melbourne'')::date-1 and r.pay_treatment=''paid_entitlement'' and
+     ((p_kind=''annual'' and r.request_type_label=''Annual leave'') or(p_kind=''personal'' and r.request_type_label in (''Sick leave'',''Carer''''s leave''))) and (qty is null or qty>0) and rev.id is null then usage_review_day:=coalesce(usage_review_day,day); end if;
+   end loop;
+   if (rev.id is not null and rev.request_fingerprint<>private.leave_accrual_request_fingerprint(p_person,day)) or (requires_actual and rev.id is null) then status:=''needs_review'';eligibility_status:=''needs_review'';review_day:=day;exit; end if;
+   eligible:=case when pol.enabled or pol.requires_review then coalesce(case when p_kind=''annual'' then rev.annual_eligible_hours else rev.personal_eligible_hours end*420,greatest(0,ordinary-future_unpaid)) else 0 end;
+   term:=coalesce(terms->pol.id::text,jsonb_build_object(''fromDate'',day,''weeklyHours'',pol.weekly_hours,''weekdays'',pol.weekdays,''annualWeeks'',pol.annual_weeks,''personalWeeks'',pol.personal_weeks,''eligibleNumerator'',0));
+   term:=term||jsonb_build_object(''throughDate'',day,''eligibleNumerator'',(term->>''eligibleNumerator'')::numeric+eligible);terms:=jsonb_set(terms,array[pol.id::text],term);
+   earned_numerator:=earned_numerator+eligible*case when p_kind=''annual'' then pol.annual_weeks else pol.personal_weeks end;
+   through_day:=day;
+  end loop;
+ end if;
+ if cutoff is not null and p_through is not null then
+  usage_through:=greatest(cutoff,least(p_through,(now() at time zone ''Australia/Melbourne'')::date-1));
+  for rev in select distinct on(service_date) * from private.leave_accrual_day_reviews where person_id=p_person and service_date>cutoff and service_date<=usage_through order by service_date,created_at desc,id desc loop
+   if rev.request_fingerprint<>private.leave_accrual_request_fingerprint(p_person,rev.service_date) then
+    usage_review_day:=least(usage_review_day,rev.service_date);continue;
+   end if;
+   taken:=taken+coalesce(case when p_kind=''annual'' then rev.annual_taken_hours else rev.personal_taken_hours end,0);
+  end loop;
+ end if;
+ if usage_review_day is not null then status:=''needs_review'';review_day:=least(review_day,usage_review_day); end if;
+ return jsonb_build_object(''status'',status,''eligibilityStatus'',eligibility_status,''usageThroughDate'',usage_through,''reviewDate'',review_day,''hours'',round((basis->>''bankHours'')::numeric+earned_numerator/(420*52)-taken,4),
+  ''exactHours'',(basis->>''bankHours'')::numeric+earned_numerator/(420*52)-taken,''earned'',earned_numerator/(420*52),''taken'',taken,
+  ''asOf'',coalesce(through_day,(basis->>''reportDate'')::date),''payrollHours'',basis->''bankHours'',''payrollDate'',basis->''reportDate'',
+  ''coveredThrough'',basis->''coveredThrough'',''sourceKind'',basis->''sourceKind'',''policyId'',policy_id,
+  ''terms'',coalesce((select jsonb_agg((value-''eligibleNumerator'')||jsonb_build_object(''eligibleHours'',(value->>''eligibleNumerator'')::numeric/420,
+   ''accruedHours'',(value->>''eligibleNumerator'')::numeric*(value->>case when p_kind=''annual'' then ''annualWeeks'' else ''personalWeeks'' end)::numeric/(420*52)) order by value->>''fromDate'') from jsonb_each(terms)),''[]''::jsonb));
+end $function$
+'),
+    ('function','private.capture_annual_leave_accounting(uuid, date, date, boolean)','213dc31563244fe1845a2c9db420c6f2529e51e88c61f428401e55f9833ca19b',null),
+    ('function','private.enforce_banked_annual_leave_request()','3702438e5c6836c1ae5b7db0dece7a14aabb8a7f1eb1353d87bde697c5e536ae','CREATE OR REPLACE FUNCTION private.enforce_banked_annual_leave_request()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare projection jsonb; required numeric; available numeric; own_hours numeric:=0; basis jsonb;
+ classification text; budget_classification text; changed boolean:=true; days integer; review private.leave_accrual_day_reviews%rowtype; scheduled numeric; overlapping integer;
+begin
+ if tg_op=''UPDATE'' then
+  changed:=row(new.employee_person_id,new.leave_type,new.request_type_label,new.start_date,new.end_date,new.start_time,new.end_time,new.business_days,new.hours,new.employment_type_snapshot,new.pay_treatment)
+   is distinct from row(old.employee_person_id,old.leave_type,old.request_type_label,old.start_date,old.end_date,old.start_time,old.end_time,old.business_days,old.hours,old.employment_type_snapshot,old.pay_treatment);
+  if new.status in (''cancelled'',''rejected'') and not changed then return new; end if;
+  if not changed and (new.status is not distinct from old.status or(old.status=''approved'' and new.status<>''approved'')) then return new; end if;
+ end if;
+ if new.request_type_label<>''Annual leave'' and new.leave_type<>''annual'' then return new; end if;
+ perform private.lock_annual_leave_budget();
+ if current_setting(''transaction_isolation'')<>''read committed'' then raise exception ''Annual leave changes require a fresh READ COMMITTED transaction.'' using errcode=''55000''; end if;
+ if new.request_type_label is distinct from ''Annual leave'' or new.leave_type is distinct from ''annual'' or new.pay_treatment is distinct from ''paid_entitlement'' then raise exception ''Annual leave classification is inconsistent.'' using errcode=''22023''; end if;
+ perform private.assert_leave_date_range(new.start_date,new.end_date);
+ select employment_type into classification from private.employee_directory_details where person_id=new.employee_person_id;
+ if tg_op=''INSERT'' and new.employment_type_snapshot is null then new.employment_type_snapshot:=classification; end if;
+ budget_classification:=coalesce(new.employment_type_snapshot,classification);
+ if budget_classification is null or budget_classification not in (''full_time'',''part_time'')
+  or(tg_op=''INSERT'' and new.employment_type_snapshot is distinct from classification)
+  or(tg_op=''UPDATE'' and(new.employment_type_snapshot is distinct from old.employment_type_snapshot or new.employee_person_id is distinct from old.employee_person_id) and budget_classification is distinct from classification) then
+  raise exception ''Annual leave employment snapshot is inconsistent.'' using errcode=''22023''; end if;
+ select count(*)::integer into days from generate_series(new.start_date,new.end_date,interval ''1 day'') d
+  cross join lateral(select ap.weekdays from private.leave_accrual_policies ap where ap.person_id=new.employee_person_id and ap.effective_from<=d::date order by ap.effective_from desc,ap.created_at desc,ap.id desc limit 1)p
+  where extract(isodow from d)::integer=any(p.weekdays);
+ if days<1 or new.business_days is distinct from days then raise exception ''Annual leave working days are inconsistent.'' using errcode=''22023''; end if;
+ if new.start_date=new.end_date and new.start_time is not null and new.end_time is not null and new.hours is distinct from round(extract(epoch from(new.end_time-new.start_time))/3600,2) then
+  raise exception ''Annual leave timed hours are inconsistent.'' using errcode=''22023''; end if;
+ required:=private.leave_request_quantity(new.employee_person_id,new.start_date,new.end_date,new.start_time,new.end_time,new.hours);
+ projection:=private.project_annual_leave_balance(new.employee_person_id,new.start_date);
+ basis:=private.leave_bank_basis(new.employee_person_id,''annual'');
+ if tg_op=''UPDATE'' and old.status=''approved'' and old.request_type_label=''Annual leave'' and old.employee_person_id=new.employee_person_id then
+  own_hours:=private.payroll_request_hours_after(old.id,coalesce((basis->>''coveredThrough'')::date,(basis->>''reportDate'')::date));
+  if basis->>''sourceId'' is null then
+   own_hours:=own_hours+coalesce((select pending_hours from private.payroll_carryforward_events where request_id=old.id and leave_kind=''annual'' and through_date<=(basis->>''reportDate'')::date order by id desc limit 1),0);
+  end if;
+  for review in select distinct on(service_date) * from private.leave_accrual_day_reviews where person_id=old.employee_person_id and service_date>coalesce((basis->>''coveredThrough'')::date,(basis->>''reportDate'')::date) and service_date<=(projection->>''throughDate'')::date and service_date between old.start_date and old.end_date order by service_date,created_at desc,id desc loop
+   if review.request_fingerprint<>private.leave_accrual_request_fingerprint(old.employee_person_id,review.service_date) then own_hours:=null;exit;end if;
+   if review.annual_taken_hours>0 then
+    select count(*) into overlapping from public.leave_requests r where r.employee_person_id=old.employee_person_id and r.status=''approved'' and r.request_type_label=''Annual leave'' and r.pay_treatment=''paid_entitlement'' and review.service_date between r.start_date and r.end_date;
+    scheduled:=private.leave_payroll_day_hours(old.id,review.service_date);
+    if overlapping<>1 or scheduled is null then own_hours:=null;exit;end if;
+    own_hours:=greatest(0,own_hours-least(review.annual_taken_hours,scheduled));
+   end if;
+  end loop;
+ end if;
+ available:=(projection->>''availableHours'')::numeric+own_hours;
+ if new.hours is not null and coalesce(required,new.hours)>available then raise exception ''Not enough balance. Your projected annual leave balance at the start of this leave is insufficient. Request fewer paid hours or submit a separate unpaid leave request.'' using errcode=''22023''; end if;
+ if projection->>''status''=''unavailable'' or required is null or required<=0 or available is null or required::text in(''NaN'',''Infinity'',''-Infinity'') then
+  raise exception ''Your annual leave projection is unavailable. Please contact payroll before requesting annual leave.'' using errcode=''22023''; end if;
+ if required>available then
+  if projection->>''status''=''banked_only'' then raise exception ''Future accrual could not be confirmed and your banked balance is insufficient. Please contact payroll.'' using errcode=''22023''; end if;
+  raise exception ''Not enough balance. Your projected annual leave balance at the start of this leave is insufficient. Request fewer paid hours or submit a separate unpaid leave request.'' using errcode=''22023''; end if;
+ return new;
+end $function$
+'),
+    ('function','private.enforce_leave_request_employment_policy()','129ff4a64cf0d48c021424e2f95562cee499b9c2baad32586885e6c29f03d4dc','CREATE OR REPLACE FUNCTION private.enforce_leave_request_employment_policy()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare
+  v_person_id uuid;
+  v_person_auth_user_id uuid;
+  v_employment_type text;
+begin
+  if new.record_origin = ''historical_import'' then
+    select person.id, person.auth_user_id, detail.employment_type
+    into v_person_id, v_person_auth_user_id, v_employment_type
+    from public.internal_org_people person
+    left join private.employee_directory_details detail
+      on detail.person_id = person.id
+    where person.id = new.employee_person_id
+      and person.node_kind = ''person''
+    limit 1;
+
+    if v_person_id is null then
+      raise exception ''A retained employee profile is required for historical leave.''
+        using errcode = ''23503'';
+    end if;
+
+    if new.user_id is not null and new.user_id is distinct from v_person_auth_user_id then
+      raise exception ''The historical leave login does not belong to the selected employee.''
+        using errcode = ''23503'';
+    end if;
+
+    new.employment_type_snapshot := coalesce(new.employment_type_snapshot, v_employment_type);
+    new.pay_treatment := coalesce(
+      new.pay_treatment,
+      case
+        when new.request_type_label = ''Unpaid leave'' then ''unpaid''
+        when v_employment_type in (''full_time'', ''part_time'') then ''paid_entitlement''
+        when v_employment_type in (''abn'', ''casual'') then ''unpaid''
+        else null
+      end
+    );
+    return new;
+  end if;
+
+  select person.id, detail.employment_type
+  into v_person_id, v_employment_type
+  from public.internal_org_people person
+  left join private.employee_directory_details detail
+    on detail.person_id = person.id
+  where person.auth_user_id = new.user_id
+    and person.node_kind = ''person''
+    and person.is_active
+  limit 1;
+
+  if v_person_id is null then
+    raise exception ''An active linked employee account is required to submit leave.''
+      using errcode = ''42501'';
+  end if;
+
+  if v_employment_type is not null and v_employment_type not in (''full_time'', ''part_time'')
+    and new.request_type_label <> ''Unpaid leave'' then
+    raise exception ''This employment type only allows Unpaid leave.''
+      using errcode = ''22023'';
+  end if;
+
+  if v_employment_type is null
+    and new.request_type_label <> ''Unpaid leave'' then
+    raise exception ''Ask a System Admin to set your employment type before requesting this leave.''
+      using errcode = ''22023'';
+  end if;
+
+  new.employee_person_id := v_person_id;
+  new.employment_type_snapshot := v_employment_type;
+  new.pay_treatment := case
+    when new.request_type_label = ''Unpaid leave'' then ''unpaid''
+    when v_employment_type in (''full_time'', ''part_time'') then ''paid_entitlement''
+    else ''unpaid''
+  end;
+
+  return new;
+end;
+$function$
+'),
+    ('function','private.enforce_trade_school_leave()','36f22fcce454ec88a5ddf9b0d026b632966722e56a68cff212203414d8b9034b',null),
+    ('function','private.leave_payroll_day_hours(uuid, date)','be264b6b847de447fbed6a5f893d11c0af96fefd269678d1478ebf8823972ced','CREATE OR REPLACE FUNCTION private.leave_payroll_day_hours(p_request uuid, p_day date)
+ RETURNS numeric
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare r public.leave_requests%rowtype; pol private.leave_accrual_policies%rowtype; ordinary numeric; calendar text; total numeric; elapsed numeric;
+begin
+ select * into r from public.leave_requests where id=p_request;
+ if not found then return null; end if;
+ if p_day<r.start_date or p_day>r.end_date then return 0; end if;
+ select * into pol from private.leave_accrual_policies where person_id=r.employee_person_id and effective_from<=p_day order by effective_from desc,created_at desc,id desc limit 1;
+ if not found or cardinality(pol.weekdays)<>(select count(distinct value) from unnest(pol.weekdays) value) then return null; end if;
+ ordinary:=case when extract(isodow from p_day)::integer=any(pol.weekdays) then pol.weekly_hours/cardinality(pol.weekdays) else 0 end;
+ if ordinary=0 then return 0; end if;
+ if r.pay_treatment=''paid_entitlement'' and exists(select 1 from private.victorian_public_holidays where holiday_date=p_day) then
+  select calendar_key into calendar from private.leave_payroll_calendars where person_id=r.employee_person_id;
+  if calendar is null then return null; elsif calendar=''victoria'' then return 0; end if;
+ end if;
+ if r.start_time is not null or r.end_time is not null then
+  if r.start_date<>r.end_date or r.start_time is null or r.end_time is null then return null; end if;
+  elapsed:=extract(epoch from(r.end_time-r.start_time))/3600;
+  if elapsed<=0 or elapsed>24 or (r.hours is not null and abs(r.hours-round(elapsed,2))>0.0001) then return null; end if;
+  return elapsed;
+ end if;
+ if r.hours is not null then
+  if r.start_date=r.end_date and r.hours>0 and r.hours<=24 then return r.hours; end if;
+  if r.pay_treatment=''paid_entitlement'' then
+   total:=private.leave_request_quantity(r.employee_person_id,r.start_date,r.end_date,null,null,null);
+   if abs(total-r.hours)>0.0001 then total:=null;end if;
+  else
+   select case when count(*) filter(where p.id is null or cardinality(p.weekdays)<>(select count(distinct value) from unnest(p.weekdays) value))>0 then null else coalesce(sum(case when extract(isodow from d)::integer=any(p.weekdays) then p.weekly_hours/cardinality(p.weekdays) else 0 end),0) end into total
+    from generate_series(r.start_date,r.end_date,interval ''1 day'')d left join lateral(select * from private.leave_accrual_policies where person_id=r.employee_person_id and effective_from<=d::date order by effective_from desc,created_at desc,id desc limit 1)p on true;
+   if abs(total-r.hours)>0.0001 then total:=null;end if;
+  end if;
+  if total is null then return null; end if;
+ end if;
+ return ordinary;
+end $function$
+'),
+    ('function','private.leave_request_quantity(uuid, date, date, time without time zone, time without time zone, numeric)','c5a17eb132bbd9e599576e97df07bf30bdcfd6c9eddacf4b7d3b82f9b38f8c2c','CREATE OR REPLACE FUNCTION private.leave_request_quantity(p_person uuid, p_start date, p_end date, p_start_time time without time zone, p_end_time time without time zone, p_hours numeric)
+ RETURNS numeric
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare day date; pol private.leave_accrual_policies%rowtype; calendar text; ordinary numeric; total numeric:=0; elapsed numeric; ordinary_days integer:=0;
+begin
+ if p_start is null or p_end is null or p_end<p_start or p_end-p_start>3660 or ((p_start_time is null)<>(p_end_time is null)) then return null; end if;
+ if p_hours is not null and (p_hours<=0 or p_hours::text in (''NaN'',''Infinity'',''-Infinity'')) then return null;end if;
+ if p_start_time is not null and p_start<>p_end then return null; end if;
+ select calendar_key into calendar from private.leave_payroll_calendars where person_id=p_person;
+ for day in select d::date from generate_series(p_start,p_end,interval ''1 day'') d loop
+  select * into pol from private.leave_accrual_policies where person_id=p_person and effective_from<=day order by effective_from desc,created_at desc,id desc limit 1;
+  if not found or cardinality(pol.weekdays)<>(select count(distinct value) from unnest(pol.weekdays) value) then return null; end if;
+  ordinary:=case when extract(isodow from day)::integer=any(pol.weekdays) then pol.weekly_hours/cardinality(pol.weekdays) else 0 end;
+  if ordinary=0 then continue; end if;
+  if exists(select 1 from private.victorian_public_holidays where holiday_date=day) then
+   if calendar is null then return null; elsif calendar=''victoria'' then continue; end if;
+  end if;
+  ordinary_days:=ordinary_days+1;
+  if p_start_time is not null then
+   elapsed:=extract(epoch from(p_end_time-p_start_time))/3600;
+   if elapsed<=0 or elapsed>24 or (p_hours is not null and abs(p_hours-round(elapsed,2))>0.0001) then return null; end if;
+   total:=total+elapsed;
+  elsif p_start=p_end and p_hours is not null then
+   if p_hours<=0 or p_hours>24 or p_hours::text in (''NaN'',''Infinity'',''-Infinity'') then return null; end if;
+   total:=total+p_hours;
+  else total:=total+ordinary; end if;
+ end loop;
+ if p_hours is not null and p_start<>p_end then if p_hours>ordinary_days*24 then return null;end if;return p_hours;end if;
+ return total;
+end $function$
+'),
+    ('function','private.payroll_request_hours_after(uuid, date)','eeb5380b3f249f806704d88746754242b59097ae8b16a3eb004f3a1426a02f30','CREATE OR REPLACE FUNCTION private.payroll_request_hours_after(p_request uuid, p_after date)
+ RETURNS numeric
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+ select case when p_after is null then null when r.end_date<=p_after then 0 when p_after<r.start_date and r.hours is not null and r.pay_treatment=''paid_entitlement'' then private.leave_request_quantity(r.employee_person_id,r.start_date,r.end_date,r.start_time,r.end_time,r.hours) else
+ (select case when count(*) filter(where qty is null)>0 then null else coalesce(sum(qty),0) end
+ from(select private.leave_payroll_day_hours(r.id,d::date) qty from generate_series(greatest(r.start_date,p_after+1),r.end_date,interval ''1 day'') d) amounts) end
+ from public.leave_requests r where r.id=p_request;
+$function$
+'),
+    ('function','private.payroll_request_unconsumed_hours(uuid, date, date)','5195fc234b82a5d34b9e142d464b4e597fb0fe37d281715bf5bee275356de190','CREATE OR REPLACE FUNCTION private.payroll_request_unconsumed_hours(p_person uuid, p_after date, p_through date)
+ RETURNS numeric
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare committed numeric; consumed numeric:=0; day date; request_count integer; request_id uuid;
+  scheduled numeric; employment_start date; employment_end date; review private.leave_accrual_day_reviews%rowtype;
+begin
+  if p_after is null or p_through is null or p_through<p_after or p_through-p_after>3660 then return null; end if;
+  committed:=private.approved_leave_hours_after(p_person,array[''Annual leave''],p_after);
+  if committed is null then return null; end if;
+  select p.started_date,d.scheduled_employment_end_date into employment_start,employment_end
+    from public.internal_org_people p left join private.employee_directory_details d on d.person_id=p.id where p.id=p_person;
+  for day in select x::date from generate_series(p_after+1,p_through,interval ''1 day'') x loop
+    if day<coalesce(employment_start,day) or day>coalesce(employment_end,day) then continue; end if;
+    select count(*),min(r.id::text)::uuid into request_count,request_id
+    from public.leave_requests r where r.employee_person_id=p_person and r.status=''approved''
+      and r.request_type_label=''Annual leave'' and day between r.start_date and r.end_date
+      and private.payroll_request_hours_after(r.id,day-1)>private.payroll_request_hours_after(r.id,day);
+    select * into review from private.leave_accrual_day_reviews where person_id=p_person and service_date=day order by created_at desc,id desc limit 1;
+    if (request_count>0 and review.id is null)
+      or (review.id is not null and review.request_fingerprint<>private.leave_accrual_request_fingerprint(p_person,day))
+      or (request_count>1 and review.annual_taken_hours>0) then return null; end if;
+    if request_count=1 and review.annual_taken_hours>0 then
+      scheduled:=private.payroll_request_hours_after(request_id,day-1)-private.payroll_request_hours_after(request_id,day);
+      consumed:=consumed+least(review.annual_taken_hours,scheduled);
+    end if;
+  end loop;
+  return committed-consumed;
+end;
+$function$
+'),
+    ('function','private.plan_employee_removal_reporting_splice(uuid)','ed84b454c1f3b9bb790c569e9098a880f5228456400c67f4876e58f92d1fc292',null),
+    ('function','private.project_annual_leave_balance(uuid, date)','98385266f9a1a77aaf975d95e2fbea2272cf8940601d9230fe6ce26d0e036ec4','CREATE OR REPLACE FUNCTION private.project_annual_leave_balance(p_person uuid, p_start date)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare basis jsonb; c jsonb; approved numeric; consumed numeric:=0; day date; qty numeric; taken numeric; r record; rev private.leave_accrual_day_reviews%rowtype; terms jsonb; projection_status text;
+begin
+ basis:=private.leave_bank_basis(p_person,''annual'');
+ if p_start is null or basis->>''bankHours'' is null then return jsonb_build_object(''status'',''unavailable'',''projectedDate'',p_start); end if;
+ c:=private.calculate_leave_entitlement(p_person,''annual'',p_start-1);
+ approved:=private.approved_leave_hours_after(p_person,array[''Annual leave''],(basis->>''reportDate'')::date);
+ if basis->>''coveredThrough'' is not null then
+  for rev in select distinct on(service_date) * from private.leave_accrual_day_reviews where person_id=p_person and service_date>(basis->>''coveredThrough'')::date and service_date<p_start and service_date<=(c->>''usageThroughDate'')::date order by service_date,created_at desc,id desc loop
+   if rev.request_fingerprint<>private.leave_accrual_request_fingerprint(p_person,rev.service_date) then approved:=null;exit; end if;
+   qty:=0;
+   for r in select id from public.leave_requests where employee_person_id=p_person and status=''approved'' and pay_treatment=''paid_entitlement'' and request_type_label=''Annual leave'' and rev.service_date between start_date and end_date loop
+    taken:=private.leave_payroll_day_hours(r.id,rev.service_date); if taken is null then approved:=null;exit; end if;qty:=qty+taken;
+   end loop;
+   consumed:=consumed+least(rev.annual_taken_hours,qty);
+  end loop;
+ end if;
+ terms:=c->''terms'';projection_status:=case when approved is null or c->>''status''=''not_configured'' or basis->>''status''=''needs_review'' then ''unavailable'' when (basis->>''coveredThrough'')::date>=p_start then ''banked_only'' when basis->>''status''=''current'' and c->>''eligibilityStatus''=''current'' then ''projected'' else ''banked_only'' end;
+ return jsonb_build_object(''status'',projection_status,
+  ''accrualStatus'',c->''status'',''projectedDate'',p_start,''fromDate'',(basis->>''coveredThrough'')::date+1,''throughDate'',p_start-1,
+  ''payrollDate'',basis->''reportDate'',''bankReportDate'',basis->''reportDate'',''coveredServiceThrough'',basis->''coveredThrough'',''payrollHours'',basis->''bankHours'',
+  ''approvedHours'',approved,''retainedHours'',basis->''retainedHours'',
+  ''balanceSource'',basis->''sourceKind'',''sourceKind'',basis->''sourceKind'',''accruedHours'',c->''earned'',''otherTakenHours'',greatest(0,(c->>''taken'')::numeric-consumed),
+  ''availableHours'',case when projection_status=''unavailable'' then null else (basis->>''bankHours'')::numeric+(c->>''earned'')::numeric-approved-greatest(0,(c->>''taken'')::numeric-consumed) end,''terms'',terms);
+end $function$
+'),
+    ('function','private.record_subscription_review(uuid, bigint)','c93192128cc5549e47a5e76c251db6fe08bdfbbc4b8a3366d03239d3c9da87c3',null),
+    ('function','private.retain_completed_annual_leave_accounting()','31b3d93692aa59c4d8f1b77c52bed38c13639609f6402fe29b42fe2bf066155d',null),
+    ('function','private.sync_new_starter_after_person_change()','f3385de926eaf08c78d25759bc948130a3410aeb0a2ee7725f044081e8699f52','CREATE OR REPLACE FUNCTION private.sync_new_starter_after_person_change()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare child_id uuid;
+begin
+  if new.node_kind = ''person'' then
+    perform private.sync_employee_new_starter_day_one_reminder(new.id);
+  end if;
+  if new.node_kind = ''person'' then
+    for child_id in
+      select child.id from public.internal_org_people child
+      where child.node_kind=''person'' and child.parent_id=new.id
+    loop
+      perform private.sync_employee_new_starter_day_one_reminder(child_id);
+    end loop;
+  end if;
+  return new;
+end;
+$function$
+'),
+    ('function','public.archive_employee_directory_record(uuid, bigint, bigint, date, text)','60a83054f4ab64682178160914135cfdefed9d158c99f24e02a7174f05d17d8c','CREATE OR REPLACE FUNCTION public.archive_employee_directory_record(p_person_id uuid, p_expected_person_version bigint, p_expected_detail_version bigint, p_end_date date, p_archive_reason text)
+ RETURNS TABLE(person_id uuid, person_version bigint, detail_version bigint)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare
+  v_unified_role_fence boolean := private.lock_portal_role_actor();
+  v_actor uuid := (select auth.uid());
+  v_person public.internal_org_people%rowtype;
+  v_detail private.employee_directory_details%rowtype;
+  v_profile public.profiles%rowtype;
+  v_reason text := nullif(btrim(p_archive_reason), '''');
+  v_profile_before jsonb;
+  v_profile_version bigint;
+  v_updated_person public.internal_org_people%rowtype;
+  v_updated_detail private.employee_directory_details%rowtype;
+begin
+  if not private.can_view_archived_employee_profiles() then
+    raise exception ''Only authorised HR and global reviewers can archive employee profiles.''
+      using errcode = ''42501'';
+  end if;
+
+  if p_person_id is null or p_expected_person_version is null or p_expected_person_version < 1
+    or p_expected_detail_version is null or p_expected_detail_version < 0 then
+    raise exception ''The employee record is invalid.'' using errcode = ''22023'';
+  end if;
+
+  if p_end_date is null then
+    raise exception ''Choose an employment end date.'' using errcode = ''22004'';
+  end if;
+
+  if v_reason is null or v_reason not in (''Resigned'', ''End of contract'', ''Terminated'', ''Redundant'', ''Other'') then
+    raise exception ''Choose an archive reason.'' using errcode = ''22023'';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(''internal_org_people_hierarchy'', 0));
+
+  select person.* into v_person
+  from public.internal_org_people person
+  where person.id = p_person_id
+    and person.node_kind = ''person''
+  for update;
+
+  if not found then
+    raise exception ''The employee record no longer exists.'' using errcode = ''23503'';
+  end if;
+
+  if v_person.version <> p_expected_person_version then
+    raise exception ''This employee changed since it was opened. Refresh and try again.'' using errcode = ''40001'';
+  end if;
+
+  if v_person.started_date is not null and p_end_date < v_person.started_date then
+    raise exception ''The end date cannot be before the start date.'' using errcode = ''22023'';
+  end if;
+
+  if exists (
+    select 1
+    from public.internal_org_people child
+    where child.parent_id = p_person_id
+      and child.is_active
+  ) then
+    raise exception ''Move or archive this employee''''s active direct reports first.'' using errcode = ''23503'';
+  end if;
+
+  if v_person.auth_user_id is not null then
+    select profile.* into v_profile
+    from public.profiles profile
+    where profile.id = v_person.auth_user_id
+    for update;
+
+    if found and v_profile.account_status = ''active'' then
+      if v_person.auth_user_id = v_actor then
+        raise exception ''You cannot end employment and disable your own portal account.''
+          using errcode = ''42501'';
+      end if;
+
+      if (
+        exists (
+          select 1
+          from private.portal_account_admins administrator
+          where administrator.auth_user_id = v_person.auth_user_id
+            and administrator.revoked_at is null
+        )
+        or v_profile.app_role = ''system_admin''
+      )
+      and not exists (
+        select 1
+        from public.profiles other_profile
+        where other_profile.id <> v_person.auth_user_id
+          and other_profile.account_status = ''active''
+          and other_profile.login_name is not null
+          and (
+            other_profile.app_role = ''system_admin''
+            or exists (
+              select 1
+              from private.portal_account_admins other_administrator
+              where other_administrator.auth_user_id = other_profile.id
+                and other_administrator.revoked_at is null
+            )
+          )
+      ) then
+        raise exception ''The last active account administrator cannot be disabled.''
+          using errcode = ''42501'';
+      end if;
+
+      v_profile_before := jsonb_build_object(
+        ''account_status'', v_profile.account_status,
+        ''account_version'', v_profile.account_version
+      );
+
+      update public.profiles profile
+      set account_status = ''disabled'',
+          disabled_at = clock_timestamp(),
+          credentials_valid_after = clock_timestamp(),
+          account_version = profile.account_version + 1,
+          updated_at = clock_timestamp()
+      where profile.id = v_person.auth_user_id
+        and profile.account_version = v_profile.account_version
+      returning profile.account_version into v_profile_version;
+
+      if not found then
+        raise exception ''The portal account changed. Refresh and try again.''
+          using errcode = ''40001'';
+      end if;
+
+      insert into private.portal_account_admin_events (
+        actor_user_id,
+        target_user_id,
+        event_type,
+        before_state,
+        after_state
+      )
+      values (
+        v_actor,
+        v_person.auth_user_id,
+        ''account_disabled'',
+        v_profile_before,
+        jsonb_build_object(
+          ''account_status'', ''disabled'',
+          ''account_version'', v_profile_version
+        )
+      );
+    end if;
+  end if;
+
+  select detail.* into v_detail
+  from private.employee_directory_details detail
+  where detail.person_id = p_person_id
+  for update;
+
+  if not found then
+    raise exception ''The employee detail does not exist.'' using errcode = ''23503'';
+  end if;
+
+  if v_detail.version <> p_expected_detail_version then
+    raise exception ''This employee detail changed since it was opened. Refresh and try again.'' using errcode = ''40001'';
+  end if;
+
+  update public.internal_org_people person
+  set is_active = false,
+      updated_by = v_actor
+  where person.id = p_person_id
+  returning * into v_updated_person;
+
+  update private.employee_directory_details detail
+  set scheduled_employment_end_date = p_end_date,
+      archive_reason = v_reason,
+      updated_by = v_actor
+  where detail.person_id = p_person_id
+  returning * into v_updated_detail;
+
+  insert into private.employee_directory_audit_events (
+    person_id,
+    actor_user_id,
+    event_type,
+    changed_fields
+  )
+  values (
+    p_person_id,
+    v_actor,
+    ''updated'',
+    array[''is_active'', ''scheduled_employment_end_date'']::text[]
+  );
+
+  return query select v_updated_person.id, v_updated_person.version, v_updated_detail.version;
+end;
+$function$
+'),
+    ('function','public.complete_my_subscription_review_task(uuid, bigint)','878845e95f824a7510aac430613dbcb83e8bb0c2e050fa0138f1b19a6b4af540',null),
+    ('function','public.delete_employee_directory_record(uuid, bigint)','8bf12b755abe5f78b4e74f856ae5a931f7156f617f576f9e54662f327a1a4a66','CREATE OR REPLACE FUNCTION public.delete_employee_directory_record(p_person_id uuid, p_expected_person_version bigint)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare
+  v_unified_role_fence boolean := private.lock_portal_role_actor();
+  v_person public.internal_org_people%rowtype;
+  v_has_roster_link boolean := false;
+begin
+  if not public.can_delete_employee_directory_profile() then
+    raise exception ''Only authorised HR, Super Admin, Steven or Penny can delete archived employee profiles.''
+      using errcode = ''42501'';
+  end if;
+
+  if p_person_id is null or p_expected_person_version is null or p_expected_person_version < 1 then
+    raise exception ''The employee record is invalid.'' using errcode = ''22023'';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(''internal_org_people_hierarchy'', 0));
+
+  select person.* into v_person
+  from public.internal_org_people person
+  where person.id = p_person_id
+    and person.node_kind = ''person''
+  for update;
+
+  if not found then
+    raise exception ''The employee record no longer exists.'' using errcode = ''23503'';
+  end if;
+
+  if v_person.version <> p_expected_person_version then
+    raise exception ''This employee changed since it was opened. Refresh and try again.'' using errcode = ''40001'';
+  end if;
+
+  if v_person.is_active then
+    raise exception ''Archive the employee before deleting the profile.'' using errcode = ''23503'';
+  end if;
+
+  if v_person.auth_user_id is not null then
+    raise exception ''Unlink the portal account before deleting the profile.'' using errcode = ''23503'';
+  end if;
+
+  if exists (
+    select 1 from public.internal_org_people child where child.parent_id = p_person_id
+  ) then
+    raise exception ''Move or delete this employee''''s reporting line before deleting the profile.'' using errcode = ''23503'';
+  end if;
+
+  if to_regclass(''private.employee_check_in_reminders'') is not null
+    and exists (select 1 from private.employee_check_in_reminders reminder where reminder.person_id = p_person_id) then
+    raise exception ''This profile has check-in history. Keep it archived instead.'' using errcode = ''23503'';
+  end if;
+
+  if to_regclass(''private.employee_check_in_enrolments'') is not null
+    and exists (select 1 from private.employee_check_in_enrolments enrolment where enrolment.person_id = p_person_id) then
+    raise exception ''This profile has check-in history. Keep it archived instead.'' using errcode = ''23503'';
+  end if;
+
+  if to_regclass(''private.employee_roster_person_links'') is not null then
+    execute ''select exists (select 1 from private.employee_roster_person_links where person_id = $1)''
+      into v_has_roster_link using p_person_id;
+    if v_has_roster_link then
+      raise exception ''This profile is part of the authoritative roster. Keep it archived instead.'' using errcode = ''23503'';
+    end if;
+  end if;
+
+  begin
+    delete from public.internal_org_people person where person.id = p_person_id;
+  exception
+    when foreign_key_violation then
+      raise exception ''This profile is referenced by existing records. Keep it archived instead.'' using errcode = ''23503'';
+  end;
+
+  return p_person_id;
+end;
+$function$
+'),
+    ('function','public.finalise_portal_account_status_change(uuid, uuid, uuid)','b63463e0bca9fe0d737338865e2ad0620ed089d634f55a233d0366720e4b0b3c','CREATE OR REPLACE FUNCTION public.finalise_portal_account_status_change(p_person_id uuid, p_auth_user_id uuid, p_change_token uuid)
+ RETURNS TABLE(person_id uuid, auth_user_id uuid, login_name text, account_status text, account_version bigint)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare
+  v_unified_role_fence boolean := private.lock_portal_role_actor();
+  v_claim private.portal_account_status_change_claims;
+  v_row record;
+  v_target_status text;
+begin
+  if not private.is_portal_account_admin() then
+    raise exception ''Only an account administrator can finalise an account status change.''
+      using errcode = ''42501'';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(''portal_account:'' || p_auth_user_id::text, 0));
+
+  select claim.*
+  into v_claim
+  from private.portal_account_status_change_claims claim
+  where claim.auth_user_id = p_auth_user_id
+    and claim.change_token = p_change_token
+    and claim.person_id = p_person_id
+    and claim.claimed_by = (select auth.uid())
+  for update;
+
+  if not found or v_claim.status = ''cancelled'' then
+    raise exception ''The account-status claim is no longer valid.'' using errcode = ''40001'';
+  end if;
+
+  if v_claim.status = ''finalised'' then
+    return query
+    select p_person_id, p_auth_user_id, profile.login_name, profile.account_status,
+      coalesce(v_claim.final_account_version, profile.account_version)
+    from public.profiles profile
+    where profile.id = p_auth_user_id;
+    return;
+  end if;
+
+  v_target_status := case when v_claim.requested_enabled then ''active'' else ''disabled'' end;
+
+  select p_person_id as person_id,
+    p_auth_user_id as auth_user_id,
+    profile.login_name,
+    profile.account_status,
+    profile.account_version
+  into v_row
+  from public.profiles profile
+  where profile.id = p_auth_user_id
+    and profile.login_name is not null
+    and exists (
+      select 1
+      from public.internal_org_people person
+      where person.id = p_person_id
+        and person.auth_user_id = p_auth_user_id
+        and person.node_kind = ''person''
+        and (person.is_active or profile.account_status = v_target_status)
+    );
+
+  if not found then
+    raise exception ''The account changed or no longer exists. Reconcile the login provider before retrying.''
+      using errcode = ''40001'';
+  end if;
+
+  if v_row.account_status <> v_target_status
+    and v_row.account_version <> v_claim.claimed_account_version then
+    raise exception ''The account changed or no longer exists. Reconcile the login provider before retrying.''
+      using errcode = ''40001'';
+  end if;
+
+  if v_row.account_status <> v_target_status then
+    select changed.*
+    into v_row
+    from public.set_portal_account_enabled(
+      p_person_id,
+      p_auth_user_id,
+      v_claim.requested_enabled,
+      v_claim.claimed_account_version
+    ) changed;
+  end if;
+
+  update private.portal_account_status_change_claims claim
+  set status = ''finalised'',
+      final_account_version = v_row.account_version,
+      finalised_at = clock_timestamp()
+  where claim.auth_user_id = p_auth_user_id
+    and claim.change_token = p_change_token;
+
+  return query
+  select v_row.person_id,
+    v_row.auth_user_id,
+    v_row.login_name,
+    v_row.account_status,
+    v_row.account_version;
+end;
+$function$
+'),
+    ('function','public.list_my_subscription_review_tasks()','fd253a8ec614422290b76958d9ff155661622ae4f61beae3a97361ed5c3c66cc',null),
+    ('function','public.list_subscription_review_tasks_for_preview(uuid)','547c9f5eab9ea48fc73d889ae147947a322c5510a7f9eb06f6805c5815c1cb93',null),
+    ('function','public.list_trade_school_leave_entitlements(uuid)','90811f3ed6329ced70b5bf2ff98f18a11f3d65e83dc2104d882afdc3dd0bd3e0',null),
+    ('function','public.mark_subscription_reviewed_v2(uuid, bigint)','ac588e02123a9898f414ce3715771306748b6ce00d110a744116bf2dd1b945c3','CREATE OR REPLACE FUNCTION public.mark_subscription_reviewed_v2(p_subscription_id uuid, p_expected_version bigint)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare
+  actor uuid := (select auth.uid());
+  v_subscription private.subscription_register%rowtype;
+begin
+  if actor is null or not private.lock_subscription_role_authority(false) then
+    raise exception ''You do not have permission to review subscriptions.'' using errcode = ''42501'';
+  end if;
+  if p_subscription_id is null or p_expected_version is null or p_expected_version < 1 then
+    raise exception ''The subscription record is invalid.'' using errcode = ''22023'';
+  end if;
+  select target.* into v_subscription
+  from private.subscription_register target
+  where target.id = p_subscription_id
+  for update;
+  if not found then
+    raise exception ''This subscription is no longer available.'' using errcode = ''P0002'';
+  end if;
+  if v_subscription.version <> p_expected_version then
+    raise exception ''This subscription has changed. Refresh it, then try again.'' using errcode = ''40001'';
+  end if;
+  if v_subscription.subscription_status not in (''active'', ''paused'')
+    or v_subscription.pricing_model <> ''paid'' then
+    raise exception ''Only active paid subscriptions need a quarterly review.'' using errcode = ''22023'';
+  end if;
+
+  update private.subscription_register target
+  set next_review_on = private.next_paid_subscription_quarter_review_on(
+        greatest(
+          private.mam_local_calendar_date(),
+          coalesce(v_subscription.next_review_on, private.mam_local_calendar_date())
+        )
+      ),
+      updated_by = actor
+  where target.id = v_subscription.id
+  returning * into v_subscription;
+
+  insert into private.subscription_audit_events (
+    subscription_id,
+    actor_user_id,
+    event_type,
+    changed_fields
+  ) values (
+    v_subscription.id,
+    actor,
+    ''reviewed'',
+    array[''next_review_on'']::text[]
+  );
+
+  return (
+    select projection.item
+    from private.subscription_register_v2_projection(v_subscription.id) as projection(item)
+  );
+end;
+$function$
+'),
+    ('function','public.preflight_employee_removal_reporting_splice(uuid, bigint, bigint, date, text)','8572b75fcd772bbe658c7a793054fed2b60f7edb39999e46c6eda81511c9c4b2',null),
+    ('function','public.refresh_employee_leave_accrual()','e1fcc431a959a1929bc46e25bdf31a58c469265329edaa7a28e967b38eeff292','CREATE OR REPLACE FUNCTION public.refresh_employee_leave_accrual()
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare n integer;
+begin
+  insert into private.leave_accrual_calculations(person_id,result)
+  select distinct p.person_id,private.calculate_employee_leave_accrual(p.person_id,(now() at time zone ''Australia/Melbourne'')::date-1)
+  from private.leave_accrual_policies p on conflict(person_id,result) do nothing;
+  get diagnostics n=row_count; return n;
+end;
+$function$
+'),
+    ('function','public.run_scheduled_employee_offboarding(uuid, timestamp with time zone)','a4b89c3ebeffdc4297cbeb195cd1575ec9cb07ba8ecf086c3be4ba8f21a9235f','CREATE OR REPLACE FUNCTION public.run_scheduled_employee_offboarding(p_person_id uuid, p_now timestamp with time zone DEFAULT clock_timestamp())
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare
+  v_person public.internal_org_people%rowtype;
+  v_schedule private.scheduled_employee_offboarding%rowtype;
+  v_profile public.profiles%rowtype;
+  v_version bigint;
+begin
+  if (select auth.role()) is distinct from ''service_role'' and session_user not in (''service_role'',''postgres'') then
+    raise exception ''Service role required.'' using errcode=''42501'';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(''mam:directory-role-control'', 0));
+  perform pg_advisory_xact_lock(hashtextextended(''internal_org_people_hierarchy'', 0));
+  select * into v_person from public.internal_org_people where id=p_person_id and node_kind=''person'' for update;
+  select * into v_schedule from private.scheduled_employee_offboarding where person_id=p_person_id for update;
+  if v_person.id is null or not v_person.is_active or v_schedule.person_id is null
+    or v_schedule.end_date >= (p_now at time zone ''Australia/Melbourne'')::date then
+    return false;
+  end if;
+  if exists(select 1 from public.internal_org_people where parent_id=p_person_id and is_active) then
+    raise exception ''Move or archive active direct reports first.'' using errcode=''23503'';
+  end if;
+  if exists(select 1 from private.it_assets where assigned_person_id=p_person_id and asset_status <> ''retired'') then
+    raise exception ''Reassign active IT devices before ending employment.'' using errcode=''23514'';
+  end if;
+  if v_person.auth_user_id is not null then
+    select * into v_profile from public.profiles where id=v_person.auth_user_id for update;
+    if v_profile.id is not null and v_profile.account_status=''active'' then
+      if (v_profile.app_role=''system_admin'' or exists(select 1 from private.portal_account_admins where auth_user_id=v_profile.id and revoked_at is null))
+        and not exists(select 1 from public.profiles other where other.id<>v_profile.id and other.account_status=''active'' and other.login_name is not null
+          and (other.app_role=''system_admin'' or exists(select 1 from private.portal_account_admins admin where admin.auth_user_id=other.id and admin.revoked_at is null))) then
+        raise exception ''The last active account administrator cannot be disabled.'' using errcode=''42501'';
+      end if;
+      update public.profiles set account_status=''disabled'',disabled_at=clock_timestamp(),credentials_valid_after=clock_timestamp(),
+        account_version=account_version+1,updated_at=clock_timestamp() where id=v_profile.id returning account_version into v_version;
+      insert into private.portal_account_admin_events(actor_user_id,target_user_id,event_type,before_state,after_state)
+      values(v_schedule.scheduled_by,v_profile.id,''account_disabled'',
+        jsonb_build_object(''account_status'',v_profile.account_status,''account_version'',v_profile.account_version),
+        jsonb_build_object(''account_status'',''disabled'',''account_version'',v_version));
+    end if;
+  end if;
+  update public.internal_org_people set is_active=false,updated_by=v_schedule.scheduled_by where id=p_person_id;
+  update private.employee_directory_details set archive_reason=v_schedule.reason,updated_by=v_schedule.scheduled_by where person_id=p_person_id;
+  insert into private.employee_directory_audit_events(person_id,actor_user_id,event_type,changed_fields)
+  values(p_person_id,v_schedule.scheduled_by,''updated'',array[''is_active'',''scheduled_employment_end_date'']::text[]);
+  return true;
+end $function$
+'),
+    ('function','public.submit_my_leave_request(text, date, date, time without time zone, time without time zone, text)','a6b1db5ea5381168236c61073024a43218a10acd7e2984102e342514b9524388','CREATE OR REPLACE FUNCTION public.submit_my_leave_request(p_request_type_label text, p_start_date date, p_end_date date, p_start_time time without time zone DEFAULT NULL::time without time zone, p_end_time time without time zone DEFAULT NULL::time without time zone, p_employee_note text DEFAULT NULL::text)
+ RETURNS TABLE(id uuid, status text, approval_required boolean, assigned_reviewer_label text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare
+  v_actor_user_id uuid := (select auth.uid());
+  v_actor_person_id uuid;
+  v_request_type_label text := nullif(btrim(p_request_type_label), '''');
+  v_leave_type text;
+  v_employee_note text := nullif(btrim(p_employee_note), '''');
+  v_business_days integer;
+  v_hours numeric(7, 2);
+  v_primary_reviewer_user_id uuid;
+  v_primary_reviewer_label text;
+  v_reviewer_count integer;
+  v_request public.leave_requests%rowtype;
+begin
+  if v_actor_user_id is null
+    or coalesce(((select auth.jwt()) ->> ''is_anonymous'')::boolean, false)
+    or not private.is_active_portal_account() then
+    raise exception ''An active portal account is required to submit leave.''
+      using errcode = ''42501'';
+  end if;
+
+  v_actor_person_id := private.current_active_portal_employee_id();
+  if v_actor_person_id is null then
+    raise exception ''An active linked employee account is required to submit leave.''
+      using errcode = ''42501'';
+  end if;
+
+  if v_request_type_label is null or v_request_type_label not in (
+    ''Annual leave'',
+    ''Sick leave'',
+    ''Carer''''s leave'',
+    ''Unpaid leave''
+  ) then
+    raise exception ''Choose a valid leave type.'' using errcode = ''22023'';
+  end if;
+
+  perform private.assert_leave_date_range(p_start_date, p_end_date);
+  if p_start_date is null or p_end_date is null or p_end_date < p_start_date then
+    raise exception ''End date must be on or after start date.'' using errcode = ''22023'';
+  end if;
+
+  if (p_start_time is null) <> (p_end_time is null) then
+    raise exception ''Choose both times or neither.'' using errcode = ''22023'';
+  end if;
+
+  if v_employee_note is not null and char_length(v_employee_note) > 2000 then
+    raise exception ''Leave note is too long.'' using errcode = ''22001'';
+  end if;
+
+  if v_request_type_label=''Annual leave'' and exists(select 1 from private.employee_directory_details where person_id=v_actor_person_id and employment_type in (''full_time'',''part_time'')) then
+    select count(*)::integer into v_business_days from generate_series(p_start_date,p_end_date,interval ''1 day'') day
+      cross join lateral(select ap.weekdays from private.leave_accrual_policies ap where ap.person_id=v_actor_person_id and ap.effective_from<=day::date order by ap.effective_from desc,ap.created_at desc,ap.id desc limit 1) policy
+      where extract(isodow from day)::integer=any(policy.weekdays);
+    if p_start_time is not null and (p_start_time<time ''06:00'' or p_start_time>=time ''18:00'' or p_end_time<=time ''06:00'' or p_end_time>time ''18:00'' or extract(minute from p_start_time)::integer%15<>0 or extract(minute from p_end_time)::integer%15<>0) then
+      raise exception ''Times must use 15-minute intervals within 06:00 to 18:00.'' using errcode=''22023'';
+    end if;
+    if v_business_days<1 or private.leave_request_quantity(v_actor_person_id,p_start_date,p_end_date,p_start_time,p_end_time,null) is null or private.leave_request_quantity(v_actor_person_id,p_start_date,p_end_date,p_start_time,p_end_time,null)<=0 then
+      raise exception ''Your annual leave projection is unavailable. Please contact payroll before requesting annual leave.'' using errcode=''22023'';
+    end if;
+    if p_start_time is not null then v_hours:=round(private.leave_request_quantity(v_actor_person_id,p_start_date,p_end_date,p_start_time,p_end_time,null),2); end if;
+  else
+  select count(*)::integer
+  into v_business_days
+  from generate_series(p_start_date, p_end_date, interval ''1 day'') day
+  where extract(isodow from day) between 1 and 5;
+
+  if v_business_days < 1 then
+    raise exception ''Choose at least one weekday for this request.'' using errcode = ''22023'';
+  end if;
+
+  if p_start_time is not null then
+    if extract(isodow from p_start_date) not between 1 and 5
+      or extract(isodow from p_end_date) not between 1 and 5
+      or p_start_time < time ''06:00''
+      or p_start_time >= time ''18:00''
+      or p_end_time <= time ''06:00''
+      or p_end_time > time ''18:00''
+      or (p_start_date = p_end_date and p_end_time <= p_start_time)
+      or extract(minute from p_start_time)::integer % 15 <> 0
+      or extract(minute from p_end_time)::integer % 15 <> 0 then
+      raise exception ''Times must use 15-minute intervals within 06:00 to 18:00.''
+        using errcode = ''22023'';
+    end if;
+
+    select round(sum(
+      case
+        when day::date = p_start_date and day::date = p_end_date then
+          (extract(epoch from (p_end_time - p_start_time)) / 3600)::numeric
+        when day::date = p_start_date then
+          (extract(epoch from (time ''18:00'' - p_start_time)) / 3600)::numeric
+        when day::date = p_end_date then
+          (extract(epoch from (p_end_time - time ''06:00'')) / 3600)::numeric
+        else 12::numeric
+      end
+    ), 2)
+    into v_hours
+    from generate_series(p_start_date, p_end_date, interval ''1 day'') day
+    where extract(isodow from day) between 1 and 5;
+
+    if v_hours is null or v_hours <= 0 then
+      raise exception ''Choose a time range with working hours.'' using errcode = ''22023'';
+    end if;
+  end if;
+
+  end if;
+
+  -- Lock the hierarchy and the grant configuration in one stable order before
+  -- deriving the snapshot. Organisation edits and grant changes therefore
+  -- affect either this request or a later request, never half of each.
+  perform pg_advisory_xact_lock(hashtextextended(''internal_org_people_hierarchy'', 0));
+  perform pg_advisory_xact_lock(hashtextextended(''leave_approval_grants'', 0));
+
+  select count(distinct candidate.reviewer_user_id)::integer
+  into v_reviewer_count
+  from private.resolve_leave_approval_grants(v_actor_person_id) candidate
+  where candidate.reviewer_user_id is distinct from v_actor_user_id;
+
+  if coalesce(v_reviewer_count, 0) < 1 then
+    raise exception ''No authorised leave reviewer is configured for this request.''
+      using errcode = ''42501'';
+  end if;
+
+  select candidate.reviewer_user_id, candidate.reviewer_label
+  into v_primary_reviewer_user_id, v_primary_reviewer_label
+  from private.resolve_leave_approval_grants(v_actor_person_id) candidate
+  where candidate.reviewer_user_id is distinct from v_actor_user_id
+  order by
+    case candidate.scope_kind
+      when ''team'' then 0
+      when ''subtree'' then 1
+      else 2
+    end,
+    candidate.scope_priority,
+    candidate.scope_depth,
+    candidate.grant_id
+  limit 1;
+
+  v_leave_type := case v_request_type_label
+    when ''Annual leave'' then ''annual''
+    when ''Sick leave'' then ''personal''
+    when ''Carer''''s leave'' then ''personal''
+    when ''Unpaid leave'' then ''unpaid''
+  end;
+
+  insert into public.leave_requests (
+    user_id,
+    leave_type,
+    request_type_label,
+    start_date,
+    end_date,
+    start_time,
+    end_time,
+    business_days,
+    hours,
+    approval_required,
+    manager_user_id,
+    manager_name_snapshot,
+    reason,
+    status,
+    submitted_at,
+    decided_at,
+    decided_by,
+    created_at,
+    updated_at
+  )
+  values (
+    v_actor_user_id,
+    v_leave_type,
+    v_request_type_label,
+    p_start_date,
+    p_end_date,
+    p_start_time,
+    p_end_time,
+    v_business_days,
+    v_hours,
+    true,
+    v_primary_reviewer_user_id,
+    v_primary_reviewer_label,
+    v_employee_note,
+    ''submitted'',
+    clock_timestamp(),
+    null,
+    null,
+    clock_timestamp(),
+    clock_timestamp()
+  )
+  returning * into v_request;
+
+  with candidates as (
+    select candidate.*
+    from private.resolve_leave_approval_grants(v_actor_person_id) candidate
+    where candidate.reviewer_user_id is distinct from v_actor_user_id
+  ),
+  distinct_reviewers as (
+    select distinct on (candidate.reviewer_user_id)
+      candidate.*
+    from candidates candidate
+    order by
+      candidate.reviewer_user_id,
+      case candidate.scope_kind
+        when ''team'' then 0
+        when ''subtree'' then 1
+        else 2
+      end,
+      candidate.scope_priority,
+      candidate.scope_depth,
+      candidate.grant_id
+  ),
+  ranked_reviewers as (
+    select
+      candidate.*,
+      row_number() over (
+        order by
+          case candidate.scope_kind
+            when ''team'' then 0
+            when ''subtree'' then 1
+            else 2
+          end,
+          candidate.scope_priority,
+          candidate.scope_depth,
+          candidate.grant_id
+      ) as route_rank
+    from distinct_reviewers candidate
+  )
+  insert into private.leave_request_reviewer_assignments (
+    leave_request_id,
+    reviewer_user_id,
+    source_grant_id,
+    assignment_kind,
+    reviewer_label,
+    is_primary
+  )
+  select
+    v_request.id,
+    candidate.reviewer_user_id,
+    candidate.grant_id,
+    candidate.scope_kind,
+    candidate.reviewer_label,
+    candidate.route_rank = 1
+  from ranked_reviewers candidate;
+
+  insert into public.leave_request_events (
+    leave_request_id,
+    actor_user_id,
+    event_type,
+    note
+  )
+  values
+    (v_request.id, v_actor_user_id, ''created'', null),
+    (v_request.id, v_actor_user_id, ''submitted'', null);
+
+  return query
+  select
+    v_request.id,
+    ''Pending'',
+    v_request.approval_required,
+    v_primary_reviewer_label;
+end;
+$function$
+'),
+    ('function','public.submit_selected_employee_leave_request(uuid, text, date, date, time without time zone, time without time zone, text)','88ab7b8f4969290e0a3f95ee50459bc92c14e2c0c70ddbec36156b4ca4569b74','CREATE OR REPLACE FUNCTION public.submit_selected_employee_leave_request(p_person_id uuid, p_request_type_label text, p_start_date date, p_end_date date, p_start_time time without time zone DEFAULT NULL::time without time zone, p_end_time time without time zone DEFAULT NULL::time without time zone, p_employee_note text DEFAULT NULL::text)
+ RETURNS TABLE(id uuid, status text, approval_required boolean, assigned_reviewer_label text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''''
+AS $function$
+declare
+  v_unified_role_fence boolean := private.lock_portal_role_actor();
+  v_actor_user_id uuid := (select auth.uid());
+  v_target_user_id uuid;
+  v_request_type_label text := nullif(btrim(p_request_type_label), '''');
+  v_employee_note text := nullif(btrim(p_employee_note), '''');
+  v_leave_type text;
+  v_business_days integer;
+  v_hours numeric(7, 2);
+  v_primary_reviewer_user_id uuid;
+  v_primary_reviewer_label text;
+  v_reviewer_count integer;
+  v_request public.leave_requests%rowtype;
+begin
+  if v_actor_user_id is null
+    or coalesce(((select auth.jwt()) ->> ''is_anonymous'')::boolean, false)
+    or not private.is_active_portal_account()
+    or not (private.is_operational_portal_admin() or private.can_submit_team_leave(p_person_id)) then
+    raise exception ''Only Super Admin may submit leave for a selected profile.'' using errcode = ''42501'';
+  end if;
+
+  select person.auth_user_id into v_target_user_id
+  from public.internal_org_people person
+  join public.profiles target_profile
+    on target_profile.id = person.auth_user_id
+   and target_profile.account_status = ''active''
+  where person.id = p_person_id
+    and person.node_kind = ''person''
+    and person.is_active = true
+    and person.auth_user_id is not null;
+
+  if v_target_user_id is null or not private.is_active_portal_account(v_target_user_id) then
+    raise exception ''The selected profile is not an active linked employee.'' using errcode = ''42501'';
+  end if;
+
+  if v_request_type_label is null or v_request_type_label not in (''Annual leave'', ''Sick leave'', ''Carer''''s leave'', ''Unpaid leave'') then
+    raise exception ''Choose a valid leave type.'' using errcode = ''22023'';
+  end if;
+  perform private.assert_leave_date_range(p_start_date, p_end_date);
+  if p_start_date is null or p_end_date is null or p_end_date < p_start_date then
+    raise exception ''End date must be on or after start date.'' using errcode = ''22023'';
+  end if;
+  if (p_start_time is null) <> (p_end_time is null) then
+    raise exception ''Choose both times or neither.'' using errcode = ''22023'';
+  end if;
+  if v_employee_note is not null and char_length(v_employee_note) > 2000 then
+    raise exception ''Leave note is too long.'' using errcode = ''22001'';
+  end if;
+
+  if v_request_type_label=''Annual leave'' and exists(select 1 from private.employee_directory_details where person_id=p_person_id and employment_type in (''full_time'',''part_time'')) then
+    select count(*)::integer into v_business_days from generate_series(p_start_date,p_end_date,interval ''1 day'') day
+      cross join lateral(select ap.weekdays from private.leave_accrual_policies ap where ap.person_id=p_person_id and ap.effective_from<=day::date order by ap.effective_from desc,ap.created_at desc,ap.id desc limit 1) policy
+      where extract(isodow from day)::integer=any(policy.weekdays);
+    if p_start_time is not null and (p_start_time<time ''06:00'' or p_start_time>=time ''18:00'' or p_end_time<=time ''06:00'' or p_end_time>time ''18:00'' or extract(minute from p_start_time)::integer%15<>0 or extract(minute from p_end_time)::integer%15<>0) then
+      raise exception ''Times must use 15-minute intervals within 06:00 to 18:00.'' using errcode=''22023'';
+    end if;
+    if v_business_days<1 or private.leave_request_quantity(p_person_id,p_start_date,p_end_date,p_start_time,p_end_time,null) is null or private.leave_request_quantity(p_person_id,p_start_date,p_end_date,p_start_time,p_end_time,null)<=0 then
+      raise exception ''Your annual leave projection is unavailable. Please contact payroll before requesting annual leave.'' using errcode=''22023'';
+    end if;
+    if p_start_time is not null then v_hours:=round(private.leave_request_quantity(p_person_id,p_start_date,p_end_date,p_start_time,p_end_time,null),2); end if;
+  else
+  select count(*)::integer into v_business_days
+  from generate_series(p_start_date, p_end_date, interval ''1 day'') day
+  where extract(isodow from day) between 1 and 5;
+  if v_business_days < 1 then
+    raise exception ''Choose at least one weekday for this request.'' using errcode = ''22023'';
+  end if;
+
+  if p_start_time is not null then
+    if extract(isodow from p_start_date) not between 1 and 5
+      or extract(isodow from p_end_date) not between 1 and 5
+      or p_start_time < time ''06:00'' or p_start_time >= time ''18:00''
+      or p_end_time <= time ''06:00'' or p_end_time > time ''18:00''
+      or (p_start_date = p_end_date and p_end_time <= p_start_time)
+      or extract(minute from p_start_time)::integer % 15 <> 0
+      or extract(minute from p_end_time)::integer % 15 <> 0 then
+      raise exception ''Times must use 15-minute intervals within 06:00 to 18:00.'' using errcode = ''22023'';
+    end if;
+    select round(sum(case
+      when day::date = p_start_date and day::date = p_end_date then (extract(epoch from (p_end_time - p_start_time)) / 3600)::numeric
+      when day::date = p_start_date then (extract(epoch from (time ''18:00'' - p_start_time)) / 3600)::numeric
+      when day::date = p_end_date then (extract(epoch from (p_end_time - time ''06:00'')) / 3600)::numeric
+      else 12::numeric end), 2)
+    into v_hours
+    from generate_series(p_start_date, p_end_date, interval ''1 day'') day
+    where extract(isodow from day) between 1 and 5;
+    if v_hours is null or v_hours <= 0 then
+      raise exception ''Choose a time range with working hours.'' using errcode = ''22023'';
+    end if;
+  end if;
+
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(''internal_org_people_hierarchy'', 0));
+  perform pg_advisory_xact_lock(hashtextextended(''leave_approval_grants'', 0));
+  select count(distinct candidate.reviewer_user_id)::integer into v_reviewer_count
+  from private.resolve_leave_approval_grants(p_person_id) candidate
+  where candidate.reviewer_user_id is distinct from v_target_user_id;
+  if coalesce(v_reviewer_count, 0) < 1 then
+    raise exception ''No authorised leave reviewer is configured for this employee.'' using errcode = ''42501'';
+  end if;
+
+  select candidate.reviewer_user_id, candidate.reviewer_label
+  into v_primary_reviewer_user_id, v_primary_reviewer_label
+  from private.resolve_leave_approval_grants(p_person_id) candidate
+  where candidate.reviewer_user_id is distinct from v_target_user_id
+  order by case candidate.scope_kind when ''team'' then 0 when ''subtree'' then 1 else 2 end,
+    candidate.scope_priority, candidate.scope_depth, candidate.grant_id
+  limit 1;
+  v_leave_type := case v_request_type_label
+    when ''Annual leave'' then ''annual''
+    when ''Sick leave'' then ''personal''
+    when ''Carer''''s leave'' then ''personal''
+    when ''Unpaid leave'' then ''unpaid''
+  end;
+
+  insert into public.leave_requests (
+    user_id, leave_type, request_type_label, start_date, end_date, start_time,
+    end_time, business_days, hours, approval_required, manager_user_id,
+    manager_name_snapshot, reason, status, submitted_at, decided_at, decided_by,
+    created_at, updated_at
+  ) values (
+    v_target_user_id, v_leave_type, v_request_type_label, p_start_date, p_end_date,
+    p_start_time, p_end_time, v_business_days, v_hours, true,
+    v_primary_reviewer_user_id, v_primary_reviewer_label, v_employee_note,
+    ''submitted'', clock_timestamp(), null, null, clock_timestamp(), clock_timestamp()
+  ) returning * into v_request;
+
+  with candidates as (
+    select candidate.* from private.resolve_leave_approval_grants(p_person_id) candidate
+    where candidate.reviewer_user_id is distinct from v_target_user_id
+  ), distinct_reviewers as (
+    select distinct on (candidate.reviewer_user_id) candidate.* from candidates candidate
+    order by candidate.reviewer_user_id,
+      case candidate.scope_kind when ''team'' then 0 when ''subtree'' then 1 else 2 end,
+      candidate.scope_priority, candidate.scope_depth, candidate.grant_id
+  ), ranked_reviewers as (
+    select candidate.*, row_number() over (
+      order by case candidate.scope_kind when ''team'' then 0 when ''subtree'' then 1 else 2 end,
+        candidate.scope_priority, candidate.scope_depth, candidate.grant_id
+    ) as route_rank from distinct_reviewers candidate
+  )
+  insert into private.leave_request_reviewer_assignments (
+    leave_request_id, reviewer_user_id, source_grant_id, assignment_kind, reviewer_label, is_primary
+  )
+  select v_request.id, candidate.reviewer_user_id, candidate.grant_id,
+    candidate.scope_kind, candidate.reviewer_label, candidate.route_rank = 1
+  from ranked_reviewers candidate;
+
+  insert into public.leave_request_events (leave_request_id, actor_user_id, event_type, note)
+  values (v_request.id, v_actor_user_id, ''created'', null),
+    (v_request.id, v_actor_user_id, ''submitted'', null);
+
+  return query select v_request.id, ''Pending'', v_request.approval_required, v_primary_reviewer_label;
+end;
+$function$
+'),
+    ('function_security','private.annual_leave_accounting_day(uuid, date)','5bccdf3da99b758cc3e64720c62dab402268e833c9a6127bc7896f981f0e0d80',null),
+    ('function_security','private.annual_leave_retained_usage(uuid)','5bccdf3da99b758cc3e64720c62dab402268e833c9a6127bc7896f981f0e0d80',null),
+    ('function_security','private.apply_employee_removal_reporting_splice(uuid, uuid)','67f77240be35694c25f9a905775c20494865d6890bee22272ca82d458643a37d',null),
+    ('function_security','private.capture_annual_leave_accounting(uuid, date, date, boolean)','67f77240be35694c25f9a905775c20494865d6890bee22272ca82d458643a37d',null),
+    ('function_security','private.enforce_trade_school_leave()','67f77240be35694c25f9a905775c20494865d6890bee22272ca82d458643a37d',null),
+    ('function_security','private.plan_employee_removal_reporting_splice(uuid)','67f77240be35694c25f9a905775c20494865d6890bee22272ca82d458643a37d',null),
+    ('function_security','private.record_subscription_review(uuid, bigint)','67f77240be35694c25f9a905775c20494865d6890bee22272ca82d458643a37d',null),
+    ('function_security','private.retain_completed_annual_leave_accounting()','67f77240be35694c25f9a905775c20494865d6890bee22272ca82d458643a37d',null),
+    ('function_security','public.complete_my_subscription_review_task(uuid, bigint)','9854602ac8fba4e8fb0b56304eb3b5cbb4259a3189d7acd7e5d977127b3f3f1e',null),
+    ('function_security','public.list_my_subscription_review_tasks()','9b6712489182a62306a6b7f682d82499b0f0a7d56c7811574e26df13f6c6f404',null),
+    ('function_security','public.list_subscription_review_tasks_for_preview(uuid)','9b6712489182a62306a6b7f682d82499b0f0a7d56c7811574e26df13f6c6f404',null),
+    ('function_security','public.list_trade_school_leave_entitlements(uuid)','9b6712489182a62306a6b7f682d82499b0f0a7d56c7811574e26df13f6c6f404',null),
+    ('function_security','public.preflight_employee_removal_reporting_splice(uuid, bigint, bigint, date, text)','9854602ac8fba4e8fb0b56304eb3b5cbb4259a3189d7acd7e5d977127b3f3f1e',null),
+    ('global_function_acl','private.annual_leave_accounting_day(uuid, date)','c027e95beca64045f15d2075c66162eeeeb192e6756be61c73f91c7ce14dd4f3',null),
+    ('global_function_acl','private.annual_leave_retained_usage(uuid)','c027e95beca64045f15d2075c66162eeeeb192e6756be61c73f91c7ce14dd4f3',null),
+    ('global_function_acl','private.apply_employee_removal_reporting_splice(uuid, uuid)','c027e95beca64045f15d2075c66162eeeeb192e6756be61c73f91c7ce14dd4f3',null),
+    ('global_function_acl','private.capture_annual_leave_accounting(uuid, date, date, boolean)','c027e95beca64045f15d2075c66162eeeeb192e6756be61c73f91c7ce14dd4f3',null),
+    ('global_function_acl','private.enforce_trade_school_leave()','c027e95beca64045f15d2075c66162eeeeb192e6756be61c73f91c7ce14dd4f3',null),
+    ('global_function_acl','private.plan_employee_removal_reporting_splice(uuid)','c027e95beca64045f15d2075c66162eeeeb192e6756be61c73f91c7ce14dd4f3',null),
+    ('global_function_acl','private.record_subscription_review(uuid, bigint)','c027e95beca64045f15d2075c66162eeeeb192e6756be61c73f91c7ce14dd4f3',null),
+    ('global_function_acl','private.retain_completed_annual_leave_accounting()','c027e95beca64045f15d2075c66162eeeeb192e6756be61c73f91c7ce14dd4f3',null),
+    ('global_function_acl','public.complete_my_subscription_review_task(uuid, bigint)','48cbe0bdca3235e1dba22f9504e61b3c8e254ede516a33fa6fe51f6537916ca9',null),
+    ('global_function_acl','public.list_my_subscription_review_tasks()','48cbe0bdca3235e1dba22f9504e61b3c8e254ede516a33fa6fe51f6537916ca9',null),
+    ('global_function_acl','public.list_subscription_review_tasks_for_preview(uuid)','48cbe0bdca3235e1dba22f9504e61b3c8e254ede516a33fa6fe51f6537916ca9',null),
+    ('global_function_acl','public.list_trade_school_leave_entitlements(uuid)','48cbe0bdca3235e1dba22f9504e61b3c8e254ede516a33fa6fe51f6537916ca9',null),
+    ('global_function_acl','public.preflight_employee_removal_reporting_splice(uuid, bigint, bigint, date, text)','48cbe0bdca3235e1dba22f9504e61b3c8e254ede516a33fa6fe51f6537916ca9',null),
+    ('global_relation_acl','private.annual_leave_day_accounting',case current_setting('server_version_num')::integer/10000 when 16 then 'c0e6bb2dbd327bd3c3ef5cf70c329910a5853d629417887f257e091ff5b73577' when 17 then 'd51696be62bea2471822f7114b081fc4989012a076cf2721dc1bf1139b89773d' end,null),
+    ('index','private.annual_leave_day_accounting_latest','2a00c154a06e307a2ea767f05b1ed6c9f3cd023538b3128e2614af4e66ea5878',null),
+    ('index','private.annual_leave_day_accounting_pkey','1a86f1e3a21ba22319243c36c43af6d94d87c5ac19d7e7f6b50919043b592600',null),
+    ('relation','private.annual_leave_day_accounting',case current_setting('server_version_num')::integer/10000 when 16 then 'd07dee95e06b266e400556fe83f155d3bc1acedfe62716a92195d68da9b63a6a' when 17 then '441c0e971192032eedaebcff160a2cfc9b91cafaaf71ca7a0472da6aa5d01e07' end,null),
+    ('routine_kind','private.annual_leave_accounting_day(uuid, date)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','private.annual_leave_retained_usage(uuid)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','private.apply_employee_removal_reporting_splice(uuid, uuid)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','private.capture_annual_leave_accounting(uuid, date, date, boolean)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','private.enforce_trade_school_leave()','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','private.plan_employee_removal_reporting_splice(uuid)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','private.record_subscription_review(uuid, bigint)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','private.retain_completed_annual_leave_accounting()','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','public.complete_my_subscription_review_task(uuid, bigint)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','public.list_my_subscription_review_tasks()','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','public.list_subscription_review_tasks_for_preview(uuid)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','public.list_trade_school_leave_entitlements(uuid)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','public.preflight_employee_removal_reporting_splice(uuid, bigint, bigint, date, text)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('trigger','private.annual_leave_day_accounting:annual_leave_day_accounting_immutable','a4b8e47199b0c958398b5209887676749ac185a9eddafee040525969d6752d56',null),
+    ('trigger','private.annual_leave_day_accounting:annual_leave_day_accounting_no_truncate','08119b5f45368940cc0ebc359ad0708153e1c2c2d4acd2a65f528be66d10a0e0',null),
+    ('trigger','private.annual_leave_day_accounting:reject_retired_test_identity_reference','15d8360e20ff1153886dae5627b2fe3678b48e7c71e17a1f99e6b690d0847694',null),
+    ('trigger','public.leave_requests:ab_retain_completed_annual_leave_accounting','043b9ccbffc8e82c991ceaced15dff1a0245577d71457c4a1ca945d92c9b9ca4',null),
+    ('trigger','public.leave_requests:zz_leave_requests_trade_school_policy','78280d932075d5ec28c77ba58a1f668be448b9a299744244810f456e302086fe',null),
+    ('type','private._annual_leave_day_accounting','85b45b9acd31a5ae8dab995a254698640df916894863c9d5bb5e351fa25d8cc6',null),
+    ('type','private.annual_leave_day_accounting','b3a1be551292f287425a027ee3c94be9e89e8ce6675b64c1010de1d863125383',null)
+    on conflict(kind,object_identity) do update set after_hash=excluded.after_hash;
+  end if;
+end $sr_latest_main$;
+
 create function pg_temp.sr_capture_catalog() returns table(kind text,object_identity text,definition text)
 language plpgsql stable set search_path='' as $sr_capture$
 declare inventory jsonb; observed text; expected text; begin
@@ -1520,7 +3001,8 @@ declare inventory jsonb; observed text; expected text; begin
     and current_user='postgres'
     and not (select r.rolsuper from pg_catalog.pg_roles r where r.rolname=current_user)
     and (observed='bce85bd12dba8274c0a488074b2c18d0ed1fc55b09590b4119ec85981232c53f'
-      or observed='6d36df0f3fc60ccefc847c8af667e0f43f3d43018500cd6996b75f383b8d720c'),false) then
+      or observed='6d36df0f3fc60ccefc847c8af667e0f43f3d43018500cd6996b75f383b8d720c'
+      or observed='d8ac05b23d63fc06564883d3bb8e4ca074b536f14bb17ed26d9caa50614e5c85'),false) then
     raise exception 'Initial expanded catalog is not reviewed for this platform.' using errcode='55000';
   end if;
   return query select c.kind,c.object_identity,c.definition
@@ -1651,7 +3133,7 @@ insert into sr_catalog_delta values
   ('type','private.subscription_requests','0efc744a4923b138a841712d0750085b5444b6e6882a5961eeb1131ceb9c3084');
 create function pg_temp.sr_existing_data() returns text language plpgsql stable set search_path='' as $sr_data$
 declare relation_name text; rows jsonb; inventory jsonb:='{}'::jsonb; begin
-  foreach relation_name in array array['auth.users','private.employee_team_manager_defaults','private.leave_bank_adoption_receipts','private.leave_bank_sources','private.leave_payroll_calendars','private.portal_account_admin_events','private.portal_account_admins','private.subscription_audit_events','private.subscription_credential_access_audit_events','private.subscription_credential_access_grants','private.subscription_credential_audit_events','private.subscription_credential_grant_changes','private.subscription_credential_vault','private.subscription_management_grant_events','private.subscription_management_grants','private.subscription_memberships','private.subscription_register','public.internal_org_people','public.profiles'] loop
+  for relation_name in select r.relation_name from pg_temp.sr_protected_relations r order by r.relation_name collate "C" loop
     execute format('select coalesce(jsonb_agg(to_jsonb(r) order by to_jsonb(r)::text collate "C"),''[]''::jsonb) from %s r',relation_name::regclass) into rows;
     inventory:=inventory||jsonb_build_object(relation_name,rows);
   end loop;
