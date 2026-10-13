@@ -1,5 +1,6 @@
 begin;
 \ir payroll-closing-setup.sql
+create function pg_temp.cutoff_continuous() returns boolean language sql stable as $$ select to_regprocedure('private.annual_leave_accounting_day(uuid,date)') is not null; $$;
 select public.reconcile_payroll_closing('synthetic-cutoff-closing',pg_temp.closing_payload());
 insert into public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,employment_type_snapshot,pay_treatment,approval_required)
 values('96000000-0000-4000-8000-000000000031','96000000-0000-4000-8000-000000000003','96000000-0000-4000-8000-000000000003','annual','Annual leave','2027-03-01','2027-03-18',14,100,'submitted',now(),'full_time','paid_entitlement',true);
@@ -10,7 +11,7 @@ from generate_series(date '2026-09-25',(now() at time zone 'Australia/Melbourne'
 do $$declare pid uuid:='96000000-0000-4000-8000-000000000003'; calculation jsonb; sufficient boolean; begin
   calculation:=private.calculate_employee_leave_accrual(pid,(now() at time zone 'Australia/Melbourne')::date-1);
   assert calculation->>'status'='current';
-  assert (calculation->>'annualTaken')::numeric=0;
+  assert (calculation->>'annualTaken')::numeric=case when pg_temp.cutoff_continuous() then 38 else 0 end;
   assert private.approved_leave_hours_after(pid,array['Annual leave'],'2026-09-24')=45.6;
   assert private.approved_leave_hours_after(pid,array['Annual leave'],(calculation->>'annualAsOf')::date)=38;
   assert (private.project_annual_leave_balance(pid,'2026-09-25')->>'availableHours')::numeric=94.8321;
@@ -24,9 +25,9 @@ declare pid uuid:='96000000-0000-4000-8000-000000000003'; calculation jsonb; rem
   calculation:=private.calculate_employee_leave_accrual(pid,(now() at time zone 'Australia/Melbourne')::date-1);
   remaining:=private.payroll_request_unconsumed_hours(pid,'2026-09-24',(calculation->>'annualAsOf')::date);
   assert calculation->>'status'='current';
-  assert (calculation->>'annualTaken')::numeric=p_taken;
-  assert (calculation->>'annualExactHours')::numeric=140.4321-p_taken;
-  assert remaining=45.6-least(p_taken,7.6), 'Only confirmed scheduled consumption releases commitments';
+  assert (calculation->>'annualTaken')::numeric=p_taken+case when pg_temp.cutoff_continuous() then 38 else 0 end;
+  assert (calculation->>'annualExactHours')::numeric=140.4321-p_taken-case when pg_temp.cutoff_continuous() then 38 else 0 end;
+  assert remaining=45.6-least(p_taken,7.6)-case when pg_temp.cutoff_continuous() then 38 else 0 end, 'Only confirmed scheduled consumption releases commitments';
   assert (calculation->>'annualExactHours')::numeric-remaining=94.8321-greatest(0,p_taken-7.6), 'Actual usage is never subtracted twice';
   assert private.approved_leave_hours_after(pid,array['Annual leave'],'2026-09-24')=45.6, 'Bank-cutoff duration is unchanged';
   assert private.approved_leave_hours_after(pid,array['Annual leave'],'2026-09-24')-private.approved_leave_hours_after(pid,array['Annual leave'],'2026-09-25')=7.6, 'Reviewed-usage duration difference is unchanged';
@@ -53,18 +54,24 @@ update private.employee_directory_details set scheduled_employment_end_date='202
 do $$declare pid uuid:='96000000-0000-4000-8000-000000000003'; calculation jsonb; begin
   calculation:=private.calculate_employee_leave_accrual(pid,(now() at time zone 'Australia/Melbourne')::date-1);
   assert calculation->>'status'='current';
-  assert (calculation->>'annualTaken')::numeric=7.6, 'Correcting employment end cannot erase confirmed actual usage';
-  assert (calculation->>'annualExactHours')::numeric=132.8321;
-  assert private.payroll_request_unconsumed_hours(pid,'2026-09-24',(calculation->>'annualAsOf')::date)=45.6, 'Legacy commitment diagnostics remain conservative after the employment end';
+  assert (calculation->>'annualTaken')::numeric=7.6+case when pg_temp.cutoff_continuous() then 38 else 0 end, 'Correcting employment end cannot erase confirmed actual usage';
+  assert (calculation->>'annualExactHours')::numeric=132.8321-case when pg_temp.cutoff_continuous() then 38 else 0 end;
+  assert private.payroll_request_unconsumed_hours(pid,'2026-09-24',(calculation->>'annualAsOf')::date)=case when pg_temp.cutoff_continuous() then 0 else 45.6 end, 'Accounted usage cannot be charged again after employment end';
   assert (private.project_annual_leave_balance(pid,((calculation->>'annualAsOf')::date+1))->>'availableHours')::numeric=94.8321, 'Confirmed usage overlapping the preserved reservation is debited once';
 end$$;
 rollback to employment_end;
 savepoint missing_review;
 delete from private.leave_accrual_day_reviews where person_id='96000000-0000-4000-8000-000000000003' and service_date='2026-09-25';
 do $$begin
-  assert private.calculate_employee_leave_accrual('96000000-0000-4000-8000-000000000003',(now() at time zone 'Australia/Melbourne')::date-1)->>'status'='needs_review';
-  assert private.payroll_request_unconsumed_hours('96000000-0000-4000-8000-000000000003','2026-09-24','2026-09-30') is null;
-  assert not private.leave_payroll_balance_sufficient('96000000-0000-4000-8000-000000000031');
+  if pg_temp.cutoff_continuous() then
+   assert private.calculate_employee_leave_accrual('96000000-0000-4000-8000-000000000003',(now() at time zone 'Australia/Melbourne')::date-1)->>'status'='current';
+   assert private.payroll_request_unconsumed_hours('96000000-0000-4000-8000-000000000003','2026-09-24','2026-09-30')=0;
+   assert private.leave_payroll_balance_sufficient('96000000-0000-4000-8000-000000000031');
+  else
+   assert private.calculate_employee_leave_accrual('96000000-0000-4000-8000-000000000003',(now() at time zone 'Australia/Melbourne')::date-1)->>'status'='needs_review';
+   assert private.payroll_request_unconsumed_hours('96000000-0000-4000-8000-000000000003','2026-09-24','2026-09-30') is null;
+   assert not private.leave_payroll_balance_sufficient('96000000-0000-4000-8000-000000000031');
+  end if;
 end$$;
 rollback to missing_review;
 savepoint stale_review;
@@ -80,7 +87,7 @@ insert into public.leave_requests(id,employee_person_id,user_id,leave_type,reque
 values('96000000-0000-4000-8000-000000000032','96000000-0000-4000-8000-000000000003','96000000-0000-4000-8000-000000000003','annual','Annual leave','2026-09-25','2026-09-25',1,'approved',now(),'historical_import',repeat('c',64),'full_time','paid_entitlement');
 select public.review_employee_leave_accrual_day('96000000-0000-4000-8000-000000000003','2026-09-25',0,0,3,0,'Synthetic ambiguous actual usage');
 do $$begin
-  assert private.calculate_employee_leave_accrual('96000000-0000-4000-8000-000000000003',(now() at time zone 'Australia/Melbourne')::date-1)->>'status'='current';
+  assert private.calculate_employee_leave_accrual('96000000-0000-4000-8000-000000000003',(now() at time zone 'Australia/Melbourne')::date-1)->>'status'=case when pg_temp.cutoff_continuous() then 'needs_review' else 'current' end;
   assert private.payroll_request_unconsumed_hours('96000000-0000-4000-8000-000000000003','2026-09-24','2026-09-30') is null, 'Aggregate review cannot allocate consumption between overlapping approvals';
   assert not private.leave_payroll_balance_sufficient('96000000-0000-4000-8000-000000000031'), 'Ambiguous usage fails closed even for a one-hour request';
 end$$;
@@ -100,7 +107,7 @@ do $$declare pid uuid:='96000000-0000-4000-8000-000000000003'; rid uuid:='960000
   assert (calculation->>'annualExactHours')::numeric-private.payroll_request_unconsumed_hours(pid,'2026-09-24',(calculation->>'annualAsOf')::date)=94.8321;
   update public.leave_requests set status='cancelled' where id=rid;
   assert (select hours from private.employee_annual_leave_balances where person_id=pid)=102.4321, 'Cancellation never refunds settled or consumed hours';
-  assert not private.leave_payroll_balance_sufficient('96000000-0000-4000-8000-000000000031'), 'Cancellation invalidates stale usage evidence';
+  assert private.leave_payroll_balance_sufficient('96000000-0000-4000-8000-000000000031')=pg_temp.cutoff_continuous(), 'Continuous cancellation retains usage; prior review-only behavior remains held';
   perform public.review_employee_leave_accrual_day(pid,'2026-09-25',0,0,7.6,0,'Synthetic preserved consumption after cancellation');
   calculation:=private.calculate_employee_leave_accrual(pid,(now() at time zone 'Australia/Melbourne')::date-1);
   assert (calculation->>'annualExactHours')::numeric=94.8321;

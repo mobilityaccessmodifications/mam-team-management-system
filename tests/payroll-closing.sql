@@ -28,7 +28,7 @@ do $$declare p jsonb; r jsonb; before_count integer; begin
   assert private.approved_leave_hours_after('96000000-0000-4000-8000-000000000002',array['Annual leave'],'2026-09-24')=15.2;
   assert private.approved_leave_hours_after('96000000-0000-4000-8000-000000000003',array['Annual leave'],'2026-09-24')=45.6;
   assert (private.project_annual_leave_balance('96000000-0000-4000-8000-000000000003','2026-09-25')->>'availableHours')::numeric=140.4321-45.6;
-  assert (private.calculate_employee_leave_accrual('96000000-0000-4000-8000-000000000003','2026-09-24')->>'annualTaken')::numeric=0;
+  assert (private.calculate_employee_leave_accrual('96000000-0000-4000-8000-000000000003','2026-09-24')->>'annualTaken')::numeric=case when pg_temp.closing_continuous() then 38 else 0 end;
   assert public.reconcile_payroll_closing('synthetic-closing-one',p)=r, 'Identical key and payload returns original receipt';
   assert (select count(*) from private.payroll_closing_receipts)=1;
   begin

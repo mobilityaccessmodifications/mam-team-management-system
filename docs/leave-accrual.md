@@ -35,6 +35,10 @@ First activation requires authoritative opening balances covering the preceding 
 
 The existing authenticated projection and employee-preview permissions are preserved. Staff receive only their annual amount and a neutral reconciliation status; scoped managers receive personal leave too. Only the real non-preview System Admin receives configuration and review dates. A reconciliation hold prevents the one-time sufficient-balance reminder; otherwise it uses the current accrued balance. No final leave approval is automatic.
 
+## Owner-confirmed annual continuous accrual — 13 October 2026
+
+For annual leave only, routine missing day reviews no longer pause accrual. Completed approved annual leave uses its canonical quantity; future approved leave is reserved, and Pending leave is not reserved. Paid leave retains ordinary service, while approved unpaid leave reduces eligible service by its recorded quantity. Valid manual reviews override automatic accounting. Immutable completed-use snapshots prevent cancellation or amendment from refunding consumed hours; booking, conditional sufficiency and later confirmed closing balances must not debit that usage twice. Unknown source coverage and exceptional or stale evidence still fail closed. Without an explicitly confirmed payroll calendar, annual duration counts saved ordinary weekdays (Monday–Friday for the full-time default), including public holidays; existing explicit calendar quantities and personal/sick rules remain unchanged.
+
 ## Verification and release
 
 ### Future booking estimates (22 September 2026)
