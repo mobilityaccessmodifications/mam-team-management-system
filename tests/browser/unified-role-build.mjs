@@ -5,7 +5,7 @@ import postcssConfig from '../../postcss.config.mjs';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
-import { actionFixture, capabilities } from '../helpers/unified-role-harness.mjs';
+import { actionFixture, capabilities, loadModule } from '../helpers/unified-role-harness.mjs';
 import { syntheticRolePeople } from './unified-role-data.mjs';
 
 export async function buildUnifiedRoleFixture(sourceRoot, scratch) {
@@ -34,6 +34,14 @@ export async function buildUnifiedRoleFixture(sourceRoot, scratch) {
   } catch (error) {
     results.contactError = error.message;
   }
+  const reviewRow = { subscription_id: '33000000-0000-4000-8000-000000000010', service_name: 'Synthetic due review', next_review_on: '2500-01-01', subscription_status: 'active', version: 5 };
+  const reviewActions = (error = null) => loadModule(path.join(sourceRoot, 'src/app/subscriptions/review-task-actions.ts'), {
+    '@/lib/supabase/server': { createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: syntheticRolePeople[3].id } }, error: null }) }, rpc: async () => ({ data: reviewRow, error }) }) },
+    'next/cache': { revalidatePath() {} },
+    '@/lib/subscription-review-tasks': loadModule(path.join(sourceRoot, 'src/lib/subscription-review-tasks.ts')),
+  });
+  results.reviewCompleted = await reviewActions().completeMySubscriptionReviewTask({ subscriptionId: reviewRow.subscription_id, version: 4 });
+  results.reviewStale = await reviewActions({ code: '40001', message: 'synthetic private detail' }).completeMySubscriptionReviewTask({ subscriptionId: reviewRow.subscription_id, version: 4 });
   await build({
     entryPoints: [path.join(sourceRoot, 'tests/browser/unified-role-fixture.jsx')], bundle: true, outdir: scratch,
     platform: 'browser', jsx: 'automatic', sourcemap: false, minify: false,

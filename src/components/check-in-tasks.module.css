@@ -440,6 +440,7 @@
   .task { border: 0; border-bottom: 1px solid var(--surface-border); border-radius: 0; }
   .person span { display: none; }
 }
+.reviewDone { width: auto; padding: 8px 11px; }
 .touchLabel { display: none; }
 
 @media (max-width: 680px) {
