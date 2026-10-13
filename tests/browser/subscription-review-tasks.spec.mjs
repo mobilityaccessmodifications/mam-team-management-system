@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 const ownerId='11000000-0000-4000-8000-000000000005';
 const subscriptionId='33000000-0000-4000-8000-000000000010';
-const tasks=page=>page.getByRole('region',{name:'Subscription review tasks',exact:true});
+const tasks=page=>page.getByRole('region',{name:'Tasks',exact:true});
 const tabs=page=>page.getByRole('tablist',{name:'People sections'});
 async function openTasks(page){
   await page.getByRole('complementary',{name:'People Hub navigation'}).getByRole('button',{name:'People',exact:true}).click();
@@ -23,9 +23,10 @@ for(const width of [1440,390])test(`ordinary responsible employee has Tasks and 
   await page.goto('/?fixture=unified-roles&subscription-reviews=employee');
   await openTasks(page);
   await expect(tabs(page).getByRole('tab')).toHaveText(['Directory','Tasks']);
-  const done=tasks(page).getByRole('button',{name:"Mark Synthetic due review's subscription review done",exact:true});
+  await tasks(page).getByRole('button',{name:"Open Synthetic due review's Quarterly subscription review",exact:true}).click();
+  const details=page.getByRole(width <= 900 ? 'dialog' : 'region',{name:'Task details',exact:true});
+  const done=details.getByRole('button',{name:"Mark Synthetic due review's subscription review done",exact:true});
   await expect(done).toBeEnabled();
-  await expect(tasks(page).getByRole('button',{name:"Mark Synthetic future review's subscription review done",exact:true})).toBeDisabled();
   await expect(tasks(page)).toContainText('1 Jan 2500');
   await page.evaluate(id=>window.unifiedRoleFixture.holdNext('completeMySubscriptionReviewTask',id),subscriptionId);
   await done.click();
@@ -33,8 +34,11 @@ for(const width of [1440,390])test(`ordinary responsible employee has Tasks and 
   await done.dispatchEvent('click');
   await expect.poll(()=>page.evaluate(()=>window.unifiedRoleFixture.calls.filter(c=>c.name==='completeMySubscriptionReviewTask').length)).toBe(1);
   await page.evaluate(id=>window.unifiedRoleFixture.finish('completeMySubscriptionReviewTask',id),subscriptionId);
-  await expect(tasks(page).getByRole('status')).toContainText('review is complete');
+  await expect(tasks(page).getByRole('status').filter({hasText:'review is complete'})).toHaveCount(1);
   await expect(done).toBeDisabled();
+  if(width <= 900) await page.keyboard.press('Escape');
+  await tasks(page).getByRole('button',{name:"Open Synthetic future review's Quarterly subscription review",exact:true}).click();
+  await expect(details.getByRole('button',{name:"Mark Synthetic future review's subscription review done",exact:true})).toBeDisabled();
   const mutations=await page.evaluate(()=>window.unifiedRoleFixture.calls.filter(c=>c.name==='completeMySubscriptionReviewTask'));
   expect(mutations[0].args).toEqual([{subscriptionId,version:4}]);
 });
