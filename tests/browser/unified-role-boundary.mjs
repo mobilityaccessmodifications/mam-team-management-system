@@ -4,6 +4,7 @@ import { completedFixtureToday, leaveCompletedRequests } from './leave-completed
 const completedMode = new URLSearchParams(location.search).has('leave-completed');
 const ordinaryReviewEmployee = new URLSearchParams(location.search).get('subscription-reviews') === 'employee';
 const combinedTasks = new URLSearchParams(location.search).get('tasks') === 'combined';
+const scheduleTasks = combinedTasks && new URLSearchParams(location.search).has('schedule-tasks');
 const subscriptionReviewsFail = new URLSearchParams(location.search).has('subscription-review-error');
 const reviewOwnerId = syntheticRolePeople[3].id;
 let checkInRows = combinedTasks ? [
@@ -19,6 +20,13 @@ let reviewRows = [
   { subscription_id: '33000000-0000-4000-8000-000000000010', service_name: 'Synthetic due review', next_review_on: '2000-01-01', subscription_status: 'active', version: 4 },
   { subscription_id: '33000000-0000-4000-8000-000000000011', service_name: 'Synthetic future review', next_review_on: '2500-01-01', subscription_status: 'paused', version: 1 },
 ];
+let scheduleRequest = {
+  id: '88000000-0000-4000-8000-000000000001',
+  originalWorkingWeekdays: [1, 3, 5], originalWorkingDayTimes: [{ weekday: 1, startTime: '09:00', endTime: '17:00' }],
+  requestedWorkingWeekdays: [2, 4], requestedWorkingDayTimes: [{ weekday: 2, startTime: '10:00', endTime: '16:00' }],
+  requestReason: 'Synthetic change to support a study timetable', submittedByName: 'Synthetic Employee',
+  status: 'submitted', submittedAt: '2026-10-01T00:00:00Z', decidedAt: null, reviewerName: null, decisionReason: null,
+};
 const notesStorageKey = 'mam-synthetic-task-notes';
 const taskNotes = JSON.parse(sessionStorage.getItem(notesStorageKey) ?? '{}');
 const notesKey = target => `${target.kind}:${target.taskId}:${target.reviewOn ?? ''}`;
@@ -73,6 +81,7 @@ window.unifiedRoleFixture = {
   },
   failNext(name, id, kind) { failures.set(`${name}:${id ?? ''}`, kind); },
   setTaskNotes(target, text, version) { writeNotes(target, { text, version }); },
+  removeScheduleRequest() { scheduleRequest = { ...scheduleRequest, status: 'cancelled' }; },
   setSubscriptionGrants(id, management, vault) {
     grantsById[id] = { can_manage_subscriptions: management, can_manage_subscription_credentials: vault };
   },
@@ -122,10 +131,18 @@ const handlers = {
   },
   '@/app/accounts/actions': { listPortalAccounts: () => [] },
   '@/app/leave/actions': { getLeaveWorkspaceData: leaveWorkspace },
-  '@/app/work-schedule/actions': { loadEmployeeWorkScheduleWorkspace: (id = ordinaryReviewEmployee ? reviewOwnerId : undefined) => ({ ok: true, workspace: {
+  '@/app/work-schedule/actions': { loadEmployeeWorkScheduleWorkspace: previewPersonId => {
+    const id = previewPersonId ?? (ordinaryReviewEmployee ? reviewOwnerId : undefined);
+    return { ok: true, workspace: {
     activePersonId: id ?? null, activePersonName: personFor(id)?.name ?? null, workingWeekdays: id ? [1, 2, 3, 4, 5] : null,
-    workingDayTimes: [], initialSetupAvailable: false, canRequestChange: Boolean(id), isProfilePreview: Boolean(id), history: [], reviews: [],
-  } }) },
+    workingDayTimes: [], initialSetupAvailable: false, canRequestChange: Boolean(id), isProfilePreview: Boolean(previewPersonId),
+    history: scheduleTasks && id === reviewOwnerId ? [{ ...scheduleRequest }] : [],
+    reviews: scheduleTasks && !id ? [{ ...scheduleRequest, personId: reviewOwnerId, employeeName: 'Synthetic Employee' }] : [],
+  } }; }, reviewEmployeeWorkScheduleChange: input => {
+    if (input.requestId !== scheduleRequest.id || scheduleRequest.status !== 'submitted' || !input.reason.trim()) return { ok: false, message: 'Enter a valid decision reason for this request.' };
+    scheduleRequest = { ...scheduleRequest, status: input.decision, decisionReason: input.reason, reviewerName: 'Synthetic Admin' };
+    return { ok: true };
+  } },
   '@/app/people/team-directory-actions': { listEmployeeTeamDirectory: id => [personFor(id)].filter(Boolean).map(person => ({
     id: person.id, name: person.name, position: person.title, company: person.company,
     reportsTo: null, managerName: '', kind: 'person', isActive: true, version: 1,
@@ -187,7 +204,7 @@ const handlers = {
 
 export async function invokeServerAction(module, name, args) {
   calls.push({ module, name, args: args.map(arg => arg instanceof FormData ? { files: arg.getAll('files').map(file => ({ name: file.name, type: file.type, size: file.size })) } : arg) });
-  const key = `${name}:${args[0]?.personId ?? args[0]?.subscriptionId ?? args[0]?.target?.taskId ?? args[0]?.taskId ?? args[0] ?? ''}`;
+  const key = `${name}:${args[0]?.personId ?? args[0]?.subscriptionId ?? args[0]?.requestId ?? args[0]?.target?.taskId ?? args[0]?.taskId ?? args[0] ?? ''}`;
   const failure = failures.get(key);
   if (failure) {
     failures.delete(key);

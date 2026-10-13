@@ -35,6 +35,8 @@ for(const width of [1440,390])test(`ordinary responsible employee has Tasks and 
   await expect.poll(()=>page.evaluate(()=>window.unifiedRoleFixture.calls.filter(c=>c.name==='completeMySubscriptionReviewTask').length)).toBe(1);
   await page.evaluate(id=>window.unifiedRoleFixture.finish('completeMySubscriptionReviewTask',id),subscriptionId);
   await expect(tasks(page).getByRole('status').filter({hasText:'review is complete'})).toHaveCount(1);
+  await expect(details).toHaveCount(0);
+  await tasks(page).getByRole('button',{name:"Open Synthetic due review's Quarterly subscription review",exact:true}).click();
   await expect(done).toBeDisabled();
   if(width <= 900) await page.keyboard.press('Escape');
   await tasks(page).getByRole('button',{name:"Open Synthetic future review's Quarterly subscription review",exact:true}).click();
