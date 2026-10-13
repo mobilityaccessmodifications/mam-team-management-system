@@ -352,4 +352,86 @@ END $$;
 \echo PASS C17: retained legacy-bank consumption uses a timezone-independent bank identity
 SET LOCAL TIME ZONE DEFAULT;
 ROLLBACK TO recorded_quantities;
+SAVEPOINT reviewed_checkpoint;
+INSERT INTO private.leave_accrual_day_reviews(person_id,service_date,annual_eligible_hours,personal_eligible_hours,annual_taken_hours,personal_taken_hours,request_fingerprint,note,actor_user_id)
+ VALUES(pg_temp.continuous_person(1),'2026-10-05',7.6,7.6,3.8,0,private.leave_accrual_request_fingerprint(pg_temp.continuous_person(1),'2026-10-05'),'Synthetic reviewed checkpoint',pg_temp.continuous_person(900));
+SELECT public.refresh_employee_leave_accrual();
+DO $$ DECLARE a jsonb; BEGIN
+ a:=private.annual_leave_accounting_day(pg_temp.continuous_person(1),'2026-10-05');
+ ASSERT a->>'status'='current' AND (a->>'taken')::numeric=3.8 AND (a->>'eligibleNumerator')::numeric=7.6*420;
+ ASSERT EXISTS(SELECT 1 FROM private.annual_leave_day_accounting WHERE person_id=pg_temp.continuous_person(1) AND service_date='2026-10-05' AND state=a), 'The reviewed day is durably captured before its requests change';
+END $$;
+SAVEPOINT reviewed_requests_changed;
+INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
+ VALUES(pg_temp.continuous_request(18),pg_temp.continuous_person(1),pg_temp.continuous_person(1),'unpaid','Unpaid leave','2026-10-05','2026-10-05',1,3.8,'approved',now(),'historical_import',encode(sha256(convert_to('continuous-reviewed-unpaid-18','UTF8')),'hex'),'full_time','unpaid');
+DO $$ DECLARE a jsonb; BEGIN
+ ASSERT EXISTS(SELECT 1 FROM private.leave_accrual_day_reviews WHERE person_id=pg_temp.continuous_person(1) AND service_date='2026-10-05' AND request_fingerprint<>private.leave_accrual_request_fingerprint(pg_temp.continuous_person(1),'2026-10-05'));
+ a:=private.annual_leave_accounting_day(pg_temp.continuous_person(1),'2026-10-05');
+ ASSERT a->>'status'='needs_review', 'New approved unpaid leave invalidates saved reviewed eligibility';
+ ASSERT (a->>'taken')::numeric=3.8, 'Invalidating eligibility does not refund confirmed completed usage';
+ a:=private.calculate_leave_entitlement(pg_temp.continuous_person(1),'annual','2026-10-06');
+ ASSERT a->>'status'='needs_review' AND a->>'eligibilityStatus'='needs_review' AND (a->>'taken')::numeric=3.8;
+ ASSERT abs((a->>'earned')::numeric-7.6/13)<0.000000000001, 'Stale reviewed service cannot be credited';
+ ASSERT private.project_annual_leave_balance(pg_temp.continuous_person(1),'2026-10-07')->>'status'='unavailable';
+ ASSERT private.payroll_request_unconsumed_hours(pg_temp.continuous_person(1),'2026-10-01','2026-10-06') IS NULL;
+ PERFORM public.refresh_employee_leave_accrual();
+ ASSERT (SELECT count(*) FROM private.annual_leave_day_accounting WHERE person_id=pg_temp.continuous_person(1) AND service_date='2026-10-05')=1, 'Refresh cannot replace stale review evidence with a current snapshot';
+END $$;
+INSERT INTO private.leave_accrual_day_reviews(person_id,service_date,annual_eligible_hours,personal_eligible_hours,annual_taken_hours,personal_taken_hours,request_fingerprint,note,actor_user_id)
+ VALUES(pg_temp.continuous_person(1),'2026-10-05',3.8,3.8,3.8,0,private.leave_accrual_request_fingerprint(pg_temp.continuous_person(1),'2026-10-05'),'Synthetic revalidated unpaid service',pg_temp.continuous_person(900));
+DO $$ DECLARE a jsonb; BEGIN
+ a:=private.calculate_leave_entitlement(pg_temp.continuous_person(1),'annual','2026-10-06');
+ ASSERT a->>'status'='current' AND (a->>'taken')::numeric=3.8;
+ ASSERT abs((a->>'earned')::numeric-19.0/13)<0.000000000001, 'A fresh review restores only confirmed eligible service';
+END $$;
+ROLLBACK TO reviewed_requests_changed;
+UPDATE public.leave_requests SET status='cancelled' WHERE id=pg_temp.continuous_request(1);
+DO $$ DECLARE a jsonb; BEGIN
+ a:=private.calculate_leave_entitlement(pg_temp.continuous_person(1),'annual','2026-10-06');
+ ASSERT a->>'status'='needs_review' AND (a->>'taken')::numeric=3.8, 'Cancelled reviewed leave retains consumption while stale eligibility fails closed';
+END $$;
+ROLLBACK TO reviewed_requests_changed;
+UPDATE public.leave_requests SET hours=1.9 WHERE id=pg_temp.continuous_request(1);
+DO $$ DECLARE a jsonb; BEGIN
+ a:=private.calculate_leave_entitlement(pg_temp.continuous_person(1),'annual','2026-10-06');
+ ASSERT a->>'status'='needs_review' AND (a->>'taken')::numeric=3.8, 'Amended reviewed leave cannot refund already consumed hours';
+END $$;
+\echo PASS C18: saved reviewed accounting revalidates request fingerprints and retains consumed annual usage
+ROLLBACK TO reviewed_checkpoint;
+SAVEPOINT nonannual_unresolved_day;
+INSERT INTO private.leave_accrual_policies(person_id,effective_from,weekly_hours,weekdays,annual_weeks,personal_weeks,enabled,requires_review,note,actor_user_id)
+ VALUES(pg_temp.continuous_person(1),'2026-10-05',38,ARRAY[1,2,3,4,5],4,2,true,true,'Synthetic unresolved annual day',pg_temp.continuous_person(900));
+UPDATE private.employee_directory_details SET trade_school_enabled=true WHERE person_id=pg_temp.continuous_person(1);
+DO $$ DECLARE r record; n integer; request_id uuid; blocked boolean:=false; BEGIN
+ ASSERT private.annual_leave_accounting_day(pg_temp.continuous_person(1),'2026-10-05')->>'status'='needs_review';
+ FOR r IN SELECT * FROM (VALUES
+  (19,'personal','Sick leave','paid_entitlement'),
+  (190,'personal','Carer''s leave','paid_entitlement'),
+  (191,'unpaid','Unpaid leave','unpaid'),
+  (192,'other','Other leave','unpaid'),
+  (193,'other','trade school','paid_other')
+ )kinds(number,leave_type,label,treatment) LOOP
+  FOR n IN 1..2 LOOP
+   request_id:=pg_temp.continuous_request(r.number*10+n);
+   INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,record_origin,source_record_sha256,employment_type_snapshot,pay_treatment)
+    VALUES(request_id,pg_temp.continuous_person(1),pg_temp.continuous_person(1),r.leave_type,r.label,'2026-10-05','2026-10-05',1,3.8,'approved',now(),'historical_import',encode(sha256(convert_to('continuous-nonannual-'||request_id::text,'UTF8')),'hex'),'full_time',r.treatment);
+   IF n=1 THEN
+    UPDATE public.leave_requests SET status='cancelled' WHERE id=request_id;
+    ASSERT (SELECT status='cancelled' AND hours=3.8 FROM public.leave_requests WHERE id=request_id), r.label||' cancellation succeeds with unresolved annual accounting';
+   ELSE
+    UPDATE public.leave_requests SET hours=1.9 WHERE id=request_id;
+    ASSERT (SELECT status='approved' AND hours=1.9 FROM public.leave_requests WHERE id=request_id), r.label||' amendment succeeds with unresolved annual accounting';
+   END IF;
+   ASSERT private.annual_leave_accounting_day(pg_temp.continuous_person(1),'2026-10-05')->>'status'='needs_review', 'Nonannual changes cannot fabricate an annual review';
+  END LOOP;
+ END LOOP;
+ ASSERT NOT EXISTS(SELECT 1 FROM private.annual_leave_day_accounting WHERE person_id=pg_temp.continuous_person(1)), 'Nonannual lifecycle changes never capture annual accounting';
+ BEGIN
+  UPDATE public.leave_requests SET status='cancelled' WHERE id=pg_temp.continuous_request(1);
+ EXCEPTION WHEN sqlstate '55000' THEN blocked:=SQLERRM='Completed annual accounting requires a confirmed day review.';
+ END;
+ ASSERT blocked AND (SELECT status='approved' FROM public.leave_requests WHERE id=pg_temp.continuous_request(1)), 'Unresolved completed annual cancellation still fails closed';
+END $$;
+\echo PASS C19: nonannual cancellations and amendments bypass unresolved annual accounting without weakening annual guards
+ROLLBACK TO nonannual_unresolved_day;
 ROLLBACK;

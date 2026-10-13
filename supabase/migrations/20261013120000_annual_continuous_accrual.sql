@@ -26,9 +26,9 @@ insert into annual_continuous_function_spec(signature,before_sha256,after_sha256
 ('private.approved_leave_hours_after(uuid,text[],date)','03833b5e9266e4da7386994162bed27660c583b8f21eac95143046a4d3936f65','a94b51d4400a12acb82675e6a8c3db0217a295ec13adea9a365352224c83d9dc');
 insert into annual_continuous_function_spec values
 ('private.annual_leave_retained_usage(uuid)',null,'18cd2d65bb202709232f23f767b1317320fbc5a11213e9a714feea4fb889c57b','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
-('private.annual_leave_accounting_day(uuid,date)',null,'123b50694f03f9f4be37b77b403b100e5dd9d31abd0929a50e678d8bb9f45959','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
+('private.annual_leave_accounting_day(uuid,date)',null,'26e40841d15dd8ec3bea036fb73657afc8399613eccae16fa2ced0dfef9557ee','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
 ('private.capture_annual_leave_accounting(uuid,date,date,boolean)',null,'213dc31563244fe1845a2c9db420c6f2529e51e88c61f428401e55f9833ca19b','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb),
-('private.retain_completed_annual_leave_accounting()',null,'c94d38548f722a534da7d8e2676529e52b884269c3aeb77218933a33ea5b2e24','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb);
+('private.retain_completed_annual_leave_accounting()',null,'31b3d93692aa59c4d8f1b77c52bed38c13639609f6402fe29b42fe2bf066155d','{"acl":"{postgres=X/postgres}","owner":"postgres","config":["search_path=\"\""],"security_definer":true}'::jsonb);
 do $annual_continuous_functions$ declare item record; begin
  if exists(select 1 from annual_continuous_relation_spec s join pg_namespace n on n.nspname=s.schema_name join pg_class c on c.relnamespace=n.oid and c.relname=s.relation_name) then raise exception 'Annual accounting relation already exists.' using errcode='55000';end if;
  for item in select * from annual_continuous_function_spec loop
@@ -146,6 +146,7 @@ begin
  if p_day<=(now() at time zone 'Australia/Melbourne')::date-1 then
   select state into saved from private.annual_leave_day_accounting where person_id=p_person and service_date=p_day and not coalesce((state->>'retainedOnly')::boolean,false) order by created_at desc,id desc limit 1;
  end if;
+ if (rev.id is not null and rev.request_fingerprint<>fingerprint) or (pol.requires_review and rev.id is null) then return jsonb_build_object('status','needs_review','taken',coalesce((saved->>'taken')::numeric,0));end if;
  if saved is not null and saved->>'reviewId' is not distinct from rev.id::text then
   requests:=saved->'requestUsage';taken:=(saved->>'taken')::numeric;
   for r in select * from public.leave_requests where employee_person_id=p_person and status='approved' and p_day between start_date and end_date loop
@@ -161,7 +162,6 @@ begin
   end loop;
   return saved||jsonb_build_object('policyId',pol.id,'eligibleNumerator',case when p_day<coalesce(start_day,p_day) or p_day>coalesce(end_day,p_day) then 0 when rev.id is not null then (saved->>'eligibleNumerator')::numeric else greatest(0,ordinary-unpaid) end,'taken',taken,'requestUsage',requests,'requestFingerprint',fingerprint);
  end if;
- if (rev.id is not null and rev.request_fingerprint<>fingerprint) or (pol.requires_review and rev.id is null) then return jsonb_build_object('status','needs_review','taken',coalesce((saved->>'taken')::numeric,0));end if;
  for r in select * from public.leave_requests where employee_person_id=p_person and status='approved' and p_day between start_date and end_date loop
   if ordinary>0 and (r.pay_treatment is null or r.pay_treatment not in ('paid_entitlement','paid_other','unpaid')) and rev.id is null then return jsonb_build_object('status','needs_review','taken',0);end if;
   if ordinary>0 and r.pay_treatment='unpaid' and rev.id is null then
@@ -215,7 +215,7 @@ AS $function$
 declare retained jsonb; retained_entry jsonb;
 begin
  if tg_op='DELETE' or private.payroll_request_money(to_jsonb(old)) is distinct from private.payroll_request_money(to_jsonb(new)) then
-  if old.status='approved' then
+  if old.status='approved' and old.leave_type='annual' and old.request_type_label='Annual leave' and old.pay_treatment='paid_entitlement' then
    perform private.capture_annual_leave_accounting(old.employee_person_id,old.start_date,old.end_date,true);
    retained:=private.annual_leave_retained_usage(old.employee_person_id);
    for retained_entry in select value from jsonb_array_elements(retained->'requestUsage') where value->>'requestId'=old.id::text loop

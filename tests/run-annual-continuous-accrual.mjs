@@ -23,7 +23,7 @@ try {
   if (owned) run(process.execPath, ['scripts/test-migration-replay.mjs', socket, database, '--annual-legacy-fixture']);
   const output = run('psql', [...target(socket, database), '-f', path.join(root, 'tests/annual-continuous-accrual.sql')]);
   const groups = [...output.matchAll(/^PASS (C\d{2}):/gm)].map(match => match[1]).sort();
-  assert.deepEqual(groups, Array.from({ length: 17 }, (_, index) => `C${String(index + 1).padStart(2, '0')}`));
+  assert.deepEqual(groups, Array.from({ length: 19 }, (_, index) => `C${String(index + 1).padStart(2, '0')}`));
   const passed = [];
   if (option === '--regressions') {
     for (const file of ['annual-source-bank.sql', 'annual-source-adoption.sql', 'payroll-closing-contract.sql',

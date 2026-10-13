@@ -258,12 +258,12 @@ ROLLBACK TO source_bank_extra_after_hold;
 UPDATE public.leave_requests SET status='cancelled' WHERE id=pg_temp.source_request(50);
 DO $$ DECLARE c jsonb; p jsonb; BEGIN
   c:=private.calculate_leave_entitlement(pg_temp.source_person(5),'annual','2026-10-07');
-  ASSERT c->>'status'=CASE WHEN pg_temp.source_continuous() THEN 'current' ELSE 'needs_review' END;
+  ASSERT c->>'status'='needs_review';
   p:=private.project_annual_leave_balance(pg_temp.source_person(5),'2026-10-08');
   IF pg_temp.source_continuous() THEN
-   ASSERT p->>'status'='projected' AND (p->>'otherTakenHours')::numeric=9.6;
-   ASSERT abs((p->>'availableHours')::numeric-(20.5+22.8/13-9.6))<0.000000000001, 'Completed cancellation retains accounted usage once';
-  ELSE ASSERT p->>'status'='unavailable' AND p->>'availableHours' IS NULL, 'Stale usage after an eligibility hold fails closed'; END IF;
+   ASSERT (c->>'taken')::numeric=9.6, 'Completed cancellation retains accounted usage while its review fingerprint is stale';
+  END IF;
+  ASSERT p->>'status'='unavailable' AND p->>'availableHours' IS NULL, 'Stale usage after an eligibility hold fails closed';
   ASSERT (p->>'payrollHours')::numeric=20.5;
 END $$;
 ROLLBACK TO source_bank_actual_usage_past_hold;

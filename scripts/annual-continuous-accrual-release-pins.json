@@ -3,8 +3,8 @@
   "organization": "fwlmbmospuwoaosffvmw",
   "baseHead": "15c89c42eb94270edeedfbe531948b41bece91fd",
   "version": "20261013120000",
-  "migrationSha256": "b69aa9d06338ac30063df25ca73f286b9ae5fd62250a607b8f31721a4e165c37",
-  "helperSha256": "dca0714163a71a6beb2192232429e8e682b06d0121af966370730b0beae0525c",
+  "migrationSha256": "271c649221999cfce6f27ecbcd39dfbc5e95e581108a39b66f0f88ae182d2682",
+  "helperSha256": "41111f9e209f4146c7f1be479401b55bc65284ab8e64a387aa4d75d6323c15a6",
   "serverMajor": 17,
   "before": {
     "roles": [
@@ -6753,7 +6753,7 @@
       {
         "version": "20261013120000",
         "name": "annual_continuous_accrual",
-        "sourceHash": "8ba25a6b433720eadc60b1c222a20dbaa27e24030911a721cff7dfd77b466933"
+        "sourceHash": "187196841235cb3cfd53483b89577260d44e11ce547812f7f2170ba2c550a280"
       }
     ],
     "tables": {
@@ -7295,7 +7295,7 @@
             "name": "ab_retain_completed_annual_leave_accounting",
             "enabled": "O",
             "definition": "CREATE TRIGGER ab_retain_completed_annual_leave_accounting BEFORE DELETE OR UPDATE ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.retain_completed_annual_leave_accounting()",
-            "functionHash": "c94d38548f722a534da7d8e2676529e52b884269c3aeb77218933a33ea5b2e24"
+            "functionHash": "31b3d93692aa59c4d8f1b77c52bed38c13639609f6402fe29b42fe2bf066155d"
           },
           {
             "name": "leave_notification_on_mutation",
@@ -11948,7 +11948,7 @@
         ]
       },
       "private.annual_leave_accounting_day(uuid,date)": {
-        "sha256": "123b50694f03f9f4be37b77b403b100e5dd9d31abd0929a50e678d8bb9f45959",
+        "sha256": "26e40841d15dd8ec3bea036fb73657afc8399613eccae16fa2ced0dfef9557ee",
         "owner": "postgres",
         "acl": "{postgres=X/postgres}",
         "securityDefiner": true,
@@ -11966,7 +11966,7 @@
         ]
       },
       "private.retain_completed_annual_leave_accounting()": {
-        "sha256": "c94d38548f722a534da7d8e2676529e52b884269c3aeb77218933a33ea5b2e24",
+        "sha256": "31b3d93692aa59c4d8f1b77c52bed38c13639609f6402fe29b42fe2bf066155d",
         "owner": "postgres",
         "acl": "{postgres=X/postgres}",
         "securityDefiner": true,
@@ -16995,11 +16995,11 @@
       "ndims": 1,
       "upper": 1,
       "isNull": false,
-      "rawHash": "0b4cbe75cc87a7abfd2f2c1da07c59009a5633dd52c8647c3cc8cc8e626ee3bd",
+      "rawHash": "ce95d07b35ed6560ed4e1017a74957965d73b7e05250ae6387be4ad389a63de7",
       "version": "20261013120000",
       "cardinality": 1,
       "statementHashes": [
-        "b69aa9d06338ac30063df25ca73f286b9ae5fd62250a607b8f31721a4e165c37"
+        "271c649221999cfce6f27ecbcd39dfbc5e95e581108a39b66f0f88ae182d2682"
       ]
     }
   ],

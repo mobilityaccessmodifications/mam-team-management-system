@@ -107,7 +107,10 @@ do $$declare pid uuid:='96000000-0000-4000-8000-000000000003'; rid uuid:='960000
   assert (calculation->>'annualExactHours')::numeric-private.payroll_request_unconsumed_hours(pid,'2026-09-24',(calculation->>'annualAsOf')::date)=94.8321;
   update public.leave_requests set status='cancelled' where id=rid;
   assert (select hours from private.employee_annual_leave_balances where person_id=pid)=102.4321, 'Cancellation never refunds settled or consumed hours';
-  assert private.leave_payroll_balance_sufficient('96000000-0000-4000-8000-000000000031')=pg_temp.cutoff_continuous(), 'Continuous cancellation retains usage; prior review-only behavior remains held';
+  assert not private.leave_payroll_balance_sufficient('96000000-0000-4000-8000-000000000031'), 'Cancellation retains consumed usage but stale manual review eligibility remains held';
+  if pg_temp.cutoff_continuous() then
+    assert (private.calculate_employee_leave_accrual(pid,(now() at time zone 'Australia/Melbourne')::date-1)->>'annualTaken')::numeric=7.6, 'A stale cancellation review cannot refund captured consumption';
+  end if;
   perform public.review_employee_leave_accrual_day(pid,'2026-09-25',0,0,7.6,0,'Synthetic preserved consumption after cancellation');
   calculation:=private.calculate_employee_leave_accrual(pid,(now() at time zone 'Australia/Melbourne')::date-1);
   assert (calculation->>'annualExactHours')::numeric=94.8321;
