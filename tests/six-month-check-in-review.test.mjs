@@ -61,7 +61,7 @@ test('six-month checklist email follows the approved copy and attaches the provi
   assert.equal(createHash('sha256').update(attachment).digest('hex'), '58484c5b70fbb50cee967e1913135544e7217337a80c4809898730d30d99e601');
   assert.equal(
     nodes['Send 6-Month Check-In Email from HR'].credentials.microsoftOutlookOAuth2Api.name,
-    'Microsoft Outlook account - hr@mobilityaccess.com.au',
+    'Microsoft Outlook - ai@mobilityaccess.com.au',
   );
   assert.equal(workflow.settings.saveDataErrorExecution, 'none');
 });

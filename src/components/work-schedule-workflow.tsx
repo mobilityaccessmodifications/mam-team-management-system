@@ -597,12 +597,12 @@ export function WorkScheduleHome(props: WorkflowProps) {
   </div>;
 }
 
-export function WorkScheduleTasks(props: WorkflowProps) {
+export function WorkScheduleTasks(props: WorkflowProps & { showReviews?: boolean }) {
   const { workspace, loading, error, onRefresh, onRequest, onReview } = props;
   if (!workspace) return <LoadState loading={loading} error={error} onRefresh={onRefresh} />;
   return <div className={styles.taskWorkflow}>
     {error ? <LoadState loading={false} error={error} onRefresh={onRefresh} /> : null}
     {workspace.activePersonId ? <ScheduleCard workspace={workspace} onRequest={onRequest} /> : null}
-    <ReviewQueue reviews={workspace.reviews} compact={false} onReview={onReview} />
+    {props.showReviews !== false ? <ReviewQueue reviews={workspace.reviews} compact={false} onReview={onReview} /> : null}
   </div>;
 }

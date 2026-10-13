@@ -7,7 +7,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const TEST_RECIPIENT = 'marketing@mobilityaccess.com.au';
 export const CHECKLIST_PATH = path.join(ROOT, 'assets/checklists/Day 1 New Starter Readiness Checklist.docx');
 const RECEIPT_URL = 'https://mam-team-management-system-ten.vercel.app/api/internal/integrations/notifications/receipts';
-const HR_OUTLOOK_CREDENTIAL = { id: 'vFEolsXoEOOxNyan', name: 'Microsoft Outlook account - hr@mobilityaccess.com.au' };
+const AI_OUTLOOK_CREDENTIAL = { id: 'Ug5bTBjvF1vCSdhQ', name: 'Microsoft Outlook - ai@mobilityaccess.com.au' };
 const RECEIPT_CREDENTIAL = { id: 'tGtpwegru8OxtdCt', name: 'MAM Team Management - Notification Webhook Header' };
 
 const node = (id, name, type, typeVersion, position, parameters, extra = {}) => ({
@@ -125,7 +125,7 @@ export function buildNewStarterDayOneWorkflow({
       resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
       additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true,
         attachments: { attachments: [{ binaryPropertyName: 'checklist' }] } },
-    }, { credentials: { microsoftOutlookOAuth2Api: HR_OUTLOOK_CREDENTIAL } }),
+    }, { credentials: { microsoftOutlookOAuth2Api: AI_OUTLOOK_CREDENTIAL } }),
     node('d1000000-0000-4000-8000-000000000009', 'Build Durable Day 1 Confirmation', 'n8n-nodes-base.code', 2, [900, -180], {
       mode: 'runOnceForAllItems', jsCode: confirmationCode,
     }),

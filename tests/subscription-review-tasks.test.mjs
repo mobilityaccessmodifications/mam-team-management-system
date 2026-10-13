@@ -33,20 +33,25 @@ test('responsible-person Done sends exact optimistic version and returns a safe 
   assert.deepEqual(h.revalidated,['/']);
 });
 
-test('People Tasks mounts subscription reviews independently and makes Change Profile read-only',()=>{
-  for(const previewPersonId of [undefined,id]){
-    const hooks=hooksHarness(React);
+test('People Tasks enables scoped subscription reviews independently and keeps Change Profile read-only',()=>{
+  for(const previewPersonId of [undefined,id]) for(const enabled of [true,false]){
+    const hooks=hooksHarness(React), calls=[];
     const {CheckInTasks}=loadModule('src/components/check-in-tasks.tsx',{
       react:hooks.react,
-      '@/components/subscription-review-tasks':{SubscriptionReviewTasks:'SubscriptionReviewTasks'},
+      '@/components/subscription-review-tasks':{useSubscriptionReviewTasks:options=>{
+        calls.push(options);
+        return {tasks:[],loading:false,error:'',notice:'',pendingId:'',load:async()=>{},complete:async()=>{}};
+      }},
+      '@/components/ui/use-media-query':{useMediaQuery:()=>false},
+      '@/components/ui/use-dialog-focus':{useDialogFocus:()=>{}},
       '@/lib/supabase/client':{createClient:()=>({})},
     });
     hooks.begin();
-    const tree=CheckInTasks({previewPersonId,readOnly:false,showCheckInTasks:false});
-    const reviews=nodes(tree).find(n=>n.type==='SubscriptionReviewTasks');
-    assert.ok(reviews,'subscription reviews must appear in the actual People Tasks renderer');
-    assert.equal(reviews.props.previewPersonId,previewPersonId);
-    assert.equal(reviews.props.readOnly,Boolean(previewPersonId));
+    CheckInTasks({previewPersonId,readOnly:false,showCheckInTasks:false,showSubscriptionReviewTasks:enabled});
+    assert.equal(calls.length,1,'the actual People Tasks renderer must use the scoped subscription hook');
+    assert.equal(calls[0].previewPersonId,previewPersonId);
+    assert.equal(calls[0].readOnly,Boolean(previewPersonId));
+    assert.equal(calls[0].enabled,enabled);
   }
 });
 

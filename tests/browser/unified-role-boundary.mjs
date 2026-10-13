@@ -3,12 +3,38 @@ import { completedFixtureToday, leaveCompletedRequests } from './leave-completed
 
 const completedMode = new URLSearchParams(location.search).has('leave-completed');
 const ordinaryReviewEmployee = new URLSearchParams(location.search).get('subscription-reviews') === 'employee';
+const combinedTasks = new URLSearchParams(location.search).get('tasks') === 'combined';
+const scheduleTasks = combinedTasks && new URLSearchParams(location.search).has('schedule-tasks');
+const subscriptionReviewsFail = new URLSearchParams(location.search).has('subscription-review-error');
 const reviewOwnerId = syntheticRolePeople[3].id;
+let checkInRows = combinedTasks ? [
+  { person_id: reviewOwnerId, full_name: 'Synthetic Check-in Employee', position_title: 'Coordinator', company_key: 'mam', reminders: [
+    { id: '66000000-0000-4000-8000-000000000001', milestone: '1_month', sequence: 'initial', dueDate: '2000-01-01', status: 'delivered', needsReviewReason: null },
+    { id: '66000000-0000-4000-8000-000000000002', milestone: '5_month', sequence: 'initial', dueDate: '2000-01-02', status: 'needs_review', needsReviewReason: 'missing_manager_email' },
+  ] },
+  { person_id: syntheticRolePeople[2].id, full_name: 'Synthetic Future Employee', position_title: 'Installer', company_key: 'equipsy', reminders: [
+    { id: '66000000-0000-4000-8000-000000000003', milestone: '6_month', sequence: 'initial', dueDate: '2500-01-01', status: 'scheduled', needsReviewReason: null },
+  ] },
+] : [];
 let reviewRows = [
   { subscription_id: '33000000-0000-4000-8000-000000000010', service_name: 'Synthetic due review', next_review_on: '2000-01-01', subscription_status: 'active', version: 4 },
   { subscription_id: '33000000-0000-4000-8000-000000000011', service_name: 'Synthetic future review', next_review_on: '2500-01-01', subscription_status: 'paused', version: 1 },
 ];
-
+let scheduleRequest = {
+  id: '88000000-0000-4000-8000-000000000001',
+  originalWorkingWeekdays: [1, 3, 5], originalWorkingDayTimes: [{ weekday: 1, startTime: '09:00', endTime: '17:00' }],
+  requestedWorkingWeekdays: [2, 4], requestedWorkingDayTimes: [{ weekday: 2, startTime: '10:00', endTime: '16:00' }],
+  requestReason: 'Synthetic change to support a study timetable', submittedByName: 'Synthetic Employee',
+  status: 'submitted', submittedAt: '2026-10-01T00:00:00Z', decidedAt: null, reviewerName: null, decisionReason: null,
+};
+const notesStorageKey = 'mam-synthetic-task-notes';
+const taskNotes = JSON.parse(sessionStorage.getItem(notesStorageKey) ?? '{}');
+const notesKey = target => `${target.kind}:${target.taskId}:${target.reviewOn ?? ''}`;
+const readNotes = target => ({ ...(taskNotes[notesKey(target)] ?? { text: '', version: 0 }) });
+const writeNotes = (target, notes) => {
+  taskNotes[notesKey(target)] = { ...notes };
+  sessionStorage.setItem(notesStorageKey, JSON.stringify(taskNotes));
+};
 
 const calls = [], unexpected = [];
 const roleById = Object.fromEntries(syntheticRolePeople.map(person => [person.id, person.role]));
@@ -54,6 +80,8 @@ window.unifiedRoleFixture = {
     request.resolve(Promise.reject(new Error('synthetic uncertain save outcome')));
   },
   failNext(name, id, kind) { failures.set(`${name}:${id ?? ''}`, kind); },
+  setTaskNotes(target, text, version) { writeNotes(target, { text, version }); },
+  removeScheduleRequest() { scheduleRequest = { ...scheduleRequest, status: 'cancelled' }; },
   setSubscriptionGrants(id, management, vault) {
     grantsById[id] = { can_manage_subscriptions: management, can_manage_subscription_credentials: vault };
   },
@@ -103,10 +131,18 @@ const handlers = {
   },
   '@/app/accounts/actions': { listPortalAccounts: () => [] },
   '@/app/leave/actions': { getLeaveWorkspaceData: leaveWorkspace },
-  '@/app/work-schedule/actions': { loadEmployeeWorkScheduleWorkspace: (id = ordinaryReviewEmployee ? reviewOwnerId : undefined) => ({ ok: true, workspace: {
+  '@/app/work-schedule/actions': { loadEmployeeWorkScheduleWorkspace: previewPersonId => {
+    const id = previewPersonId ?? (ordinaryReviewEmployee ? reviewOwnerId : undefined);
+    return { ok: true, workspace: {
     activePersonId: id ?? null, activePersonName: personFor(id)?.name ?? null, workingWeekdays: id ? [1, 2, 3, 4, 5] : null,
-    workingDayTimes: [], initialSetupAvailable: false, canRequestChange: Boolean(id), isProfilePreview: Boolean(id), history: [], reviews: [],
-  } }) },
+    workingDayTimes: [], initialSetupAvailable: false, canRequestChange: Boolean(id), isProfilePreview: Boolean(previewPersonId),
+    history: scheduleTasks && id === reviewOwnerId ? [{ ...scheduleRequest }] : [],
+    reviews: scheduleTasks && (!id || roleById[id] === 'manager') ? [{ ...scheduleRequest, personId: reviewOwnerId, employeeName: 'Synthetic Employee' }] : [],
+  } }; }, reviewEmployeeWorkScheduleChange: input => {
+    if (input.requestId !== scheduleRequest.id || scheduleRequest.status !== 'submitted' || !input.reason.trim()) return { ok: false, message: 'Enter a valid decision reason for this request.' };
+    scheduleRequest = { ...scheduleRequest, status: input.decision, decisionReason: input.reason, reviewerName: 'Synthetic Admin' };
+    return { ok: true };
+  } },
   '@/app/people/team-directory-actions': { listEmployeeTeamDirectory: id => [personFor(id)].filter(Boolean).map(person => ({
     id: person.id, name: person.name, position: person.title, company: person.company,
     reportsTo: null, managerName: '', kind: 'person', isActive: true, version: 1,
@@ -150,17 +186,31 @@ const handlers = {
     if (result.ok && result.task) reviewRows = reviewRows.map(row => row.subscription_id === input.subscriptionId ? { ...row, next_review_on: result.task.nextReviewOn, version: result.task.version } : row);
     return result;
   } },
+  '@/app/check-in-tasks/actions': { completeMyEmployeeCheckInTask: reminderId => {
+    checkInRows = checkInRows.map(row => ({ ...row, reminders: row.reminders.filter(reminder => reminder.id !== reminderId) }));
+  } },
+  '@/app/tasks/note-actions': {
+    getTaskNotes: target => ({ ok: true, notes: readNotes(target) }),
+    saveTaskNotes: input => {
+      const current = readNotes(input.target);
+      if (current.version !== input.version) return { ok: false, error: 'Notes have changed. Refresh and try again.' };
+      const notes = { text: input.text, version: current.version + 1 };
+      writeNotes(input.target, notes);
+      return { ok: true, notes };
+    },
+  },
   '@/app/subscriptions/employee-actions': { listEmployeeSubscriptionsForPreview: () => [], listMySubscriptions: () => [] },
 };
 
 export async function invokeServerAction(module, name, args) {
   calls.push({ module, name, args: args.map(arg => arg instanceof FormData ? { files: arg.getAll('files').map(file => ({ name: file.name, type: file.type, size: file.size })) } : arg) });
-  const key = `${name}:${args[0]?.personId ?? args[0]?.subscriptionId ?? args[0] ?? ''}`;
+  const key = `${name}:${args[0]?.personId ?? args[0]?.subscriptionId ?? args[0]?.requestId ?? args[0]?.target?.taskId ?? args[0]?.taskId ?? args[0] ?? ''}`;
   const failure = failures.get(key);
   if (failure) {
     failures.delete(key);
     if (failure === 'contact') throw new Error(UNIFIED_ROLE_FIXTURE_RESULTS.contactError);
     if (name === 'getPortalRoleCapabilities' && (failure === 'denied' || failure === 'malformed')) return UNIFIED_ROLE_FIXTURE_RESULTS[failure];
+    if (name === 'saveTaskNotes' && failure === 'stale') return { ok: false, error: 'Notes have changed. Refresh and try again.' };
     if (failure === 'transport') throw new Error('private synthetic provider permission detail');
     throw new Error(`Unexpected synthetic failure ${failure}`);
   }
@@ -191,8 +241,8 @@ const client = {
   },
   async rpc(name, args) {
     calls.push({ module: 'supabase', name, args: [args] });
-    if (name === 'list_my_employee_check_in_tasks' || name === 'list_employee_check_in_tasks_for_preview') return { data: [], error: null };
-    if (name === 'list_my_subscription_review_tasks') return { data: ordinaryReviewEmployee ? reviewRows : [], error: null };
+    if (name === 'list_my_employee_check_in_tasks' || name === 'list_employee_check_in_tasks_for_preview') return { data: checkInRows, error: null };
+    if (name === 'list_my_subscription_review_tasks') return subscriptionReviewsFail ? { data: null, error: { code: 'XX000', message: 'synthetic private provider detail' } } : { data: ordinaryReviewEmployee ? reviewRows : [], error: null };
     if (name === 'list_subscription_review_tasks_for_preview') return { data: args.p_person_id === reviewOwnerId ? reviewRows : [], error: null };
     if (name === 'can_edit_internal_org' || name === 'can_manage_employee_directory') return { data: true, error: null };
     unexpected.push({ module: 'supabase', name });

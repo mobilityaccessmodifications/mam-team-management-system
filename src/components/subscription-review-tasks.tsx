@@ -12,9 +12,9 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-AU", { timeZone: "Australia/Melbourne", day: "numeric", month: "short", year: "numeric" }).format(new Date(`${value}T12:00:00Z`));
 }
 
-export function SubscriptionReviewTasks({ previewPersonId, readOnly = false }: { previewPersonId?: string; readOnly?: boolean }) {
+export function useSubscriptionReviewTasks({ previewPersonId, readOnly = false, enabled = true }: { previewPersonId?: string; readOnly?: boolean; enabled?: boolean }) {
   const [tasks, setTasks] = useState<SubscriptionReviewTask[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pendingId, setPendingId] = useState("");
@@ -25,6 +25,7 @@ export function SubscriptionReviewTasks({ previewPersonId, readOnly = false }: {
     setLoading(true);
     setError("");
     setNotice("");
+    if (!enabled) { setTasks([]); setLoading(false); return; }
     try {
       const supabase = createClient();
       const { data, error: failure } = previewPersonId
@@ -41,7 +42,7 @@ export function SubscriptionReviewTasks({ previewPersonId, readOnly = false }: {
     } finally {
       if (request === generation.current) setLoading(false);
     }
-  }, [previewPersonId]);
+  }, [enabled, previewPersonId]);
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => { window.clearTimeout(timer); generation.current += 1; };
@@ -71,6 +72,12 @@ export function SubscriptionReviewTasks({ previewPersonId, readOnly = false }: {
       }
     });
   }
+
+  return { tasks, loading, error, notice, pendingId, load, complete };
+}
+
+export function SubscriptionReviewTasks({ previewPersonId, readOnly = false }: { previewPersonId?: string; readOnly?: boolean }) {
+  const { tasks, loading, error, notice, pendingId, load, complete } = useSubscriptionReviewTasks({ previewPersonId, readOnly });
 
   return <section className={styles.workspace} aria-label="Subscription review tasks">
     <div className={styles.header}>
