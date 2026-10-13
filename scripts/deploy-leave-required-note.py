@@ -10,10 +10,10 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = 'xtwlrjqbusadghavchqm'
 ORGANISATION = 'fwlmbmospuwoaosffvmw'
-VERSION = '20261013143000'
+VERSION = '20261013180000'
 NAME = 'leave_required_employee_note'
-PREDECESSOR_VERSION = '20261013120000'
-PREDECESSOR_NAME = 'annual_continuous_accrual'
+PREDECESSOR_VERSION = '20261013170000'
+PREDECESSOR_NAME = 'subscription_review_tasks'
 SIGNATURE = 'private.enforce_leave_request_employment_policy()'
 BEFORE_SHA = '6535b99e6244c42999825fd79262d29623e109f7af701810dcf4b6b410ff9819'
 AFTER_SHA = '129ff4a64cf0d48c021424e2f95562cee499b9c2baad32586885e6c29f03d4dc'

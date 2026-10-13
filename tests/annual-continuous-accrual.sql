@@ -83,8 +83,8 @@ END $$;
 \echo PASS C04: daily service-only refresh persists immutable annual usage and checkpoints idempotently
 ROLLBACK TO durable_refresh;
 SAVEPOINT conditional_balance;
-INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,employment_type_snapshot,pay_treatment,approval_required)
-SELECT pg_temp.continuous_request(2),pg_temp.continuous_person(1),pg_temp.continuous_person(1),'annual','Annual leave',day,day,1,1,'submitted',now(),'full_time','paid_entitlement',true
+INSERT INTO public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,employment_type_snapshot,pay_treatment,approval_required,reason)
+SELECT pg_temp.continuous_request(2),pg_temp.continuous_person(1),pg_temp.continuous_person(1),'annual','Annual leave',day,day,1,1,'submitted',now(),'full_time','paid_entitlement',true,'Synthetic continuous accrual note'
 FROM (SELECT min(d::date) AS day FROM generate_series((now() at time zone 'Australia/Melbourne')::date+21,(now() at time zone 'Australia/Melbourne')::date+28,interval '1 day')d WHERE extract(isodow from d) BETWEEN 1 AND 5)dates;
 INSERT INTO private.leave_balance_approvals(request_id,approved_by,approved_at)
 VALUES(pg_temp.continuous_request(2),pg_temp.continuous_person(900),(now() at time zone 'Australia/Melbourne')::date-1);

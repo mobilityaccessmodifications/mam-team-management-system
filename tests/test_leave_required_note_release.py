@@ -24,27 +24,27 @@ def predecessor_state(helper):
         'ledger': [
             {'version': '20261012110000', 'name': 'trade_school_leave',
              'dimensions': '[0:0]', 'cardinality': 1, 'sourceSha256': 'e'*64},
-            {'version': '20261013120000', 'name': 'annual_continuous_accrual',
+            {'version': '20261013170000', 'name': 'subscription_review_tasks',
              'dimensions': '[1:1]', 'cardinality': 1, 'sourceSha256': 'f'*64},
         ],
     }
 
 
 class RequiredNoteReleaseTests(unittest.TestCase):
-    def test_latest_predecessor_is_exact_committed_annual_continuous_accrual(self):
+    def test_latest_predecessor_is_exact_committed_subscription_review_tasks(self):
         helper = load_helper()
-        predecessor = ROOT / 'supabase/migrations/20261013120000_annual_continuous_accrual.sql'
+        predecessor = ROOT / 'supabase/migrations/20261013170000_subscription_review_tasks.sql'
         self.assertEqual((helper.PREDECESSOR_VERSION, helper.PREDECESSOR_NAME),
-                         ('20261013120000', 'annual_continuous_accrual'))
+                         ('20261013170000', 'subscription_review_tasks'))
         self.assertEqual(helper.PREDECESSOR, predecessor)
         self.assertEqual(predecessor.read_bytes(), subprocess.check_output(
-            ['git', 'show', 'HEAD:supabase/migrations/20261013120000_annual_continuous_accrual.sql'], cwd=ROOT))
+            ['git', 'show', 'HEAD:supabase/migrations/20261013170000_subscription_review_tasks.sql'], cwd=ROOT))
         source = helper.candidate(helper.sha(helper.MIGRATION.read_bytes()))
         expression = helper.state_expression(source)
-        self.assertIn("'predecessorExact',coalesce((select name='annual_continuous_accrual' "
+        self.assertIn("'predecessorExact',coalesce((select name='subscription_review_tasks' "
                       "and array_dims(statements)='[1:1]' and statements=ARRAY[" +
                       helper.literal(predecessor.read_text()) + "]::text[] "
-                      "from supabase_migrations.schema_migrations where version='20261013120000'),false)", expression)
+                      "from supabase_migrations.schema_migrations where version='20261013170000'),false)", expression)
         self.assertEqual(helper.BEFORE_SHA,
                          '6535b99e6244c42999825fd79262d29623e109f7af701810dcf4b6b410ff9819')
 
@@ -75,7 +75,7 @@ class RequiredNoteReleaseTests(unittest.TestCase):
         before = predecessor_state(helper)
         helper.validate_before(before, source)
         historical, current = before['ledger']
-        newer = dict(current, version='20261013130000')
+        newer = dict(current, version='20261013173000')
         for label, rows in [
             ('stale latest', [historical]),
             ('newer latest', [historical, current, newer]),
@@ -100,7 +100,7 @@ class RequiredNoteReleaseTests(unittest.TestCase):
             ('overbound ledger', [current]*513, 'Unsupported bounded raw ledger'),
             ('extra row field', [dict(current, unknown=True)], 'Unsupported exact raw ledger'),
             ('missing array dimensions', [{k: v for k, v in current.items() if k != 'dimensions'}], 'Unsupported exact raw ledger'),
-            ('nonliteral version', [dict(current, version=20261013120000)], 'Unsupported exact raw ledger'),
+            ('nonliteral version', [dict(current, version=20261013170000)], 'Unsupported exact raw ledger'),
             ('malformed raw hash', [dict(current, sourceSha256='f'*63)], 'Unsupported exact raw ledger'),
         ]:
             with self.subTest(label=label):
