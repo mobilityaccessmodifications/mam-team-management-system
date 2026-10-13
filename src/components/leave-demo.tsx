@@ -2170,11 +2170,17 @@ export function LeaveDemo({
                   : undefined}
               renderCheckInTasks={activeCapabilities
                 ? (toolbarAction) => <CheckInTasks
+                    key={isPreviewingEmployeeAccess ? activeProfile.id : "self"}
+                    showSubscriptionReviewTasks={Boolean(activeCapabilities.person_id)}
+                    workScheduleWorkspace={visibleWorkScheduleWorkspace}
+                    onScheduleReview={reviewWorkScheduleRequest}
+                    onScheduleRefresh={refreshWorkScheduleWorkspace}
                     previewPersonId={isPreviewingEmployeeAccess ? activeProfile.id : undefined}
                     readOnly={false}
                     toolbarAction={toolbarAction}
                     showCheckInTasks={true}
                     scheduleContent={<WorkScheduleTasks
+                      showReviews={false}
                       workspace={visibleWorkScheduleWorkspace}
                       loading={workScheduleLoading}
                       error={workScheduleError}
