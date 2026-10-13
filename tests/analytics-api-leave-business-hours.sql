@@ -25,15 +25,15 @@ insert into private.employee_directory_details(
   ('f1000000-0000-4000-8000-000000000002', 'Synthetic', 'Part Time', 'part-time@example.test', 'part_time', array[1,3]::smallint[], '[{"weekday":1,"start_time":"09:00","end_time":"17:00"}]'::jsonb);
 select pg_temp.set_test_actor('e1000000-0000-4000-8000-000000000001');
 create temp table full_time_request on commit drop as
-  select id from public.submit_my_leave_request('Unpaid leave', date '2026-11-09', date '2026-11-10');
+  select id from public.submit_my_leave_request('Unpaid leave', date '2026-11-09', date '2026-11-10', null, null, 'Synthetic employee note');
 create temp table explicit_time_request on commit drop as
-  select id from public.submit_my_leave_request('Unpaid leave', date '2026-11-23', date '2026-11-23', time '09:15', time '11:00');
+  select id from public.submit_my_leave_request('Unpaid leave', date '2026-11-23', date '2026-11-23', time '09:15', time '11:00', 'Synthetic employee note');
 select pg_temp.set_test_actor('e1000000-0000-4000-8000-000000000002');
 create temp table part_time_request on commit drop as
-  select id from public.submit_my_leave_request('Unpaid leave', date '2026-11-02', date '2026-11-03');
+  select id from public.submit_my_leave_request('Unpaid leave', date '2026-11-02', date '2026-11-03', null, null, 'Synthetic employee note');
 select pg_temp.set_test_actor('e1000000-0000-4000-8000-000000000003');
 create temp table unclassified_request on commit drop as
-  select id from public.submit_my_leave_request('Unpaid leave', date '2026-11-16', date '2026-11-16');
+  select id from public.submit_my_leave_request('Unpaid leave', date '2026-11-16', date '2026-11-16', null, null, 'Synthetic employee note');
 insert into public.leave_requests(
   id, employee_person_id, user_id, leave_type, request_type_label,
   start_date, end_date, business_days, hours, employment_type_snapshot,

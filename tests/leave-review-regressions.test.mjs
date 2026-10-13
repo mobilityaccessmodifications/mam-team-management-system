@@ -339,7 +339,10 @@ function submitForm({ onBehalfOf, dateError, start = "2026-09-22", end = start, 
     teamRequestPeople: [], formLeaveType: leaveType, availableLeaveTypes: [], employmentType: "full_time",
     formStartDate: start, formEndDate: end, formError: "", submitRequest: () => calls.push("submitted"),
     setFormError: (error) => calls.push(error) });
-  nodes(tree).find((node) => node.type === "form").props.onSubmit({ preventDefault: () => calls.push("prevented") });
+  nodes(tree).find((node) => node.type === "form").props.onSubmit({
+    preventDefault: () => calls.push("prevented"),
+    currentTarget: { elements: { namedItem: (name) => name === "employeeNote" ? { value: "Synthetic leave note" } : null } },
+  });
   return { calls, tree, hoursCalls };
 }
 
