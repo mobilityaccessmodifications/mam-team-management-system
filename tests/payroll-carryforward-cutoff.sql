@@ -2,8 +2,8 @@ begin;
 \ir payroll-closing-setup.sql
 create function pg_temp.cutoff_continuous() returns boolean language sql stable as $$ select to_regprocedure('private.annual_leave_accounting_day(uuid,date)') is not null; $$;
 select public.reconcile_payroll_closing('synthetic-cutoff-closing',pg_temp.closing_payload());
-insert into public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,employment_type_snapshot,pay_treatment,approval_required)
-values('96000000-0000-4000-8000-000000000031','96000000-0000-4000-8000-000000000003','96000000-0000-4000-8000-000000000003','annual','Annual leave','2027-03-01','2027-03-18',14,100,'submitted',now(),'full_time','paid_entitlement',true);
+insert into public.leave_requests(id,employee_person_id,user_id,leave_type,request_type_label,start_date,end_date,business_days,hours,status,submitted_at,employment_type_snapshot,pay_treatment,approval_required,reason)
+values('96000000-0000-4000-8000-000000000031','96000000-0000-4000-8000-000000000003','96000000-0000-4000-8000-000000000003','annual','Annual leave','2027-03-01','2027-03-18',14,100,'submitted',now(),'full_time','paid_entitlement',true,'Synthetic employee note');
 insert into private.leave_balance_approvals(request_id,approved_by,approved_at)
 values('96000000-0000-4000-8000-000000000031','96000000-0000-4000-8000-000000000001','2026-09-24 00:00:00+10');
 select public.review_employee_leave_accrual_day('96000000-0000-4000-8000-000000000003',day::date,0,0,0,0,'Synthetic actual zero usage')
