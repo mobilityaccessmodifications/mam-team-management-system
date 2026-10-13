@@ -14,18 +14,26 @@ VALUES('96000000-0000-4000-8000-000000000012','96000000-0000-4000-8000-000000000
 SAVEPOINT candidate_budget;
 UPDATE private.leave_accrual_policies SET enabled=false WHERE person_id='96000000-0000-4000-8000-000000000002';
 UPDATE private.employee_annual_leave_balances SET hours=15.1 WHERE person_id='96000000-0000-4000-8000-000000000002';
-DO $$ BEGIN
-  BEGIN
-    UPDATE public.leave_requests SET start_date='2026-10-05',end_date='2026-10-06'
-      WHERE id='96000000-0000-4000-8000-000000000012';
-    RAISE EXCEPTION 'Missing snapshot understated full-time candidate hours' USING ERRCODE='ZX001';
-  EXCEPTION WHEN invalid_parameter_value THEN
-    ASSERT SQLERRM LIKE ANY(array['Not enough balance.%','Future accrual could not be confirmed%']);
-  END;
-  ASSERT (SELECT start_date='2026-09-24' AND end_date='2026-09-25' AND employment_type_snapshot IS NULL
-    FROM public.leave_requests WHERE id='96000000-0000-4000-8000-000000000012');
-  ASSERT (SELECT required_hours=15.2 FROM private.leave_balance_approvals WHERE request_id='96000000-0000-4000-8000-000000000012');
-  UPDATE private.employee_annual_leave_balances SET hours=15.2 WHERE person_id='96000000-0000-4000-8000-000000000002';
+DO $$ DECLARE bank_hours numeric; basis jsonb; BEGIN
+  basis:=private.leave_bank_basis('96000000-0000-4000-8000-000000000002','annual');
+  ASSERT basis->>'reportDate'='2026-09-01' AND basis->>'coveredThrough' IS NULL,
+    'The imported report does not confirm coverage of the original leave';
+  ASSERT (now() AT TIME ZONE 'Australia/Melbourne')::date>date '2026-09-25',
+    'The original approved leave is completed';
+  FOREACH bank_hours IN ARRAY ARRAY[15.1,15.2,30.3] LOOP
+    UPDATE private.employee_annual_leave_balances SET hours=bank_hours WHERE person_id='96000000-0000-4000-8000-000000000002';
+    BEGIN
+      UPDATE public.leave_requests SET start_date='2026-10-05',end_date='2026-10-06'
+        WHERE id='96000000-0000-4000-8000-000000000012';
+      RAISE EXCEPTION 'Missing snapshot understated candidate hours or refunded completed usage' USING ERRCODE='ZX001';
+    EXCEPTION WHEN invalid_parameter_value THEN
+      ASSERT SQLERRM LIKE ANY(array['Not enough balance.%','Future accrual could not be confirmed%']);
+    END;
+    ASSERT (SELECT start_date='2026-09-24' AND end_date='2026-09-25' AND employment_type_snapshot IS NULL
+      FROM public.leave_requests WHERE id='96000000-0000-4000-8000-000000000012');
+    ASSERT (SELECT required_hours=15.2 FROM private.leave_balance_approvals WHERE request_id='96000000-0000-4000-8000-000000000012');
+  END LOOP;
+  UPDATE private.employee_annual_leave_balances SET hours=30.4 WHERE person_id='96000000-0000-4000-8000-000000000002';
   UPDATE public.leave_requests SET start_date='2026-10-05',end_date='2026-10-06'
     WHERE id='96000000-0000-4000-8000-000000000012';
   ASSERT (SELECT employment_type_snapshot IS NULL AND hours IS NULL FROM public.leave_requests WHERE id='96000000-0000-4000-8000-000000000012');
