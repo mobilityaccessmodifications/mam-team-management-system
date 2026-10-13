@@ -13,6 +13,7 @@ export function runReportingSpliceSql(socket, database, sourceRoot = process.cwd
     'reporting-splice-safety.sql',
     'reporting-splice-graph.sql',
     'reporting-splice-consumers.sql',
+    'day-one-reporting-splice-claims.sql',
     'scheduled-offboarding.sql',
   ];
   const unit = spawnSync('python3', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_reporting_splice_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit', timeout: 60000 });

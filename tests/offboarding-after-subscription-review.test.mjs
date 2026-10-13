@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
-test('subscription and note aware release preserves the public custody, query, snapshot, and spent-dispatch guards in offline models', () => {
+test('subscription, note, and Day1 aware release preserves the public custody, query, snapshot, and spent-dispatch guards in offline models', () => {
   const code = String.raw`
 import contextlib,copy,hashlib,importlib.util,io,json,os,pathlib,sys,unittest
 from unittest.mock import patch
@@ -20,6 +20,8 @@ def add_subscription(module,before):
     before['ledger'].append({'version':module.SUBSCRIPTION_VERSION,'name':module.SUBSCRIPTION_NAME,'dimensions':'[1:1]','cardinality':1,'sourceSha256':module.SUBSCRIPTION_ARRAY_SHA})
     before.update(noteExact=True,noteFunctionsExact=True,noteStateHash='7'*64)
     before['ledger'].append({'version':module.NOTE_VERSION,'name':module.NOTE_NAME,'dimensions':'[1:1]','cardinality':1,'sourceSha256':module.NOTE_ARRAY_SHA})
+    before.update(dayOneExact=True,dayOneFunctionsExact=True,dayOneStateHash='8'*64)
+    before['ledger'].append({'version':module.DAY_ONE_VERSION,'name':module.DAY_ONE_NAME,'dimensions':'[1:1]','cardinality':1,'sourceSha256':module.DAY_ONE_ARRAY_SHA})
     before['ledger'].sort(key=lambda row:row['version'])
     return before
 def model(phase):
@@ -27,7 +29,7 @@ def model(phase):
     adapter=module.AfterSubscriptionReviewAdapter.__new__(module.AfterSubscriptionReviewAdapter)
     adapter.phase=phase
     adapter.raw={ROOT/path:(ROOT/path).read_bytes() for path in module.IMMUTABLE}
-    adapter.load_components();adapter.load_subscription();adapter.load_note()
+    adapter.load_components();adapter.load_subscription();adapter.load_note();adapter.load_day_one()
     return module,adapter,add_subscription(module,fixtures.model_before(module,adapter))
 def construct(module,phase,head,pins,**overrides):
     helper,_,source=module.PHASES[phase]
@@ -37,12 +39,13 @@ def construct(module,phase,head,pins,**overrides):
       'annual_sha':pins[str(module.ANNUAL.relative_to(module.ROOT))],
       'wrapper_sha':pins[str(module.WRAPPER.relative_to(module.ROOT))],
       'subscription_sha':pins[str(module.SUBSCRIPTION.relative_to(module.ROOT))],
-      'note_sha':pins[str(module.NOTE.relative_to(module.ROOT))]}
+      'note_sha':pins[str(module.NOTE.relative_to(module.ROOT))],
+      'day_one_sha':pins[str(module.DAY_ONE.relative_to(module.ROOT))]}
     values.update(overrides)
     return module.AfterSubscriptionReviewAdapter(phase,head,**values)
 def arguments(module,adapter,parent,action='apply'):
     values=fixtures.entry_arguments(module,adapter,parent,action)
-    return values+['--wrapper-sha',adapter.pins[module.WRAPPER],'--subscription-sha',adapter.pins[module.SUBSCRIPTION],'--note-sha',adapter.pins[module.NOTE]]
+    return values+['--wrapper-sha',adapter.pins[module.WRAPPER],'--subscription-sha',adapter.pins[module.SUBSCRIPTION],'--note-sha',adapter.pins[module.NOTE],'--day-one-sha',adapter.pins[module.DAY_ONE]]
 class SubscriptionReleaseGuards(unittest.TestCase):
     def setUp(self):
         trap=patch('urllib.request.urlopen',side_effect=AssertionError('Offline MODEL tests forbid network'))
@@ -51,18 +54,18 @@ class SubscriptionReleaseGuards(unittest.TestCase):
         for phase in ('reporting-splice','finalizer','version-conflict'):
             module,adapter,before=model(phase);source=adapter.raw[adapter.core].decode()
             adapter.validate_before(before,source)
-            for version in (module.SUBSCRIPTION_VERSION,module.NOTE_VERSION):
+            for version in (module.SUBSCRIPTION_VERSION,module.NOTE_VERSION,module.DAY_ONE_VERSION):
                 for key,value in [('name','renamed'),('dimensions','[0:0]'),('dimensions',None),('cardinality',True),('cardinality',0),('cardinality',None),('sourceSha256','0'*64)]:
                     bad=copy.deepcopy(before);next(row for row in bad['ledger'] if row['version']==version)[key]=value
                     with self.subTest(phase=phase,version=version,key=key,value=value),self.assertRaises(SystemExit):adapter.validate_before(bad,source)
-            for field,value in [('subscriptionExact',False),('subscriptionFunctionsExact',False),('subscriptionStateHash',None),('subscriptionStateHash','bad'),('noteExact',False),('noteFunctionsExact',False),('noteStateHash',None),('noteStateHash','bad')]:
+            for field,value in [('subscriptionExact',False),('subscriptionFunctionsExact',False),('subscriptionStateHash',None),('subscriptionStateHash','bad'),('noteExact',False),('noteFunctionsExact',False),('noteStateHash',None),('noteStateHash','bad'),('dayOneExact',False),('dayOneFunctionsExact',False),('dayOneStateHash',None),('dayOneStateHash','bad')]:
                 bad=copy.deepcopy(before);bad[field]=value
                 with self.subTest(phase=phase,field=field),self.assertRaises(SystemExit):adapter.validate_before(bad,source)
             variants=[]
-            for version in (module.SUBSCRIPTION_VERSION,module.NOTE_VERSION):
+            for version in (module.SUBSCRIPTION_VERSION,module.NOTE_VERSION,module.DAY_ONE_VERSION):
                 bad=copy.deepcopy(before);bad['ledger']=[row for row in bad['ledger'] if row['version']!=version];variants.append(bad)
             bad=copy.deepcopy(before);bad['ledger'].append(dict(bad['ledger'][-1]));variants.append(bad)
-            bad=copy.deepcopy(before);bad['ledger'].append(dict(bad['ledger'][-1],version='20261013180001'));variants.append(bad)
+            bad=copy.deepcopy(before);bad['ledger'].append(dict(bad['ledger'][-1],version='20261013200001'));variants.append(bad)
             bad=copy.deepcopy(before);bad['ledger'].reverse();variants.append(bad)
             bad=copy.deepcopy(before);bad['unexpected']=True;variants.append(bad)
             for bad in variants:
@@ -77,13 +80,15 @@ class SubscriptionReleaseGuards(unittest.TestCase):
             self.assertEqual(restored,original)
             self.assertEqual(adapter.transaction(source,before),query)
             projection=adapter.validation_projection(before)
-            self.assertEqual(len(projection['ledger']),len(before['ledger'])-3)
-            self.assertTrue(all(row['version'] not in (module.ANNUAL_VERSION,module.SUBSCRIPTION_VERSION,module.NOTE_VERSION) for row in projection['ledger']))
-            self.assertTrue(all(field not in projection for field in (*module.SUBSCRIPTION_FIELDS,*module.NOTE_FIELDS)))
+            self.assertEqual(len(projection['ledger']),len(before['ledger'])-4)
+            self.assertTrue(all(row['version'] not in (module.ANNUAL_VERSION,module.SUBSCRIPTION_VERSION,module.NOTE_VERSION,module.DAY_ONE_VERSION) for row in projection['ledger']))
+            self.assertTrue(all(field not in projection for field in (*module.SUBSCRIPTION_FIELDS,*module.NOTE_FIELDS,*module.DAY_ONE_FIELDS)))
             self.assertEqual(len(adapter.subscription_functions),5)
             self.assertTrue(module.SUBSCRIPTION_SIGNATURES.isdisjoint(adapter.helper.function_spec(source)))
             self.assertIn('20261013170000',query);self.assertIn('20261013120000',query);self.assertIn('20261013180000',query)
             self.assertIn(module.NOTE_SIGNATURE,query)
+            self.assertIn(module.DAY_ONE_SIGNATURE,query);self.assertIn(module.DAY_ONE_VERSION,query)
+            self.assertNotIn(module.DAY_ONE_SIGNATURE,adapter.helper.function_spec(source))
             self.assertNotIn(module.NOTE_SIGNATURE,adapter.helper.function_spec(source))
             for signature in module.SUBSCRIPTION_SIGNATURES:self.assertIn(signature,query)
             self.assertIn('pg_get_userbyid(p.proowner)',query);self.assertIn('parameter_defaults',query)
@@ -92,10 +97,10 @@ class SubscriptionReleaseGuards(unittest.TestCase):
             module,adapter,before=model(phase);source=adapter.raw[adapter.core].decode();after=fixtures.model_after(adapter,before)
             adapter.verify_after(after,before,source,'5'*64)
             self.assertEqual(after['ledger'],sorted(after['ledger'],key=lambda row:row['version']))
-            for field,value in [('subscriptionExact',False),('subscriptionFunctionsExact',False),('subscriptionStateHash','0'*64),('noteExact',False),('noteFunctionsExact',False),('noteStateHash','0'*64),('annualStateHash','0'*64),('dbRoleSettingHash','0'*64),('dataHash','0'*64),('securityHash','0'*64)]:
+            for field,value in [('subscriptionExact',False),('subscriptionFunctionsExact',False),('subscriptionStateHash','0'*64),('noteExact',False),('noteFunctionsExact',False),('noteStateHash','0'*64),('dayOneExact',False),('dayOneFunctionsExact',False),('dayOneStateHash','0'*64),('annualStateHash','0'*64),('dbRoleSettingHash','0'*64),('dataHash','0'*64),('securityHash','0'*64)]:
                 bad=copy.deepcopy(after);bad[field]=value
                 with self.subTest(phase=phase,field=field),self.assertRaises(SystemExit):adapter.verify_after(bad,before,source,'5'*64)
-            for version in (module.SUBSCRIPTION_VERSION,module.NOTE_VERSION):
+            for version in (module.SUBSCRIPTION_VERSION,module.NOTE_VERSION,module.DAY_ONE_VERSION):
                 bad=copy.deepcopy(after);bad['ledger']=[row for row in bad['ledger'] if row['version']!=version]
                 with self.assertRaises(SystemExit):adapter.verify_after(bad,before,source,'5'*64)
     def test_clean_committed_constructor_measures_wrapper_and_subscription_before_ports(self):
@@ -104,13 +109,14 @@ class SubscriptionReleaseGuards(unittest.TestCase):
             self.assertEqual(adapter.raw[module.WRAPPER],module.WRAPPER.read_bytes())
             self.assertEqual(adapter.raw[module.SUBSCRIPTION],module.SUBSCRIPTION.read_bytes())
             self.assertEqual(adapter.raw[module.NOTE],module.NOTE.read_bytes())
-            for name in ('wrapper_sha','subscription_sha','note_sha','adapter_sha'):
+            self.assertEqual(adapter.raw[module.DAY_ONE],module.DAY_ONE.read_bytes())
+            for name in ('wrapper_sha','subscription_sha','note_sha','day_one_sha','adapter_sha'):
                 with self.subTest(pin=name),self.assertRaises(SystemExit):construct(module,'reporting-splice',head,pins,**{name:'0'*64})
             args=arguments(module,adapter,parent,'prepare')
-            for flag in ('--wrapper-sha','--subscription-sha','--note-sha'):
+            for flag in ('--wrapper-sha','--subscription-sha','--note-sha','--day-one-sha'):
                 bad=list(args);i=bad.index(flag);del bad[i:i+2]
                 with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit):module.arguments(bad)
-            for path in (module.SUBSCRIPTION,module.NOTE):
+            for path in (module.SUBSCRIPTION,module.NOTE,module.DAY_ONE):
                 path.write_bytes(adapter.raw[path]+b'\n')
                 with self.assertRaises(SystemExit):adapter.check_custody()
                 with self.assertRaises(SystemExit):construct(module,'reporting-splice',head,pins)
