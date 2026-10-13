@@ -51,6 +51,12 @@ for (const file of files) {
     command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, `${database}_note_predecessor`]);
     console.log(command('python3', [path.resolve('tests/run-required-note-release.py'), socket, `${database}_note_predecessor`, `mam_test_note_${database.replace(/^mam_test_/, '')}`]));
   }
+  if (file === '20261013213724_task_follow_up_notes.sql') {
+    const predecessor = `${database}_task_notes_pred`;
+    command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
+    console.log(command('python3', [path.resolve('tests/run-task-notes-release.py'), socket, predecessor]));
+    command('dropdb', ['-h', socket, '-p', '55439', '-U', 'postgres', predecessor]);
+  }
   if (annualLegacy && file === "20261006106000_annual_leave_all_submitter_gate.sql") {
     command('createdb', ['-h', target(socket, database)[2], '-p', '55439', '-U', 'postgres', `--template=${database}`, `${database}_predecessor`]);
     sql(socket, database, readFileSync(new URL("../tests/annual-leave-legacy-setup.sql", import.meta.url), "utf8"));
