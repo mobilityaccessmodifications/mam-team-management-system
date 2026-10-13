@@ -17,6 +17,8 @@ export function runReportingSpliceSql(socket, database, sourceRoot = process.cwd
   ];
   const unit = spawnSync('python3', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_reporting_splice_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit', timeout: 60000 });
   assert.equal(unit.status, 0, 'Reporting-splice release helper tests');
+  const guarded = spawnSync('python3', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_reporting_splice_guarded.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit', timeout: 60000 });
+  assert.equal(guarded.status, 0, 'Reporting-splice guarded outer adapter tests');
   for (const regression of regressions) {
     console.log(command('psql', [...target(socket, database), '-f', path.join(sourceRoot, 'tests', regression)]));
     console.log(`PASS: reporting-splice SQL ${regression}`);
