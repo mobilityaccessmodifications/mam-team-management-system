@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 import { fixture, input, staleMessages, refreshMessage, accountNotice, verifyNoMutation } from './helpers/offboarding-version-conflict-harness.mjs';
@@ -108,8 +111,10 @@ for (const error of [{ code: '40001', message: 'private synthetic' }, { code: 'P
 
 test('source-root binding keeps every actual transitive module out of unrelated cwd', async () => {
   const sourceRoot = process.cwd();
-  process.chdir(process.env.TMPDIR);
+  const unrelatedCwd = mkdtempSync(path.join(tmpdir(), 'mam-offboarding-version-source-'));
   try {
+    process.chdir(unrelatedCwd);
+    assert.notEqual(process.cwd(), sourceRoot);
     const f = fixture({ sourceRoot, preflightError: { code: 'PT409', message: staleMessages[0] } });
     assert.deepEqual(await f.action(input), { ok: false, message: refreshMessage });
     verifyNoMutation(f.state);
@@ -117,5 +122,8 @@ test('source-root binding keeps every actual transitive module out of unrelated 
     assert.ok(names.length > 5);
     assert.ok(names.every(file => file.startsWith(sourceRoot + '/src/')));
     for (const file of ['src/app/people/actions.ts', 'src/lib/portal-account-status.ts', 'src/lib/employee-directory.ts', 'src/lib/portal-role-access.ts', 'src/lib/portal-role-capabilities.ts']) assert.ok(names.includes(sourceRoot + '/' + file), file);
-  } finally { process.chdir(sourceRoot); }
+  } finally {
+    process.chdir(sourceRoot);
+    rmSync(unrelatedCwd, { recursive: true, force: true });
+  }
 });

@@ -19,6 +19,15 @@ helper = importlib.util.module_from_spec(spec)
 exec(compile(RAW_HELPER, str(HELPER_PATH), 'exec'), helper.__dict__)
 
 
+def source_context(root):
+    if not (root / '.git').exists():
+        return {'git': False, 'cleanCommittedApply': 'UNAVAILABLE_NON_GIT_SOURCE'}
+    dirty = bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=root).strip())
+    head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root).decode().strip()
+    return {'git': True, 'dirty': dirty, 'head': head,
+            'cleanCommittedApply': 'BLOCKED_UNCOMMITTED_SOURCE' if dirty else 'NOT_RUN'}
+
+
 def run(socket, predecessor, prefix, evidence_dir):
     socket = Path(socket).resolve()
     assert socket.parent == Path(tempfile.gettempdir()).resolve()
@@ -41,6 +50,7 @@ def run(socket, predecessor, prefix, evidence_dir):
     initial = None
     failure = None
     context_role = 'postgres'
+    clean_committed_apply = 'NOT_RUN'
 
     def retain(name,value):
         target = evidence/name
@@ -216,8 +226,11 @@ def run(socket, predecessor, prefix, evidence_dir):
         except SystemExit:rejected=True
         assert rejected
         finish_case({'case':'postcommit_readback_detection','passed':True,'rollbackClaimed':False,'detectionOnly':True})
-        if subprocess.check_output(['git','status','--porcelain'],cwd=ROOT).strip():
-            args=['apply','--source-sha',source_sha,'--snapshot',str(evidence/'not-created-snapshot'),'--head',subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT).decode().strip(),'--helper-sha',helper.sha(RAW_HELPER)]
+        context = source_context(ROOT)
+        clean_committed_apply = context['cleanCommittedApply']
+        retain('source-context.json', context)
+        if context.get('dirty'):
+            args=['apply','--source-sha',source_sha,'--snapshot',str(evidence/'not-created-snapshot'),'--head',context['head'],'--helper-sha',helper.sha(RAW_HELPER)]
             stdout=io.StringIO()
             with patch.object(helper,'api',side_effect=AssertionError('Uncommitted source cannot call API')) as api,patch.object(helper,'query',side_effect=AssertionError('Uncommitted source cannot dispatch')) as query,contextlib.redirect_stdout(stdout):
                 try:helper.main(args)
@@ -234,9 +247,9 @@ def run(socket, predecessor, prefix, evidence_dir):
         cleanup=rows(native(predecessor,"begin read only;select jsonb_build_object('databasesAbsent',not exists(select 1 from pg_database where datname=any(array["+','.join(helper.literal(db) for db in databases)+"]::text[])),'roleAbsent',not exists(select 1 from pg_roles where rolname="+helper.literal(role)+"));rollback;",'cleanup-absent'))[0]
         cleanup['predecessorUnchanged']=state(predecessor,'original-after')==initial if initial is not None else None
         cleanup['sourcesUnchanged']=pins=={str(path.relative_to(ROOT)):helper.sha(path.read_bytes()) for path in paths}
-        retain('result.json',{'status':'PASS' if failure is None else 'FAIL','failure':failure,'cases':cases,'caseCount':len(cases),'sourcePins':pins,'cleanup':cleanup,'syntheticOnly':True,'hostedAcceptance':False,'realAuthAcceptance':False,'cleanCommittedApply':'BLOCKED_UNCOMMITTED_SOURCE','providerCalled':False})
+        retain('result.json',{'status':'PASS' if failure is None else 'FAIL','failure':failure,'cases':cases,'caseCount':len(cases),'sourcePins':pins,'cleanup':cleanup,'syntheticOnly':True,'hostedAcceptance':False,'realAuthAcceptance':False,'cleanCommittedApply':clean_committed_apply,'providerCalled':False})
         retain('artifact-hashes.json',{str(path.relative_to(evidence)):{'sha256':helper.sha(path.read_bytes()),'bytes':path.stat().st_size} for path in sorted(evidence.rglob('*')) if path.is_file() and path.name!='artifact-hashes.json'})
-        print(json.dumps({'evidence':str(evidence),'caseCount':len(cases),'cleanup':cleanup,'failure':failure}),flush=True)
+        print(json.dumps({'evidence':str(evidence),'caseCount':len(cases),'cleanup':cleanup,'failure':failure,'cleanCommittedApply':clean_committed_apply}),flush=True)
         assert all(cleanup.values()),'Owned cleanup/source preservation differs'
 
 

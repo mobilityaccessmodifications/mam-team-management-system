@@ -55,6 +55,29 @@ def model_before(helper,source):
 
 
 class VersionConflictReleaseTests(unittest.TestCase):
+ def test_native_runner_source_snapshot_has_no_clean_committed_acceptance(self):
+  runner_path=Path('tests/run-offboarding-version-conflict-release.py')
+  paths=[HELPER.relative_to(ROOT),MIGRATION.relative_to(ROOT),Path('scripts/deploy-staff-leave-calendar.py'),Path('supabase/migrations/20261013081500_archived_account_status_finalizer.sql'),Path('supabase/migrations/20261012170000_employee_removal_reporting_splice.sql'),runner_path]
+  with tempfile.TemporaryDirectory(prefix='vc-nongit-source-unit-') as directory:
+   root=Path(directory).resolve()
+   for path in paths:
+    target=root/path
+    target.parent.mkdir(parents=True,exist_ok=True)
+    target.write_bytes((ROOT/path).read_bytes())
+   runner=load(root/runner_path)
+   self.assertEqual(runner.ROOT,root)
+   with patch.object(runner.subprocess,'check_output',side_effect=AssertionError('Non-Git snapshot cannot borrow Git context')) as git,patch.object(runner.helper,'api',side_effect=AssertionError('Non-Git context cannot call API')) as api,patch.object(runner.helper,'query',side_effect=AssertionError('Non-Git context cannot dispatch')) as query:
+    self.assertEqual(runner.source_context(root),{'git':False,'cleanCommittedApply':'UNAVAILABLE_NON_GIT_SOURCE'})
+    git.assert_not_called()
+    api.assert_not_called()
+    query.assert_not_called()
+
+ def test_native_runner_git_context_retains_uncommitted_source_block(self):
+  runner=load(ROOT/'tests/run-offboarding-version-conflict-release.py')
+  with dirty_source_fixture() as (helper,head):
+   context=runner.source_context(helper.ROOT)
+   self.assertEqual(context,{'git':True,'dirty':True,'head':head,'cleanCommittedApply':'BLOCKED_UNCOMMITTED_SOURCE'})
+
  def setUp(self):
   guard=patch('urllib.request.urlopen',side_effect=AssertionError('Offline release unit tests forbid network'))
   guard.start()
