@@ -12,7 +12,7 @@ do $$ declare r uuid; label text; owner integer; day date:=current_date+(8-extra
  foreach owner in array array[20,30] loop
   foreach label in array array['Sick leave','trade school'] loop
    foreach decided in array array[false,true] loop
-    select id into r from public.submit_selected_employee_leave_request(pg_temp.splice_id(owner),label,day,day,time '09:00',time '10:00');
+    select id into r from public.submit_selected_employee_leave_request(pg_temp.splice_id(owner),label,day,day,time '09:00',time '10:00','Synthetic reporting splice leave note');
     if decided then update public.leave_requests set status='approved',decided_by=pg_temp.splice_id(1),decided_at=clock_timestamp() where id=r; end if;
     insert into splice_leave_ids values(r,owner,label,decided);
    end loop;
