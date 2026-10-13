@@ -172,3 +172,18 @@ test('a late schedule decision cannot close a newer task or release its pending 
   expect(await calls(page, 'reviewEmployeeWorkScheduleChange')).toHaveLength(1);
   expect(await calls(page, 'saveTaskNotes')).toHaveLength(1);
 });
+
+test('a pending schedule decision prevents editing or saving Notes', async ({ page }) => {
+  await page.goto(reviewerRoute);
+  await openTasks(page);
+  await expect(notes(page)).toBeEditable();
+  await details(page).getByLabel('Decision reason', { exact: true }).fill('Synthetic decision awaiting a response');
+  await page.evaluate(id => window.unifiedRoleFixture.holdNext('reviewEmployeeWorkScheduleChange', id), scheduleId);
+  await details(page).getByRole('button', { name: 'Approve request', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain(`reviewEmployeeWorkScheduleChange:${scheduleId}`);
+  await expect(notes(page)).toBeDisabled();
+  await expect(details(page).getByRole('button', { name: 'Save notes', exact: true })).toBeDisabled();
+  expect(await calls(page, 'saveTaskNotes')).toEqual([]);
+  await page.evaluate(id => window.unifiedRoleFixture.finish('reviewEmployeeWorkScheduleChange', id), scheduleId);
+  await expect(details(page)).toHaveCount(0);
+});

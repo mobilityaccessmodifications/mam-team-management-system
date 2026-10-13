@@ -188,6 +188,48 @@ test('stale note saves preserve the draft and show safe conflict feedback', asyn
   await expect(pane).not.toContainText('synthetic private');
 });
 
+for (const [kind, rowName, action, id, buttonName] of [
+  ['check-in', checkInRowName, 'completeMyEmployeeCheckInTask', checkInId, "Mark Synthetic Check-in Employee's 1-month check-in complete"],
+  ['subscription review', subscriptionRowName, 'completeMySubscriptionReviewTask', subscriptionId, "Mark Synthetic due review's subscription review done"],
+]) test(`pending ${kind} completion prevents editing or saving Notes`, async ({ page }) => {
+  await page.goto(combinedRoute);
+  await openTasks(page);
+  const pane = await openTask(page, rowName);
+  const notes = pane.getByLabel('Notes', { exact: true });
+  await expect(notes).toBeEditable();
+  await workspace(page).getByRole('button', { name: rowName, exact: true }).click();
+  await expect(pane.getByRole('button', { name: buttonName, exact: true })).toBeEnabled();
+  await page.evaluate(({ action, id }) => window.unifiedRoleFixture.holdNext(action, id), { action, id });
+  await pane.getByRole('button', { name: buttonName, exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain(`${action}:${id}`);
+  await expect(notes).toBeDisabled();
+  await expect(pane.getByRole('button', { name: 'Save notes', exact: true })).toBeDisabled();
+  expect(await actionCalls(page, 'saveTaskNotes')).toEqual([]);
+  await page.evaluate(({ action, id }) => window.unifiedRoleFixture.finish(action, id), { action, id });
+  await expect(pane).toHaveCount(0);
+});
+
+test('reopening a dirty task keeps completion disabled during the Notes authorization read', async ({ page }) => {
+  await page.goto(combinedRoute);
+  await openTasks(page);
+  const pane = await openTask(page, checkInRowName);
+  await expect(pane.getByLabel('Notes', { exact: true })).toBeEditable();
+  await pane.getByLabel('Notes', { exact: true }).fill('Synthetic cached draft awaiting authorization');
+  await pane.getByRole('button', { name: 'Close task details', exact: true }).click();
+  await expect(pane).toHaveCount(0);
+  await page.evaluate(id => window.unifiedRoleFixture.holdNext('getTaskNotes', id), checkInId);
+  await openTask(page, checkInRowName);
+  await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain(`getTaskNotes:${checkInId}`);
+  const complete = pane.getByRole('button', { name: "Mark Synthetic Check-in Employee's 1-month check-in complete", exact: true });
+  await expect(pane.getByLabel('Notes', { exact: true })).toBeDisabled();
+  await expect(complete).toBeDisabled();
+  await page.evaluate(id => window.unifiedRoleFixture.finish('getTaskNotes', id), checkInId);
+  await expect(pane.getByLabel('Notes', { exact: true })).toHaveValue('Synthetic cached draft awaiting authorization');
+  await expect(pane.getByLabel('Notes', { exact: true })).toBeEditable();
+  await expect(complete).toBeDisabled();
+  expect(await actionCalls(page, 'completeMyEmployeeCheckInTask')).toEqual([]);
+});
+
 test('Change Profile shows task notes read-only and keeps subscription completion unavailable', async ({ page }) => {
   await page.goto('/?fixture=unified-roles&tasks=combined');
   await page.getByRole('region', { name: 'Employee access preview' }).locator('button[aria-haspopup="dialog"]').click();
