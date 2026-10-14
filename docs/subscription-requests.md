@@ -98,6 +98,8 @@ New requests use the simplified AUD form: authenticated Requested by, service/pu
 
 #### Release order and acceptance
 
+This release requires the already published `20261014110000_subscription_review_managers_mail.sql` from PR #236 as its exact latest predecessor. Verify its recorded name and source read-only before fencing; a different predecessor blocks this release rather than extending it to historical migrations.
+
 Run the required local checks and structured review against the frozen branch. Fence new submissions before changing the mail contract: under the exclusive singleton configuration lock and short `EXCLUSIVE NOWAIT` locks on requests, mail deliveries and notification receipts, require zero submitted requests, zero undelivered subscription mail rows and zero subscription receipts in `processing` or `legacy_unknown`. Retain the exact original Penny pair in an owned `0600` recovery journal, then temporarily clear only `approver_user_id` and `approver_person_id`. Keep `enabled=true` so the paid-register approval gate remains enforced. Submission and withdrawal fail atomically while the approver is unavailable; drafts and free subscriptions remain available. An in-flight claim makes the fence fail and roll back. Reconcile uncertain outcomes read-only, without retrying a mutation blindly.
 
 After independent readback proves that fence, use the MAM Supabase credential helper to run each deployment script with `inspect` then `apply`, in this order:
