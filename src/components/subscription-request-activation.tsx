@@ -21,6 +21,7 @@ export function SubscriptionRequestActivation({ people, defaultPersonId, disable
       <label>Seats<input required type="number" min={1} max={100000} step={1} value={seatCount} disabled={disabled} onChange={e=>setSeatCount(e.target.value)}/></label>
       <label>Billing start date<input required type="date" value={billingAnchorDate} disabled={disabled} onChange={e=>setBillingAnchorDate(e.target.value)}/></label>
       <label>Renewal date<input required type="date" min={billingAnchorDate} value={renewalDate} disabled={disabled} onChange={e=>setRenewalDate(e.target.value)}/></label>
+      <label className={styles.member}><input type="checkbox" checked={Boolean(renewalDate)} disabled/>Renewal reminder set</label>
       <label>Responsible person<select required value={responsiblePersonId} disabled={disabled} onChange={e=>setResponsiblePersonId(e.target.value)}><option value="">Select person</option>{people.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
     </div>
     <fieldset disabled={disabled}><legend>Who has access</legend>{people.map(p=><label className={styles.member} key={p.id}><input type="checkbox" checked={memberPersonIds.includes(p.id)} onChange={e=>setMemberPersonIds(current=>e.target.checked?[...current,p.id]:current.filter(id=>id!==p.id))}/>{p.name}</label>)}</fieldset>

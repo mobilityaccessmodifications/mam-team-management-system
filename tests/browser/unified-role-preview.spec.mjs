@@ -263,3 +263,16 @@ for (const name of ['getPortalRoleCapabilities', 'getSelectedEmployeeProfile', '
   await expect(page.getByRole('button', { name: /^Approvals|^Balance$/ })).toHaveCount(0);
   expect(await page.evaluate(() => window.unifiedRoleFixture.calls.filter(call => call.name === 'getLeaveWorkspaceData').length)).toBe(reads);
 });
+
+test('new paid register entry navigates to the request form while free remains direct entry',async({page})=>{
+  await openPeople(page,'system_admin');
+  await peopleTabs(page).getByRole('tab',{name:'Subscriptions',exact:true}).click();
+  await page.getByRole('button',{name:'Add subscription',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Add subscription',exact:true});
+  await expect(dialog.getByLabel('Free',{exact:true})).toBeChecked();
+  await expect(dialog.getByRole('button',{name:'Add subscription',exact:true})).toBeEnabled();
+  await dialog.getByLabel('Paid',{exact:true}).check();
+  await expect.poll(()=>page.evaluate(()=>window.fixtureNavigation)).toBe('/subscription-requests?new=1');
+  await expect(dialog.getByRole('button',{name:'Add subscription',exact:true})).toBeDisabled();
+  expect(await page.evaluate(()=>window.unifiedRoleFixture.calls.filter(c=>c.name==='createSubscription'))).toEqual([]);
+});

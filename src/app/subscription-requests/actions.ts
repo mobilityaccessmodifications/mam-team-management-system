@@ -5,7 +5,7 @@ import { dispatchSubscriptionRequestMail } from "@/lib/subscription-request-mail
 
 import { isAuthApiError, isAuthSessionMissingError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { UUID, validateRequestPayload, type RequestActivation, type RequestEvidence, type RequestOperation, type RequestResult, type RequestWorkspace, type SubscriptionRequest } from "@/lib/subscription-request-types";
+import { UUID, validateRequestPayload, validateRequestFinance, type RequestFinance, type RequestActivation, type RequestEvidence, type RequestOperation, type RequestResult, type RequestWorkspace, type SubscriptionRequest } from "@/lib/subscription-request-types";
 
 const generic = "The request could not be confirmed. Reload before retrying.";
 function failure(error: unknown, uncertain = false): RequestResult<never> {
@@ -29,7 +29,11 @@ function validRequest(value: unknown): value is SubscriptionRequest {
     && [r.canEdit,r.canDecide,r.canWithdraw].every(v=>typeof v === "boolean")
     && (r.applicantName === undefined || typeof r.applicantName === "string")
     && (r.linkedSubscriptionId === undefined || r.linkedSubscriptionId === null || (typeof r.linkedSubscriptionId === "string" && UUID.test(r.linkedSubscriptionId)))
-    && (r.canActivate === undefined || typeof r.canActivate === "boolean");
+    && (r.canActivate === undefined || typeof r.canActivate === "boolean")
+    && (r.canCompletePurchase === undefined || typeof r.canCompletePurchase === "boolean")
+    && (r.requestedAt == null || typeof r.requestedAt === "string")
+    && (r.completedAt == null || typeof r.completedAt === "string")
+    && (r.completedByName == null || typeof r.completedByName === "string");
 }
 export async function loadSubscriptionRequests(): Promise<RequestResult<RequestWorkspace>> {
   try {
@@ -38,6 +42,7 @@ export async function loadSubscriptionRequests(): Promise<RequestResult<RequestW
     if (error) return failure(error);
     if (!data || typeof data.enabled !== "boolean" || typeof data.canApply !== "boolean" || !Array.isArray(data.requests) || !data.requests.every(validRequest) || !Array.isArray(data.people)
       || !data.people.every((p: {id?:unknown;name?:unknown}) => typeof p.id === "string" && UUID.test(p.id) && typeof p.name === "string")
+      || (data.requestFormVersion !== undefined && ![2,3].includes(data.requestFormVersion))
       || (data.viewerName !== undefined && typeof data.viewerName !== "string")
       || (data.viewerPersonId !== undefined && data.viewerPersonId !== null && (typeof data.viewerPersonId !== "string" || !UUID.test(data.viewerPersonId)))
       || (data.canManageCredentials !== undefined && typeof data.canManageCredentials !== "boolean")) return failure(null);
@@ -57,7 +62,7 @@ export async function activateSubscriptionRequest(input: RequestActivation): Pro
     return {ok:true,data,committed:true};
   } catch(error) { return failure(error,dispatched); }
 }
-export async function mutateSubscriptionRequest(input: { id: string; version: number; operation: RequestOperation; payload?: unknown; reason?: string; evidence?: RequestEvidence[] }): Promise<RequestResult<SubscriptionRequest>> {
+export async function mutateSubscriptionRequest(input: { id: string; version: number; operation: RequestOperation; payload?: unknown; reason?: string; evidence?: RequestEvidence[]; finance?: RequestFinance }): Promise<RequestResult<SubscriptionRequest>> {
   let dispatched = false;
   try {
     const supabase = await client();
@@ -69,13 +74,32 @@ export async function mutateSubscriptionRequest(input: { id: string; version: nu
     }
     if (["return","reject"].includes(input.operation) && !input.reason?.trim()) return failure({code:"22023"});
     if (input.evidence !== undefined && (!Array.isArray(input.evidence) || input.evidence.length>3 || JSON.stringify(input.evidence).length>700000 || input.evidence.some(e=>!e || typeof e.name !== "string" || typeof e.base64 !== "string" || !["application/pdf","image/png","image/jpeg"].includes(e.mime)))) return failure({code:"22023"});
+    let finance = null;
+    if (input.finance !== undefined) {
+      if (!["approve","return","reject"].includes(input.operation)) return failure({code:"22023"});
+      try { finance = validateRequestFinance(input.finance,input.operation); } catch { return failure({code:"22023"}); }
+    }
     dispatched = true;
-    const { data, error } = await supabase.rpc("sr_mutate", { p_id:input.id, p_version:input.version, p_operation:input.operation, p_payload:payload, p_reason:input.reason ?? "", p_evidence:input.evidence ?? null });
+    const { data, error } = finance
+      ? await supabase.rpc("subscription_request_decide_v3", { p_id:input.id, p_version:input.version, p_operation:input.operation, p_reason:input.reason ?? "", p_finance:finance })
+      : await supabase.rpc("sr_mutate", { p_id:input.id, p_version:input.version, p_operation:input.operation, p_payload:payload, p_reason:input.reason ?? "", p_evidence:input.evidence ?? null });
     if (error) return failure(error,true);
     if (!validRequest(data)) return failure(null,true);
     if (input.operation === "submit") after(() => dispatchSubscriptionRequestMail(data.id).then(() => undefined));
     return { ok:true, data, committed:true };
   } catch (error) { return failure(error,dispatched); }
+}
+export async function completeSubscriptionRequestPurchase(id: string, version: number): Promise<RequestResult<SubscriptionRequest>> {
+  let dispatched = false;
+  try {
+    const supabase = await client();
+    if (!UUID.test(id) || !Number.isSafeInteger(version) || version < 1) return failure({code:"22023"});
+    dispatched = true;
+    const {data,error} = await supabase.rpc("subscription_request_complete_purchase_v3", {p_id:id,p_version:version});
+    if (error) return failure(error,true);
+    if (!validRequest(data) || !data.completedAt || data.canCompletePurchase !== false || data.linkedSubscriptionId) return failure(null,true);
+    return {ok:true,data,committed:true};
+  } catch(error) { return failure(error,dispatched); }
 }
 export async function downloadRequestEvidence(id: string, version: number, index: number): Promise<RequestResult<RequestEvidence>> {
   try {

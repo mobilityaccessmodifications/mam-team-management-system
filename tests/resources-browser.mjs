@@ -48,6 +48,7 @@ export async function installResourcesFixture(page) {
     } });
     function require(id) {
       if (id.endsWith(".css")) return { default: new Proxy({}, { get: (_, key) => String(key) }) };
+      if (id === "next/navigation") return { useRouter: () => ({ push: (url) => { results.navigation = url; } }) };
       if (id === "lucide-react") return new Proxy({}, { get: () => () => null });
       if (id.startsWith("@/app/")) return actions;
       if (cache[id]) return cache[id].exports;

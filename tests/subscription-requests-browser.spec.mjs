@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import {readFileSync} from 'node:fs';
 async function completeRequest(page) {
   await page.getByRole('button',{name:'New request',exact:true}).click();
-  await page.getByLabel('Payment method',{exact:true}).selectOption('non_card');
+  await page.getByLabel('Payment method',{exact:true}).selectOption('direct_debit');
   for(const [label,value] of [['Service','Synthetic evidence request'],['Purpose','Project work'],['Monthly cost (AUD)','12.34'],['Annual cost (AUD)','100.00'],['Intended users','Synthetic project team']]) await page.getByLabel(label,{exact:true}).fill(value);
 }
 test('Requests form submit and returned resubmit use the real component',async({page})=>{
@@ -14,13 +14,14 @@ test('Requests form submit and returned resubmit use the real component',async({
   await page.getByRole('button',{name:'Submit',exact:true}).click();
   await expect(page.getByRole('alert')).toContainText('required');
   for(const [label,value] of [['Purpose','Project work'],['Monthly cost (AUD)','12.34'],['Annual cost (AUD)','100.00'],['Intended users','Synthetic project team']]) await page.getByLabel(label,{exact:true}).fill(value);
-  await page.getByLabel('Payment method',{exact:true}).selectOption('non_card');
+  await page.getByLabel('Payment method',{exact:true}).selectOption('direct_debit');
   await page.getByRole('button',{name:'Submit',exact:true}).click();
   await expect(page.getByText('submitted',{exact:true}).first()).toBeVisible();
   await page.getByLabel('Decision reason').fill('Please revise');
   await page.getByRole('button',{name:'Return',exact:true}).click();
   await expect(page.getByRole('button',{name:'Resubmit',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Resubmit',exact:true}).click();
+  await page.getByLabel('Budget approved',{exact:true}).check();
   await page.getByRole('button',{name:'Approve',exact:true}).click();
   await expect(page.getByText('Approved — ready to register',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Add subscription',exact:true})).toBeVisible();
@@ -93,19 +94,33 @@ test('reload preserves a genuinely unsaved new draft',async({page})=>{
   expect(await page.evaluate(()=>window.srCalls.length)).toBe(1);
 });
 
-test('approved request registers its immutable price and access without reading credentials',async({page})=>{
+test('annual approval preserves setup cost and finance decision before registering immutable price and access',async({page})=>{
   await page.goto('/');await completeRequest(page);
+  await page.getByLabel('Website link',{exact:true}).fill('https://example.test/product');
+  await page.getByLabel('Category',{exact:true}).selectOption('software_app');
+  await page.getByLabel('Usage frequency',{exact:true}).fill('Daily');
+  await page.getByLabel('One-off cost (AUD)',{exact:true}).fill('25.00');
+  await page.getByLabel('Payment method',{exact:true}).selectOption('invoice');
+  await page.getByLabel('Invoice email',{exact:true}).fill('requester@example.test');
   await expect(page.getByLabel('Requested by',{exact:true})).toBeDisabled();
   await expect(page.getByLabel('Payer',{exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Submit',exact:true}).click();
+  await expect(page.getByLabel('Date requested',{exact:true})).not.toHaveValue('');
   await page.getByRole('button',{name:'Approve',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('budget');
+  await page.getByLabel('Approval invoice email',{exact:true}).fill('finance@example.test');
+  await page.getByLabel('Budget approved',{exact:true}).check();
+  await page.getByRole('button',{name:'Approve',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Finance approval',exact:true})).toContainText('finance@example.test');
   const region=page.getByRole('region',{name:'Register approved subscription',exact:true});
   await region.getByLabel('Seats',{exact:true}).fill('2');
   await region.getByLabel('Billing start date',{exact:true}).fill('2026-10-14');
   await region.getByLabel('Renewal date',{exact:true}).fill('2027-10-14');
+  await expect(region.getByLabel('Renewal reminder set',{exact:true})).toBeChecked();
+  await expect(region.getByLabel('Renewal reminder set',{exact:true})).toBeDisabled();
   const owner=region.getByRole('combobox',{name:'Responsible person',exact:true});
   const personId=await owner.locator('option').nth(1).getAttribute('value');await owner.selectOption(personId);
-  await region.locator('input[type=checkbox]').first().check();
+  await region.getByRole('group',{name:'Who has access',exact:true}).locator('input[type=checkbox]').first().check();
   await region.getByRole('button',{name:'Add subscription',exact:true}).click();
   await expect(page.getByText('Approved — subscription added',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Withdraw',exact:true})).toHaveCount(0);
@@ -113,5 +128,28 @@ test('approved request registers its immutable price and access without reading 
   await expect(page.getByRole('button',{name:'Credentials',exact:true})).toBeVisible();
   expect(await page.evaluate(()=>window.vaultCalls??[])).toEqual([]);
   const reload=await page.request.post('/action',{data:{name:'loadSubscriptionRequests',args:[]}});const data=(await reload.json()).data;
-  const row=data.requests.find(r=>r.linkedSubscriptionId&&r.payload.service==='Synthetic evidence request');expect(row.payload.monthlyCostCents).toBe(1234);expect(row.payload.annualCostCents).toBe(10000);expect(row.payload.quoteCents).toBe(10000);expect(row.canActivate).toBe(false);
+  const row=data.requests.find(r=>r.linkedSubscriptionId&&r.payload.service==='Synthetic evidence request');expect(row.payload.monthlyCostCents).toBe(1234);expect(row.payload.annualCostCents).toBe(10000);expect(row.payload.quoteCents).toBe(10000);expect(row.canActivate).toBe(false);expect(row.payload.oneOffCostCents).toBe(2500);expect(row.payload.websiteUrl).toBe('https://example.test/product');expect(row.payload.invoiceEmail).toBe('requester@example.test');expect(row.finance.budgetApproved).toBe(true);expect(row.finance.invoiceEmail).toBe('finance@example.test');expect(row.finance.approvedByName).toBeTruthy();expect(row.finance.approvedAt).toBeTruthy();
+  await page.getByRole('button',{name:'Reload',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Finance approval',exact:true})).toContainText(row.finance.approvedByName);
+});
+
+test('standalone one-off purchase completes without creating a recurring subscription or credentials',async({page})=>{
+  await page.goto('/');await page.getByRole('button',{name:'New request',exact:true}).click();
+  for(const [label,value] of [['Service','Synthetic one-off purchase'],['Purpose','Synthetic equipment'],['Intended users','Synthetic team'],['One-off cost (AUD)','250.00']])await page.getByLabel(label,{exact:true}).fill(value);
+  await page.getByLabel('Category',{exact:true}).selectOption('hardware');
+  await page.getByLabel('Preferred billing',{exact:true}).selectOption('one_off');
+  await page.getByLabel('Payment method',{exact:true}).selectOption('direct_debit');
+  await page.getByRole('button',{name:'Submit',exact:true}).click();
+  await page.getByLabel('Budget approved',{exact:true}).check();
+  await page.getByRole('button',{name:'Approve',exact:true}).click();
+  await expect(page.getByText('Approved — ready to record purchase',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Add subscription',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Record purchase',exact:true}).click();
+  await expect(page.getByText('Approved — purchase recorded',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Record purchase',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Credentials',exact:true})).toHaveCount(0);
+  const reload=await page.request.post('/action',{data:{name:'loadSubscriptionRequests',args:[]}});const data=(await reload.json()).data;
+  const row=data.requests.find(r=>r.payload.service==='Synthetic one-off purchase');expect(row.payload.quoteCents).toBe(25000);expect(row.linkedSubscriptionId).toBeNull();expect(row.canActivate).toBe(false);expect(row.canCompletePurchase).toBe(false);expect(row.completedAt).toBeTruthy();expect(row.completedByName).toBeTruthy();expect(row.events.some(e=>e.operation==='complete_purchase')).toBe(true);
+  await page.getByRole('button',{name:'Reload',exact:true}).click();await expect(page.getByText('Approved — purchase recorded',{exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>window.vaultCalls??[])).toEqual([]);
 });
