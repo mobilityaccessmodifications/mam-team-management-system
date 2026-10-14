@@ -142,6 +142,14 @@ try {
   if (afterAnnualUnit.status !== 0) throw new Error('After-annual offboarding portable release adapter tests failed');
   console.log('PASS: after-annual offboarding portable MODEL source, query, dispatch and readback controls');
   if (!reportingSpliceOnly) {
+  for (const regression of ['subscription-request-simple-activation.sql', 'subscription-request-penny-mail.sql', 'subscription-password-tasks.sql']) {
+    console.log(command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests', regression)]));
+  }
+  command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', '--template=mam_test_replay', 'mam_test_sra_concurrency']);
+  const activationRace = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/subscription-request-activation-concurrency.mjs'), socket, 'mam_test_sra_concurrency'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (activationRace.status !== 0) throw new Error('Subscription activation and withdrawal concurrency failed');
+  const passwordRace = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/subscription-password-tasks-concurrency.mjs'), socket, 'mam_test_replay'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (passwordRace.status !== 0) throw new Error('Subscription password task completion concurrency failed');
   console.log(command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests/subscription-review-tasks.sql')]));
   console.log(command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests/subscription-review-mail.sql')]));
   console.log(command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests/task-notes.sql')]));
