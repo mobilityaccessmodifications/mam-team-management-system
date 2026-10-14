@@ -170,6 +170,9 @@ const handlers = {
     listSubscriptions: () => [syntheticRoleSubscription],
     listSubscriptionPeople: () => syntheticRolePeople.map(person => ({ personId: person.id, fullName: person.name, positionTitle: person.title, teamName: 'Operation & Accounts', company: person.company })),
   },
+  '@/app/subscription-requests/actions': {
+    loadSubscriptionRequests: () => ({ ok: true, data: { enabled: false, canApply: false, requests: [], people: [] } }),
+  },
   '@/app/subscriptions/delegation-actions': {
     listSubscriptionManagementDelegates: () => ({ ok: true, delegates: delegationPeople.filter(person => delegationManagement.includes(person.personId)) }),
     replaceSubscriptionManagementDelegates: ids => { delegationManagement = [...ids]; return { ok: true }; },
