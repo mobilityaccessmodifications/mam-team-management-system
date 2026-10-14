@@ -1,7 +1,7 @@
 "use client";
 
-import { AlertTriangle, CalendarCheck2, CheckCircle2, ChevronRight, CircleAlert, ListChecks, RotateCcw, Search, X } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, CalendarCheck2, CheckCircle2, ChevronLeft, ChevronRight, CircleAlert, ListChecks, PanelLeftClose, PanelLeftOpen, RotateCcw, Search, X } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { completeMyEmployeeCheckInTask } from "@/app/check-in-tasks/actions";
 import styles from "@/components/check-in-tasks.module.css";
 import toolbar from "@/components/people-toolbar.module.css";
@@ -116,6 +116,8 @@ type TaskItem = {
   canReview?: boolean;
 };
 
+const tasksPerPage = 8;
+
 export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction, scheduleContent, showCheckInTasks = true, showSubscriptionReviewTasks = true, workScheduleWorkspace, onScheduleReview, onScheduleRefresh }: {
   previewPersonId?: string;
   readOnly?: boolean;
@@ -137,6 +139,9 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sort, setSort] = useState("date");
+  const [page, setPage] = useState(1);
+  const [listCollapsed, setListCollapsed] = useState(false);
+  const recordsId = useId();
   const [notesBusy, setNotesBusy] = useState(false);
   const [notesBlocked, setNotesBlocked] = useState(true);
   const pending = useRef(false);
@@ -145,6 +150,7 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
   const dialogRef = useRef<HTMLElement>(null);
   const [drafts] = useState(() => new Map<string, TaskNoteDraft>());
   const mobile = useMediaQuery("(max-width: 900px)");
+  const collapsed = listCollapsed && !mobile;
   const notesReadOnly = readOnly || Boolean(previewPersonId);
   const subscriptions = useSubscriptionReviewTasks({ previewPersonId, readOnly: notesReadOnly, enabled: showSubscriptionReviewTasks });
   const busy = notesBusy || Boolean(pendingId) || Boolean(subscriptions.pendingId);
@@ -200,6 +206,9 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
       && (!search || `${task.name} ${task.title} ${task.context} ${statusLabel(task.status)}`.toLocaleLowerCase().includes(search)))
       .sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) || a.date.localeCompare(b.date) : a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
   }, [tasks, query, typeFilter, statusFilter, sort]);
+  const totalPages = Math.max(1, Math.ceil(visibleTasks.length / tasksPerPage));
+  const currentPage = Math.min(page, totalPages);
+  const pageTasks = visibleTasks.slice((currentPage - 1) * tasksPerPage, currentPage * tasksPerPage);
   const selected = tasks.find((task) => task.key === selectedKey);
   const close = useCallback(() => { if (!busy) { setSelectedKey(""); if (!mobile) searchRef.current?.focus(); } }, [busy, mobile]);
   useEffect(() => {
@@ -232,23 +241,36 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
     {scheduleContent}
     <header className={toolbar.toolbar} aria-label="Task actions">
       <div className={toolbar.controls}>
-        <label className={toolbar.search}><Search size={17} aria-hidden="true" /><span className={styles.srOnly}>Search tasks</span><input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} onInput={(event) => setQuery(event.currentTarget.value)} placeholder="Search tasks" /></label>
-        <label className={toolbar.select}><span>Type</span><select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">All types</option><option value="check_in">Check-ins</option>{showSubscriptionReviewTasks ? <option value="subscription_review">Subscription reviews</option> : null}<option value="work_schedule">Schedule requests</option></select></label>
-        <label className={toolbar.select}><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option><option value="needs_review">Needs review</option><option value="ready">Ready</option><option value="scheduled">Scheduled</option><option value="claimed">Sending reminder</option><option value="active">Active</option><option value="paused">Paused</option><option value="submitted">Pending approval</option></select></label>
-        <label className={toolbar.select}><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="date">Date — earliest</option><option value="name">Name A–Z</option></select></label>
+        <label className={toolbar.search}><Search size={17} aria-hidden="true" /><span className={styles.srOnly}>Search tasks</span><input ref={searchRef} type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} onInput={(event) => { setQuery(event.currentTarget.value); setPage(1); }} placeholder="Search tasks" /></label>
+        <label className={toolbar.select}><span>Type</span><select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(1); }}><option value="all">All types</option><option value="check_in">Check-ins</option>{showSubscriptionReviewTasks ? <option value="subscription_review">Subscription reviews</option> : null}<option value="work_schedule">Schedule requests</option></select></label>
+        <label className={toolbar.select}><span>Status</span><select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}><option value="all">All statuses</option><option value="needs_review">Needs review</option><option value="ready">Ready</option><option value="scheduled">Scheduled</option><option value="claimed">Sending reminder</option><option value="active">Active</option><option value="paused">Paused</option><option value="submitted">Pending approval</option></select></label>
+        <label className={toolbar.select}><span>Sort</span><select value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }}><option value="date">Date — earliest</option><option value="name">Name A–Z</option></select></label>
       </div>
       <div className={toolbar.actions}><span className={toolbar.count}>{visibleTasks.length} tasks</span>{toolbarAction}<button className={toolbar.iconButton} type="button" aria-label="Refresh tasks" disabled={loading || subscriptions.loading || busy} onClick={() => { void load(); void subscriptions.load(); void onScheduleRefresh?.(); }}><RotateCcw size={17} aria-hidden="true" /></button></div>
     </header>
     {error || subscriptions.error ? <div className={styles.errors}>{error ? <p className={styles.error} role="alert"><AlertTriangle size={17} aria-hidden="true" />{error}</p> : null}{subscriptions.error ? <p className={styles.error} role="alert"><AlertTriangle size={17} aria-hidden="true" />{subscriptions.error}</p> : null}</div> : null}
     {notice || subscriptions.notice ? <p className={styles.notice} role="status"><CheckCircle2 size={17} aria-hidden="true" />{notice || subscriptions.notice}</p> : null}
-    <div className={styles.taskDesk}>
+    <div className={styles.taskDesk} data-list-collapsed={collapsed}>
       <div className={styles.taskList} aria-label="Task records">
+        <header className={styles.listHeader}>
+          <strong hidden={collapsed}>Tasks</strong>
+          <button className={`${toolbar.iconButton} ${styles.collapseButton}`} type="button" aria-label={collapsed ? "Expand task list" : "Collapse task list"} aria-expanded={!collapsed} aria-controls={recordsId} onClick={() => setListCollapsed((current) => !current)}>{collapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}</button>
+        </header>
+        <div id={recordsId} className={styles.listContent} hidden={collapsed}>
         {loading || subscriptions.loading ? <div className={styles.loading}><MotionLoader label="Loading tasks" /></div> : null}
         {!visibleTasks.length && !loading && !subscriptions.loading ? <div className={styles.empty}><ListChecks size={22} aria-hidden="true" /><strong>{tasks.length ? "No tasks match these filters." : "No tasks need your action."}</strong></div> : null}
-        {visibleTasks.map((task) => <button className={styles.taskRow} type="button" key={task.key} data-selected={task.key === selected?.key} aria-current={task.key === selected?.key ? "true" : undefined} aria-label={`Open ${task.name}'s ${task.title}`} disabled={busy} onClick={() => { if (task.key !== selectedKey) { setNotesBlocked(true); setSelectedKey(task.key); } }}>
+        {pageTasks.map((task) => <button className={styles.taskRow} type="button" key={task.key} data-selected={task.key === selected?.key} aria-current={task.key === selected?.key ? "true" : undefined} aria-label={`Open ${task.name}'s ${task.title}`} disabled={busy} onClick={() => { if (task.key !== selectedKey) { setNotesBlocked(true); setSelectedKey(task.key); } }}>
           <span className={styles.taskIdentity}><strong>{task.name}</strong><span>{task.title}</span><small>{task.schedule ? "Submitted" : "Due"} {formatDate(task.date)}</small></span>
           <span className={styles.rowStatus} data-status={task.status}>{task.status === "needs_review" ? <CircleAlert size={14} aria-hidden="true" /> : null}{statusLabel(task.status)}</span><ChevronRight size={16} className={styles.chevron} aria-hidden="true" />
         </button>)}
+          <nav className={styles.pagination} aria-label="Task list pagination">
+            <span className={styles.pageRange} aria-live="polite" aria-atomic="true">Page {currentPage} of {totalPages}</span>
+            <div className={styles.paginationControls}>
+              <button className={toolbar.iconButton} type="button" aria-label="Previous page" disabled={currentPage === 1 || loading || subscriptions.loading} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={16} aria-hidden="true" /></button>
+              <button className={toolbar.iconButton} type="button" aria-label="Next page" disabled={currentPage === totalPages || loading || subscriptions.loading} onClick={() => setPage(currentPage + 1)}><ChevronRight size={16} aria-hidden="true" /></button>
+            </div>
+          </nav>
+        </div>
       </div>
       {selected ? <>
         <button className={styles.detailBackdrop} type="button" disabled={busy} onClick={close} aria-label="Close task details" tabIndex={-1} />
