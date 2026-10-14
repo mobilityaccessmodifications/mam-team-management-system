@@ -14,16 +14,16 @@ const compiled = ts.transpileModule(readFileSync("src/app/leave/actions.ts", "ut
 const listRpcs = new Set([
   "list_leave_calendar_entries_with_teams", "list_staff_leave_calendar_entries",
   "list_calendar_birthdays", "list_employee_check_in_calendar_entries",
-  "list_subscription_review_calendar_entries", "list_leave_workspace_attachments",
+  "list_subscription_review_calendar_entries", "list_subscription_renewal_calendar_entries", "list_leave_workspace_attachments",
   "list_payroll_balance_reminder_calendar_entries",
   "list_leave_calendar_entries_with_teams_for_preview", "list_staff_leave_calendar_entries_for_preview",
   "list_calendar_birthdays_for_preview", "list_employee_check_in_calendar_entries_for_preview",
-  "list_subscription_review_calendar_entries_for_preview",
+  "list_subscription_review_calendar_entries_for_preview", "list_subscription_renewal_calendar_entries_for_preview",
 ]);
 const capabilityRpcs = new Set([
-  "can_view_subscription_review_calendar", "can_review_leave_workspace",
+  "can_view_subscription_review_calendar", "can_view_subscription_renewal_calendar", "can_review_leave_workspace",
   "can_view_all_leave_requests", "can_import_payroll_balances",
-  "can_view_subscription_review_calendar_for_preview", "can_import_payroll_balances_for_preview",
+  "can_view_subscription_review_calendar_for_preview", "can_view_subscription_renewal_calendar_for_preview", "can_import_payroll_balances_for_preview",
 ]);
 
 function workspace({

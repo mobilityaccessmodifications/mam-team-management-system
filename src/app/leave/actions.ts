@@ -125,6 +125,8 @@ export type SubscriptionReviewCalendarEntry = {
   status: "active" | "paused";
 };
 
+export type SubscriptionRenewalCalendarEntry = SubscriptionReviewCalendarEntry;
+
 /** Minimal monthly reminder for authorised payroll-balance importers. */
 export type PayrollBalanceReminderCalendarEntry = {
   reminderId: string;
@@ -140,9 +142,11 @@ export type LeaveWorkspaceData = {
   birthdayEntries: BirthdayCalendarEntry[];
   checkInEntries: CheckInCalendarEntry[];
   subscriptionReviewEntries: SubscriptionReviewCalendarEntry[];
+  subscriptionRenewalEntries: SubscriptionRenewalCalendarEntry[];
   payrollBalanceReminderEntries: PayrollBalanceReminderCalendarEntry[];
   /** Current active profile may open the calendar for its own review dates. */
   canViewSubscriptionReviewCalendar: boolean;
+  canViewSubscriptionRenewalCalendar: boolean;
   /** Current authenticated user may open the monthly payroll reminder. */
   canViewPayrollBalanceReminderCalendar: boolean;
   /** Current authenticated user is System Admin or an explicit payroll-import delegate. */
@@ -926,6 +930,8 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Base
       { data: birthdayData, error: birthdayError },
       { data: checkInData, error: checkInError },
       { data: subscriptionReviewData, error: subscriptionReviewError },
+      { data: subscriptionRenewalData, error: subscriptionRenewalError },
+      { data: canViewSubscriptionRenewalCalendar, error: subscriptionRenewalCalendarPermissionError },
       { data: canViewSubscriptionReviewCalendar, error: subscriptionReviewCalendarPermissionError },
       { data: canImportPayrollBalances, error: payrollBalanceImportPermissionError },
       { data: entitlementPolicyData, error: entitlementPolicyError },
@@ -935,6 +941,8 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Base
       supabase.rpc("list_calendar_birthdays_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("list_employee_check_in_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("list_subscription_review_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
+      supabase.rpc("list_subscription_renewal_calendar_entries_for_preview", { p_person_id: checkedPreviewPersonId }),
+      supabase.rpc("can_view_subscription_renewal_calendar_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("can_view_subscription_review_calendar_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("can_import_payroll_balances_for_preview", { p_person_id: checkedPreviewPersonId }),
       supabase.rpc("get_selected_employee_leave_entitlement_policy", { p_person_id: checkedPreviewPersonId }),
@@ -944,11 +952,13 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Base
     const birthdays = parseOptionalProjection(birthdayData, birthdayError, toBirthdayCalendarEntry);
     const checkIns = parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry);
     const subscriptionReviews = parseOptionalProjection(subscriptionReviewData, subscriptionReviewError, toSubscriptionReviewCalendarEntry);
+    const subscriptionRenewals = parseOptionalProjection(subscriptionRenewalData, subscriptionRenewalError, toSubscriptionReviewCalendarEntry);
     const unavailable = [
       !calendar.available ? "leave calendar" : "",
       !birthdays.available ? "birthdays" : "",
       !checkIns.available ? "check-ins" : "",
       !subscriptionReviews.available ? "subscription reviews" : "",
+      !subscriptionRenewals.available ? "subscription renewals" : "",
     ].filter(Boolean);
     const warnings = [
       preview.warning,
@@ -965,6 +975,8 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Base
       birthdayEntries: birthdays.rows,
       checkInEntries: checkIns.rows,
       subscriptionReviewEntries: subscriptionReviews.rows,
+      subscriptionRenewalEntries: subscriptionRenewals.rows,
+      canViewSubscriptionRenewalCalendar: !subscriptionRenewalCalendarPermissionError && canViewSubscriptionRenewalCalendar === true,
       payrollBalanceReminderEntries: [],
       canViewSubscriptionReviewCalendar: subscriptionReviewCalendarPermissionError
         ? false
@@ -984,6 +996,8 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Base
     { data: birthdayData, error: birthdayError },
     { data: checkInData, error: checkInError },
     { data: subscriptionReviewData, error: subscriptionReviewError },
+    { data: subscriptionRenewalData, error: subscriptionRenewalError },
+    { data: canViewSubscriptionRenewalCalendar, error: subscriptionRenewalCalendarPermissionError },
     { data: canViewSubscriptionReviewCalendar, error: subscriptionReviewCalendarPermissionError },
     { data: canReviewLeave, error: canReviewError },
     { data: canViewAllLeave, error: canViewAllLeaveError },
@@ -998,6 +1012,8 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Base
     supabase.rpc("list_calendar_birthdays"),
     supabase.rpc("list_employee_check_in_calendar_entries"),
     supabase.rpc("list_subscription_review_calendar_entries"),
+    supabase.rpc("list_subscription_renewal_calendar_entries"),
+    supabase.rpc("can_view_subscription_renewal_calendar"),
     supabase.rpc("can_view_subscription_review_calendar"),
     supabase.rpc("can_review_leave_workspace"),
     supabase.rpc("can_view_all_leave_requests"),
@@ -1027,6 +1043,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Base
   const birthdays = parseOptionalProjection(birthdayData, birthdayError, toBirthdayCalendarEntry);
   const checkIns = parseOptionalProjection(checkInData, checkInError, toCheckInCalendarEntry);
   const subscriptionReviews = parseOptionalProjection(subscriptionReviewData, subscriptionReviewError, toSubscriptionReviewCalendarEntry);
+  const subscriptionRenewals = parseOptionalProjection(subscriptionRenewalData, subscriptionRenewalError, toSubscriptionReviewCalendarEntry);
   const payrollBalanceReminders = parseOptionalProjection(
     payrollBalanceReminderData,
     payrollBalanceReminderError,
@@ -1042,6 +1059,7 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Base
     !birthdays.available ? "birthdays" : "",
     !checkIns.available ? "check-ins" : "",
     !subscriptionReviews.available ? "subscription reviews" : "",
+    !subscriptionRenewals.available ? "subscription renewals" : "",
     !payrollBalanceReminders.available ? "payroll balance reminders" : "",
   ].filter(Boolean);
 
@@ -1053,6 +1071,8 @@ async function getBaseLeaveWorkspaceData(previewPersonId?: string): Promise<Base
     birthdayEntries: birthdays.rows,
     checkInEntries: checkIns.rows,
     subscriptionReviewEntries: subscriptionReviews.rows,
+    subscriptionRenewalEntries: subscriptionRenewals.rows,
+    canViewSubscriptionRenewalCalendar: !subscriptionRenewalCalendarPermissionError && canViewSubscriptionRenewalCalendar === true,
     payrollBalanceReminderEntries: payrollBalanceReminders.rows,
     canViewSubscriptionReviewCalendar: subscriptionReviewCalendarPermissionError
       ? false

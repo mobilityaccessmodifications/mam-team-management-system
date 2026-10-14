@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { dispatchSubscriptionRequestMail } from "@/lib/subscription-request-mail";
+import { dispatchSubscriptionRenewalMail } from "@/lib/subscription-renewal-mail";
 import { dispatchSubscriptionReviewMail } from "@/lib/subscription-review-mail";
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -11,6 +12,7 @@ export async function GET(request: Request) {
   const deadline = Date.now() + 260_000;
   const submissions = await dispatchSubscriptionRequestMail();
   const reviews = await dispatchSubscriptionReviewMail(deadline);
-  const result = { ok: submissions.ok && reviews.ok, submissions, reviews };
+  const renewals = await dispatchSubscriptionRenewalMail(deadline);
+  const result = { ok: submissions.ok && reviews.ok && renewals.ok, submissions, reviews, renewals };
   return Response.json(result, { status:result.ok ? 200 : 503, headers:{ "Cache-Control":"no-store" } });
 }
