@@ -49,6 +49,19 @@ begin
   if not found then return; end if;
   perform pg_advisory_xact_lock(hashtextextended('portal_account:' || v_target.user_id::text,0));
   if exists(select 1 from private.portal_password_reset_claims c where c.auth_user_id=v_target.user_id and c.status='pending') then return; end if;
+  select p.id as user_id,person.id as person_id,p.account_version into v_target
+  from public.profiles p join public.internal_org_people person on person.auth_user_id=p.id
+  join private.employee_directory_details d on d.person_id=person.id
+  where p.id=v_target.user_id and person.node_kind='person' and person.is_active
+    and p.account_status='active' and p.app_role<>'system_admin' and p.login_name is not null
+    and p_email in (lower(btrim(d.work_email)),lower(btrim(d.personal_email)))
+    and 1=(select count(*) from private.employee_directory_details other_d
+      join public.internal_org_people other_person on other_person.id=other_d.person_id
+      join public.profiles other_p on other_p.id=other_person.auth_user_id
+      where other_person.node_kind='person' and other_person.is_active and other_p.account_status='active'
+        and other_p.login_name is not null and p_email in (lower(btrim(other_d.work_email)),lower(btrim(other_d.personal_email))))
+  for share of p,person,d;
+  if not found then return; end if;
   insert into private.portal_password_recovery_requests as r
     (auth_user_id,person_id,request_id,token_hash,recipient,account_version,expires_at)
   values (v_target.user_id,v_target.person_id,v_request,p_token_hash,p_email,v_target.account_version,clock_timestamp()+interval '1 hour')
@@ -233,6 +246,33 @@ begin
   where profile.id = p_auth_user_id;
 end;
 $$;
+
+do $migration$
+declare item record; definition text; body text; guard text := $guard$
+  perform pg_advisory_xact_lock(hashtextextended('portal_account:' || p_auth_user_id::text,0));
+  if exists(select 1 from private.portal_password_reset_claims claim
+    where claim.auth_user_id=p_auth_user_id and claim.status='pending') then
+    raise exception 'A password reset is in progress. Refresh and try again.' using errcode='55000';
+  end if;
+
+$guard$;
+begin
+  for item in select * from (values
+    ('public.create_portal_account(uuid,uuid,text,text,bigint)',
+      'cc6724802a70ae6109188db39f9a8ca580fb7ccd81d7075823a005d855a20ce2','  select person.*'),
+    ('public.set_portal_account_enabled(uuid,uuid,boolean,bigint)',
+      '1040a246fc7e9cee5e3c73ace2855788312b4954f6cdf9207c5734d941d47307','  select jsonb_build_object(')
+  ) reviewed(signature,sha256,anchor) loop
+    select prosrc into body from pg_proc where oid=item.signature::regprocedure;
+    definition:=pg_get_functiondef(item.signature::regprocedure);
+    if encode(extensions.digest(body,'sha256'),'hex')<>item.sha256
+      or (length(definition)-length(replace(definition,item.anchor,'')))/length(item.anchor)<>1 then
+      raise exception 'Recovery account writer predecessor differs: %',item.signature;
+    end if;
+    execute replace(definition,item.anchor,guard || item.anchor);
+  end loop;
+end;
+$migration$;
 
 update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;
 

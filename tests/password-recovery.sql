@@ -82,6 +82,17 @@ begin
     raise exception 'Same-login version update during recovery was accepted';
   exception when object_not_in_prerequisite_state then null;
   end;
+  begin
+    perform public.set_portal_account_enabled(claimed.auth_user_id,claimed.auth_user_id,true,before_version);
+    raise exception 'Same-status version update during recovery was accepted';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  begin
+    perform public.create_portal_account(claimed.auth_user_id,claimed.auth_user_id,'work-one@example.test','employee',
+      (select version from public.internal_org_people where id=claimed.auth_user_id));
+    raise exception 'Account relink during recovery was accepted';
+  exception when object_not_in_prerequisite_state then null;
+  end;
   perform set_config('request.jwt.claim.sub','',true);
   perform set_config('request.jwt.claims','{}',true);
   perform set_config('request.jwt.claim.role','service_role',true);

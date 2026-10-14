@@ -174,6 +174,9 @@ try {
     const resetRace = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/run-password-reset-credential-concurrency.mjs'), socket, database, ...mode], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
     if (resetRace.status !== 0) throw new Error('Password reset credential PostgreSQL concurrency tests failed');
   }
+  command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', '--template=mam_test_replay', 'mam_test_recovery_concurrency']);
+  const recoveryRace = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/run-password-recovery-concurrency.mjs'), socket, 'mam_test_recovery_concurrency'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (recoveryRace.status !== 0) throw new Error('Password recovery account-version concurrency tests failed');
   console.log('PASS: password reset preflight, durable pending fences, ACLs, audit and PostgreSQL concurrency');
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/two-week-check-in.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/check-in-review-outcomes.sql")]);
