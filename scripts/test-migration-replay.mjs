@@ -56,6 +56,7 @@ for (const file of files) {
     ['20261014120000_subscription_request_simple_activation.sql', 'run-subscription-request-activation-release.py', 'sra'],
     ['20261014130000_subscription_request_penny_mail.sql', 'run-subscription-request-penny-release.py', 'srp'],
     ['20261014140000_subscription_departure_password_tasks.sql', 'run-subscription-password-release.py', 'spw'],
+    ['20261014220111_subscription_request_template_completion.sql', 'run-subscription-request-template-release.py', 'srt'],
   ]) {
     if (file !== migration) continue;
     const predecessor = `mam_test_${label}_${createHash('sha256').update(database).digest('hex').slice(0, 8)}_pred`;

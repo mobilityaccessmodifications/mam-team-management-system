@@ -75,7 +75,7 @@ export function SubscriptionRequests({ initial, selectedId, startNew = false }: 
     busyRef.current=true;setBusy(true);setMessage("");setIsError(false);
     let dispatched=false;
     try {
-      const outgoing=payload.formVersion===2||payload.formVersion===3?withSelectedRequestCost({...payload,monthlyCostCents:parseRequestAmount(monthlyAmount),annualCostCents:parseRequestAmount(annualAmount),...(payload.formVersion===3?{oneOffCostCents:parseRequestAmount(oneOffAmount)}:{})}):payload;
+      const outgoing=payload.formVersion===2||payload.formVersion===3?withSelectedRequestCost({...payload,monthlyCostCents:payload.billing==="one_off"?null:parseRequestAmount(monthlyAmount),annualCostCents:payload.billing==="one_off"?null:parseRequestAmount(annualAmount),...(payload.formVersion===3?{oneOffCostCents:parseRequestAmount(oneOffAmount)}:{})}):payload;
       if(operation==="save"||operation==="submit") validateRequestPayload(outgoing,operation==="submit");
       const decisionFinance=payload.formVersion===3&&["approve","return","reject"].includes(operation)?validateRequestFinance(finance,operation):undefined;
       if(operation==="approve"&&decisionFinance&&payload.payment==="invoice"&&!decisionFinance.invoiceEmail?.trim()&&!decisionFinance.invoiceContact?.trim()) throw new Error("Provide the invoice email or contact.");
@@ -126,7 +126,7 @@ export function SubscriptionRequests({ initial, selectedId, startNew = false }: 
     return <label key={key}>{label}{area?<textarea value={String(value)} maxLength={maxLength} disabled={!editable||blocked} onChange={e=>setPayload(p=>({...p,[key]:e.target.value}))}/>:<input type={key==="websiteUrl"?"url":key==="invoiceEmail"?"email":"text"} value={String(value)} maxLength={maxLength} disabled={!editable||blocked} onChange={e=>setPayload(p=>({...p,[key]:e.target.value}))}/>}</label>;
   }
   function choice(key: keyof RequestPayload,label: string,options: [string,string][]) {
-    return <label>{label}<select aria-label={label} value={String(payload[key]??"")} disabled={!editable||blocked} onChange={e=>setPayload(p=>({...p,[key]:e.target.value}))}>{options.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>;
+    return <label>{label}<select aria-label={label} value={String(payload[key]??"")} disabled={!editable||blocked} onChange={e=>setPayload(p=>({...p,[key]:e.target.value,...(key==="category"&&e.target.value==="one_off_service"?{billing:"one_off"}:{})}))}>{options.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>;
   }
   return <section className={styles.workspace} aria-label="Subscription requests" aria-busy={busy}>
     <header className={styles.toolbar}><h1>Requests</h1><button type="button" onClick={()=>void reload()} disabled={busy||denied}>Reload</button>{workspace.canApply&&workspace.enabled?<button type="button" onClick={create} disabled={blocked}>New request</button>:null}</header>
@@ -146,8 +146,8 @@ export function SubscriptionRequests({ initial, selectedId, startNew = false }: 
               {textField("intendedUsers","Intended users",true)}
               {choice("duration","Expected usage",[["ongoing","Ongoing"],["3_months","3 months"],["12_months","12 months"]])}
               {payload.formVersion===3?textField("usageFrequency","Usage frequency"):null}
-              <label>Monthly cost (AUD)<input inputMode="decimal" value={monthlyAmount} disabled={!editable||blocked} onChange={e=>setMonthlyAmount(e.target.value)} /></label>
-              <label>Annual cost (AUD)<input inputMode="decimal" value={annualAmount} disabled={!editable||blocked} onChange={e=>setAnnualAmount(e.target.value)} /></label>
+              {payload.billing!=="one_off"?<><label>Monthly cost (AUD)<input inputMode="decimal" value={monthlyAmount} disabled={!editable||blocked} onChange={e=>setMonthlyAmount(e.target.value)} /></label>
+              <label>Annual cost (AUD)<input inputMode="decimal" value={annualAmount} disabled={!editable||blocked} onChange={e=>setAnnualAmount(e.target.value)} /></label></>:null}
               {choice("billing","Preferred billing",[["monthly","Paid monthly"],["annual","Paid annually"],...(payload.formVersion===3?[["one_off","One-off"]] as [string,string][]:[])])}
               {payload.billing!=="one_off"?textField("comparisonUnavailableReason","Alternative quote unavailable reason"):null}
               {payload.formVersion===3?<label>One-off cost (AUD)<input inputMode="decimal" value={oneOffAmount} disabled={!editable||blocked} onChange={e=>setOneOffAmount(e.target.value)}/></label>:null}

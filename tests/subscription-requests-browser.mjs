@@ -29,7 +29,7 @@ try {
   server=createServer(async(req,res)=>{
     if(req.method==='POST' && req.url==='/fixture/revocation-seed') {
       try {
-        const value=sql(socket,database,"begin; select set_config('request.jwt.claim.sub','a1000000-0000-4000-8000-000000000013',true); select set_config('request.jwt.claims','{\"sub\":\"a1000000-0000-4000-8000-000000000013\",\"iat\":4102444800,\"is_anonymous\":false}',true); set local role authenticated; select public.sr_mutate('b1000000-0000-4000-8000-000000000090',0,'submit','{\"kind\":\"new_purchase\",\"service\":\"Synthetic revoked request\",\"purpose\":\"Work\",\"company\":\"mam\",\"payer\":\"MAM\",\"duration\":\"Year\",\"billing\":\"annual\",\"currency\":\"AUD\",\"tax\":\"Inclusive\",\"quoteCents\":1,\"audEstimateCents\":1,\"payment\":\"non_card\",\"intendedUsers\":\"Team\"}'); commit;");
+        const value=sql(socket,database,"begin; select set_config('request.jwt.claim.sub','a1000000-0000-4000-8000-000000000013',true); select set_config('request.jwt.claims','{\"sub\":\"a1000000-0000-4000-8000-000000000013\",\"iat\":4102444800,\"is_anonymous\":false}',true); set local role authenticated; select public.sr_mutate('b1000000-0000-4000-8000-000000000090',0,'submit','{\"formVersion\":3,\"kind\":\"new_purchase\",\"category\":\"subscription\",\"service\":\"Synthetic revoked request\",\"purpose\":\"Work\",\"company\":\"mam\",\"duration\":\"ongoing\",\"billing\":\"annual\",\"currency\":\"AUD\",\"monthlyCostCents\":1,\"annualCostCents\":1,\"quoteCents\":1,\"audEstimateCents\":1,\"payment\":\"direct_debit\",\"intendedUsers\":\"Team\"}'); commit;");
         res.setHeader('Content-Type','application/json');res.end(value.trim().split('\n').at(-1));
       } catch {res.writeHead(500);res.end('{}');} return;
     }

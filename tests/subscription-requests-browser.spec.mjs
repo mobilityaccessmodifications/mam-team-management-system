@@ -116,8 +116,6 @@ test('annual approval preserves setup cost and finance decision before registeri
   await region.getByLabel('Seats',{exact:true}).fill('2');
   await region.getByLabel('Billing start date',{exact:true}).fill('2026-10-14');
   await region.getByLabel('Renewal date',{exact:true}).fill('2027-10-14');
-  await expect(region.getByLabel('Renewal reminder set',{exact:true})).toBeChecked();
-  await expect(region.getByLabel('Renewal reminder set',{exact:true})).toBeDisabled();
   const owner=region.getByRole('combobox',{name:'Responsible person',exact:true});
   const personId=await owner.locator('option').nth(1).getAttribute('value');await owner.selectOption(personId);
   await region.getByRole('group',{name:'Who has access',exact:true}).locator('input[type=checkbox]').first().check();

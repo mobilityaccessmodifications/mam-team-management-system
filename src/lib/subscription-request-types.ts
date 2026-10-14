@@ -53,6 +53,8 @@ export function validateRequestPayload(input: unknown, submission: boolean): Req
       } catch { throw new Error("Enter a valid product website URL."); }
     }
     if (submission && !value.category) throw new Error("Complete the required request fields.");
+    if (submission && value.category === "one_off_service" && value.billing !== "one_off") throw new Error("Choose one-off billing for a one-off service.");
+    if (submission && value.billing === "one_off" && (value.monthlyCostCents != null || value.annualCostCents != null)) throw new Error("One-off purchases cannot include recurring prices.");
   }
   if (submission) {
     const required = value.formVersion === 2 || value.formVersion === 3 ? ["kind","service","purpose","company","duration","billing","currency","payment","intendedUsers"] : ["kind","service","purpose","company","payer","duration","billing","currency","tax","payment","intendedUsers"];

@@ -456,3 +456,29 @@ configuration and release checks are complete. The scheduled offboarding
 worker/Auth ban is likewise a separate activation: do not enable its workflow
 or run it merely because the schema is present. No migration sends credentials,
 activates workflows, or performs historical offboarding.
+
+### Subscription request template
+
+The template release adds website/category/frequency, separate upfront fees,
+invoice/direct-debit details, an audited Penny budget decision and a standalone
+one-off purchase completion. New requests use V3 after a staged cutover; existing
+V1/V2 requests keep their original form version. Paid Add opens Requests; Free
+remains direct entry. Existing quarterly review Tasks and their reminders remain.
+
+Apply `20261014220111_subscription_request_template_completion.sql` with
+`scripts/deploy-subscription-request-template.py inspect|apply`. The helper
+requires the full reviewed HEAD plus SHA-256 pins for itself, the
+`deploy-staff-leave-calendar.py` transport, the migration and its predecessor.
+Use the MAM Supabase credential wrapper; inspect and independent readback must
+confirm the exact project and source. The migration leaves
+`request_form_version=2` so the existing production application remains usable.
+
+Build and publish the separate zero-schedule V3 request receiver from
+`scripts/build-subscription-request-template-mail-workflow.mjs` through the
+verified MAM n8n release route. Preserve the existing V1 scheduler, V2 receiver
+and review receiver. Merge the reviewed branch to `main` and verify the Vercel
+production alias and commit. After that deployment is Ready and the previous
+300-second worker runtime has drained, use the same source pins with the
+helper's `activate` mode to change only `request_form_version` from 2 to 3.
+Read back the configuration and live request form; do not send synthetic
+production requests or test mail during acceptance.
