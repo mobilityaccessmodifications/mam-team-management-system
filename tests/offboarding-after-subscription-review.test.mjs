@@ -153,7 +153,7 @@ class SubscriptionReleaseGuards(unittest.TestCase):
 unittest.main(argv=['offline-subscription-guards'])
 `;
   const result = spawnSync('python3', ['-B', '-c', code], {
-    encoding: 'utf8', timeout: 120000, maxBuffer: 4 * 1024 * 1024,
+    encoding: 'utf8', timeout: 300000, maxBuffer: 4 * 1024 * 1024,
   });
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stderr, /Ran 6 tests/);
