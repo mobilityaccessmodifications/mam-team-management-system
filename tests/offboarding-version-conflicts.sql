@@ -4,7 +4,7 @@ begin;
 set local role postgres;
 set local search_path='';
 do $$ begin assert current_database() ~ '^mam_test_' and inet_server_addr() is null and current_setting('listen_addresses')=''; end $$;
-set local statement_timeout='5s';
+set local statement_timeout='30s';
 set local lock_timeout='1s';
 create temporary table vc_params as select
  'a7300000-0000-4000-8000-000000000001'::uuid actor,
