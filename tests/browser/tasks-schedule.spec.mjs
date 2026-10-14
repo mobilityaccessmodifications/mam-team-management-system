@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const scheduleId = '88000000-0000-4000-8000-000000000001';
 const checkInId = '66000000-0000-4000-8000-000000000001';
-const ownRoute = '/?fixture=unified-roles&tasks=combined&schedule-tasks&subscription-reviews=employee';
+const ownRoute = '/?fixture=unified-roles&tasks=combined&schedule-tasks&subscription-reviews=register-manager';
 const reviewerRoute = '/?fixture=unified-roles&tasks=combined&schedule-tasks';
 const scheduleRowName = "Open Synthetic Employee's Work schedule change";
 const checkInRowName = "Open Synthetic Check-in Employee's 1-month check-in";

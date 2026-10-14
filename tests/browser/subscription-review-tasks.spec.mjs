@@ -18,11 +18,11 @@ test.afterEach(async({page})=>{
   expect(page.reviewErrors).toEqual([]);
   expect(await page.evaluate(()=>window.unifiedRoleFixture.unexpected)).toEqual([]);
 });
-for(const width of [1440,390])test(`ordinary responsible employee has Tasks and versioned Done at ${width}px`,async({page})=>{
+for(const width of [1440,390])test(`global register manager has Tasks and versioned Done at ${width}px`,async({page})=>{
   await page.setViewportSize({width,height:1000});
-  await page.goto('/?fixture=unified-roles&subscription-reviews=employee');
+  await page.goto('/?fixture=unified-roles&subscription-reviews=register-manager');
   await openTasks(page);
-  await expect(tabs(page).getByRole('tab')).toHaveText(['Directory','Tasks']);
+  await expect(tabs(page).getByRole('tab')).toHaveText(['Directory','Tasks','Subscriptions']);
   await tasks(page).getByRole('button',{name:"Open Synthetic due review's Quarterly subscription review",exact:true}).click();
   const details=page.getByRole(width <= 900 ? 'dialog' : 'region',{name:'Task details',exact:true});
   const done=details.getByRole('button',{name:"Mark Synthetic due review's subscription review done",exact:true});
@@ -44,8 +44,8 @@ for(const width of [1440,390])test(`ordinary responsible employee has Tasks and 
   const mutations=await page.evaluate(()=>window.unifiedRoleFixture.calls.filter(c=>c.name==='completeMySubscriptionReviewTask'));
   expect(mutations[0].args).toEqual([{subscriptionId,version:4}]);
 });
-test('Change Profile shows only the responsible employee reviews without Done or completion dispatch',async({page})=>{
-  await page.goto('/?fixture=unified-roles');
+test('Change Profile shows only the register manager reviews without Done or completion dispatch',async({page})=>{
+  await page.goto('/?fixture=unified-roles&subscription-reviews=preview-register-manager');
   await page.getByRole('region',{name:'Employee access preview'}).locator('button[aria-haspopup="dialog"]').click();
   await page.getByRole('dialog',{name:'Change profile',exact:true}).getByRole('button',{name:/Synthetic Employee/}).click();
   await openTasks(page);

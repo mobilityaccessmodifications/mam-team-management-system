@@ -16,7 +16,7 @@ export function runSubscriptionRequestCatalog(socket,group='all') {
   target(socket,predecessor);
   createDatabase(socket,predecessor);
   sql(socket,predecessor,readFileSync('tests/migrations/0001-supabase-platform.sql','utf8'));
-  const history=readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql') && (f<path.basename(migration) || (group==='forward' && f!==path.basename(migration) && f<'20261014100000'))).sort();
+  const history=readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql') && (f<path.basename(migration) || (group==='forward' && f!==path.basename(migration) && f<='20261013223556_task_follow_up_notes.sql'))).sort();
   const pins=history.map(f=>[f,createHash('sha256').update(readFileSync('supabase/migrations/'+f)).digest('hex')]);
   const catalogSource=readFileSync('supabase/migrations/20261006105000_onboarding_credential_review.sql','utf8');
   const start=catalogSource.indexOf('create function pg_temp.onboarding_review_catalog()');

@@ -4,7 +4,7 @@ import { LeaveDemo } from '@/components/leave-demo';
 import { actorCapabilities } from './unified-role-boundary.mjs';
 import { SubscriptionDelegationDialog } from '@/components/subscription-delegation-dialog';
 import { useState } from 'react';
-const ordinaryReviewEmployee = new URLSearchParams(location.search).get('subscription-reviews') === 'employee';
+const ordinaryReviewEmployee = new URLSearchParams(location.search).get('subscription-reviews') === 'register-manager';
 
 function DelegationFixture() {
   const [open, setOpen] = useState(true);

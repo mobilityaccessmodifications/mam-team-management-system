@@ -1,6 +1,8 @@
 \set ON_ERROR_STOP on
 begin;
 \ir unified-role-fixture.sql
+insert into private.subscription_management_grants(person_id,employee_delegation_confirmed)
+values ('a1000000-0000-4000-8000-000000000001',true);
 insert into private.employee_directory_details(person_id,working_weekdays)
 values ('a1000000-0000-4000-8000-000000000001',array[1,2,3,4,5]::smallint[]);
 insert into private.employee_check_in_reminders(id,person_id,milestone,reminder_sequence,due_date,notify_date)
@@ -8,7 +10,7 @@ values ('a6000000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-00000000
  ('a6000000-0000-4000-8000-000000000002','a1000000-0000-4000-8000-000000000008','2_week','initial',current_date,current_date),
  ('a6000000-0000-4000-8000-000000000003','a1000000-0000-4000-8000-000000000001','5_month','final',current_date,current_date);
 insert into private.subscription_register(id,subscription_code,service_name,pricing_model,billing_cycle,amount_cents,responsible_person_id,subscription_status,next_review_on)
-values ('a4000000-0000-4000-8000-000000000001','MAM-SUB-990001','Synthetic notes review','paid','monthly',100,'a1000000-0000-4000-8000-000000000001','active',private.mam_local_calendar_date());
+values ('a4000000-0000-4000-8000-000000000001','MAM-SUB-990001','Synthetic notes review','paid','monthly',100,'a1000000-0000-4000-8000-000000000008','active',private.mam_local_calendar_date());
 insert into private.employee_work_schedule_change_requests(id,person_id,submitted_by_user_id,original_working_weekdays,requested_working_weekdays,request_reason)
 values ('a7000000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-000000000001',array[1,2,3,4,5]::smallint[],array[1,2,3,4]::smallint[],'Synthetic schedule change');
 create function pg_temp.expect_notes_state(command text,expected text) returns void language plpgsql as $$
@@ -67,7 +69,7 @@ do $$ declare task record; begin
  perform pg_temp.expect_notes_state(format('select public.save_visible_task_notes(''subscription_review'',%L,%L,''Old cycle'',1)',task.subscription_id,task.next_review_on-1),'42501');
 end $$;
 reset role;
-\echo PASS: own/reviewer work-schedule scope, owner subscription notes, exact 5,000 boundary and review-cycle isolation
+\echo PASS: own/reviewer work-schedule scope, global register manager subscription notes, exact 5,000 boundary and review-cycle isolation
 select pg_temp.set_test_actor('a1000000-0000-4000-8000-000000000009');
 set local role authenticated;
 do $$ begin

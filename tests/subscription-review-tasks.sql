@@ -1,18 +1,21 @@
 \set ON_ERROR_STOP on
 begin;
+create temporary table review_fixture_baseline as select count(*) base_count from private.subscription_register where pricing_model='paid' and subscription_status in ('active','paused');
+grant select on review_fixture_baseline to authenticated;
 \ir unified-role-fixture.sql
+insert into private.subscription_management_grants(person_id,employee_delegation_confirmed) values('a1000000-0000-4000-8000-000000000001',true);
 insert into private.subscription_register(id,subscription_code,service_name,pricing_model,billing_cycle,amount_cents,responsible_person_id,subscription_status,next_review_on)
-values ('a4000000-0000-4000-8000-000000000001','MAM-SUB-990001','Synthetic due service','paid','monthly',100,'a1000000-0000-4000-8000-000000000001','active',private.mam_local_calendar_date());
+values ('a4000000-0000-4000-8000-000000000001','MAM-SUB-990001','Synthetic due service','paid','monthly',100,'a1000000-0000-4000-8000-000000000008','active',private.mam_local_calendar_date());
 update private.subscription_register set next_review_on=private.mam_local_calendar_date()-1 where id='a4000000-0000-4000-8000-000000000001';
 do $$ begin
- assert to_regprocedure('public.list_my_subscription_review_tasks()') is not null, 'Responsible employees need a subscription review task projection';
- assert to_regprocedure('public.complete_my_subscription_review_task(uuid,bigint)') is not null, 'Responsible employees need a Done operation';
+ assert to_regprocedure('public.list_my_subscription_review_tasks()') is not null, 'Register managers need a subscription review task projection';
+ assert to_regprocedure('public.complete_my_subscription_review_task(uuid,bigint)') is not null, 'Register managers need a Done operation';
 end $$;
 insert into private.subscription_register(id,subscription_code,service_name,pricing_model,billing_cycle,amount_cents,responsible_person_id,subscription_status,next_review_on)
-values ('a4000000-0000-4000-8000-000000000002','MAM-SUB-990002','Synthetic future service','paid','monthly',100,'a1000000-0000-4000-8000-000000000001','active',private.mam_local_calendar_date()),
- ('a4000000-0000-4000-8000-000000000003','MAM-SUB-990003','Synthetic paused service','paid','monthly',100,'a1000000-0000-4000-8000-000000000001','paused',private.mam_local_calendar_date()),
- ('a4000000-0000-4000-8000-000000000004','MAM-SUB-990004','Synthetic free service','free',null,null,'a1000000-0000-4000-8000-000000000001','active',private.mam_local_calendar_date()),
- ('a4000000-0000-4000-8000-000000000005','MAM-SUB-990005','Synthetic cancelled service','paid','monthly',100,'a1000000-0000-4000-8000-000000000001','cancelled',private.mam_local_calendar_date());
+values ('a4000000-0000-4000-8000-000000000002','MAM-SUB-990002','Synthetic future service','paid','monthly',100,'a1000000-0000-4000-8000-000000000008','active',private.mam_local_calendar_date()),
+ ('a4000000-0000-4000-8000-000000000003','MAM-SUB-990003','Synthetic paused service','paid','monthly',100,'a1000000-0000-4000-8000-000000000008','paused',private.mam_local_calendar_date()),
+ ('a4000000-0000-4000-8000-000000000004','MAM-SUB-990004','Synthetic free service','free',null,null,'a1000000-0000-4000-8000-000000000008','active',private.mam_local_calendar_date()),
+ ('a4000000-0000-4000-8000-000000000005','MAM-SUB-990005','Synthetic cancelled service','paid','monthly',100,'a1000000-0000-4000-8000-000000000008','cancelled',private.mam_local_calendar_date());
 update private.subscription_register set next_review_on=private.mam_local_calendar_date()+1 where id='a4000000-0000-4000-8000-000000000002';
 update private.subscription_register set next_review_on=private.mam_local_calendar_date() where id='a4000000-0000-4000-8000-000000000003';
 create function pg_temp.expect_review_state(command text,expected text) returns void language plpgsql as $$
@@ -26,7 +29,7 @@ end $$;
 select pg_temp.set_test_actor('a1000000-0000-4000-8000-000000000001');
 set local role authenticated;
 do $$ declare item record; fields text[]; begin
- assert (select count(*)=3 from public.list_my_subscription_review_tasks()), 'Only live paid owner tasks are listed';
+ assert (select count(*)=(select base_count+3 from review_fixture_baseline) from public.list_my_subscription_review_tasks()), 'Register managers receive all live paid tasks regardless of owner';
  for item in select * from public.list_my_subscription_review_tasks() loop
   select array_agg(key order by key) into fields from jsonb_object_keys(to_jsonb(item)) key;
   assert fields=array['next_review_on','service_name','subscription_id','subscription_status','version'], 'Task projection excludes credential, vault, card and pricing fields';
@@ -42,10 +45,10 @@ reset role;
 \echo PASS: future denied, stale version denied, non-paid and cancelled denied, employee preview denied
 select pg_temp.set_test_actor('a1000000-0000-4000-8000-000000000008');
 set local role authenticated;
-do $$ begin assert not exists(select 1 from public.list_my_subscription_review_tasks()), 'Other employees receive no owner tasks'; end $$;
+do $$ begin assert not exists(select 1 from public.list_my_subscription_review_tasks()), 'Non-delegated owners receive no register review tasks'; end $$;
 select pg_temp.expect_review_state('select public.complete_my_subscription_review_task(''a4000000-0000-4000-8000-000000000001'',2)','42501');
 reset role;
-\echo PASS: another employee cannot see or complete the responsible person's task
+\echo PASS: another employee cannot see or complete the register managers' task
 select pg_temp.set_test_actor('a1000000-0000-4000-8000-000000000011');
 set local role authenticated;
 select pg_temp.expect_review_state('select public.list_my_subscription_review_tasks()','42501');
@@ -69,10 +72,10 @@ select pg_temp.expect_review_state('select public.complete_my_subscription_revie
 reset role;
 select pg_temp.set_test_actor('a1000000-0000-4000-8000-000000000009');
 set local role authenticated;
-do $$ begin assert (select count(*)=3 from public.list_subscription_review_tasks_for_preview('a1000000-0000-4000-8000-000000000001')); end $$;
+do $$ begin assert (select count(*)=(select base_count+3 from review_fixture_baseline) from public.list_subscription_review_tasks_for_preview('a1000000-0000-4000-8000-000000000001')); end $$;
 select pg_temp.expect_review_state('select public.complete_my_subscription_review_task(''a4000000-0000-4000-8000-000000000001'',2)','42501');
 reset role;
-\echo PASS: privileged preview is owner-scoped and does not impersonate task completion
+\echo PASS: privileged preview is delegate-scoped and does not impersonate task completion
 select pg_temp.set_test_actor('a1000000-0000-4000-8000-000000000001');
 set local role authenticated;
 do $$ declare task record; completed jsonb; begin
@@ -120,5 +123,16 @@ do $$ begin
  assert private.confirmed_test_purge_schema_hash()=(select schema_hash from private.confirmed_test_purge_schema where singleton), 'Additive RPCs preserve the destructive-operation fingerprint';
 end $$;
 \echo PASS: anonymous, service-role and direct private-core execution remain denied; purge fingerprint remains current
+select pg_temp.set_test_actor('a1000000-0000-4000-8000-000000000015');
+set local role authenticated;
+select pg_temp.expect_review_state('select public.complete_my_subscription_review_task(''a4000000-0000-4000-8000-000000000001'',2)','40001');
+do $$ begin assert (select count(*)=(select base_count+3 from review_fixture_baseline) from public.list_my_subscription_review_tasks()), 'Another register manager receives the same register tasks'; end $$;
+reset role;
+delete from private.subscription_management_grants where person_id='a1000000-0000-4000-8000-000000000001';
+select pg_temp.set_test_actor('a1000000-0000-4000-8000-000000000001');
+set local role authenticated;
+do $$ begin assert not exists(select 1 from public.list_my_subscription_review_tasks()), 'Revocation removes review tasks'; end $$;
+select pg_temp.expect_review_state('select public.complete_my_subscription_review_task(''a4000000-0000-4000-8000-000000000001'',3)','42501');
+reset role;
 rollback;
-\echo PASS: responsible employee lists and completes a due quarterly subscription review
+\echo PASS: register manager lists and completes a due quarterly subscription review

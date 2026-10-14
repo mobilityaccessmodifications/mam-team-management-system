@@ -13,11 +13,12 @@ const CHECK_IN = new RegExp(`^checkin:${UUID_SOURCE}:(2-week|1-month|2-month|3-m
 const CHECK_IN_REVIEW = new RegExp(`^checkin-review:${UUID_SOURCE}:hr:[1-9][0-9]*:(test|live)$`);
 const ONBOARDING_CREDENTIAL = new RegExp(`^onboarding-credential:${UUID_SOURCE}$`);
 const SUBSCRIPTION_REQUEST = new RegExp(`^subscription-request:${UUID_SOURCE}:[1-9][0-9]*$`);
+const SUBSCRIPTION_REVIEW = new RegExp(`^subscription-review:${UUID_SOURCE}:[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01]):(upcoming|due)$`);
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 const headers = { "Cache-Control": "private, no-store, max-age=0", "X-Content-Type-Options": "nosniff" };
 
-type RpcName = "reserve_notification_delivery" | "confirm_notification_delivery" | "notification_delivery_store_status";
+type RpcName = "reserve_notification_delivery" | "reserve_subscription_review_mail" | "confirm_notification_delivery" | "notification_delivery_store_status";
 export type ReceiptRpc = (name: RpcName, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
 type ProviderReceipt = { accepted: true; messageId: string | null; requestId: string | null; statusCode: number | null };
 type DeliveryInput = { eventKey: string; recipient: string; cc: string } & (
@@ -31,7 +32,7 @@ const reply = (body: unknown, status = 200) => Response.json(body, { status, hea
 const error = (code: string, status: number) => reply({ ok: false, code }, status);
 const eventKey = (value: unknown): value is string => typeof value === "string" && value.length <= 256
   && (LEAVE.test(value) || PAYROLL.test(value) || COMPARISON.test(value) || NEW_STARTER.test(value)
-    || CHECK_IN.test(value) || CHECK_IN_REVIEW.test(value) || ONBOARDING_CREDENTIAL.test(value) || SUBSCRIPTION_REQUEST.test(value));
+    || CHECK_IN.test(value) || CHECK_IN_REVIEW.test(value) || ONBOARDING_CREDENTIAL.test(value) || SUBSCRIPTION_REQUEST.test(value) || SUBSCRIPTION_REVIEW.test(value));
 
 /** Do not silently drop malformed addresses: that would change the send intent. */
 function recipients(value: unknown, required: boolean): string | null {
@@ -154,7 +155,8 @@ export async function handleNotificationReceipts(request: Request, secret: strin
   const input = parseInput(body.data);
   if (!input) return error("invalid_request", 400);
   try {
-    const { data, error: failure } = await rpc(input.action === "reserve" ? "reserve_notification_delivery" : "confirm_notification_delivery", {
+    const reserveRpc = SUBSCRIPTION_REVIEW.test(input.eventKey) ? "reserve_subscription_review_mail" : "reserve_notification_delivery";
+    const { data, error: failure } = await rpc(input.action === "reserve" ? reserveRpc : "confirm_notification_delivery", {
       p_event_key: input.eventKey, p_recipient: input.recipient, p_cc: input.cc,
       ...(input.action === "reserve" ? { p_legacy_event_key: input.legacyEventKey }
         : { p_delivery_token: input.deliveryToken, p_provider_receipt: input.providerReceipt }),
