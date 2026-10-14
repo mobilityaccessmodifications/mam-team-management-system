@@ -38,6 +38,7 @@ test('People Tasks enables scoped subscription reviews independently and keeps C
     const hooks=hooksHarness(React), calls=[];
     const {CheckInTasks}=loadModule('src/components/check-in-tasks.tsx',{
       react:hooks.react,
+      '@/components/subscription-password-tasks':{useSubscriptionPasswordTasks:()=>({tasks:[],loading:false,error:'',notice:'',pendingId:'',load:async()=>{},complete:()=>{}})},
       '@/components/subscription-review-tasks':{useSubscriptionReviewTasks:options=>{
         calls.push(options);
         return {tasks:[],loading:false,error:'',notice:'',pendingId:'',load:async()=>{},complete:async()=>{}};

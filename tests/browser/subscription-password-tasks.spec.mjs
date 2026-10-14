@@ -1,0 +1,28 @@
+import {test,expect} from '@playwright/test';
+const taskId='34000000-0000-4000-8000-000000000001';
+for(const width of [1440,390])test(`subscription departure password task is filtered and manually completed at ${width}px`,async({page,context,baseURL})=>{
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  await context.route('**/*',route=>new URL(route.request().url()).origin===baseURL?route.continue():route.abort());
+  await page.setViewportSize({width,height:1000});
+  await page.goto('/?fixture=unified-roles&subscription-reviews=register-manager&subscription-passwords');
+  await page.getByRole('complementary',{name:'People Hub navigation'}).getByRole('button',{name:'People',exact:true}).click();
+  await page.getByRole('tablist',{name:'People sections'}).getByRole('tab',{name:'Tasks',exact:true}).click();
+  const tasks=page.getByRole('region',{name:'Tasks',exact:true});
+  await tasks.getByRole('combobox',{name:'Type',exact:true}).selectOption('subscription_password');
+  await expect(tasks.getByRole('button',{name:/^Open /})).toHaveCount(1);
+  await tasks.getByRole('combobox',{name:'Status',exact:true}).selectOption('ready');
+  await tasks.getByRole('button',{name:"Open Synthetic password service's Change subscription account password",exact:true}).click();
+  const details=page.getByRole(width<900?'dialog':'region',{name:'Task details',exact:true});
+  await expect(details.getByLabel('Notes',{exact:true})).toHaveCount(0);
+  await expect(details).not.toContainText(/departed_person|archive_reason|synthetic private|password value/);
+  const complete=details.getByRole('button',{name:"Confirm Synthetic password service's subscription password changed",exact:true});
+  await expect(complete).toHaveText('Password changed');
+  await page.evaluate(id=>window.unifiedRoleFixture.holdNext('completeMySubscriptionPasswordTask',id),taskId);
+  await complete.click();await expect(complete).toBeDisabled();await complete.dispatchEvent('click');
+  await expect.poll(()=>page.evaluate(()=>window.unifiedRoleFixture.calls.filter(call=>call.name==='completeMySubscriptionPasswordTask').length)).toBe(1);
+  expect(await page.evaluate(()=>window.unifiedRoleFixture.calls.find(call=>call.name==='completeMySubscriptionPasswordTask').args)).toEqual([{taskId,version:1,passwordChanged:true}]);
+  await page.evaluate(id=>window.unifiedRoleFixture.finish('completeMySubscriptionPasswordTask',id),taskId);
+  await expect(tasks.getByRole('button',{name:/^Open /})).toHaveCount(0);
+  await expect(tasks).toContainText('password change is recorded');
+  expect(errors).toEqual([]);expect(await page.evaluate(()=>window.unifiedRoleFixture.unexpected)).toEqual([]);
+});
