@@ -24,7 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { createPortal } from "react-dom";
 import { Temporal } from "temporal-polyfill";
 
-import type { BirthdayCalendarEntry, CheckInCalendarEntry, PayrollBalanceReminderCalendarEntry, SubscriptionReviewCalendarEntry, SubscriptionRenewalCalendarEntry } from "@/app/leave/actions";
+import type { BirthdayCalendarEntry, CheckInCalendarEntry, PayrollBalanceReminderCalendarEntry, SubscriptionReviewCalendarEntry } from "@/app/leave/actions";
 import { CalendarFilters } from "@/components/calendar-filters";
 import { calendarEventIsVisible, calendarTeamOptions } from "@/lib/calendar-filters";
 import { syncCalendarEvents } from "@/lib/sync-calendar-events";
@@ -67,16 +67,14 @@ type CalendarLeaveRequest = {
   documentCount?: number;
 };
 
-type EventKind = "approved" | "pending" | "balance-pending" | "birthday" | "check-in" | "subscription" | "subscription-renewal" | "payroll-balance" | "public-holiday";
-type MAMEventMeta = { kind: EventKind; subject: string; detail: string; identity?: string; leaveType?: string; dateLabel: string; priority: number; team?: string; duration?: { days: number; hours?: number }; requestedAt?: string; approvedBy?: string; documentCount?: number; subscriptionId?: string };
+type EventKind = "approved" | "pending" | "balance-pending" | "birthday" | "check-in" | "subscription" | "payroll-balance" | "public-holiday";
+type MAMEventMeta = { kind: EventKind; subject: string; detail: string; identity?: string; leaveType?: string; dateLabel: string; priority: number; team?: string; duration?: { days: number; hours?: number }; requestedAt?: string; approvedBy?: string; documentCount?: number };
 
 type TeamCalendarProps = {
   birthdays: BirthdayCalendarEntry[];
   checkIns: CheckInCalendarEntry[];
   requests: CalendarLeaveRequest[];
   subscriptionReviews: SubscriptionReviewCalendarEntry[];
-  subscriptionRenewals?: SubscriptionRenewalCalendarEntry[];
-  showSubscriptionRenewals?: boolean;
   payrollBalanceReminders: PayrollBalanceReminderCalendarEntry[];
   showSubscriptionReviews: boolean;
   showPayrollBalanceReminders: boolean;
@@ -86,7 +84,6 @@ type TeamCalendarProps = {
 };
 
 const timeZone = "Australia/Melbourne";
-const emptyRenewals: SubscriptionRenewalCalendarEntry[] = [];
 const subscribeToClient = () => () => undefined;
 const views = [createDayView(), createWeekView({ allDayHeight: 48 }), createMonthView(), createYearView(), createAgendaView()];
 
@@ -98,7 +95,6 @@ const calendars: CalendarType[] = [
   { id: "birthday", name: "Birthdays", icon: "◈", isVisible: true, readOnly: true, colors: { eventColor: "#e9f5fb", eventSelectedColor: "#1684ad", lineColor: "#1684ad", textColor: "#075978" } },
   { id: "check-in", name: "Check-ins", icon: "CI", isVisible: true, readOnly: true, colors: { eventColor: "#f2edfb", eventSelectedColor: "#7454a2", lineColor: "#7454a2", textColor: "#523a76" } },
   { id: "subscription", name: "Subscription reviews", icon: "$", isVisible: true, readOnly: true, colors: { eventColor: "#fff7df", eventSelectedColor: "#b77914", lineColor: "#b77914", textColor: "#744d0f" } },
-  { id: "subscription-renewal", name: "Subscription renewals", icon: "$", isVisible: true, readOnly: true, colors: { eventColor: "#fff7df", eventSelectedColor: "#b77914", lineColor: "#b77914", textColor: "#744d0f" } },
   { id: "payroll-balance", name: "Payroll balance updates", icon: "↑", isVisible: true, readOnly: true, colors: { eventColor: "#eef8f4", eventSelectedColor: "#26745a", lineColor: "#26745a", textColor: "#19513f" } },
 ];
 const leaveColors = [
@@ -190,7 +186,6 @@ function buildEvents(
   reviews: SubscriptionReviewCalendarEntry[],
   payrollReminders: PayrollBalanceReminderCalendarEntry[],
   years: number[],
-  renewals: SubscriptionRenewalCalendarEntry[] = [],
 ) {
   const leave = requests.filter((request) => request.status === "Approved" || request.status === "Pending" || request.status === BALANCE_PENDING_STATUS).map((request) => {
     const kind: EventKind = request.status === BALANCE_PENDING_STATUS ? "balance-pending" : request.status === "Approved" ? "approved" : "pending";
@@ -225,13 +220,6 @@ function buildEvents(
     calendarId: "subscription",
     meta: { kind: "subscription", subject: entry.serviceName, detail: "Quarterly paid subscription review", dateLabel: formatDate(entry.dueDate), priority: 3 },
   }));
-  const subscriptionRenewals = renewals.map((entry) => createMAMEvent({
-    id: `subscription-renewal:${entry.subscriptionId}:${entry.dueDate}`,
-    title: `${entry.serviceName} · Subscription renewal`,
-    startDate: entry.dueDate,
-    calendarId: "subscription-renewal",
-    meta: { kind: "subscription-renewal", subject: entry.serviceName, detail: "Paid subscription renewal", dateLabel: formatDate(entry.dueDate), priority: 3, subscriptionId: entry.subscriptionId },
-  }));
   const payroll = payrollReminders.map((entry) => createMAMEvent({
     id: entry.reminderId,
     title: "Update payroll leave balances",
@@ -256,12 +244,12 @@ function buildEvents(
     calendarId: "public-holiday",
     meta: { kind: "public-holiday", subject: holiday.name, detail: "Victorian public holiday", dateLabel: formatDate(holiday.date), priority: 0 },
   }));
-  return [...publicHolidays, ...birthday, ...checkIn, ...subscriptions, ...subscriptionRenewals, ...payroll, ...leave];
+  return [...publicHolidays, ...birthday, ...checkIn, ...subscriptions, ...payroll, ...leave];
 }
 
 function EventDetail({ event, onClose }: EventDetailContentProps) {
   const meta = eventMeta(event);
-  const icon = meta.kind === "public-holiday" ? <Flag size={18} /> : meta.kind === "birthday" ? <Gift size={18} /> : meta.kind === "check-in" ? <CheckCircle2 size={18} /> : (meta.kind === "subscription" || meta.kind === "subscription-renewal") ? <WalletCards size={18} /> : meta.kind === "payroll-balance" ? <FileSpreadsheet size={18} /> : <CalendarDays size={18} />;
+  const icon = meta.kind === "public-holiday" ? <Flag size={18} /> : meta.kind === "birthday" ? <Gift size={18} /> : meta.kind === "check-in" ? <CheckCircle2 size={18} /> : meta.kind === "subscription" ? <WalletCards size={18} /> : meta.kind === "payroll-balance" ? <FileSpreadsheet size={18} /> : <CalendarDays size={18} />;
   const staffDetail = meta.requestedAt !== undefined && meta.documentCount !== undefined;
   return (
     <div className={styles.eventDetail}>
@@ -277,7 +265,6 @@ function EventDetail({ event, onClose }: EventDetailContentProps) {
         <div className={styles.eventDetailDate}><Clock3 size={16} /><span>Requested: {new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone }).format(new Date(meta.requestedAt ?? ""))}</span></div>
         <div className={styles.eventDetailDate}><CheckCircle2 size={16} /><span>Approved by: {meta.kind === "approved" ? meta.approvedBy ?? "Not recorded" : "Awaiting approval"}</span></div>
       </> : null}
-      {meta.subscriptionId ? <a className={styles.eventDetailDate} href={`/?view=people&tab=subscriptions#subscription-${meta.subscriptionId}`}>Open subscription</a> : null}
       {meta.duration ? <div className={styles.eventDetailDate}><Clock3 size={16} aria-hidden="true" /><span>Duration: {formatLeaveDuration(meta.duration)}</span></div> : null}
     </div>
   );
@@ -312,7 +299,7 @@ function MobileEventDetail({ draftEvent, isOpen, onClose }: MobileEventProps) {
   );
 }
 
-function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews, subscriptionRenewals = emptyRenewals, showSubscriptionRenewals = false, payrollBalanceReminders, showSubscriptionReviews, showPayrollBalanceReminders, reviewOnly, loading }: TeamCalendarProps) {
+function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, showSubscriptionReviews, showPayrollBalanceReminders, reviewOnly, loading }: TeamCalendarProps) {
   const [filterHost, setFilterHost] = useState<HTMLElement | null>(null);
   const [hiddenKinds, setHiddenKinds] = useState<string[]>([]);
   const [hiddenTeams, setHiddenTeams] = useState<string[]>([]);
@@ -323,17 +310,16 @@ function TeamCalendarClient({ birthdays, checkIns, requests, subscriptionReviews
   const year = new Date().getFullYear();
   const calendarFrameRef = useRef<HTMLDivElement>(null);
   const [visibleYears, setVisibleYears] = useState([year - 1, year, year + 1]);
-  const events = useMemo(() => buildEvents(birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, visibleYears, subscriptionRenewals), [birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, visibleYears, subscriptionRenewals]);
+  const events = useMemo(() => buildEvents(birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, visibleYears), [birthdays, checkIns, requests, subscriptionReviews, payrollBalanceReminders, visibleYears]);
   // Keep the calendar instance stable while its event data syncs. Recreating it
   // whenever visibleYears changes resets the active view back to Month (which
   // made Year appear to do nothing).
   const visibleCalendars = useMemo(() => [...calendars.filter((item) => {
     if (item.id === "public-holiday") return true;
     if (item.id === "subscription") return showSubscriptionReviews;
-    if (item.id === "subscription-renewal") return showSubscriptionRenewals;
     if (item.id === "payroll-balance") return showPayrollBalanceReminders;
     return !reviewOnly;
-  }), ...(staffLeave && !reviewOnly ? staffCalendars : [])], [reviewOnly, staffLeave, showPayrollBalanceReminders, showSubscriptionReviews, showSubscriptionRenewals]);
+  }), ...(staffLeave && !reviewOnly ? staffCalendars : [])], [reviewOnly, staffLeave, showPayrollBalanceReminders, showSubscriptionReviews]);
   const filteredEvents = useMemo(() => events.filter((event) => {
     const meta = eventMeta(event);
     return visibleCalendars.some((calendar) => calendar.id === event.calendarId)

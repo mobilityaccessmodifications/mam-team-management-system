@@ -75,7 +75,6 @@ import {
   type LeaveWorkspaceRequest,
   type PayrollBalanceReminderCalendarEntry,
   type SubscriptionReviewCalendarEntry,
-  type SubscriptionRenewalCalendarEntry,
 } from "@/app/leave/actions";
 import { signOut } from "@/app/login/actions";
 import {
@@ -593,8 +592,6 @@ export function LeaveDemo({
   const [calendarEntries, setCalendarEntries] = useState<LeaveRequest[]>([]);
   const [calendarBirthdays, setCalendarBirthdays] = useState<BirthdayCalendarEntry[]>([]);
   const [checkInCalendarEntries, setCheckInCalendarEntries] = useState<CheckInCalendarEntry[]>([]);
-  const [subscriptionRenewalCalendarEntries, setSubscriptionRenewalCalendarEntries] = useState<SubscriptionRenewalCalendarEntry[]>([]);
-  const [canViewSubscriptionRenewalCalendarForProfile, setCanViewSubscriptionRenewalCalendarForProfile] = useState(false);
   const [subscriptionReviewCalendarEntries, setSubscriptionReviewCalendarEntries] = useState<SubscriptionReviewCalendarEntry[]>([]);
   const [payrollBalanceReminderEntries, setPayrollBalanceReminderEntries] = useState<PayrollBalanceReminderCalendarEntry[]>([]);
   const [canViewSubscriptionReviewCalendarForProfile, setCanViewSubscriptionReviewCalendarForProfile] = useState(canViewSubscriptionReviewCalendar);
@@ -733,8 +730,6 @@ export function LeaveDemo({
       setCalendarBirthdays(data.birthdayEntries);
       setCheckInCalendarEntries(data.checkInEntries);
       setSubscriptionReviewCalendarEntries(data.subscriptionReviewEntries);
-      setSubscriptionRenewalCalendarEntries(data.subscriptionRenewalEntries ?? []);
-      setCanViewSubscriptionRenewalCalendarForProfile(data.canViewSubscriptionRenewalCalendar === true);
       setPayrollBalanceReminderEntries(data.payrollBalanceReminderEntries);
       setCanViewSubscriptionReviewCalendarForProfile(data.canViewSubscriptionReviewCalendar);
       setCanViewPayrollBalanceReminderCalendar(data.canViewPayrollBalanceReminderCalendar);
@@ -1317,10 +1312,9 @@ export function LeaveDemo({
     && !isPreviewingEmployeeAccess;
   const canViewActiveWorkspaceCalendar = Boolean(activeCapabilities) && (canViewTeamCalendarForActiveProfile
     || canViewSubscriptionReviewCalendarForProfile
-    || canViewSubscriptionRenewalCalendarForProfile
     || canViewPayrollBalanceReminderForActiveProfile);
   const calendarHidesTeamEvents = !canViewTeamCalendarForActiveProfile
-    && (canViewSubscriptionReviewCalendarForProfile || canViewSubscriptionRenewalCalendarForProfile || canViewPayrollBalanceReminderForActiveProfile);
+    && (canViewSubscriptionReviewCalendarForProfile || canViewPayrollBalanceReminderForActiveProfile);
   // Change profile changes what the System Admin sees, not their real server
   // authority. Returning to their own profile restores the complete admin
   // workspace. Server Actions and RPCs still re-authorise the real session.
@@ -2099,8 +2093,6 @@ export function LeaveDemo({
             checkIns={calendarHidesTeamEvents ? [] : calendarCheckIns}
             requests={calendarHidesTeamEvents ? [] : calendarRequests.map((request) => ({ ...request, position: organisationRows.find((person) => person.id === request.personId)?.position_title }))}
             subscriptionReviews={calendarSubscriptionReviews}
-            subscriptionRenewals={subscriptionRenewalCalendarEntries}
-            showSubscriptionRenewals={canViewSubscriptionRenewalCalendarForProfile}
             payrollBalanceReminders={calendarPayrollBalanceReminders}
             showSubscriptionReviews={canViewSubscriptionReviewCalendarForProfile}
             showPayrollBalanceReminders={canViewPayrollBalanceReminderForActiveProfile}

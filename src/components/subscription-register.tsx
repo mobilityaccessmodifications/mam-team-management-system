@@ -268,14 +268,6 @@ export function SubscriptionRegister({
   onRecordsChanged?: () => void;
 }) {
   const [registerState, setRegisterState] = useState<RegisterState>({ state: "loading" });
-  useEffect(() => {
-    if (registerState.state !== "ready") return;
-    const target = window.location.hash.slice(1);
-    if (!/^subscription-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(target)) return;
-    const row = document.getElementById(target);
-    row?.scrollIntoView({ block: "center" });
-    row?.focus({ preventScroll: true });
-  }, [registerState]);
   const [people, setPeople] = useState<SubscriptionPerson[]>([]);
   const [query, setQuery] = useState("");
   const [subscriptionSort, setSubscriptionSort] = useState<SubscriptionSort | null>(null);
@@ -596,7 +588,7 @@ export function SubscriptionRegister({
           <SubscriptionSheetHeader label="Access" sortKey="members" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
           <div className={styles.sheetHeaderCell} role="columnheader"><span>Actions</span></div>
         </div>
-        {filteredSubscriptions.map((subscription) => <div className={styles.subscriptionSheetRow} id={`subscription-${subscription.id}`} tabIndex={-1} key={subscription.id} role="row" data-selected={selectedIds.has(subscription.id) || undefined}>
+        {filteredSubscriptions.map((subscription) => <div className={styles.subscriptionSheetRow} key={subscription.id} role="row" data-selected={selectedIds.has(subscription.id) || undefined}>
           {!readOnly ? <div className={`${styles.sheetCell} ${styles.selectionCell}`} role="cell"><label className={styles.selectionLabel}><input type="checkbox" checked={selectedIds.has(subscription.id)} onChange={() => toggleSelected(subscription.id)} aria-label={`Select ${subscription.serviceName}`} /><span className={styles.mobileSelectionText}>Select</span></label></div> : null}
           <div className={`${styles.sheetCell} ${styles.serviceCell}`} role="cell" data-label="Service">
             <div className={styles.subscriptionIcon}><CreditCard size={18} aria-hidden="true" /></div>
@@ -606,7 +598,6 @@ export function SubscriptionRegister({
           <div className={`${styles.sheetCell} ${styles.detailCell} ${styles.seatCell}`} role="cell" data-label="Seats / licences"><strong>{subscription.pricingModel === "paid" ? subscription.seatCount ?? "Not recorded" : "—"}</strong></div>
           <div className={`${styles.sheetCell} ${styles.detailCell} ${styles.billingCell}`} role="cell" data-label="Next billing">
             <strong>{subscription.pricingModel === "paid" ? (subscription.nextBillingOn ? formatDate(subscription.nextBillingOn) : subscription.billingCycle === "other" ? "Manual schedule" : "Not recorded") : "—"}</strong>
-            {subscription.pricingModel === "paid" && subscription.status !== "cancelled" ? <small>Renewal: {subscription.renewalDate ? `${formatDate(subscription.renewalDate)} · Reminder set` : "Not recorded"}</small> : null}
             {subscription.pricingModel === "paid" ? <><small>Billing date: {formatDate(subscription.billingDate)}</small><small>Credit card: {subscription.creditCardUsed === null ? "Not recorded" : subscription.creditCardUsed ? "Yes" : "No"}</small>{subscription.creditCardUsed ? <small>Cardholder: {subscription.creditCardHolder ?? "Not recorded"}</small> : null}</> : null}
           </div>
           <div className={`${styles.sheetCell} ${styles.detailCell} ${styles.lastReviewedCell}`} role="cell" data-label="Last reviewed"><strong>{hasQuarterlyReview(subscription) ? (subscription.lastReviewedOn ? formatDate(subscription.lastReviewedOn) : "Not yet reviewed") : "—"}</strong></div>
