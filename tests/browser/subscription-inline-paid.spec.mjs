@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const navigation = page => page.getByRole('complementary', { name: 'People Hub navigation' });
 const dialogFor = page => page.getByRole('dialog', { name: 'Add subscription', exact: true });
-const field = (dialog, name) => dialog.getByLabel(name, { exact: true });
+const field = (dialog, name) => ['Free', 'Paid'].includes(name) ? dialog.getByRole('radio', { name, exact: true }) : dialog.getByLabel(new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
 const submitFor = dialog => dialog.getByRole('button', { name: 'Submit request', exact: true });
 const writes = page => page.evaluate(() => window.unifiedRoleFixture.calls.filter(call => ['createSubscription', 'mutateSubscriptionRequest'].includes(call.name)));
 
@@ -75,10 +75,11 @@ test('inline paid preserves common and paid drafts when switching Free and Paid'
   const dialog = await openModal(page);
   await expect(dialog.getByLabel(/^Service name/)).toBeFocused();
   await paidFields(dialog);
-  await expect(field(dialog, 'Requested by')).toBeDisabled();
+  expect(await field(dialog, 'Requested by').evaluate(node => node.readOnly || node.disabled || node.matches(':disabled'))).toBe(true);
   await expect(dialog.locator('form')).toHaveCount(1);
   await expect(dialog.locator('form form')).toHaveCount(0);
-  await expect(dialog.getByLabel(/^Responsible person/)).toHaveCount(0);
+  await expect(dialog.getByLabel(/^Responsible person/)).toBeHidden();
+  await expect(dialog.getByRole('combobox', { name: 'Search employees', exact: true, includeHidden: true })).toBeDisabled();
   await expect(field(dialog, 'Alternative quote unavailable reason')).toBeVisible();
   await expect(dialog.getByLabel(/^Evidence/)).toBeVisible();
   await field(dialog, 'Free').click();
@@ -162,7 +163,7 @@ test('inline paid switching back to Free adds directly and does not send a reque
   const dialog = await openModal(page);
   await paidFields(dialog);
   await field(dialog, 'Free').click();
-  await dialog.getByRole('textbox', { name: 'Search employees', exact: true }).fill('Synthetic Manager');
+  await dialog.getByRole('combobox', { name: 'Search employees', exact: true }).fill('Synthetic Manager');
   await dialog.getByRole('option', { name: /Synthetic Manager/ }).click();
   await dialog.getByRole('button', { name: 'Add subscription', exact: true }).click();
   await expect(dialog).toHaveCount(0);
