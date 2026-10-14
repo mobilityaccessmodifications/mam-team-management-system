@@ -51,11 +51,13 @@ set local role authenticated;
 select * from public.archive_employee_directory_record('a1000000-0000-4000-8000-000000000008',
   (select person_version from public.get_employee_directory_record_with_archive_visibility('a1000000-0000-4000-8000-000000000008')),
   (select detail_version from public.get_employee_directory_record_with_archive_visibility('a1000000-0000-4000-8000-000000000008')),
-  current_date,'Resigned');
+  (clock_timestamp() at time zone 'Australia/Melbourne')::date+2,'Resigned');
 reset role;
 set constraints all immediate;
 do $$ begin
-  assert (select count(*)=2 from private.subscription_password_tasks),'Deferred trigger sees archive reason written after inactivity';
+  assert exists(select 1 from private.employee_directory_details where person_id='a1000000-0000-4000-8000-000000000008'
+    and scheduled_employment_end_date > (clock_timestamp() at time zone 'Australia/Melbourne')::date),'Immediate archive accepted a future recorded end date';
+  assert (select count(*)=2 from private.subscription_password_tasks),'Actual immediate archive queues password tasks even with a future recorded end date';
   assert not exists(select 1 from private.subscription_password_tasks where subscription_id in('a5000000-0000-4000-8000-000000000003','a5000000-0000-4000-8000-000000000004')),'Cancelled and unrelated services do not create tasks';
 end $$;
 set constraints all deferred;
@@ -114,4 +116,4 @@ select pg_temp.expect_password_state('select public.list_my_subscription_passwor
 select pg_temp.expect_password_state('select * from private.subscription_password_task_completions','42501');
 reset role;
 rollback;
-\echo PASS: actual and scheduled archive, free/paid owner/member provenance, no historical/future backfill, safe projection, dynamic delegates, manual CAS, shared completion and real-actor audit
+\echo PASS: actual immediate archive with future recorded date and naturally due scheduled archive, free/paid owner/member provenance, no historical or still-active future-schedule backfill, safe projection, dynamic delegates, manual CAS, shared completion and real-actor audit

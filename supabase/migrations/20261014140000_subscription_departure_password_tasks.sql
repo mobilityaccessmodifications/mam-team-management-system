@@ -53,8 +53,7 @@ begin
     or not exists(select 1 from public.internal_org_people person
       join private.employee_directory_details detail on detail.person_id = person.id
       where person.id = new.id and not person.is_active and person.node_kind = 'person'
-        and detail.archive_reason in ('Resigned', 'End of contract', 'Terminated', 'Redundant', 'Other')
-        and detail.scheduled_employment_end_date <= private.mam_local_calendar_date()) then
+        and detail.archive_reason in ('Resigned', 'End of contract', 'Terminated', 'Redundant', 'Other')) then
     return null;
   end if;
   perform 1 from private.subscription_register subscription
