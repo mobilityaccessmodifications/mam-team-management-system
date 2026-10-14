@@ -67,6 +67,24 @@ begin
     raise exception 'Duplicate reset was accepted';
   exception when object_not_in_prerequisite_state then null;
   end;
+  perform set_config('request.jwt.claim.sub','96000000-0000-4000-8000-000000000003',true);
+  perform set_config('request.jwt.claim.role','authenticated',true);
+  perform set_config('request.jwt.claims',jsonb_build_object('sub','96000000-0000-4000-8000-000000000003',
+    'iat',extract(epoch from clock_timestamp())::bigint,'is_anonymous',false,
+    'app_metadata',jsonb_build_object('org_role','system_admin'))::text,true);
+  begin
+    perform public.update_portal_login(claimed.auth_user_id,claimed.auth_user_id,'renamed@example.test',before_version);
+    raise exception 'Login rename during recovery was accepted';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  begin
+    perform public.update_portal_login(claimed.auth_user_id,claimed.auth_user_id,'work-one@example.test',before_version);
+    raise exception 'Same-login version update during recovery was accepted';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  perform set_config('request.jwt.claim.sub','',true);
+  perform set_config('request.jwt.claims','{}',true);
+  perform set_config('request.jwt.claim.role','service_role',true);
   assert not public.finish_portal_password_recovery(claimed.auth_user_id,gen_random_uuid(),true);
   assert public.finish_portal_password_recovery(claimed.auth_user_id,claimed.reset_token,true);
   assert public.finish_portal_password_recovery(claimed.auth_user_id,claimed.reset_token,true),'Finalisation is idempotent';

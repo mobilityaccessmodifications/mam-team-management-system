@@ -146,6 +146,94 @@ revoke all on function public.issue_portal_password_recovery(text,text),public.b
 grant execute on function public.issue_portal_password_recovery(text,text),public.begin_portal_password_recovery(text),
   public.finish_portal_password_recovery(uuid,uuid,boolean) to service_role;
 
+create or replace function public.update_portal_login(
+  p_person_id uuid,
+  p_auth_user_id uuid,
+  p_login_name text,
+  p_expected_account_version bigint
+)
+returns table (
+  person_id uuid,
+  auth_user_id uuid,
+  login_name text,
+  account_status text,
+  account_version bigint
+)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_login_name text := lower(btrim(p_login_name));
+  v_before jsonb;
+  v_version bigint;
+begin
+  if not private.is_portal_account_admin() then
+    raise exception 'Only an account administrator can rename a login.'
+      using errcode = '42501';
+  end if;
+
+  if not private.is_valid_portal_login(v_login_name) then
+    raise exception 'Choose a valid email or username.' using errcode = '22023';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('portal_account:' || p_auth_user_id::text, 0));
+  if exists (select 1 from private.portal_password_reset_claims claim
+    where claim.auth_user_id = p_auth_user_id and claim.status = 'pending') then
+    raise exception 'A password reset is in progress. Refresh and try again.' using errcode = '55000';
+  end if;
+
+  if not exists (
+    select 1
+    from public.internal_org_people person
+    where person.id = p_person_id
+      and person.auth_user_id = p_auth_user_id
+      and person.node_kind = 'person'
+      and person.is_active
+  ) then
+    raise exception 'The account is not linked to this active person.' using errcode = '23503';
+  end if;
+
+  select jsonb_build_object(
+    'login_name', profile.login_name,
+    'account_version', profile.account_version
+  )
+  into v_before
+  from public.profiles profile
+  where profile.id = p_auth_user_id;
+
+  update public.profiles profile
+  set login_name = v_login_name,
+      account_version = profile.account_version + 1,
+      updated_at = clock_timestamp()
+  where profile.id = p_auth_user_id
+    and profile.account_version = p_expected_account_version
+    and profile.login_name is not null
+  returning profile.account_version into v_version;
+
+  if not found then
+    raise exception 'The account changed or no longer exists. Refresh and try again.'
+      using errcode = '40001';
+  end if;
+
+  insert into private.portal_account_admin_events (
+    actor_user_id, target_user_id, event_type, before_state, after_state
+  )
+  values (
+    (select auth.uid()),
+    p_auth_user_id,
+    'login_renamed',
+    v_before,
+    jsonb_build_object('login_name', v_login_name, 'account_version', v_version)
+  );
+
+  return query
+  select p_person_id, p_auth_user_id, v_login_name, profile.account_status, v_version
+  from public.profiles profile
+  where profile.id = p_auth_user_id;
+end;
+$$;
+
 update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;
 
 commit;
