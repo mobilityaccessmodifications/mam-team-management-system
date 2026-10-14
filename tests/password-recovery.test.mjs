@@ -27,6 +27,7 @@ function fixture(options = {}) {
   const previous = {...process.env};
   Object.assign(process.env, {PASSWORD_RECOVERY_WEBHOOK_ORIGIN:'https://n8n.example.test', PASSWORD_RECOVERY_WEBHOOK_URL:'https://n8n.example.test/webhook/mam-people-hub-password-recovery-v1', PASSWORD_RECOVERY_WEBHOOK_SECRET:'synthetic'});
   const calls = [];
+  const background = [];
   const admin = {rpc: async (name,args) => {
     calls.push([name,args]);
     if (name==='claim_portal_login_attempt') return ok(!options.limited);
@@ -53,14 +54,17 @@ function fixture(options = {}) {
   const actions = load('src/app/login/forgot-password/actions.ts', {
     '@/lib/password-recovery':recovery,'@/lib/portal-login':login,'@/lib/supabase/admin':{createAdminClient:()=>admin},
     'next/headers':{headers:async()=>new Headers({'x-real-ip':'192.0.2.2'})},
+    'next/server':{after:callback=>background.push(callback)},
     'next/navigation':{redirect:url=>{throw new Error('redirect:'+url);}},
   });
-  return {actions,calls,cleanup(){globalThis.fetch=fetchBefore;for(const k of Object.keys(process.env))if(!(k in previous))delete process.env[k];Object.assign(process.env,previous);}};
+  return {actions,calls,background,async flush(){for(const callback of background.splice(0))await callback();},cleanup(){globalThis.fetch=fetchBefore;for(const k of Object.keys(process.env))if(!(k in previous))delete process.env[k];Object.assign(process.env,previous);}};
 }
 test('recovery sends one single-use secret only to the database-confirmed email',async()=>{
   const f=fixture();try {
     const result=await f.actions.requestPasswordRecovery({},form({email:' Person@Company.Example '}));
     assert.equal(result.status,'success');
+    assert(!f.calls.some(([n])=>n==='email'));
+    await f.flush();
     const issued=f.calls.find(([n])=>n==='issue_portal_password_recovery')[1];
     const [,init]=f.calls.find(([n])=>n==='email')[1]; const payload=JSON.parse(init.body);
     assert.equal(payload.recipient,'person@company.example');
@@ -74,8 +78,23 @@ test('unknown, limited and uncertain email delivery get the same response',async
   let expected;for(const opts of [{unknown:true},{limited:true},{mailUncertain:true}]){const f=fixture(opts);try{
     const result=await f.actions.requestPasswordRecovery({},form({email:'person@company.example'}));
     if(expected)assert.deepEqual(result,expected);expected=result;
+    await f.flush();
     if(!opts.mailUncertain)assert(!f.calls.some(([n])=>n==='email'));
   }finally{f.cleanup();}}
+});
+test('public response completes before even a slow email delivery starts',async()=>{
+  const f=fixture();try{
+    const result=await f.actions.requestPasswordRecovery({},form({email:'person@company.example'}));
+    assert.equal(result.status,'success');assert.equal(f.background.length,1);
+    assert(!f.calls.some(([n])=>n==='email'));
+    let release;
+    globalThis.fetch=()=>new Promise(resolve=>{release=()=>resolve(Response.json({ok:true,sent:true,requestId}));});
+    let completed=false;
+    const delivery=f.flush().then(()=>{completed=true;});
+    await new Promise(resolve=>setTimeout(resolve,30));
+    assert.equal(completed,false);assert.equal(result.message,recovery.PASSWORD_RECOVERY_MESSAGE);
+    release();await delivery;
+  }finally{f.cleanup();}
 });
 test('invalid email and unsafe delivery destinations cannot send or issue a token',async()=>{
   const f=fixture();try{

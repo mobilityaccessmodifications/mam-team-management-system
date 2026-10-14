@@ -44,8 +44,9 @@ begin
   select p.id as user_id,person.id as person_id,p.account_version into v_target
   from public.profiles p join public.internal_org_people person on person.auth_user_id=p.id
   join private.employee_directory_details d on d.person_id=person.id
-  where person.node_kind='person' and person.is_active and p.account_status='active' and p.login_name is not null
+  where person.node_kind='person' and person.is_active and p.account_status='active' and p.app_role<>'system_admin' and p.login_name is not null
     and p_email in (lower(btrim(d.work_email)),lower(btrim(d.personal_email)));
+  if not found then return; end if;
   perform pg_advisory_xact_lock(hashtextextended('portal_account:' || v_target.user_id::text,0));
   if exists(select 1 from private.portal_password_reset_claims c where c.auth_user_id=v_target.user_id and c.status='pending') then return; end if;
   insert into private.portal_password_recovery_requests as r
@@ -80,7 +81,7 @@ begin
   if not found then return; end if;
   perform p.id from public.profiles p join public.internal_org_people person on person.auth_user_id=p.id
     join private.employee_directory_details d on d.person_id=person.id
-    where p.id=v_request.auth_user_id and p.account_status='active' and p.login_name is not null
+    where p.id=v_request.auth_user_id and p.account_status='active' and p.app_role<>'system_admin' and p.login_name is not null
       and p.account_version=v_request.account_version and person.id=v_request.person_id
       and person.node_kind='person' and person.is_active
       and v_request.recipient in (lower(btrim(d.work_email)),lower(btrim(d.personal_email)))
@@ -125,7 +126,7 @@ begin
   end if;
   update public.profiles p set must_change_password=false,password_changed_at=clock_timestamp(),
     temporary_password_issued_at=null,credentials_valid_after=clock_timestamp(),account_version=p.account_version+1,updated_at=clock_timestamp()
-    where p.id=p_auth_user_id and p.account_status='active' and p.account_version=v_claim.claimed_account_version
+    where p.id=p_auth_user_id and p.account_status='active' and p.app_role<>'system_admin' and p.account_version=v_claim.claimed_account_version
       and exists(select 1 from public.internal_org_people person where person.id=v_claim.person_id
         and person.auth_user_id=p.id and person.is_active and person.node_kind='person')
     returning p.account_version into v_version;

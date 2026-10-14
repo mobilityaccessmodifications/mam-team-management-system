@@ -3,6 +3,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
 import { isPortalLoginEmail, normalisePortalLogin } from "@/lib/portal-login";
 import {
@@ -55,17 +56,19 @@ export async function requestPasswordRecovery(
       if (row) {
         if (row.recipient !== email || typeof row.request_id !== "string") return unavailable();
         const resetUrl = `${PEOPLE_HUB_ORIGIN}/login/reset-password#token=${token}`;
-        try {
-          const response = await fetch(config.url, {
-            method: "POST", headers: { "content-type": "application/json", "x-mam-password-recovery-secret": config.secret },
-            body: JSON.stringify({ version: 1, requestId: row.request_id, recipient: row.recipient, resetUrl }),
-            redirect: "error", cache: "no-store", signal: AbortSignal.timeout(20_000),
-          });
-          const ack = response.ok ? await response.json() : null;
-          if (ack?.ok !== true || ack.sent !== true || ack.requestId !== row.request_id) {
-            console.error("Password recovery delivery was not confirmed.");
-          }
-        } catch { console.error("Password recovery delivery could not be confirmed."); }
+        after(async () => {
+          try {
+            const response = await fetch(config.url, {
+              method: "POST", headers: { "content-type": "application/json", "x-mam-password-recovery-secret": config.secret },
+              body: JSON.stringify({ version: 1, requestId: row.request_id, recipient: row.recipient, resetUrl }),
+              redirect: "error", cache: "no-store", signal: AbortSignal.timeout(20_000),
+            });
+            const ack = response.ok ? await response.json() : null;
+            if (ack?.ok !== true || ack.sent !== true || ack.requestId !== row.request_id) {
+              console.error("Password recovery delivery was not confirmed.");
+            }
+          } catch { console.error("Password recovery delivery could not be confirmed."); }
+        });
       }
     }
   } catch {
