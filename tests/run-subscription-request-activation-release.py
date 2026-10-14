@@ -87,6 +87,10 @@ with tempfile.TemporaryDirectory(prefix='activation-helper-', dir=socket) as cop
         if version <= helper.PREDECESSOR_VERSION:
             sql(database, 'insert into supabase_migrations.schema_migrations values('+helper.literal(version)+','+helper.literal(name)+',ARRAY['+helper.literal(migration.read_text())+']) on conflict(version) do nothing;')
     sql(database, 'create schema review_fixture; create table review_fixture.scope(id integer primary key); alter table review_fixture.scope enable row level security; create policy closed on review_fixture.scope to anon using(false);')
+    sql(database, "insert into public.internal_org_people(id,full_name,position_title,company_key,node_kind) values('b6300000-0000-4000-8000-000000000001','Synthetic migration owner','Synthetic position','mam','person'); insert into private.subscription_register(subscription_code,service_name,next_review_on,responsible_person_id) values('MAM-SUB-999998','Synthetic existing subscription',current_date,'b6300000-0000-4000-8000-000000000001'); analyze private.subscription_register; insert into private.subscription_register(subscription_code,service_name,next_review_on,responsible_person_id) values('MAM-SUB-999999','Synthetic additional subscription',current_date,'b6300000-0000-4000-8000-000000000001');")
+    estimated_rows = float(sql(database, "select reltuples from pg_class where oid='private.subscription_register'::regclass;"))
+    actual_rows = int(sql(database, 'select count(*) from private.subscription_register;'))
+    assert estimated_rows < actual_rows
     calls = {'writes': 0}
     def query(value):
         if not value.startswith('begin read only;'):
@@ -100,11 +104,22 @@ with tempfile.TemporaryDirectory(prefix='activation-helper-', dir=socket) as cop
     before = helper.read_state(source, predecessor_source, helper.query)
     helper.validate_before(before, source)
     release = helper.transaction(source, before, predecessor_source)
+    original_guard = source.replace("array['relnatts','relchecks','reltuples']", "array['relnatts','relchecks']")
+    original_before = helper.read_state(original_guard, predecessor_source, helper.query)
+    try:
+        sql(database, helper.transaction(original_guard, original_before, predecessor_source))
+        raise AssertionError('Populated-table estimate did not reproduce the original guard failure')
+    except RuntimeError as failure:
+        assert '55000' in str(failure) and 'outside the reviewed delta' in str(failure)
+    assert helper.read_state(source, predecessor_source, helper.query) == before
+    assert float(sql(database, "select reltuples from pg_class where oid='private.subscription_register'::regclass;")) == estimated_rows
+    print('PASS: populated subscription index refresh reproduces the original estimate-only guard failure with complete rollback')
     boundary = '\nset constraints all immediate;\nselect pg_temp.subscription_activation_assert_delta();\ndo $subscription_activation_release_final$'
     assert release.count(boundary) == 1
     for index, (label, fault) in enumerate([
         ('new RPC service-role ACL', "grant execute on function public.sr_activate(uuid,bigint,integer,date,date,uuid,uuid[]) to service_role;"),
         ('provenance column grant', 'grant select(source_request_id) on private.subscription_register to anon;'),
+        ('subscription table RLS disabled', 'alter table private.subscription_register disable row level security;'),
         ('new provenance index storage', 'alter index private.subscription_source_request_unique set (fillfactor=70);'),
         ('new approval FK trigger disabled', "do $$ declare n name; begin select tgname into strict n from pg_trigger where tgrelid='private.subscription_register'::regclass and tgconstraint=(select oid from pg_constraint where conrelid='private.subscription_register'::regclass and conname='subscription_source_approval') and tgtype=5; execute format('alter table private.subscription_register disable trigger %I',n); end $$;"),
         ('unrelated column grant', 'grant select(id) on review_fixture.scope to anon;'),
@@ -196,6 +211,9 @@ with tempfile.TemporaryDirectory(prefix='activation-helper-', dir=socket) as cop
         assert writes == [release], 'Actual entrypoint dispatched a different query than the frozen builder'
         after = helper.read_state(source, predecessor_source, query)
         helper.validate_target(after, source)
+        assert int(sql(database, 'select count(*) from private.subscription_register;')) == actual_rows
+        assert float(sql(database, "select reltuples from pg_class where oid='private.subscription_register'::regclass;")) == actual_rows
+        print('PASS: populated subscription index refresh preserves rows, authorization, exact schema and migration custody')
         assert all(before[field] == after[field] for field in ('major','securityHash','dataHash','predecessorExact'))
         assert after['ledger'][:-1] == before['ledger']
         if evidence is not None:
