@@ -118,7 +118,7 @@ function runPowerBiContract() {
 }
 try {
   if (!powerBiOnly) {
-  const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql", "tests/unified-role-subscription-employee-delegation.sql", "tests/annual-continuous-accrual.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
+  const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql", "tests/unified-role-subscription-employee-delegation.sql", "tests/annual-continuous-accrual.sql", "tests/password-recovery.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (replay.status !== 0) throw new Error("Full migration replay failed");
   runReportingSpliceSql(socket, "mam_test_replay", sourceRoot);
   const finalizerUnit = spawnSync('python3', ['-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_archived_account_finalizer_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
