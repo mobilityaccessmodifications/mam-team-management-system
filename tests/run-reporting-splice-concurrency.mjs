@@ -6,7 +6,7 @@ import { command, postgresEnv, sql, target } from '../scripts/local-test-postgre
 
 const [socket, database] = process.argv.slice(2);
 const id = n => `a7100000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const fixture = readFileSync('tests/reporting-splice-fixture.sql', 'utf8').replace('\\ir sql-test-auth.sql', `\\ir ${process.cwd()}/tests/sql-test-auth.sql`);
+const fixture = readFileSync('tests/reporting-splice-fixture.sql', 'utf8').replace('\\ir sql-test-auth.sql', `\\ir '${`${process.cwd()}/tests/sql-test-auth.sql`.replaceAll("'", "''")}'`);
 sql(socket, database, `begin; ${fixture}
 update public.profiles set login_name='splice8@example.test' where id='${id(8)}';
 update public.internal_org_people set auth_user_id='${id(8)}',started_date=(clock_timestamp() at time zone 'Australia/Melbourne')::date-1 where id='${id(30)}';

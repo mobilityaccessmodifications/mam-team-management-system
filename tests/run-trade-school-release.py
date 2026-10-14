@@ -76,7 +76,7 @@ def run(socket, predecessor, prefix, head=None):
         after = state(positive)
         helper.verify_after(after, before, source, catalog)
         print('PASS: exact generated release transaction and independent native readback')
-        native(positive, (ROOT / 'tests/trade-school-leave.sql').read_text().replace('\\ir sql-test-auth.sql', '\\ir ' + str(ROOT / 'tests/sql-test-auth.sql')))
+        native(positive, (ROOT / 'tests/trade-school-leave.sql').read_text().replace('\\ir sql-test-auth.sql', "\\ir '" + str(ROOT / 'tests/sql-test-auth.sql').replace("'", "''") + "'"))
         print('PASS: full-schema trade-school submission, denial, lifecycle, balances and roles')
 
         for suffix, deferred in [('late', False), ('deferred', True)]:

@@ -40,8 +40,8 @@ export function parseAssetQrCode(value: string): string | null {
   }
 }
 
-/** Login can return only to these exact internal routes, never an arbitrary URL. */
 export function assetLoginReturnPath(value: unknown): string | null {
+  if (value === "/?view=people&tab=tasks") return value;
   if (value === "/assets/scan") return value;
   if (typeof value !== "string" || !value.startsWith("/assets/")) return null;
   const code = value.slice("/assets/".length);

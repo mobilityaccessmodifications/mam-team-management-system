@@ -42,7 +42,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       view: requestedView,
       section: section === "approvals" || section === "balance" ? section : "requests",
       requestId: firstValue(params.request),
-      peopleSection: peopleSection === "assets" || peopleSection === "accounts" || peopleSection === "subscriptions" ? peopleSection : undefined,
+      peopleSection: peopleSection === "assets" || peopleSection === "accounts" || peopleSection === "subscriptions" || peopleSection === "tasks" ? peopleSection : undefined,
     }}
   />;
 }

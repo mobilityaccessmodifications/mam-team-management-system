@@ -22,7 +22,8 @@ export async function proxy(request: NextRequest) {
   }
   const isLoginRoute = pathname.startsWith("/login");
   const isConfirmationRoute = pathname === "/auth/confirm";
-  const isCronRoute = pathname === "/api/cron/check-in-reminders"
+  const isCronRoute = pathname === "/api/cron/subscription-requests"
+    || pathname === "/api/cron/check-in-reminders"
     || pathname === "/api/cron/new-starter-day-one"
     || pathname === "/api/cron/leave-accrual"
     || pathname === "/api/cron/leave-notifications"
@@ -73,7 +74,8 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
-    const assetReturnPath = assetLoginReturnPath(pathname);
+    const assetReturnPath = assetLoginReturnPath(pathname)
+      ?? assetLoginReturnPath(pathname + request.nextUrl.search);
     if (assetReturnPath) url.searchParams.set("next", assetReturnPath);
     return NextResponse.redirect(url);
   }

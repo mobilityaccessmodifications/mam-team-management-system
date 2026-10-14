@@ -71,7 +71,7 @@ def run(socket, predecessor, prefix):
 
     try:
         positive = clone('ok')
-        seed = (ROOT/'tests/leave-required-note-legacy-setup.sql').read_text().replace('\\ir sql-test-auth.sql','\\ir '+str(ROOT/'tests/sql-test-auth.sql'))
+        seed = (ROOT/'tests/leave-required-note-legacy-setup.sql').read_text().replace('\\ir sql-test-auth.sql',"\\ir '" + str(ROOT / 'tests/sql-test-auth.sql').replace("'", "''") + "'")
         native(positive,seed)
         before = state(positive)
         helper.validate_before(before,source)
@@ -80,7 +80,7 @@ def run(socket, predecessor, prefix):
         helper.verify_after(state(positive),before,source,catalog)
         passed('RNR01 exact generated COMMIT and independent catalog/security/raw-ledger/receipt/data readback')
         for file in ['leave-required-note.sql','leave-required-note-legacy.sql']:
-            result = native(positive,(ROOT/'tests'/file).read_text().replace('\\ir sql-test-auth.sql','\\ir '+str(ROOT/'tests/sql-test-auth.sql')))
+            result = native(positive,(ROOT/'tests'/file).read_text().replace('\\ir sql-test-auth.sql',"\\ir '" + str(ROOT / 'tests/sql-test-auth.sql').replace("'", "''") + "'"))
             print(result,flush=True)
         passed('RNR02 new self selected manager idempotent native assistant and legacy lifecycle contracts')
 
