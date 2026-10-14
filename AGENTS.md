@@ -27,6 +27,15 @@ This is the internal team-management portal for Mobility Access Modifications (M
 - Full verification: `npm run check`
 - Discover Supabase CLI commands: `npx supabase@latest --help`
 
+## Local release review
+
+- Review changes locally and run the equivalent project release checks before
+  merging. GitHub Actions jobs that cannot start solely because of account
+  billing, payment or spending limits do not block release when local review
+  and the required checks pass. Record that CI did not run for that reason.
+- Actual test failures, account and target mismatches, production approval
+  requirements and the GitHub merge-to-production flow remain release gates.
+
 ## Account targets
 
 - GitHub owner/repository: `mobilityaccessmodifications/mam-team-management-system`.
