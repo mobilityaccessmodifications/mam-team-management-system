@@ -16,6 +16,12 @@ let checkInRows = combinedTasks ? [
     { id: '66000000-0000-4000-8000-000000000003', milestone: '6_month', sequence: 'initial', dueDate: '2500-01-01', status: 'scheduled', needsReviewReason: null },
   ] },
 ] : [];
+if (combinedTasks && new URLSearchParams(location.search).has('paged-tasks')) {
+  checkInRows.push(...Array.from({ length: 16 }, (_, index) => ({
+    person_id: reviewOwnerId, full_name: `Synthetic Paged Employee ${String(index + 1).padStart(2, '0')}`, position_title: 'Coordinator', company_key: 'mam',
+    reminders: [{ id: `66000000-0000-4000-8000-${String(index + 4).padStart(12, '0')}`, milestone: '1_month', sequence: 'initial', dueDate: '2001-01-01', status: 'delivered', needsReviewReason: null }],
+  })));
+}
 let reviewRows = [
   { subscription_id: '33000000-0000-4000-8000-000000000010', service_name: 'Synthetic due review', next_review_on: '2000-01-01', subscription_status: 'active', version: 4 },
   { subscription_id: '33000000-0000-4000-8000-000000000011', service_name: 'Synthetic future review', next_review_on: '2500-01-01', subscription_status: 'paused', version: 1 },
