@@ -6,7 +6,7 @@ import { loadModule } from './helpers/contact-lifetime-harness.mjs';
 
 const workflow = buildSubscriptionRequestTemplateMailWorkflow({ outlookCredential: { id: 'synthetic-ai-outlook', name: 'Synthetic AI Outlook' } });
 const run = (name, input, context = {}) => vm.runInNewContext('(function(){' + workflow.nodes.find(n => n.name === name).parameters.jsCode + '})()', {
-  $input: { first: () => ({ json: input }) }, $: name => ({ first: () => ({ json: context[name] }) }), $json: input, Intl, URL,
+  $input: { first: () => ({ json: input }) }, $: name => ({ first: () => ({ json: context[name] }) }), $json: input, Intl,
 })[0].json;
 const fixture = {
   version: 3, event: 'subscription-request-submitted', deliveryId: 'subscription-request:b1000000-0000-4000-8000-000000000001:2',
@@ -44,7 +44,7 @@ test('V3 receiver fails closed on private fields, contact injection, unsafe URLs
     { ...fixture, approverWorkEmail: 'penny@example.test,other@example.test' },
     ...[
       { formVersion: 2 }, { password: 'synthetic' }, { websiteUrl: 'javascript:alert(1)' }, { websiteUrl: 'https://synthetic:secret@example.test' },
-      { websiteUrl: 'https://example.test/\npath' }, { websiteUrl: 'https://example.test/' + 'a'.repeat(2048) },
+      { websiteUrl: 'https://example.test/\npath' }, { websiteUrl: 'https://example.test/<unsafe>' }, { websiteUrl: 'https://example.test/' + 'a'.repeat(2048) },
       { invoiceEmail: 'billing@example.test;other@example.test' }, { invoiceEmail: ' Billing@example.test' }, { invoiceContact: 'a'.repeat(161) },
       { category: null }, { category: 'unknown' }, { payment: 'non_card' }, { payment: 'card', cardLabel: null },
       { quoteCents: 3000 }, { oneOffCostCents: -1 }, { oneOffCostCents: 100000001 }, { oneOffCostCents: 1.2 },

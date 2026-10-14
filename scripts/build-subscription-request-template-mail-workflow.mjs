@@ -15,7 +15,7 @@ const text=v=>typeof v==='string'&&v.length<=4000;
 const email=/^[^\\s@,;]+@[^\\s@,;]+\\.[^\\s@,;]+$/;
 const address=v=>typeof v==='string'&&v.length<=254&&email.test(v)&&v===v.trim().toLowerCase();
 const cents=v=>v===null||(Number.isSafeInteger(v)&&v>=0&&v<=100000000);
-const website=v=>{if(v===null)return true;if(!text(v)||v.length>2048||/[\\s\\x00-\\x1f\\x7f]/.test(v))return false;try{const u=new URL(v);return ['http:','https:'].includes(u.protocol)&&Boolean(u.hostname)&&!u.username&&!u.password;}catch{return false;}};
+const website=v=>v===null||(text(v)&&v.length<=2048&&/^https?:[/][/][^\\s\\x00-\\x1f\\x7f/?#@]+([/?#][^\\s\\x00-\\x1f\\x7f]*)?$/i.test(v)&&!/[<>]/.test(v));
 const key=/^subscription-request:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]*$/;
 const fields=['service','plan','purpose','company','duration','billing','currency','quoteCents','audEstimateCents','noQuoteReason','intendedUsers','formVersion','monthlyCostCents','annualCostCents','comparisonUnavailableReason','payment','cardLabel','cardHolder','websiteUrl','category','usageFrequency','oneOffCostCents','invoiceEmail','invoiceContact'];
 const r=p?.request;
