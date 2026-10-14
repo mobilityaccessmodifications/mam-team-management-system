@@ -52,6 +52,17 @@ for (const file of files) {
     command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
     console.log(command('python3', [path.resolve('tests/run-subscription-review-managers-release.py'), socket, predecessor]));
   }
+  for (const [migration, runner, label] of [
+    ['20261014120000_subscription_request_simple_activation.sql', 'run-subscription-request-activation-release.py', 'sra'],
+    ['20261014130000_subscription_request_penny_mail.sql', 'run-subscription-request-penny-release.py', 'srp'],
+    ['20261014140000_subscription_departure_password_tasks.sql', 'run-subscription-password-release.py', 'spw'],
+  ]) {
+    if (file !== migration) continue;
+    const predecessor = `mam_test_${label}_${createHash('sha256').update(database).digest('hex').slice(0, 8)}_pred`;
+    command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
+    console.log(command('python3', [path.resolve('tests', runner), socket, predecessor]));
+    command('dropdb', ['-h', socket, '-p', '55439', '-U', 'postgres', predecessor]);
+  }
   if (file === '20261013180000_leave_required_employee_note.sql') {
     command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, `${database}_note_predecessor`]);
     console.log(command('python3', [path.resolve('tests/run-required-note-release.py'), socket, `${database}_note_predecessor`, `mam_test_note_${database.replace(/^mam_test_/, '')}`]));

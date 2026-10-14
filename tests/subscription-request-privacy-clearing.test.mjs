@@ -42,7 +42,7 @@ for(const name of actionNames) {
   for(const scenario of ['PT409','22023','55000','XX000','rpc-thrown','malformed']) check('action nonauthoritative RPC failure '+name+' '+scenario,async()=>{
     const h=actionHarness(scenario);const result=await h.actions[name](...actionArgs[name]);
     assert.equal(result.ok,false);assert.equal(result.denied,false);
-    assert.equal(result.uncertain,name==='mutateSubscriptionRequest'&&['XX000','rpc-thrown','malformed'].includes(scenario));
+    assert.equal(result.uncertain,['mutateSubscriptionRequest','activateSubscriptionRequest'].includes(name)&&['XX000','rpc-thrown','malformed'].includes(scenario));
     assert.equal(h.authCalls.length,1);assert.equal(h.calls.length,1);
     assert.doesNotMatch(JSON.stringify(result),/SYNTHETIC_PROVIDER|SYNTHETIC_PRIVATE/);
     if(scenario==='PT409')assert.equal(result.message,'Request changed. Reload before retrying.');
@@ -59,6 +59,14 @@ check('actual mutation preserves exact existing CAS and evidence argument body',
 check('actual mutation validates draft without discarding or dispatching provider RPC',async()=>{
   const h=actionHarness();const r=await h.actions.mutateSubscriptionRequest({id:requestId,version:3,operation:'save',payload:{...payload,unexpected:'synthetic'}});
   assert.deepEqual(r,{ok:false,message:'Check the request fields and decision reason.',uncertain:false,denied:false});assert.equal(h.calls.length,0);
+});
+check('activation preserves canonical CAS and rejects invalid dates before RPC',async()=>{
+  const h=actionHarness();const input=actionArgs.activateSubscriptionRequest[0];
+  const result=await h.actions.activateSubscriptionRequest(input);assert.equal(result.ok,true);
+  assert.deepEqual(h.calls,[{name:'sr_activate',args:{p_request_id:input.id,p_expected_request_version:3,p_seat_count:1,p_billing_anchor_date:'2026-10-14',p_renewal_date:'2027-10-14',p_responsible_person_id:input.responsiblePersonId,p_member_person_ids:input.memberPersonIds}}]);
+  for(const extra of [{billingAnchorDate:'2026-02-30'},{renewalDate:'2025-10-14'},{seatCount:0},{memberPersonIds:[input.responsiblePersonId,input.responsiblePersonId]}]){
+    const invalid=actionHarness();const result=await invalid.actions.activateSubscriptionRequest({...input,...extra});assert.equal(result.ok,false);assert.equal(result.uncertain,false);assert.equal(invalid.calls.length,0);
+  }
 });
 
 for(const action of ['LOAD','MUTATE','DOWNLOAD']) for(const scenario of denialScenarios) check('component clears every private cache and retires captured handlers '+action+' '+scenario,async()=>{
@@ -122,7 +130,7 @@ check('successful canonical own-history read retains readable metadata without r
   const resultModule=(await import('./helpers/contact-lifetime-harness.mjs')).loadModule('src/app/subscription-requests/actions.ts',{'next/server':{after:()=>{}},'@/lib/subscription-request-mail':{dispatchSubscriptionRequestMail:async()=>({ok:true})},'@/lib/supabase/server':{createClient:async()=>({auth:{getUser:async()=>({data:{user:{id:row.applicant}},error:null})},rpc:async()=>({data:expected,error:null})})}});
   const result=await resultModule.loadSubscriptionRequests();assert.equal(result.ok,true);
   const hooks=(await import('./helpers/contact-lifetime-harness.mjs')).hooksHarness((await import('react')).default);
-  const {SubscriptionRequests}=(await import('./helpers/contact-lifetime-harness.mjs')).loadModule('src/components/subscription-requests.tsx',{'react':hooks.react,'@/app/subscription-requests/actions':{...actions,loadSubscriptionRequests:async()=>result}});
+  const {SubscriptionRequests}=(await import('./helpers/contact-lifetime-harness.mjs')).loadModule('src/components/subscription-requests.tsx',{'react':hooks.react,'./subscription-request-activation':{SubscriptionRequestActivation:()=>null,SubscriptionRequestCredentials:()=>null},'@/app/subscription-requests/actions':{...actions,loadSubscriptionRequests:async()=>result}});
   let tree;const render=()=>{hooks.begin();tree=SubscriptionRequests({initial:workspace,selectedId:requestId});hooks.effects();};
   render();nodes(tree).find(n=>n.type==='button'&&text(n.props.children)==='Reload').props.onClick();for(let i=0;i<4;i++)await new Promise(r=>setImmediate(r));render();
   assert.match(text(tree),/SYNTHETIC_PRIVATE_HISTORY_PAYLOAD/);assert.match(text(tree),/Download SYNTHETIC_PRIVATE_HISTORY.pdf/);

@@ -21,3 +21,13 @@ test('request submission validates distinct original currency, estimate and paym
   assert.throws(()=>validateRequestPayload({...payload,quoteCents:-1},true),/amount/i);
   assert.deepEqual(validateRequestPayload({},false),{});
 });
+test('simplified request compares independent AUD prices and locks the chosen quote', () => {
+  const { validateRequestPayload } = load();
+  const simple={formVersion:2,kind:'new_purchase',service:'Synthetic Service',purpose:'Work',company:'equipsy',duration:'ongoing',billing:'annual',currency:'AUD',monthlyCostCents:1200,annualCostCents:10000,quoteCents:10000,audEstimateCents:10000,payment:'card',cardLabel:'Synthetic card',cardHolder:'Synthetic holder',intendedUsers:'Synthetic team'};
+  assert.deepEqual(validateRequestPayload(simple,true),simple);
+  assert.throws(()=>validateRequestPayload({...simple,quoteCents:14400},true),/billing cost/i);
+  assert.throws(()=>validateRequestPayload({...simple,monthlyCostCents:null},true),/alternative/i);
+  assert.doesNotThrow(()=>validateRequestPayload({...simple,monthlyCostCents:null,comparisonUnavailableReason:'Annual only'},true));
+  assert.throws(()=>validateRequestPayload({...simple,annualCostCents:null},true),/selected/i);
+  for(const extra of [{requestedBy:'Other person'},{password:'forbidden'},{currency:'USD'},{duration:'Forever'},{kind:'renewal'},{service:'x'.repeat(161)}])assert.throws(()=>validateRequestPayload({...simple,...extra},true));
+});

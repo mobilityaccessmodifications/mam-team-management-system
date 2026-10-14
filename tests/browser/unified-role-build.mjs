@@ -42,6 +42,12 @@ export async function buildUnifiedRoleFixture(sourceRoot, scratch) {
   });
   results.reviewCompleted = await reviewActions().completeMySubscriptionReviewTask({ subscriptionId: reviewRow.subscription_id, version: 4 });
   results.reviewStale = await reviewActions({ code: '40001', message: 'synthetic private detail' }).completeMySubscriptionReviewTask({ subscriptionId: reviewRow.subscription_id, version: 4 });
+  results.passwordCompleted = await loadModule(path.join(sourceRoot, 'src/app/subscriptions/password-task-actions.ts'), {
+    '@/lib/supabase/server': { createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: syntheticRolePeople[3].id } }, error: null }) }, rpc: async () => ({ data: {task_id:'34000000-0000-4000-8000-000000000001',version:2,completed:true}, error:null }) }) },
+    'next/cache': { revalidatePath() {} },
+    '@/lib/subscription-password-tasks': loadModule(path.join(sourceRoot, 'src/lib/subscription-password-tasks.ts')),
+  }).completeMySubscriptionPasswordTask({taskId:'34000000-0000-4000-8000-000000000001',version:1,passwordChanged:true});
+  if (!results.passwordCompleted.ok || results.passwordCompleted.warning) throw new Error('Actual password completion action rejected the safe browser fixture');
   await build({
     entryPoints: [path.join(sourceRoot, 'tests/browser/unified-role-fixture.jsx')], bundle: true, outdir: scratch,
     platform: 'browser', jsx: 'automatic', sourcemap: false, minify: false,

@@ -28,9 +28,10 @@ test('worker confirms only exact To/CC receipts and retains failures for retry w
  const oldFetch=globalThis.fetch;const oldOrigin=process.env.MAM_N8N_LEAVE_WEBHOOK_ORIGIN;const oldSecret=process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET;
  process.env.MAM_N8N_LEAVE_WEBHOOK_ORIGIN='https://n8n.example.test';process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET='synthetic-secret-for-notification-test';
  try {
-  for(const mismatch of [false,true]){
-   const calls=[];const admin={rpc:async(name,args)=>{calls.push({name,args});return name==='claim_subscription_request_mail'?{data:[{request_id:'b1000000-0000-4000-8000-000000000001',version:2,claim_token:'synthetic-token',payload:fixture}],error:null}:{data:true,error:null};}};
-   globalThis.fetch=async(url,options)=>{assert.equal(url.href,'https://n8n.example.test/webhook/mam-subscription-request-mail-v1');assert.deepEqual(JSON.parse(options.body),fixture);return {ok:true,json:async()=>({ok:true,sent:true,deliveryId:fixture.deliveryId,actualRecipient:'marketing@mobilityaccess.com.au',actualCcRecipients:mismatch?'other@example.test':'applicant@example.test'})};};
+  for(const mismatch of ['', 'to', 'cc']){
+   const routed={...fixture,version:2,approverWorkEmail:'penny@example.test'};
+   const calls=[];const admin={rpc:async(name,args)=>{calls.push({name,args});return name==='claim_subscription_request_mail'?{data:[{request_id:'b1000000-0000-4000-8000-000000000001',version:2,claim_token:'synthetic-token',payload:routed}],error:null}:{data:true,error:null};}};
+   globalThis.fetch=async(url,options)=>{assert.equal(url.href,'https://n8n.example.test/webhook/mam-subscription-request-mail-v2');assert.deepEqual(JSON.parse(options.body),routed);return {ok:true,json:async()=>({ok:true,sent:true,deliveryId:fixture.deliveryId,actualRecipient:mismatch==='to'?'marketing@example.test':'penny@example.test',actualCcRecipients:mismatch==='cc'?'other@example.test':'applicant@example.test'})};};
    const worker=loadModule('src/lib/subscription-request-mail.ts',{'@/lib/supabase/admin':{createAdminClient:()=>admin}});
    const result=await worker.dispatchSubscriptionRequestMail();assert.equal(result.sent,mismatch?0:1);assert.equal(calls.filter(c=>c.name==='finish_subscription_request_mail').length,mismatch?0:1);
   }

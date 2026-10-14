@@ -26,6 +26,9 @@ let reviewRows = [
   { subscription_id: '33000000-0000-4000-8000-000000000010', service_name: 'Synthetic due review', next_review_on: '2000-01-01', subscription_status: 'active', version: 4 },
   { subscription_id: '33000000-0000-4000-8000-000000000011', service_name: 'Synthetic future review', next_review_on: '2500-01-01', subscription_status: 'paused', version: 1 },
 ];
+let passwordRows = new URLSearchParams(location.search).has('subscription-passwords') ? [
+  {task_id:'34000000-0000-4000-8000-000000000001',subscription_id:'33000000-0000-4000-8000-000000000010',service_name:'Synthetic password service',due_on:'2000-01-01',version:1},
+] : [];
 let scheduleRequest = {
   id: '88000000-0000-4000-8000-000000000001',
   originalWorkingWeekdays: [1, 3, 5], originalWorkingDayTimes: [{ weekday: 1, startTime: '09:00', endTime: '17:00' }],
@@ -197,6 +200,12 @@ const handlers = {
     if (result.ok && result.task) reviewRows = reviewRows.map(row => row.subscription_id === input.subscriptionId ? { ...row, next_review_on: result.task.nextReviewOn, version: result.task.version } : row);
     return result;
   } },
+  '@/app/subscriptions/password-task-actions': { completeMySubscriptionPasswordTask: input => {
+    const task = passwordRows.find(row => row.task_id === input.taskId);
+    if (!ordinaryReviewEmployee || !task || task.version !== input.version || input.passwordChanged !== true) return {ok:false,error:'Password task changed.'};
+    passwordRows = passwordRows.filter(row => row.task_id !== input.taskId);
+    return UNIFIED_ROLE_FIXTURE_RESULTS.passwordCompleted;
+  } },
   '@/app/check-in-tasks/actions': { completeMyEmployeeCheckInTask: reminderId => {
     checkInRows = checkInRows.map(row => ({ ...row, reminders: row.reminders.filter(reminder => reminder.id !== reminderId) }));
   } },
@@ -255,6 +264,8 @@ const client = {
     if (name === 'list_my_employee_check_in_tasks' || name === 'list_employee_check_in_tasks_for_preview') return { data: checkInRows, error: null };
     if (name === 'list_my_subscription_review_tasks') return subscriptionReviewsFail ? { data: null, error: { code: 'XX000', message: 'synthetic private provider detail' } } : { data: ordinaryReviewEmployee ? reviewRows : [], error: null };
     if (name === 'list_subscription_review_tasks_for_preview') return { data: args.p_person_id === reviewOwnerId && grantsById[reviewOwnerId]?.can_manage_subscriptions ? reviewRows : [], error: null };
+    if (name === 'list_my_subscription_password_tasks') return {data:ordinaryReviewEmployee ? passwordRows : [],error:null};
+    if (name === 'list_subscription_password_tasks_for_preview') return {data:args.p_person_id === reviewOwnerId && grantsById[reviewOwnerId]?.can_manage_subscriptions ? passwordRows : [],error:null};
     if (name === 'can_edit_internal_org' || name === 'can_manage_employee_directory') return { data: true, error: null };
     unexpected.push({ module: 'supabase', name });
     throw new Error(`Unexpected synthetic RPC ${name}`);

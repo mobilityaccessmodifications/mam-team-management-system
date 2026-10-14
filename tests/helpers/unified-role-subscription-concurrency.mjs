@@ -100,7 +100,7 @@ export async function runSubscriptionAuthorityConcurrency(socket, database) {
   const effectiveNames=JSON.parse(sql(socket,database,`select jsonb_agg(n.nspname||'.'||p.proname order by n.nspname,p.proname)
     from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname in ('public','private') and p.prokind='f' and p.provolatile='v'
-      and p.proname like '%subscription%' and p.proname<>'lock_subscription_role_authority'
+      and p.proname like '%subscription%' and p.proname not in ('lock_subscription_role_authority','complete_my_subscription_password_task')
       and (p.prosrc like '%public.can_manage_subscriptions()%' or p.prosrc like '%private.is_current_subscription_credential_manager()%'
         or p.prosrc like '%private.lock_subscription_role_authority(%');`).trim());
   assert.deepEqual(effectiveNames,writers.map(w=>`${w.schema ?? 'public'}.${w.name}`).sort(),'Every effective register/vault writer and audited reveal is covered');

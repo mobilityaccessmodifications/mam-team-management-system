@@ -5,7 +5,7 @@ import { dispatchSubscriptionRequestMail } from "@/lib/subscription-request-mail
 
 import { isAuthApiError, isAuthSessionMissingError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { UUID, validateRequestPayload, type RequestEvidence, type RequestOperation, type RequestResult, type RequestWorkspace, type SubscriptionRequest } from "@/lib/subscription-request-types";
+import { UUID, validateRequestPayload, type RequestActivation, type RequestEvidence, type RequestOperation, type RequestResult, type RequestWorkspace, type SubscriptionRequest } from "@/lib/subscription-request-types";
 
 const generic = "The request could not be confirmed. Reload before retrying.";
 function failure(error: unknown, uncertain = false): RequestResult<never> {
@@ -26,7 +26,10 @@ function validRequest(value: unknown): value is SubscriptionRequest {
   return typeof r.id === "string" && UUID.test(r.id) && Number.isSafeInteger(r.version) && r.version>0
     && ["draft","submitted","returned","approved","rejected","withdrawn"].includes(r.status)
     && Array.isArray(r.events) && Array.isArray(r.evidence) && typeof r.payload === "object" && r.payload !== null
-    && [r.canEdit,r.canDecide,r.canWithdraw].every(v=>typeof v === "boolean");
+    && [r.canEdit,r.canDecide,r.canWithdraw].every(v=>typeof v === "boolean")
+    && (r.applicantName === undefined || typeof r.applicantName === "string")
+    && (r.linkedSubscriptionId === undefined || r.linkedSubscriptionId === null || (typeof r.linkedSubscriptionId === "string" && UUID.test(r.linkedSubscriptionId)))
+    && (r.canActivate === undefined || typeof r.canActivate === "boolean");
 }
 export async function loadSubscriptionRequests(): Promise<RequestResult<RequestWorkspace>> {
   try {
@@ -34,9 +37,25 @@ export async function loadSubscriptionRequests(): Promise<RequestResult<RequestW
     const { data, error } = await supabase.rpc("sr_workspace");
     if (error) return failure(error);
     if (!data || typeof data.enabled !== "boolean" || typeof data.canApply !== "boolean" || !Array.isArray(data.requests) || !data.requests.every(validRequest) || !Array.isArray(data.people)
-      || !data.people.every((p: {id?:unknown;name?:unknown}) => typeof p.id === "string" && UUID.test(p.id) && typeof p.name === "string")) return failure(null);
+      || !data.people.every((p: {id?:unknown;name?:unknown}) => typeof p.id === "string" && UUID.test(p.id) && typeof p.name === "string")
+      || (data.viewerName !== undefined && typeof data.viewerName !== "string")
+      || (data.viewerPersonId !== undefined && data.viewerPersonId !== null && (typeof data.viewerPersonId !== "string" || !UUID.test(data.viewerPersonId)))
+      || (data.canManageCredentials !== undefined && typeof data.canManageCredentials !== "boolean")) return failure(null);
     return { ok:true, data:data as RequestWorkspace };
   } catch (error) { return failure(error); }
+}
+export async function activateSubscriptionRequest(input: RequestActivation): Promise<RequestResult<SubscriptionRequest>> {
+  let dispatched = false;
+  try {
+    const supabase = await client();
+    const validDate = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
+    if (!input || !UUID.test(input.id) || !Number.isSafeInteger(input.version) || input.version < 1 || !Number.isSafeInteger(input.seatCount) || input.seatCount < 1 || input.seatCount > 100000 || !validDate(input.billingAnchorDate) || !validDate(input.renewalDate) || input.renewalDate < input.billingAnchorDate || !UUID.test(input.responsiblePersonId) || !Array.isArray(input.memberPersonIds) || input.memberPersonIds.length > 1000 || input.memberPersonIds.some(id => typeof id !== "string" || !UUID.test(id)) || new Set(input.memberPersonIds).size !== input.memberPersonIds.length) return failure({code:"22023"});
+    dispatched = true;
+    const { data, error } = await supabase.rpc("sr_activate", { p_request_id:input.id, p_expected_request_version:input.version, p_seat_count:input.seatCount, p_billing_anchor_date:input.billingAnchorDate, p_renewal_date:input.renewalDate, p_responsible_person_id:input.responsiblePersonId, p_member_person_ids:input.memberPersonIds });
+    if (error) return failure(error,true);
+    if (!validRequest(data) || !data.linkedSubscriptionId || data.canActivate !== false) return failure(null,true);
+    return {ok:true,data,committed:true};
+  } catch(error) { return failure(error,dispatched); }
 }
 export async function mutateSubscriptionRequest(input: { id: string; version: number; operation: RequestOperation; payload?: unknown; reason?: string; evidence?: RequestEvidence[] }): Promise<RequestResult<SubscriptionRequest>> {
   let dispatched = false;

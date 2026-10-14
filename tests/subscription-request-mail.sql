@@ -15,7 +15,8 @@ do $$ declare row record; saved uuid; begin
  assert row.request_id='b1000000-0000-4000-8000-000000000007'::uuid and row.version=1;
  assert row.payload->>'applicantWorkEmail'='applicant@example.test';
  assert row.payload->'request'->>'service'='Synthetic Mail Service';
- assert not (row.payload->'request' ? 'cardHolder') and not (row.payload->'request' ? 'evidence');
+ assert row.payload->>'version'='2' and row.payload->>'approverWorkEmail'='applicant@example.test';
+ assert row.payload->'request'->'cardHolder'='null'::jsonb and not (row.payload->'request' ? 'evidence');
  saved:=row.claim_token;
  assert (select count(*)=0 from public.claim_subscription_request_mail()),'Concurrent claim duplicated';
  assert not public.finish_subscription_request_mail(row.request_id,row.version,'b1000000-0000-4000-8000-000000000009',true),'Wrong token accepted';

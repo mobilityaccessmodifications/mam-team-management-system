@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test';
 import {readFileSync} from 'node:fs';
 async function completeRequest(page) {
   await page.getByRole('button',{name:'New request',exact:true}).click();
-  for(const [label,value] of [['Service','Synthetic evidence request'],['Purpose','Project work'],['Payer','MAM'],['Usage duration','12 months'],['Tax basis','Inclusive'],['Original quote (cents)','12000'],['AUD estimate (cents)','18000'],['Intended users','Synthetic project team']]) await page.getByLabel(label,{exact:true}).fill(value);
+  await page.getByLabel('Payment method',{exact:true}).selectOption('non_card');
+  for(const [label,value] of [['Service','Synthetic evidence request'],['Purpose','Project work'],['Monthly cost (AUD)','12.34'],['Annual cost (AUD)','100.00'],['Intended users','Synthetic project team']]) await page.getByLabel(label,{exact:true}).fill(value);
 }
 test('Requests form submit and returned resubmit use the real component',async({page})=>{
   await page.goto('/');
@@ -12,7 +13,7 @@ test('Requests form submit and returned resubmit use the real component',async({
   await expect(page.getByText('Saved.',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Submit',exact:true}).click();
   await expect(page.getByRole('alert')).toContainText('required');
-  for(const [label,value] of [['Purpose','Project work'],['Payer','MAM'],['Usage duration','12 months'],['Tax basis','Inclusive'],['Original quote (cents)','12000'],['AUD estimate (cents)','18000'],['Intended users','Synthetic project team']]) await page.getByLabel(label,{exact:true}).fill(value);
+  for(const [label,value] of [['Purpose','Project work'],['Monthly cost (AUD)','12.34'],['Annual cost (AUD)','100.00'],['Intended users','Synthetic project team']]) await page.getByLabel(label,{exact:true}).fill(value);
   await page.getByLabel('Payment method',{exact:true}).selectOption('non_card');
   await page.getByRole('button',{name:'Submit',exact:true}).click();
   await expect(page.getByText('submitted',{exact:true}).first()).toBeVisible();
@@ -21,8 +22,8 @@ test('Requests form submit and returned resubmit use the real component',async({
   await expect(page.getByRole('button',{name:'Resubmit',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Resubmit',exact:true}).click();
   await page.getByRole('button',{name:'Approve',exact:true}).click();
-  await expect(page.getByText('Approved — pending procurement',{exact:true})).toBeVisible();
-  await expect(page.getByRole('button',{name:'Activate',exact:true})).toHaveCount(0);
+  await expect(page.getByText('Approved — ready to register',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Add subscription',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Withdraw',exact:true}).click();
   await expect(page.getByText('withdrawn',{exact:true}).first()).toBeVisible();
 });
@@ -90,4 +91,27 @@ test('reload preserves a genuinely unsaved new draft',async({page})=>{
   await page.getByRole('button',{name:'Save draft',exact:true}).click();
   await expect(page.getByText('Saved.',{exact:true})).toBeVisible();
   expect(await page.evaluate(()=>window.srCalls.length)).toBe(1);
+});
+
+test('approved request registers its immutable price and access without reading credentials',async({page})=>{
+  await page.goto('/');await completeRequest(page);
+  await expect(page.getByLabel('Requested by',{exact:true})).toBeDisabled();
+  await expect(page.getByLabel('Payer',{exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Submit',exact:true}).click();
+  await page.getByRole('button',{name:'Approve',exact:true}).click();
+  const region=page.getByRole('region',{name:'Register approved subscription',exact:true});
+  await region.getByLabel('Seats',{exact:true}).fill('2');
+  await region.getByLabel('Billing start date',{exact:true}).fill('2026-10-14');
+  await region.getByLabel('Renewal date',{exact:true}).fill('2027-10-14');
+  const owner=region.getByRole('combobox',{name:'Responsible person',exact:true});
+  const personId=await owner.locator('option').nth(1).getAttribute('value');await owner.selectOption(personId);
+  await region.locator('input[type=checkbox]').first().check();
+  await region.getByRole('button',{name:'Add subscription',exact:true}).click();
+  await expect(page.getByText('Approved — subscription added',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Withdraw',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Add subscription',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Credentials',exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>window.vaultCalls??[])).toEqual([]);
+  const reload=await page.request.post('/action',{data:{name:'loadSubscriptionRequests',args:[]}});const data=(await reload.json()).data;
+  const row=data.requests.find(r=>r.linkedSubscriptionId&&r.payload.service==='Synthetic evidence request');expect(row.payload.monthlyCostCents).toBe(1234);expect(row.payload.annualCostCents).toBe(10000);expect(row.payload.quoteCents).toBe(10000);expect(row.canActivate).toBe(false);
 });

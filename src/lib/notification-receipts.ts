@@ -18,7 +18,7 @@ const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 const headers = { "Cache-Control": "private, no-store, max-age=0", "X-Content-Type-Options": "nosniff" };
 
-type RpcName = "reserve_notification_delivery" | "reserve_subscription_review_mail" | "confirm_notification_delivery" | "notification_delivery_store_status";
+type RpcName = "reserve_notification_delivery" | "reserve_subscription_request_mail" | "reserve_subscription_review_mail" | "confirm_notification_delivery" | "notification_delivery_store_status";
 export type ReceiptRpc = (name: RpcName, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
 type ProviderReceipt = { accepted: true; messageId: string | null; requestId: string | null; statusCode: number | null };
 type DeliveryInput = { eventKey: string; recipient: string; cc: string } & (
@@ -155,7 +155,8 @@ export async function handleNotificationReceipts(request: Request, secret: strin
   const input = parseInput(body.data);
   if (!input) return error("invalid_request", 400);
   try {
-    const reserveRpc = SUBSCRIPTION_REVIEW.test(input.eventKey) ? "reserve_subscription_review_mail" : "reserve_notification_delivery";
+    const reserveRpc = SUBSCRIPTION_REQUEST.test(input.eventKey) ? "reserve_subscription_request_mail"
+      : SUBSCRIPTION_REVIEW.test(input.eventKey) ? "reserve_subscription_review_mail" : "reserve_notification_delivery";
     const { data, error: failure } = await rpc(input.action === "reserve" ? reserveRpc : "confirm_notification_delivery", {
       p_event_key: input.eventKey, p_recipient: input.recipient, p_cc: input.cc,
       ...(input.action === "reserve" ? { p_legacy_event_key: input.legacyEventKey }
