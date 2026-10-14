@@ -15,7 +15,7 @@ try {
   const replay=spawnSync(process.execPath,['scripts/test-migration-replay.mjs',socket,database],{encoding:'utf8',timeout:1800000});
   assert.equal(replay.status,0,replay.stderr);
   const fixture=readFileSync('tests/unified-role-fixture.sql','utf8').replace('\\ir sql-test-auth.sql',()=>readFileSync('tests/sql-test-auth.sql','utf8'));
-  sql(socket,database,fixture+"\nupdate private.subscription_request_config set enabled=true,approver_user_id='a1000000-0000-4000-8000-000000000004',approver_person_id='a1000000-0000-4000-8000-000000000004';");
+  sql(socket,database,fixture+"\nupdate public.internal_org_people set node_kind='person' where id::text like 'a1000000%';\nupdate private.subscription_request_config set enabled=true,approver_user_id='a1000000-0000-4000-8000-000000000004',approver_person_id='a1000000-0000-4000-8000-000000000004';");
   const actions=loadModule('src/app/subscription-requests/actions.ts',{'next/server':{after:()=>{}},'@/lib/subscription-request-mail':{dispatchSubscriptionRequestMail:async()=>({ok:true})},'@/lib/supabase/server':{createClient:async()=>({auth:{getUser:async()=>({data:{user:{id:'a1000000-0000-4000-8000-000000000004'}},error:null})},rpc:async(name,args={})=>{
     assert.ok(['sr_workspace','sr_mutate','sr_download','sr_activate'].includes(name));
     const literal=value=>value==null?'null':typeof value==='number'?String(value):"'"+(typeof value==='object'?JSON.stringify(value):value).replaceAll("'","''")+"'";

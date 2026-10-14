@@ -116,7 +116,7 @@ export function SubscriptionRequests({ initial, selectedId }: { initial: Request
     {message?<p role={isError?"alert":"status"}>{message}</p>:null}
     <div className={styles.columns}>
       <nav aria-label="Request list">{workspace.requests.map(r=><button type="button" key={r.id} disabled={blocked} aria-pressed={selected?.id===r.id} onClick={()=>choose(r)}>{r.payload.service||"Untitled request"} — {r.status}</button>)}</nav>
-      {selected||newId?<div><h2>{selected?.status==="approved"?(selected.linkedSubscriptionId?"Approved — subscription added":"Approved — ready to register"):selected?.status??"draft"}</h2>
+      {selected||newId?<div><h2>{selected?.status==="approved"?(selected.linkedSubscriptionId?"Approved — subscription added":payload.formVersion===2?"Approved — ready to register":"Approved — pending procurement"):selected?.status??"draft"}</h2>
         <form onSubmit={event=>{event.preventDefault();void run("submit");}}>
           <div className={styles.fields}>
             {payload.formVersion===2?<>
