@@ -175,15 +175,16 @@ function mapCredentialRow(subscriptionId: string, value: unknown): SubscriptionC
   return { ...draft, credentialVersion };
 }
 
-async function requireVaultManager() {
+async function requireVaultManager(fallback = "Credentials could not be loaded. Refresh and try again.") {
   const supabase = await createClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) throw new Error("Your session has expired. Sign in again.");
 
   const { data: allowed, error: permissionError } = await supabase.rpc("can_manage_subscription_credentials");
-  if (permissionError || allowed !== true) {
+  if (permissionError?.code === "42501" || (!permissionError && allowed === false)) {
     throw new Error("You do not have permission to manage subscription credentials.");
   }
+  if (permissionError || allowed !== true) throw new Error(fallback);
   return supabase;
 }
 
@@ -193,9 +194,10 @@ async function requireVaultGrantAdministrator() {
   if (userError || !userData.user) throw new Error("Your session has expired. Sign in again.");
 
   const { data: allowed, error: permissionError } = await supabase.rpc("can_manage_subscription_credential_grants");
-  if (permissionError || allowed !== true) {
+  if (permissionError?.code === "42501" || (!permissionError && allowed === false)) {
     throw new Error("You do not have permission to manage credential access.");
   }
+  if (permissionError || allowed !== true) throw new Error("Credential access could not be loaded. Refresh and try again.");
   return supabase;
 }
 
@@ -226,7 +228,7 @@ export async function listSubscriptionCredentialCatalogue(): Promise<Subscriptio
 
 /** Returns plaintext only after a fresh server-side permission check and explicit user action. */
 export async function readSubscriptionCredential(subscriptionId: string): Promise<SubscriptionCredentialRecord | null> {
-  const supabase = await requireVaultManager();
+  const supabase = await requireVaultManager("The credential could not be opened. Refresh and try again.");
   if (!isSubscriptionCredentialVaultConfigured()) {
     throw new Error("The credential vault is not configured yet. Ask a System Admin to finish setup.");
   }
@@ -250,7 +252,7 @@ export async function saveSubscriptionCredential(input: {
   credentialVersion: number;
   credential: SubscriptionCredentialDraft;
 }): Promise<{ credentialVersion: number }> {
-  const supabase = await requireVaultManager();
+  const supabase = await requireVaultManager("The credential could not be saved. Refresh and try again.");
   const id = requiredUuid(input?.subscriptionId, "The subscription record is invalid.");
   const credentialVersion = positiveVersion(input?.credentialVersion, true);
   const draft = validateCredentialDraft(input?.credential);
@@ -285,7 +287,7 @@ export async function removeSubscriptionCredential(input: {
   subscriptionId: string;
   credentialVersion: number;
 }): Promise<void> {
-  const supabase = await requireVaultManager();
+  const supabase = await requireVaultManager("The credential could not be removed. Refresh and try again.");
   const id = requiredUuid(input?.subscriptionId, "The subscription record is invalid.");
   const credentialVersion = positiveVersion(input?.credentialVersion);
   const { error } = await supabase.rpc("remove_subscription_credential", {

@@ -48,7 +48,7 @@ type PasswordResetClaimRpcRow = AccountRpcRow & {
 const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,128}$/;
 const GENERIC_ERROR = "The account change could not be saved. Refresh and try again.";
 
-async function requireAccountAdministrator() {
+async function requireAccountAdministrator(fallback = GENERIC_ERROR) {
   const supabase = await createClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
 
@@ -57,7 +57,8 @@ async function requireAccountAdministrator() {
   const { data: allowed, error: permissionError } = await supabase
     .rpc("can_manage_portal_accounts");
 
-  if (permissionError || allowed !== true) throw new Error("You do not have permission to manage accounts.");
+  if (permissionError?.code === "42501" || (!permissionError && allowed === false)) throw new Error("You do not have permission to manage accounts.");
+  if (permissionError || allowed !== true) throw new Error(fallback);
 
   return { supabase, actorUserId: userData.user.id };
 }
@@ -186,7 +187,7 @@ async function inspectCreatedAccount(
 }
 
 export async function listPortalAccounts(): Promise<AccountDto[]> {
-  const { supabase } = await requireAccountAdministrator();
+  const { supabase } = await requireAccountAdministrator("Accounts could not be loaded.");
   const admin = createAdminClient();
   const [{ data: people, error: peopleError }, { data: profiles, error: profilesError }] = await Promise.all([
     admin

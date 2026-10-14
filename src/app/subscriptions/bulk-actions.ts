@@ -9,7 +9,8 @@ export async function patchSubscription(input: { id: string; version: number; pa
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) throw new Error("Your session has expired. Sign in again.");
   const { data: allowed, error: permissionError } = await supabase.rpc("can_manage_subscriptions");
-  if (permissionError || allowed !== true) throw new Error("You do not have permission to manage subscriptions.");
+  if (permissionError?.code === "42501" || (!permissionError && allowed === false)) throw new Error("You do not have permission to manage subscriptions.");
+  if (permissionError || allowed !== true) throw new Error("This subscription could not be updated. Refresh and try again.");
   if (!input || typeof input.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.id)
     || !Number.isSafeInteger(input.version) || input.version < 1) throw new Error("The subscription record is invalid.");
   const patch = subscriptionPatchValues(input.patch);

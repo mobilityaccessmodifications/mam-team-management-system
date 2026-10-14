@@ -121,7 +121,7 @@ type TaskItem = {
 
 const tasksPerPage = 8;
 
-export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction, scheduleContent, showCheckInTasks = true, showSubscriptionReviewTasks = true, workScheduleWorkspace, onScheduleReview, onScheduleRefresh }: {
+export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction, scheduleContent, showCheckInTasks = false, showSubscriptionReviewTasks = true, workScheduleWorkspace, onScheduleReview, onScheduleRefresh }: {
   previewPersonId?: string;
   readOnly?: boolean;
   toolbarAction?: ReactNode;
@@ -184,16 +184,16 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
   }, [load]);
 
   const tasks = useMemo<TaskItem[]>(() => {
-    const result: TaskItem[] = checkIns.map((task) => ({
+    const result: TaskItem[] = (showCheckInTasks ? checkIns : []).map((task) => ({
       key: `check_in:${task.reminderId}`, target: { kind: "check_in", taskId: task.reminderId },
       name: task.employeeName, title: milestoneLabel(task.milestone), context: `${task.positionTitle || "Role not recorded"} · ${task.company === "mam" ? "MAM" : "Equipsy"}`,
       date: task.dueDate, status: task.status, checkIn: task,
     }));
-    result.push(...subscriptions.tasks.map((task) => ({
+    result.push(...(showSubscriptionReviewTasks ? subscriptions.tasks : []).map((task) => ({
       key: `subscription_review:${task.subscriptionId}:${task.nextReviewOn}`, target: { kind: "subscription_review" as const, taskId: task.subscriptionId, reviewOn: task.nextReviewOn },
       name: task.serviceName, title: "Quarterly subscription review", context: "Subscription review", date: task.nextReviewOn, status: task.status, subscription: task,
     })));
-    result.push(...passwords.tasks.map((task) => ({
+    result.push(...(showSubscriptionReviewTasks ? passwords.tasks : []).map((task) => ({
       key: `subscription_password:${task.taskId}`, target: { kind: "subscription_password" as const, taskId: task.taskId },
       name: task.serviceName, title: "Change subscription account password", context: "Subscription password", date: task.dueOn, status: "ready", password: task,
     })));
@@ -206,14 +206,17 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
       if (item.status === "submitted") result.push({ key: `work_schedule:${item.id}`, target: { kind: "work_schedule", taskId: item.id }, name, title: "Work schedule change", context: "Schedule request", date: item.submittedAt, status: "submitted", schedule: item, canReview });
     }
     return result;
-  }, [checkIns, subscriptions.tasks, passwords.tasks, workScheduleWorkspace]);
+  }, [checkIns, showCheckInTasks, showSubscriptionReviewTasks, subscriptions.tasks, passwords.tasks, workScheduleWorkspace]);
+  const activeTypeFilter = (typeFilter === "check_in" && !showCheckInTasks)
+    || ((typeFilter === "subscription_review" || typeFilter === "subscription_password") && !showSubscriptionReviewTasks)
+    ? "all" : typeFilter;
   const visibleTasks = useMemo(() => {
     const search = query.trim().toLocaleLowerCase();
-    return tasks.filter((task) => (typeFilter === "all" || task.target.kind === typeFilter)
+    return tasks.filter((task) => (activeTypeFilter === "all" || task.target.kind === activeTypeFilter)
       && (statusFilter === "all" || (task.status === statusFilter || (statusFilter === "ready" && task.status === "delivered")))
       && (!search || `${task.name} ${task.title} ${task.context} ${statusLabel(task.status)}`.toLocaleLowerCase().includes(search)))
       .sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) || a.date.localeCompare(b.date) : a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
-  }, [tasks, query, typeFilter, statusFilter, sort]);
+  }, [tasks, query, activeTypeFilter, statusFilter, sort]);
   const totalPages = Math.max(1, Math.ceil(visibleTasks.length / tasksPerPage));
   const currentPage = Math.min(page, totalPages);
   const pageTasks = visibleTasks.slice((currentPage - 1) * tasksPerPage, currentPage * tasksPerPage);
@@ -250,7 +253,7 @@ export function CheckInTasks({ previewPersonId, readOnly = false, toolbarAction,
     <header className={toolbar.toolbar} aria-label="Task actions">
       <div className={toolbar.controls}>
         <label className={toolbar.search}><Search size={17} aria-hidden="true" /><span className={styles.srOnly}>Search tasks</span><input ref={searchRef} type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} onInput={(event) => { setQuery(event.currentTarget.value); setPage(1); }} placeholder="Search tasks" /></label>
-        <label className={toolbar.select}><span>Type</span><select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(1); }}><option value="all">All types</option><option value="check_in">Check-ins</option><option value="subscription_review">Subscription reviews</option><option value="subscription_password">Subscription passwords</option><option value="work_schedule">Schedule requests</option></select></label>
+        <label className={toolbar.select}><span>Type</span><select value={activeTypeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(1); }}><option value="all">All types</option>{showCheckInTasks ? <option value="check_in">Check-ins</option> : null}{showSubscriptionReviewTasks ? <><option value="subscription_review">Subscription reviews</option><option value="subscription_password">Subscription passwords</option></> : null}<option value="work_schedule">Schedule requests</option></select></label>
         <label className={toolbar.select}><span>Status</span><select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}><option value="all">All statuses</option><option value="needs_review">Needs review</option><option value="ready">Ready</option><option value="scheduled">Scheduled</option><option value="claimed">Sending reminder</option><option value="active">Active</option><option value="paused">Paused</option><option value="submitted">Pending approval</option></select></label>
         <label className={toolbar.select}><span>Sort</span><select value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }}><option value="date">Date — earliest</option><option value="name">Name A–Z</option></select></label>
       </div>

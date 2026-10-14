@@ -6,7 +6,9 @@ const ordinaryReviewEmployee = new URLSearchParams(location.search).get('subscri
 const combinedTasks = new URLSearchParams(location.search).get('tasks') === 'combined';
 const scheduleTasks = combinedTasks && new URLSearchParams(location.search).has('schedule-tasks');
 const subscriptionReviewsFail = new URLSearchParams(location.search).has('subscription-review-error');
+const requestedActorRole = new URLSearchParams(location.search).get('actor-role');
 const reviewOwnerId = syntheticRolePeople[3].id;
+export const actorPersonId = ordinaryReviewEmployee || ['employee','manager','account','admin'].includes(requestedActorRole) ? reviewOwnerId : undefined;
 let checkInRows = combinedTasks ? [
   { person_id: reviewOwnerId, full_name: 'Synthetic Check-in Employee', position_title: 'Coordinator', company_key: 'mam', reminders: [
     { id: '66000000-0000-4000-8000-000000000001', milestone: '1_month', sequence: 'initial', dueDate: '2000-01-01', status: 'delivered', needsReviewReason: null },
@@ -47,6 +49,7 @@ const writeNotes = (target, notes) => {
 
 const calls = [], unexpected = [];
 const roleById = Object.fromEntries(syntheticRolePeople.map(person => [person.id, person.role]));
+if (actorPersonId && requestedActorRole) roleById[actorPersonId] = requestedActorRole;
 const personFor = id => syntheticRolePeople.find(person => person.id === id);
 const previewReviewDelegate = new URLSearchParams(location.search).get('subscription-reviews') === 'preview-register-manager';
 const grantsById = ordinaryReviewEmployee || previewReviewDelegate
@@ -62,7 +65,7 @@ const outcomeFor = id => {
   if (!['manager','employee'].includes(roleById[id]) || !grantsById[id]) return result;
   return { ...result, capabilities: { ...result.capabilities, ...grantsById[id] } };
 };
-export const actorCapabilities = ordinaryReviewEmployee ? outcomeFor(reviewOwnerId).capabilities : UNIFIED_ROLE_FIXTURE_RESULTS.actor.capabilities;
+export const actorCapabilities = actorPersonId ? outcomeFor(actorPersonId).capabilities : UNIFIED_ROLE_FIXTURE_RESULTS.actor.capabilities;
 const failures = new Map(), held = new Set(), pending = new Map(), responses = [];
 window.unifiedRoleFixture = {
   calls, unexpected, responses,
@@ -98,7 +101,7 @@ window.unifiedRoleFixture = {
   },
 };
 
-function leaveWorkspace(id = ordinaryReviewEmployee ? reviewOwnerId : undefined) {
+function leaveWorkspace(id = actorPersonId) {
   const role = id ? roleById[id] : 'system_admin';
   const people = role === 'manager' ? syntheticRolePeople.filter(person => person.id === id || person.role === 'employee')
     : role === 'employee' ? [personFor(id)] : syntheticRolePeople;
@@ -134,7 +137,7 @@ function leaveWorkspace(id = ordinaryReviewEmployee ? reviewOwnerId : undefined)
 }
 
 const handlers = {
-  '@/app/roles/actions': { getPortalRoleCapabilities: id => id ? outcomeFor(id) : ordinaryReviewEmployee ? UNIFIED_ROLE_FIXTURE_RESULTS.roles[reviewOwnerId].employee : UNIFIED_ROLE_FIXTURE_RESULTS.actor },
+  '@/app/roles/actions': { getPortalRoleCapabilities: id => id ? outcomeFor(id) : actorPersonId ? outcomeFor(actorPersonId) : UNIFIED_ROLE_FIXTURE_RESULTS.actor },
   '@/app/profile/actions': { getCurrentEmployeeSelfProfile: () => UNIFIED_ROLE_FIXTURE_RESULTS.contacts[reviewOwnerId], getSelectedEmployeeProfile: id => UNIFIED_ROLE_FIXTURE_RESULTS.contacts[id], updateSelectedEmployeeProfile: input => ({ ...UNIFIED_ROLE_FIXTURE_RESULTS.contactMutations[input.personId], phone: input.phone, personalEmail: input.personalEmail, dateOfBirth: input.dateOfBirth }) },
   '@/app/people/actions': {
     listEmployeeDirectoryRecords: () => syntheticRolePeople.map(syntheticRoleDirectoryRecord),
@@ -143,7 +146,7 @@ const handlers = {
   '@/app/accounts/actions': { listPortalAccounts: () => [] },
   '@/app/leave/actions': { getLeaveWorkspaceData: leaveWorkspace },
   '@/app/work-schedule/actions': { loadEmployeeWorkScheduleWorkspace: previewPersonId => {
-    const id = previewPersonId ?? (ordinaryReviewEmployee ? reviewOwnerId : undefined);
+    const id = previewPersonId ?? actorPersonId;
     return { ok: true, workspace: {
     activePersonId: id ?? null, activePersonName: personFor(id)?.name ?? null, workingWeekdays: id ? [1, 2, 3, 4, 5] : null,
     workingDayTimes: [], initialSetupAvailable: false, canRequestChange: Boolean(id), isProfilePreview: Boolean(previewPersonId),
@@ -261,11 +264,16 @@ const client = {
   },
   async rpc(name, args) {
     calls.push({ module: 'supabase', name, args: [args] });
-    if (name === 'list_my_employee_check_in_tasks' || name === 'list_employee_check_in_tasks_for_preview') return { data: checkInRows, error: null };
+    if (name === 'list_my_employee_check_in_tasks' || name === 'list_employee_check_in_tasks_for_preview') {
+      const id = name === 'list_employee_check_in_tasks_for_preview' ? args.p_person_id : actorPersonId;
+      const allowed = id ? outcomeFor(id).capabilities.can_view_check_in_workspace : actorCapabilities.can_view_check_in_workspace;
+      if (!allowed) return name === 'list_employee_check_in_tasks_for_preview' ? { data: [], error: null } : { data: null, error: { code: '42501' } };
+      return new URLSearchParams(location.search).has('check-in-error') ? { data: null, error: { code: 'XX000', message: 'synthetic private provider detail' } } : { data: checkInRows, error: null };
+    }
     if (name === 'list_my_subscription_review_tasks') return subscriptionReviewsFail ? { data: null, error: { code: 'XX000', message: 'synthetic private provider detail' } } : { data: ordinaryReviewEmployee ? reviewRows : [], error: null };
-    if (name === 'list_subscription_review_tasks_for_preview') return { data: args.p_person_id === reviewOwnerId && grantsById[reviewOwnerId]?.can_manage_subscriptions ? reviewRows : [], error: null };
+    if (name === 'list_subscription_review_tasks_for_preview') return { data: grantsById[args.p_person_id]?.can_manage_subscriptions && outcomeFor(args.p_person_id).capabilities.can_manage_subscriptions ? reviewRows : [], error: null };
     if (name === 'list_my_subscription_password_tasks') return {data:ordinaryReviewEmployee ? passwordRows : [],error:null};
-    if (name === 'list_subscription_password_tasks_for_preview') return {data:args.p_person_id === reviewOwnerId && grantsById[reviewOwnerId]?.can_manage_subscriptions ? passwordRows : [],error:null};
+    if (name === 'list_subscription_password_tasks_for_preview') return {data:grantsById[args.p_person_id]?.can_manage_subscriptions && outcomeFor(args.p_person_id).capabilities.can_manage_subscriptions ? passwordRows : [],error:null};
     if (name === 'can_edit_internal_org' || name === 'can_manage_employee_directory') return { data: true, error: null };
     unexpected.push({ module: 'supabase', name });
     throw new Error(`Unexpected synthetic RPC ${name}`);

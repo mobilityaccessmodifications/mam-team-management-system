@@ -194,7 +194,8 @@ export async function requireEmployeeDirectoryManager() {
   const { data: allowed, error: permissionError } = await supabase
     .rpc("can_manage_employee_directory");
 
-  if (permissionError || allowed !== true) throw new Error(GENERIC_ACCESS_ERROR);
+  if (permissionError?.code === "42501" || (!permissionError && allowed === false)) throw new Error(GENERIC_ACCESS_ERROR);
+  if (permissionError || allowed !== true) throw new Error(GENERIC_LOAD_ERROR);
 
   return { supabase, actorUserId: userData.user.id };
 }

@@ -46,9 +46,10 @@ async function requireAnalyticsApiManager() {
   if (userError || !userData.user) throw new Error("Your session has expired. Sign in again.");
 
   const { data: allowed, error: permissionError } = await supabase.rpc("can_manage_analytics_api");
-  if (permissionError || allowed !== true) {
+  if (permissionError?.code === "42501" || (!permissionError && allowed === false)) {
     throw new Error("You do not have permission to manage the Analytics API.");
   }
+  if (permissionError || allowed !== true) throw new Error("Analytics API access could not be loaded. Refresh and try again.");
   return supabase;
 }
 

@@ -1,9 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-const employeeId = '11000000-0000-4000-8000-000000000005';
 const checkInId = '66000000-0000-4000-8000-000000000001';
 const subscriptionId = '33000000-0000-4000-8000-000000000010';
-const combinedRoute = '/?fixture=unified-roles&tasks=combined&subscription-reviews=register-manager';
+const combinedRoute = '/?fixture=unified-roles&tasks=combined&subscription-reviews=register-manager&actor-role=manager';
 const pagedRoute = `${combinedRoute}&paged-tasks`;
 const checkInRowName = "Open Synthetic Check-in Employee's 1-month check-in";
 const subscriptionRowName = "Open Synthetic due review's Quarterly subscription review";
@@ -329,9 +328,11 @@ test('reopening a dirty task keeps completion disabled during the Notes authoriz
 });
 
 test('Change Profile shows task notes read-only and keeps subscription completion unavailable', async ({ page }) => {
+  const managerId = '11000000-0000-4000-8000-000000000004';
   await page.goto('/?fixture=unified-roles&tasks=combined&subscription-reviews=preview-register-manager');
+  await page.evaluate(id => window.unifiedRoleFixture.setSubscriptionGrants(id, true, false), managerId);
   await page.getByRole('region', { name: 'Employee access preview' }).locator('button[aria-haspopup="dialog"]').click();
-  await page.getByRole('dialog', { name: 'Change profile', exact: true }).getByRole('button', { name: /Synthetic Employee/ }).click();
+  await page.getByRole('dialog', { name: 'Change profile', exact: true }).getByRole('button', { name: /Synthetic Manager/ }).click();
   await openTasks(page);
   for (const rowName of [checkInRowName, subscriptionRowName]) {
     const pane = await openTask(page, rowName);
@@ -344,7 +345,7 @@ test('Change Profile shows task notes read-only and keeps subscription completio
   expect(await actionCalls(page, 'completeMySubscriptionReviewTask')).toEqual([]);
   const noteReads = await actionCalls(page, 'getTaskNotes');
   expect(noteReads).toHaveLength(2);
-  expect(noteReads.every(call => call.args[1] === employeeId)).toBe(true);
+  expect(noteReads.every(call => call.args[1] === managerId)).toBe(true);
 });
 
 test('subscription review errors leave check-in tasks available without exposing provider details', async ({ page }) => {
