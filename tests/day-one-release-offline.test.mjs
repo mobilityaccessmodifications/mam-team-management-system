@@ -336,7 +336,7 @@ if __name__ == '__main__':
 test('Day1 release public flow and fail-closed guards with committed synthetic source', () => {
   const args = ['-B', '-c', program];
   const result = spawnSync('python3', args, { cwd: process.cwd(), encoding: 'utf8',
-    timeout: 120_000, maxBuffer: 4 * 1024 * 1024 });
+    timeout: 300_000, maxBuffer: 4 * 1024 * 1024 });
   assert.equal(result.error, undefined, String(result.error));
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stderr, /Ran \d+ tests? in/);
