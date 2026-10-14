@@ -2,6 +2,19 @@ import { syntheticRolePeople, syntheticRoleOrgRows, syntheticRoleDirectoryRecord
 import { completedFixtureToday, leaveCompletedRequests } from './leave-completed-data.mjs';
 
 const completedMode = new URLSearchParams(location.search).has('leave-completed');
+const inlineRequestMode = new URLSearchParams(location.search).get('subscription-inline');
+let requestRows = [], registeredSubscriptions = [syntheticRoleSubscription];
+const requestApplicant = { id: syntheticRolePeople[0].id, name: 'Synthetic Applicant' };
+function requestWorkspace() {
+  if (inlineRequestMode === 'denied') return { ok: false, denied: true, message: 'You do not have permission for this request.' };
+  return { ok: true, data: {
+    enabled: Boolean(inlineRequestMode) && inlineRequestMode !== 'unavailable', canApply: Boolean(inlineRequestMode) && inlineRequestMode !== 'no-apply',
+    requestFormVersion: inlineRequestMode === 'legacy' ? 2 : 3,
+    viewerName: requestApplicant.name, viewerPersonId: requestApplicant.id, canManageCredentials: false,
+    requests: requestRows, people: syntheticRolePeople.map(person => ({ id: person.id, name: person.name })),
+  } };
+}
+
 const ordinaryReviewEmployee = new URLSearchParams(location.search).get('subscription-reviews') === 'register-manager';
 const combinedTasks = new URLSearchParams(location.search).get('tasks') === 'combined';
 const scheduleTasks = combinedTasks && new URLSearchParams(location.search).has('schedule-tasks');
@@ -178,11 +191,33 @@ const handlers = {
   '@/app/assets/employee-actions': { listItAssetsForEmployeePreview: () => [], listMyItAssets: () => [] },
   '@/app/assets/actions': { listItAssetsForEmployee: () => [], listItAssets: () => [], listItAssetAssignees: () => [] },
   '@/app/subscriptions/actions': {
-    listSubscriptions: () => [syntheticRoleSubscription],
+    listSubscriptions: () => registeredSubscriptions,
+    createSubscription: input => {
+      const person = syntheticRolePeople.find(person => person.id === input.responsiblePersonId);
+      const subscription = { ...syntheticRoleSubscription, ...input, id: '33000000-0000-4000-8000-000000000020',
+        responsible: { ...syntheticRoleSubscription.responsible, personId: person.id, fullName: person.name }, memberNames: [],
+      };
+      registeredSubscriptions = [...registeredSubscriptions, subscription];
+      return subscription;
+    },
     listSubscriptionPeople: () => syntheticRolePeople.map(person => ({ personId: person.id, fullName: person.name, positionTitle: person.title, teamName: 'Operation & Accounts', company: person.company })),
   },
   '@/app/subscription-requests/actions': {
-    loadSubscriptionRequests: () => ({ ok: true, data: { enabled: false, canApply: false, requests: [], people: [] } }),
+    loadSubscriptionRequests: requestWorkspace,
+    mutateSubscriptionRequest: input => {
+      const evidence = (input.evidence ?? []).map(file => ({ name: file.name, mime: file.mime, bytes: atob(file.base64).length }));
+      const payload = structuredClone(input.payload);
+      const row = { id: input.id, applicant: requestApplicant.id, applicantName: requestApplicant.name,
+        requestedAt: '2026-10-15T00:00:00Z', status: input.operation === 'submit' ? 'submitted' : 'draft',
+        version: input.version + 1, revision: 1, evidenceVersion: input.version + 1, payload, evidence,
+        events: [{ version: input.version + 1, operation: input.operation, actor: requestApplicant.id,
+          actorName: requestApplicant.name, at: '2026-10-15T00:00:00Z', payload, evidence, reason: '' }],
+        canEdit: input.operation !== 'submit', canDecide: false, canWithdraw: input.operation === 'submit',
+        canActivate: false, canCompletePurchase: false, linkedSubscriptionId: null,
+      };
+      requestRows = [row, ...requestRows.filter(request => request.id !== row.id)];
+      return { ok: true, data: row, committed: true };
+    },
   },
   '@/app/subscriptions/delegation-actions': {
     listSubscriptionManagementDelegates: () => ({ ok: true, delegates: delegationPeople.filter(person => delegationManagement.includes(person.personId)) }),
@@ -224,11 +259,13 @@ const handlers = {
 
 export async function invokeServerAction(module, name, args) {
   calls.push({ module, name, args: args.map(arg => arg instanceof FormData ? { files: arg.getAll('files').map(file => ({ name: file.name, type: file.type, size: file.size })) } : arg) });
-  const key = `${name}:${args[0]?.personId ?? args[0]?.subscriptionId ?? args[0]?.requestId ?? args[0]?.target?.taskId ?? args[0]?.taskId ?? args[0] ?? ''}`;
+  const key = `${name}:${['mutateSubscriptionRequest', 'createSubscription'].includes(name) ? '' : args[0]?.personId ?? args[0]?.subscriptionId ?? args[0]?.requestId ?? args[0]?.target?.taskId ?? args[0]?.taskId ?? args[0] ?? ''}`;
   const failure = failures.get(key);
   if (failure) {
     failures.delete(key);
     if (failure === 'contact') throw new Error(UNIFIED_ROLE_FIXTURE_RESULTS.contactError);
+    if (['loadSubscriptionRequests', 'mutateSubscriptionRequest'].includes(name) && failure === 'denied') return { ok: false, denied: true, message: 'You do not have permission for this request.' };
+    if (name === 'mutateSubscriptionRequest' && failure === 'uncertain') return { ok: false, denied: false, uncertain: true, message: 'The request could not be confirmed. Reload before retrying.' };
     if (name === 'getPortalRoleCapabilities' && (failure === 'denied' || failure === 'malformed')) return UNIFIED_ROLE_FIXTURE_RESULTS[failure];
     if (name === 'saveTaskNotes' && failure === 'stale') return { ok: false, error: 'Notes have changed. Refresh and try again.' };
     if (failure === 'transport') throw new Error('private synthetic provider permission detail');
