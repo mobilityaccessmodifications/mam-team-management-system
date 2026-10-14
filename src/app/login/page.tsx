@@ -10,7 +10,7 @@ const LOGIN_ERRORS: Record<string, string> = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string | string[]; next?: string | string[] }>;
+  searchParams: Promise<{ error?: string | string[]; next?: string | string[]; password?: string | string[] }>;
 }) {
   const params = await searchParams;
   const errorCode = Array.isArray(params.error) ? params.error[0] : params.error;
@@ -33,7 +33,7 @@ export default async function LoginPage({
       <section className="auth-form-wrap" aria-labelledby="sign-in-title">
         <div className="auth-card">
           <h2 id="sign-in-title">Sign in</h2>
-          <LoginForm initialMessage={initialMessage} returnTo={returnTo} />
+          <LoginForm initialMessage={initialMessage} returnTo={returnTo} passwordReset={params.password === "reset"} />
         </div>
       </section>
     </main>

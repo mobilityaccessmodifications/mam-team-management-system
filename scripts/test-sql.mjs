@@ -118,7 +118,7 @@ function runPowerBiContract() {
 }
 try {
   if (!powerBiOnly) {
-  const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql", "tests/unified-role-subscription-employee-delegation.sql", "tests/subscription-requests.sql", "tests/subscription-requests-security.sql", "tests/subscription-request-mail.sql", "tests/annual-continuous-accrual.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
+  const replay = spawnSync(process.execPath, [fileURLToPath(new URL("./test-migration-replay.mjs", import.meta.url)), socket, "mam_test_replay", "tests/core-review-safety.sql", "tests/unified-role-subscription-employee-delegation.sql", "tests/subscription-requests.sql", "tests/subscription-requests-security.sql", "tests/subscription-request-mail.sql", "tests/annual-continuous-accrual.sql", "tests/password-recovery.sql"], { cwd: sourceRoot, env: postgresEnv, stdio: "inherit" });
   if (replay.status !== 0) throw new Error("Full migration replay failed");
   command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', '--template=mam_test_replay', 'mam_test_sr_concurrency']);
   const requestRace = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/subscription-requests-concurrency.mjs'), socket, 'mam_test_sr_concurrency'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
@@ -183,6 +183,9 @@ try {
     const resetRace = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/run-password-reset-credential-concurrency.mjs'), socket, database, ...mode], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
     if (resetRace.status !== 0) throw new Error('Password reset credential PostgreSQL concurrency tests failed');
   }
+  command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', '--template=mam_test_replay', 'mam_test_recovery_concurrency']);
+  const recoveryRace = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/run-password-recovery-concurrency.mjs'), socket, 'mam_test_recovery_concurrency'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (recoveryRace.status !== 0) throw new Error('Password recovery account-version concurrency tests failed');
   console.log('PASS: password reset preflight, durable pending fences, ACLs, audit and PostgreSQL concurrency');
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/two-week-check-in.sql")]);
   command("psql", [...target(socket, "mam_test_replay"), "-f", path.join(sourceRoot, "tests/check-in-review-outcomes.sql")]);
