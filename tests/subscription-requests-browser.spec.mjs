@@ -103,7 +103,7 @@ test('approved request registers its immutable price and access without reading 
   await region.getByLabel('Seats',{exact:true}).fill('2');
   await region.getByLabel('Billing start date',{exact:true}).fill('2026-10-14');
   await region.getByLabel('Renewal date',{exact:true}).fill('2027-10-14');
-  const owner=region.getByLabel('Responsible person',{exact:true});
+  const owner=region.getByRole('combobox',{name:'Responsible person',exact:true});
   const personId=await owner.locator('option').nth(1).getAttribute('value');await owner.selectOption(personId);
   await region.locator('input[type=checkbox]').first().check();
   await region.getByRole('button',{name:'Add subscription',exact:true}).click();
