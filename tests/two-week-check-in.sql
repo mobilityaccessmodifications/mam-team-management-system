@@ -65,9 +65,18 @@ select pg_temp.assert(
       and reminder.reminder_sequence = 'initial'
       and reminder.due_date = date '2026-10-19'
       and reminder.notify_date = date '2026-10-14'
-      and reminder.delivery_status = 'scheduled'
+      and reminder.delivery_status = case
+        when reminder.notify_date < (clock_timestamp() at time zone 'Australia/Melbourne')::date
+          then 'needs_review'
+        else 'scheduled'
+      end
+      and reminder.needs_review_reason is not distinct from case
+        when reminder.notify_date < (clock_timestamp() at time zone 'Australia/Melbourne')::date
+          then 'historic_cutover'
+        else null
+      end
   ),
-  '2-Week Check-In is scheduled three Victorian business days before the due date'
+  '2-Week Check-In retains its business-day schedule and reviews past notifications'
 );
 
 select pg_temp.assert(
@@ -78,9 +87,18 @@ select pg_temp.assert(
       and reminder.reminder_sequence = 'initial'
       and reminder.due_date = date '2026-11-04'
       and reminder.notify_date = date '2026-10-29'
-      and reminder.delivery_status = 'scheduled'
+      and reminder.delivery_status = case
+        when reminder.notify_date < (clock_timestamp() at time zone 'Australia/Melbourne')::date
+          then 'needs_review'
+        else 'scheduled'
+      end
+      and reminder.needs_review_reason is not distinct from case
+        when reminder.notify_date < (clock_timestamp() at time zone 'Australia/Melbourne')::date
+          then 'historic_cutover'
+        else null
+      end
   ),
-  '1-Month Check-In is scheduled three Victorian business days before the due date'
+  '1-Month Check-In retains its business-day schedule and reviews past notifications'
 );
 
 
@@ -92,9 +110,18 @@ select pg_temp.assert(
       and reminder.reminder_sequence = 'initial'
       and reminder.due_date = date '2026-12-04'
       and reminder.notify_date = date '2026-12-01'
-      and reminder.delivery_status = 'scheduled'
+      and reminder.delivery_status = case
+        when reminder.notify_date < (clock_timestamp() at time zone 'Australia/Melbourne')::date
+          then 'needs_review'
+        else 'scheduled'
+      end
+      and reminder.needs_review_reason is not distinct from case
+        when reminder.notify_date < (clock_timestamp() at time zone 'Australia/Melbourne')::date
+          then 'historic_cutover'
+        else null
+      end
   ),
-  '2-Month Stay Interview is scheduled three Victorian business days before the due date'
+  '2-Month Stay Interview retains its business-day schedule and reviews past notifications'
 );
 
 select pg_temp.assert(
@@ -105,9 +132,18 @@ select pg_temp.assert(
       and reminder.reminder_sequence = 'initial'
       and reminder.due_date = date '2027-01-04'
       and reminder.notify_date = date '2026-12-23'
-      and reminder.delivery_status = 'scheduled'
+      and reminder.delivery_status = case
+        when reminder.notify_date < (clock_timestamp() at time zone 'Australia/Melbourne')::date
+          then 'needs_review'
+        else 'scheduled'
+      end
+      and reminder.needs_review_reason is not distinct from case
+        when reminder.notify_date < (clock_timestamp() at time zone 'Australia/Melbourne')::date
+          then 'historic_cutover'
+        else null
+      end
   ),
-  '3-Month Midpoint Review is scheduled five Victorian business days before the due date'
+  '3-Month Midpoint Review retains its business-day schedule and reviews past notifications'
 );
 
 insert into private.employee_check_in_reminders (

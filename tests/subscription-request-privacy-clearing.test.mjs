@@ -42,7 +42,7 @@ for(const name of actionNames) {
   for(const scenario of ['PT409','22023','55000','XX000','rpc-thrown','malformed']) check('action nonauthoritative RPC failure '+name+' '+scenario,async()=>{
     const h=actionHarness(scenario);const result=await h.actions[name](...actionArgs[name]);
     assert.equal(result.ok,false);assert.equal(result.denied,false);
-    assert.equal(result.uncertain,['mutateSubscriptionRequest','activateSubscriptionRequest'].includes(name)&&['XX000','rpc-thrown','malformed'].includes(scenario));
+    assert.equal(result.uncertain,['mutateSubscriptionRequest','activateSubscriptionRequest','completeSubscriptionRequestPurchase'].includes(name)&&['XX000','rpc-thrown','malformed'].includes(scenario));
     assert.equal(h.authCalls.length,1);assert.equal(h.calls.length,1);
     assert.doesNotMatch(JSON.stringify(result),/SYNTHETIC_PROVIDER|SYNTHETIC_PRIVATE/);
     if(scenario==='PT409')assert.equal(result.message,'Request changed. Reload before retrying.');

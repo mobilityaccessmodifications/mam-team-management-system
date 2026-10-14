@@ -59,7 +59,10 @@ export async function buildUnifiedRoleFixture(sourceRoot, scratch) {
       'process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY': '"synthetic-unused-key"',
       UNIFIED_ROLE_FIXTURE_RESULTS: JSON.stringify(results),
     },
-    plugins: [{ name: 'production-global-styles', setup(builder) {
+    plugins: [{ name: 'router-boundary', setup(builder) {
+      builder.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: 'next/navigation', namespace: 'router-boundary' }));
+      builder.onLoad({ filter: /.*/, namespace: 'router-boundary' }, () => ({ contents: `export const useRouter = () => ({push(url) {window.fixtureNavigation=url;}});`, loader: 'js' }));
+    } }, { name: 'production-global-styles', setup(builder) {
       builder.onLoad({ filter: /[/\\]src[/\\]app[/\\]globals\.css$/ }, async ({ path: filename }) => {
         const result = await postcss([tailwindcss({ ...postcssConfig.plugins['@tailwindcss/postcss'], base: sourceRoot })])
           .process(readFileSync(filename, 'utf8'), { from: filename, map: false });

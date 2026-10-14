@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { ModalBackdrop } from "@/components/ui/modal-backdrop";
 import { MobileRegisterTools } from "@/components/ui/mobile-register-tools";
 
@@ -708,6 +710,7 @@ function SubscriptionModal({
   onUpdated?: (subscription: Subscription) => void;
   onReview?: () => Promise<void>;
 }) {
+  const router = useRouter();
   const isEditing = Boolean(subscription);
   const dialogRef = useRef<HTMLElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -811,7 +814,7 @@ function SubscriptionModal({
           <legend>Pricing</legend>
           <div className={styles.pricingChoices}>
             <label><input type="radio" name="pricingModel" value="free" checked={pricingModel === "free"} onChange={() => setPricingModel("free")} /> Free</label>
-            <label><input type="radio" name="pricingModel" value="paid" checked={pricingModel === "paid"} onChange={() => setPricingModel("paid")} /> Paid</label>
+            <label><input type="radio" name="pricingModel" value="paid" checked={pricingModel === "paid"} onChange={() => { if (isEditing) setPricingModel("paid"); else { setSaving(true); router.push("/subscription-requests?new=1"); } }} /> Paid</label>
           </div>
           {pricingModel === "paid" ? <>
             <div className={styles.formGrid}>
