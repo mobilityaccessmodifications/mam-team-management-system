@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory(prefix='requests-release-', dir=socket) as scra
     paths = ['scripts/deploy-subscription-requests.py', 'scripts/deploy-staff-leave-calendar.py',
              'supabase/migrations/20261008160000_subscription_requests_milestone1.sql',
              'supabase/migrations/20261014100000_subscription_request_mail.sql',
-             'supabase/migrations/20261013200000_day_one_reporting_splice_claims.sql']
+             'supabase/migrations/20261013223556_task_follow_up_notes.sql']
     for relative in paths:
         destination = root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -73,7 +73,7 @@ with tempfile.TemporaryDirectory(prefix='requests-release-', dir=socket) as scra
     sql(base, fixture)
     for migration in sorted((ROOT / 'supabase/migrations').glob('*.sql')):
         version, name = migration.stem.split('_', 1)
-        if version <= '20261013200000' and version != '20261008160000':
+        if version <= '20261013223556' and version != '20261008160000':
             sql(base, 'insert into supabase_migrations.schema_migrations(version,name,statements) values(' + helper.literal(version) + ',' + helper.literal(name) + ',ARRAY[' + helper.literal(migration.read_text()) + ']) on conflict(version) do nothing;')
     relations = ['auth.users'] + sql(base, "select format('%I.%I',n.nspname,c.relname) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','storage') and c.relkind in ('r','p') and c.oid<>'private.confirmed_test_purge_schema'::regclass order by 1;").splitlines()
     before = json.loads(sql(base, 'select ' + helper.state_expression(held, relations)))

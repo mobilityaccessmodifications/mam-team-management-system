@@ -35,7 +35,7 @@ export function runSubscriptionRequestCatalog(socket,group='all') {
   const dataTables=['auth.users','public.profiles','public.internal_org_people','private.portal_account_admins','private.portal_account_admin_events','private.employee_team_manager_defaults',
     'private.subscription_register','private.subscription_memberships','private.subscription_audit_events','private.subscription_management_grants',
     'private.subscription_management_grant_events','private.subscription_credential_vault','private.subscription_credential_audit_events',
-    'private.subscription_credential_access_grants','private.subscription_credential_access_audit_events','private.subscription_credential_grant_changes',...(group==='forward'?['private.annual_leave_day_accounting']:[])];
+    'private.subscription_credential_access_grants','private.subscription_credential_access_audit_events','private.subscription_credential_grant_changes',...(group==='forward'?['private.annual_leave_day_accounting','private.task_follow_up_notes']:[])];
   const dataCollector=`create function pg_temp.sr_test_data() returns text language plpgsql stable set search_path='' as $data$declare r text;rows jsonb;v jsonb:='{}';begin foreach r in array array[${dataTables.map(t=>"'"+t+"'").join(',')}] loop execute format('select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text collate "C"),''[]''::jsonb) from %s t',r::regclass) into rows;v:=v||jsonb_build_object(r,rows);end loop;return encode(extensions.digest(v::text,'sha256'),'hex');end $data$;`;
   function snapshot(database) {
     return JSON.parse(sql(socket,database,`begin;set local search_path='';${collector}\n${dataCollector}\nselect jsonb_build_object('data',pg_temp.sr_test_data(),'catalog',(select encode(extensions.digest(coalesce(jsonb_agg(to_jsonb(c) order by kind collate "C",object_identity collate "C"),'[]'::jsonb)::text,'sha256'),'hex') from pg_temp.onboarding_review_catalog() c),'actual',private.confirmed_test_purge_schema_hash(),'stored',(select schema_hash from private.confirmed_test_purge_schema where singleton));rollback;`).trim());
@@ -118,6 +118,7 @@ export function runSubscriptionRequestCatalog(socket,group='all') {
       ['main221_deferred_config_post','after_refresh',queue("update private.employee_team_manager_defaults set version=version+1 where company_key='mam'")]
     ];
     const forwardCases=[
+      ['forward_initial_notes_rls','before_snapshot','alter table private.task_follow_up_notes disable row level security;'],
       ['forward_initial_review_acl','before_snapshot','grant execute on function public.complete_my_subscription_review_task(uuid,bigint) to anon;'],
       ['forward_initial_accounting_rls','before_snapshot','alter table private.annual_leave_day_accounting disable row level security;'],
       ['forward_final_review_body','after_refresh',"create or replace function public.complete_my_subscription_review_task(p_subscription_id uuid,p_expected_version bigint) returns jsonb language sql security definer set search_path='' as $$select '{}'::jsonb$$;"],

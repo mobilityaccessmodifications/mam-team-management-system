@@ -2976,6 +2976,58 @@ $function$
   end if;
 end $sr_latest_main$;
 
+do $sr_tasks_main$ begin
+  if to_regprocedure('public.get_visible_task_notes(text,uuid,date,uuid)') is not null then
+    lock table private.task_follow_up_notes in share row exclusive mode nowait;
+    insert into sr_protected_relations values('private.task_follow_up_notes');
+    insert into sr_published_predecessor values
+    ('column','private.task_follow_up_notes.check_in_reminder_id','bc862bc491c79e380eb65cfdaa25df215cf53f6d6ea40d2cb92df347a637fc88',null),
+    ('column','private.task_follow_up_notes.id','0f16bb55407d689a68d5bcfcbb95c0689e517f3499bf0c9697acd6a3bbe1720e',null),
+    ('column','private.task_follow_up_notes.kind','485c07e7ec42ac0a6aa108931d58b3645b610d165a15ba19f98b7948d462d976',null),
+    ('column','private.task_follow_up_notes.notes','3997a8c3c57fe69cf23f34e703d954ffe36bbccae0f15db0da7b5fa91e3841c2',null),
+    ('column','private.task_follow_up_notes.review_on','11ad24e69fae5ac4118c34a04317394665ad0ae29aead6940a98547647e97331',null),
+    ('column','private.task_follow_up_notes.subscription_id','9eb186c427a36fa6c6f151613ef41ebaca5cd36d39b5ab180091936248c54680',null),
+    ('column','private.task_follow_up_notes.updated_at','005e35ea8237a37220693eac44278d4dc63372289e0d5af57cf678f372d1de70',null),
+    ('column','private.task_follow_up_notes.updated_by_user_id','4ae8b70d0aa711e40d61622bebeaadc0fc91e64600f4e7caf3ba56dcc67cbeae',null),
+    ('column','private.task_follow_up_notes.version','c3115019937c3fb7f7c451fea4a0c07ede5b37291ad177bd633ba5721ddc7b20',null),
+    ('column','private.task_follow_up_notes.work_schedule_request_id','115ab150dcd80075f83c73b5c9c1850acbc4d8b2b33039a4b4e75c8bc0b0450e',null),
+    ('column','private.task_follow_up_notes_check_in_idx.check_in_reminder_id','352d7a15f2ee1b56b2eb4d0c8b16f60f41bdf755c9bcb623898fe3d7dbea56ab',null),
+    ('column','private.task_follow_up_notes_pkey.id','352d7a15f2ee1b56b2eb4d0c8b16f60f41bdf755c9bcb623898fe3d7dbea56ab',null),
+    ('column','private.task_follow_up_notes_subscription_idx.review_on','01ceab40c2074bb90ac97871b1ea8691cf69c94365e7738902212c7f90937d17',null),
+    ('column','private.task_follow_up_notes_subscription_idx.subscription_id','352d7a15f2ee1b56b2eb4d0c8b16f60f41bdf755c9bcb623898fe3d7dbea56ab',null),
+    ('column','private.task_follow_up_notes_work_schedule_idx.work_schedule_request_id','352d7a15f2ee1b56b2eb4d0c8b16f60f41bdf755c9bcb623898fe3d7dbea56ab',null),
+    ('constraint','private.task_follow_up_notes:task_follow_up_notes_check_in_reminder_id_fkey','4ddc2da2a08dda1174c0ed5c1c6e0361591f34cbd6b672a4a66cb2ef48779d09',null),
+    ('constraint','private.task_follow_up_notes:task_follow_up_notes_kind_check','8ca088889daf0bdb7cb88e5b6ab976a9a92521905f8b67f34bb6a92b258ad9e9',null),
+    ('constraint','private.task_follow_up_notes:task_follow_up_notes_notes_check','509efbb540332ee7b29f279a31357228be564d5ab4d4ced207ad159fb0123870',null),
+    ('constraint','private.task_follow_up_notes:task_follow_up_notes_pkey','ceeed3e1b6b0f71197286468986349d099d90ea1af0bc7dc10eec8147ca0bd38',null),
+    ('constraint','private.task_follow_up_notes:task_follow_up_notes_subscription_id_fkey','cda0b7cd0d35bb379da3196f0b6f406999be91a7ff809d476634f26eb5b44930',null),
+    ('constraint','private.task_follow_up_notes:task_follow_up_notes_target_check','faba9f17e8ffc3b4d14120c5308592048249b0c18240aea4cf01b5fc6b724237',null),
+    ('constraint','private.task_follow_up_notes:task_follow_up_notes_updated_by_user_id_fkey','ea7d5bf7bd6747e2929c14c2ca767c829417ab3a9cb006f3d2789568867ea2b2',null),
+    ('constraint','private.task_follow_up_notes:task_follow_up_notes_version_check','b2e1e44369bbc1a67f10118937c8ffde7d00876b8f94f67c65725e29ac72c6f9',null),
+    ('constraint','private.task_follow_up_notes:task_follow_up_notes_work_schedule_request_id_fkey','2793ad4c7c47df767b4d9bab6aa364072d740a04628ee357ea0a033285dfa02f',null),
+    ('function','private.require_task_notes_scope(text, uuid, date, uuid)','8e85074541368b9b9a6105e5cee8da34a2b716c5fcfb2774d98bec130b4cfa0f',null),
+    ('function','public.get_visible_task_notes(text, uuid, date, uuid)','a21c0beaff6641cdd2d97a5032a22eb87bdf3e997e981c1fb19f6645ea90ce80',null),
+    ('function','public.save_visible_task_notes(text, uuid, date, text, bigint)','daebeb5903294c9e69f077368865cca23c5c43dd672db098720533d03e5a7555',null),
+    ('function_security','private.require_task_notes_scope(text, uuid, date, uuid)','aeea9958c2c5c72f87d89c2bf8e23ed04c8a85af7ef4273a7edc66d83018e12f',null),
+    ('function_security','public.get_visible_task_notes(text, uuid, date, uuid)','9b6712489182a62306a6b7f682d82499b0f0a7d56c7811574e26df13f6c6f404',null),
+    ('function_security','public.save_visible_task_notes(text, uuid, date, text, bigint)','9854602ac8fba4e8fb0b56304eb3b5cbb4259a3189d7acd7e5d977127b3f3f1e',null),
+    ('global_function_acl','private.require_task_notes_scope(text, uuid, date, uuid)','c027e95beca64045f15d2075c66162eeeeb192e6756be61c73f91c7ce14dd4f3',null),
+    ('global_function_acl','public.get_visible_task_notes(text, uuid, date, uuid)','48cbe0bdca3235e1dba22f9504e61b3c8e254ede516a33fa6fe51f6537916ca9',null),
+    ('global_function_acl','public.save_visible_task_notes(text, uuid, date, text, bigint)','48cbe0bdca3235e1dba22f9504e61b3c8e254ede516a33fa6fe51f6537916ca9',null),
+    ('global_relation_acl','private.task_follow_up_notes',case current_setting('server_version_num')::integer/10000 when 16 then 'c0e6bb2dbd327bd3c3ef5cf70c329910a5853d629417887f257e091ff5b73577' when 17 then 'd51696be62bea2471822f7114b081fc4989012a076cf2721dc1bf1139b89773d' end,null),
+    ('index','private.task_follow_up_notes_check_in_idx','a50645ad42ed0bb7270602253fdea334599f27351aef95261e47795971b1816e',null),
+    ('index','private.task_follow_up_notes_pkey','17ac60410557e09cd0210f0eadaa49d6f7737bfc1c57dd179307aea3b1a35f32',null),
+    ('index','private.task_follow_up_notes_subscription_idx','3d02c10a86f1da2255353f12691d7cc5b8296faa6deb1b4cdde7fec21677913f',null),
+    ('index','private.task_follow_up_notes_work_schedule_idx','634d8afc4cc6c3faabad4666ce74bee0ffdcd9743ec2fca9bdfec976392c5f03',null),
+    ('relation','private.task_follow_up_notes',case current_setting('server_version_num')::integer/10000 when 16 then 'd07dee95e06b266e400556fe83f155d3bc1acedfe62716a92195d68da9b63a6a' when 17 then '441c0e971192032eedaebcff160a2cfc9b91cafaaf71ca7a0472da6aa5d01e07' end,null),
+    ('routine_kind','private.require_task_notes_scope(text, uuid, date, uuid)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','public.get_visible_task_notes(text, uuid, date, uuid)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('routine_kind','public.save_visible_task_notes(text, uuid, date, text, bigint)','252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111',null),
+    ('type','private._task_follow_up_notes','96578d8a3f8aa5a29d81602faeecae64a2f9b00ed57847070128b5c86b47b329',null),
+    ('type','private.task_follow_up_notes','ee774a4d582acd0dab0dd7d6f57b94dde6cc3be0e6a64bf230933f4a2677a21d',null);
+  end if;
+end $sr_tasks_main$;
+
 create function pg_temp.sr_capture_catalog() returns table(kind text,object_identity text,definition text)
 language plpgsql stable set search_path='' as $sr_capture$
 declare inventory jsonb; observed text; expected text; begin

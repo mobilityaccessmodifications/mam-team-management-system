@@ -14,7 +14,7 @@ ROOT = HELPER.parents[1]
 TRANSPORT = ROOT / 'scripts/deploy-staff-leave-calendar.py'
 CORE = ROOT / 'supabase/migrations/20261008160000_subscription_requests_milestone1.sql'
 MAIL = ROOT / 'supabase/migrations/20261014100000_subscription_request_mail.sql'
-PREDECESSOR = ROOT / 'supabase/migrations/20261013200000_day_one_reporting_splice_claims.sql'
+PREDECESSOR = ROOT / 'supabase/migrations/20261013223556_task_follow_up_notes.sql'
 TARGETS = ((CORE, '20261008160000', 'subscription_requests_milestone1'),
            (MAIL, '20261014100000', 'subscription_request_mail'))
 
@@ -72,7 +72,7 @@ def state_expression(held, relations):
         ",'purgeHash',private.confirmed_test_purge_schema_hash(),'purgeMatches'," \
         "(select count(*)=1 and bool_and(singleton and schema_hash=private.confirmed_test_purge_schema_hash()) from private.confirmed_test_purge_schema)," \
         "'collectorHash',encode(extensions.digest(pg_get_functiondef('private.confirmed_test_purge_schema_hash()'::regprocedure),'sha256'),'hex')," \
-        "'predecessorExact'," + exact_record('20261013200000', 'day_one_reporting_splice_claims', predecessor) + \
+        "'predecessorExact'," + exact_record('20261013223556', 'task_follow_up_notes', predecessor) + \
         ",'coreExact'," + exact_record('20261008160000', 'subscription_requests_milestone1', core) + \
         ",'mailExact'," + exact_record('20261014100000', 'subscription_request_mail', mail) + \
         ",'corePresent',to_regclass('private.subscription_request_config') is not null," \
@@ -89,7 +89,7 @@ def validate_before(state):
     require(state['major'] in (16, 17) and state['role'] == 'postgres', 'Unsupported release role/platform')
     require(state['purgeMatches'] and state['collectorHash'] == '3385d5a0140df3995e3196ffea442b4829f9a5357de3ccf5a8d521fbe9011a54', 'Unreviewed predecessor collector')
     versions = [row['version'] for row in state['ledger']]
-    require(versions and len(versions) == len(set(versions)) and max(versions) == '20261013200000' and state['predecessorExact'], 'Latest published predecessor differs')
+    require(versions and len(versions) == len(set(versions)) and max(versions) == '20261013223556' and state['predecessorExact'], 'Latest published predecessor differs')
     require(not state['corePresent'] and not state['mailPresent'] and not state['coreExact'] and not state['mailExact'], 'Partial or existing installation; reconcile read-only')
     require(not any(version in versions for version in ('20261008160000', '20261014100000')), 'Target history already exists')
 
