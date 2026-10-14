@@ -46,6 +46,7 @@ declare field text; value jsonb; chosen text; alternative text; v2 boolean:=p->'
     (p ? 'currency' and p->>'currency'<>'AUD') or length(coalesce(p->>'service',''))>160 or length(coalesce(p->>'plan',''))>160 or
     length(coalesce(p->>'cardLabel',''))>160 or length(coalesce(p->>'cardHolder',''))>160) then raise exception 'Request selection is invalid.' using errcode='22023'; end if;
   if (coalesce(v2,false) and p->>'billing'='one_off') or
+    (coalesce(v3,false) and p ? 'kind' and p->>'kind'<>'new_purchase') or
     (coalesce(v3,false) and p ? 'payment' and p->>'payment' not in ('card','invoice','direct_debit')) or
     (not coalesce(v3,false) and p ? 'payment' and p->>'payment' not in ('card','non_card')) or
     (coalesce(v3,false) and p ? 'category' and p->>'category' not in ('software_app','hardware','subscription','one_off_service')) or

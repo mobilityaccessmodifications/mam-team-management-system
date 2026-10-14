@@ -84,7 +84,7 @@ do $$ declare p jsonb:='{"formVersion":3,"kind":"new_purchase","service":"Synthe
  assert not exists(select 1 from private.subscription_password_tasks);
  begin update private.subscription_request_decisions set budget_approved=false;raise exception 'Finance audit changed';exception when object_not_in_prerequisite_state then null;end;
  perform private.sr_validate(p,true);
- foreach bad in array array[p||'{"websiteUrl":"javascript:alert(1)"}',p||'{"websiteUrl":"https://example.test/<tag>"}',p||'{"websiteUrl":"https://name:secret@example.test"}',p||'{"category":"one_off_service"}',p||'{"payment":"non_card"}',p||'{"invoiceEmail":"invalid"}',p||'{"oneOffCostCents":-1}',p||'{"oneOffCostCents":100000001}',p||'{"formVersion":2}',p-'formVersion',p||'{"budgetApproved":true}']::jsonb[] loop
+ foreach bad in array array[p||'{"websiteUrl":"javascript:alert(1)"}',p||'{"websiteUrl":"https://example.test/<tag>"}',p||'{"websiteUrl":"https://name:secret@example.test"}',p||'{"category":"one_off_service"}',p||'{"kind":"renewal"}',p||'{"kind":"added_seats"}',p||'{"kind":"plan_change"}',p||'{"payment":"non_card"}',p||'{"invoiceEmail":"invalid"}',p||'{"oneOffCostCents":-1}',p||'{"oneOffCostCents":100000001}',p||'{"formVersion":2}',p-'formVersion',p||'{"budgetApproved":true}']::jsonb[] loop
   begin perform private.sr_validate(bad,true);raise exception 'Invalid template passed';exception when invalid_parameter_value then null;end;
  end loop;
  foreach k in array array['anon','authenticated','service_role'] loop
