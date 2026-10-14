@@ -74,11 +74,11 @@ def run(socket, predecessor, prefix, head=None, evidence_dir=None):
     try:
         positive = clone('ok')
         native(positive, "insert into supabase_migrations.schema_migrations(version,name,statements) values('20260908000020','20260907230409_archive_combined_employment_account_disable',null),('20260801000001','synthetic_empty_history',ARRAY[]::text[]),('20260801000002','synthetic_split_history',ARRAY['select 1;','select 2;']::text[]);")
-        fixture = (ROOT / 'tests/reporting-splice-fixture.sql').read_text().replace('\\ir sql-test-auth.sql', '\\ir ' + str(ROOT / 'tests/sql-test-auth.sql'))
+        fixture = (ROOT / 'tests/reporting-splice-fixture.sql').read_text().replace('\\ir sql-test-auth.sql', "\\ir '" + str(ROOT / 'tests/sql-test-auth.sql').replace("'", "''") + "'")
         native(positive, 'begin;\n' + fixture + '\ncommit;')
         native(positive, "insert into auth.users(id,email,banned_until) values('97abcdef-0000-4000-8000-000000000001','compat-admin@example.test',null),('97abcdef-0000-4000-8000-000000000002','compat-pending@example.test',clock_timestamp()+interval '1 day'); insert into public.profiles(id,full_name,app_role,login_name,credentials_valid_after) values('97abcdef-0000-4000-8000-000000000001','Compatibility Admin Synthetic','system_admin','compat-admin@example.test',clock_timestamp()-interval '1 day'); insert into public.internal_org_people(id,full_name,company_key,position_title,is_active) values('97abcdef-0000-4000-8000-000000000003','Compatibility Test Synthetic','mam','Synthetic',false); insert into private.confirmed_test_identity_purges(id,person_id,auth_user_id,actor_user_id,company_key,manifest_hash,manifest,retained_audit,retired_identifiers,phase,completed_at) values('97abcdef-0000-4000-8001-000000000002','97abcdef-0000-4000-8000-000000000002','97abcdef-0000-4000-8000-000000000002','97abcdef-0000-4000-8000-000000000001','mam',repeat('a',64),'{}','{}',array['97abcdef-0000-4000-8000-000000000002']::uuid[],'business_purged',null),('97abcdef-0000-4000-8001-000000000099','97abcdef-0000-4000-8000-000000000099',null,'97abcdef-0000-4000-8000-000000000001','mam',repeat('b',64),'{}','{}',array['97abcdef-0000-4000-8000-000000000099']::uuid[],'complete',clock_timestamp());")
         def compatibility(database):
-            sql = (ROOT / 'tests/payroll-purge-compatibility.sql').read_text().replace('\\ir sql-test-auth.sql', '\\ir ' + str(ROOT / 'tests/sql-test-auth.sql'))
+            sql = (ROOT / 'tests/payroll-purge-compatibility.sql').read_text().replace('\\ir sql-test-auth.sql', "\\ir '" + str(ROOT / 'tests/sql-test-auth.sql').replace("'", "''") + "'")
             native(database, sql)
         compatibility(positive)
 

@@ -30,6 +30,7 @@ import {
 import { FormEvent, type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
+import { SubscriptionRequestTasks } from "@/components/subscription-request-tasks";
 import { getPortalRoleCapabilities } from "@/app/roles/actions";
 import { ROLE_CAPABILITY_ERROR, type PortalRole, type PortalRoleCapabilities } from "@/lib/portal-role-capabilities";
 import registerToolbar from "@/components/people-toolbar.module.css";
@@ -279,7 +280,7 @@ type InitialNavigation = {
   view: AppView;
   section: LeaveSection;
   requestId?: string;
-  peopleSection?: "assets" | "accounts" | "subscriptions";
+  peopleSection?: "assets" | "accounts" | "subscriptions" | "tasks";
 };
 
 function businessDaysBetween(start: string, end: string) {
@@ -2169,7 +2170,7 @@ export function LeaveDemo({
                     />
                   : undefined}
               renderCheckInTasks={activeCapabilities
-                ? (toolbarAction) => <CheckInTasks
+                ? (toolbarAction) => <><CheckInTasks
                     key={isPreviewingEmployeeAccess ? activeProfile.id : "self"}
                     showSubscriptionReviewTasks={Boolean(activeCapabilities.person_id)}
                     workScheduleWorkspace={visibleWorkScheduleWorkspace}
@@ -2188,7 +2189,7 @@ export function LeaveDemo({
                       onRequest={submitWorkScheduleRequest}
                       onReview={reviewWorkScheduleRequest}
                     />}
-                  />
+                  />{!isPreviewingEmployeeAccess ? <SubscriptionRequestTasks /> : null}</>
                 : undefined}
               renderAccounts={showHrWorkspace ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>

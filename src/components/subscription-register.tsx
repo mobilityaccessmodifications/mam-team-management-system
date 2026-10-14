@@ -519,6 +519,7 @@ export function SubscriptionRegister({
   }
 
   return <section className={styles.workspace} aria-label="Subscription management">
+    <nav aria-label="Subscriptions"><span aria-current="page">Register</span> <a href="/subscription-requests">Requests</a></nav>
     <header className={toolbar.toolbar}>
       <div className={toolbar.controls} ref={selectionFocusRef} tabIndex={-1} aria-label="Subscription tools">
         <label className={toolbar.search}><Search size={17} aria-hidden="true" /><span className={styles.visuallyHidden}>Search subscriptions</span><input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search service, owner or employee" /></label>
