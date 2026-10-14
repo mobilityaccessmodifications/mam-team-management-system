@@ -141,6 +141,7 @@ export function SubscriptionRequests({ initial, selectedId, startNew = false }: 
               <label>Requested by<input value={selected?.applicantName??workspace.viewerName??""} disabled /></label>
               {selected?.requestedAt?<label>Date requested<input value={new Date(selected.requestedAt).toLocaleString("en-AU",{timeZone:"Australia/Melbourne"})} disabled/></label>:null}
               {textField("service","Service")}{textField("purpose","Purpose",true)}
+              <label>Start date<input type="date" value={payload.startDate??""} disabled={!editable||blocked} onChange={e=>setPayload(p=>({...p,startDate:e.target.value}))}/></label>
               {payload.formVersion===3?<>{textField("websiteUrl","Website link")}{choice("category","Category",[["software_app","Software / App"],["hardware","Hardware"],["subscription","Subscription"],["one_off_service","One-off service"]])}</>:null}
               {choice("company","Benefiting company",[["mam","MAM"],["equipsy","Equipsy"],["both","Both"]])}
               {textField("intendedUsers","Intended users",true)}
