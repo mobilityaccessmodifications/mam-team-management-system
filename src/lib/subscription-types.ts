@@ -45,6 +45,7 @@ export type Subscription = {
   amountCents: number | null;
   currency: "AUD";
   renewalDate: string | null;
+  startDate: string | null;
   seatCount: number | null;
   creditCardUsed: boolean | null;
   creditCardHolder: string | null;
@@ -79,6 +80,7 @@ export type CreateSubscriptionInput = {
   billingCycle?: SubscriptionBillingCycle;
   amountCents?: number | null;
   renewalDate?: string | null;
+  startDate?: string | null;
   seatCount?: number | null;
   creditCardUsed?: boolean | null;
   creditCardHolder?: string | null;

@@ -1,7 +1,7 @@
 export type RequestStatus = "draft" | "submitted" | "returned" | "approved" | "rejected" | "withdrawn";
 export type RequestOperation = "save" | "submit" | "approve" | "return" | "reject" | "withdraw";
 export type RequestPayload = {
-  formVersion?: 2 | 3; monthlyCostCents?: number | null; annualCostCents?: number | null; comparisonUnavailableReason?: string;
+  formVersion?: 2 | 3; startDate?: string; monthlyCostCents?: number | null; annualCostCents?: number | null; comparisonUnavailableReason?: string;
   websiteUrl?: string; category?: string; usageFrequency?: string; oneOffCostCents?: number | null; invoiceEmail?: string; invoiceContact?: string;
   kind?: string; service?: string; plan?: string; purpose?: string; company?: string;
   payer?: string; duration?: string; billing?: string; currency?: string; tax?: string;
@@ -18,12 +18,17 @@ export type RequestWorkspace = { canApply: boolean; enabled: boolean; requestFor
 export type RequestResult<T> = { ok: true; data: T; committed?: boolean } | { ok: false; message: string; denied: boolean; uncertain?: boolean };
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const templateFields = ["websiteUrl","category","usageFrequency","oneOffCostCents","invoiceEmail","invoiceContact"];
-const fields = [...templateFields,"formVersion","monthlyCostCents","annualCostCents","comparisonUnavailableReason","kind","service","plan","purpose","company","payer","duration","billing","currency","tax","quoteCents","noQuoteReason","audEstimateCents","payment","cardLabel","cardHolder","responsiblePersonId","intendedUsers"];
+const fields = [...templateFields,"startDate","formVersion","monthlyCostCents","annualCostCents","comparisonUnavailableReason","kind","service","plan","purpose","company","payer","duration","billing","currency","tax","quoteCents","noQuoteReason","audEstimateCents","payment","cardLabel","cardHolder","responsiblePersonId","intendedUsers"];
 export function validateRequestPayload(input: unknown, submission: boolean): RequestPayload {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Request fields are invalid.");
   const value = input as Record<string, unknown>;
   if (Object.keys(value).some(key => !fields.includes(key))) throw new Error("Unsupported request field.");
   if (value.formVersion !== 3 && Object.keys(value).some(key => templateFields.includes(key))) throw new Error("Unsupported request field.");
+  if (value.startDate !== undefined) {
+    if (value.formVersion !== 2 && value.formVersion !== 3) throw new Error("Unsupported request field for this version.");
+    const date = value.startDate;
+    if (typeof date !== "string" || (date !== "" && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date.startsWith("0000") || !Number.isFinite(Date.parse(date + "T00:00:00Z")) || new Date(date + "T00:00:00Z").toISOString().slice(0,10) !== date))) throw new Error("Start date is invalid.");
+  }
   for (const [key, item] of Object.entries(value)) {
     if (key === "formVersion") {
       if (item !== 2 && item !== 3) throw new Error("Request form version is invalid.");
