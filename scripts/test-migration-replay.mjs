@@ -47,6 +47,11 @@ for (const file of files) {
     command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
     console.log(command('python3', [path.resolve('tests/run-subscription-review-release.py'), socket, predecessor]));
   }
+  if (file === '20261014110000_subscription_review_managers_mail.sql') {
+    const predecessor = `${database}_srm_pred`;
+    command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
+    console.log(command('python3', [path.resolve('tests/run-subscription-review-managers-release.py'), socket, predecessor]));
+  }
   if (file === '20261013180000_leave_required_employee_note.sql') {
     command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, `${database}_note_predecessor`]);
     console.log(command('python3', [path.resolve('tests/run-required-note-release.py'), socket, `${database}_note_predecessor`, `mam_test_note_${database.replace(/^mam_test_/, '')}`]));

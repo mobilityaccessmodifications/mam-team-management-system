@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 const employeeId = '11000000-0000-4000-8000-000000000005';
 const checkInId = '66000000-0000-4000-8000-000000000001';
 const subscriptionId = '33000000-0000-4000-8000-000000000010';
-const combinedRoute = '/?fixture=unified-roles&tasks=combined&subscription-reviews=employee';
+const combinedRoute = '/?fixture=unified-roles&tasks=combined&subscription-reviews=register-manager';
 const pagedRoute = `${combinedRoute}&paged-tasks`;
 const checkInRowName = "Open Synthetic Check-in Employee's 1-month check-in";
 const subscriptionRowName = "Open Synthetic due review's Quarterly subscription review";
@@ -329,7 +329,7 @@ test('reopening a dirty task keeps completion disabled during the Notes authoriz
 });
 
 test('Change Profile shows task notes read-only and keeps subscription completion unavailable', async ({ page }) => {
-  await page.goto('/?fixture=unified-roles&tasks=combined');
+  await page.goto('/?fixture=unified-roles&tasks=combined&subscription-reviews=preview-register-manager');
   await page.getByRole('region', { name: 'Employee access preview' }).locator('button[aria-haspopup="dialog"]').click();
   await page.getByRole('dialog', { name: 'Change profile', exact: true }).getByRole('button', { name: /Synthetic Employee/ }).click();
   await openTasks(page);

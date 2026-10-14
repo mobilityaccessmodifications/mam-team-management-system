@@ -2,7 +2,7 @@ import { syntheticRolePeople, syntheticRoleOrgRows, syntheticRoleDirectoryRecord
 import { completedFixtureToday, leaveCompletedRequests } from './leave-completed-data.mjs';
 
 const completedMode = new URLSearchParams(location.search).has('leave-completed');
-const ordinaryReviewEmployee = new URLSearchParams(location.search).get('subscription-reviews') === 'employee';
+const ordinaryReviewEmployee = new URLSearchParams(location.search).get('subscription-reviews') === 'register-manager';
 const combinedTasks = new URLSearchParams(location.search).get('tasks') === 'combined';
 const scheduleTasks = combinedTasks && new URLSearchParams(location.search).has('schedule-tasks');
 const subscriptionReviewsFail = new URLSearchParams(location.search).has('subscription-review-error');
@@ -45,7 +45,9 @@ const writeNotes = (target, notes) => {
 const calls = [], unexpected = [];
 const roleById = Object.fromEntries(syntheticRolePeople.map(person => [person.id, person.role]));
 const personFor = id => syntheticRolePeople.find(person => person.id === id);
-const grantsById = {};
+const previewReviewDelegate = new URLSearchParams(location.search).get('subscription-reviews') === 'preview-register-manager';
+const grantsById = ordinaryReviewEmployee || previewReviewDelegate
+  ? { [reviewOwnerId]: { can_view_subscription_register: true, can_manage_subscriptions: true, can_manage_subscription_credentials: false } } : {};
 const delegationPeople = Array.from({ length: 80 }, (_, index) => ({
   personId: `77000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
   fullName: `Synthetic ${index === 0 ? 'Manager' : 'Employee'} ${String(index + 1).padStart(2, '0')}`,
@@ -54,10 +56,10 @@ const delegationPeople = Array.from({ length: 80 }, (_, index) => ({
 let delegationManagement = [], delegationVault = [];
 const outcomeFor = id => {
   const result = UNIFIED_ROLE_FIXTURE_RESULTS.roles[id][roleById[id]];
-  if (roleById[id] !== 'manager' || !grantsById[id]) return result;
+  if (!['manager','employee'].includes(roleById[id]) || !grantsById[id]) return result;
   return { ...result, capabilities: { ...result.capabilities, ...grantsById[id] } };
 };
-export const actorCapabilities = ordinaryReviewEmployee ? UNIFIED_ROLE_FIXTURE_RESULTS.roles[reviewOwnerId].employee.capabilities : UNIFIED_ROLE_FIXTURE_RESULTS.actor.capabilities;
+export const actorCapabilities = ordinaryReviewEmployee ? outcomeFor(reviewOwnerId).capabilities : UNIFIED_ROLE_FIXTURE_RESULTS.actor.capabilities;
 const failures = new Map(), held = new Set(), pending = new Map(), responses = [];
 window.unifiedRoleFixture = {
   calls, unexpected, responses,
@@ -252,7 +254,7 @@ const client = {
     calls.push({ module: 'supabase', name, args: [args] });
     if (name === 'list_my_employee_check_in_tasks' || name === 'list_employee_check_in_tasks_for_preview') return { data: checkInRows, error: null };
     if (name === 'list_my_subscription_review_tasks') return subscriptionReviewsFail ? { data: null, error: { code: 'XX000', message: 'synthetic private provider detail' } } : { data: ordinaryReviewEmployee ? reviewRows : [], error: null };
-    if (name === 'list_subscription_review_tasks_for_preview') return { data: args.p_person_id === reviewOwnerId ? reviewRows : [], error: null };
+    if (name === 'list_subscription_review_tasks_for_preview') return { data: args.p_person_id === reviewOwnerId && grantsById[reviewOwnerId]?.can_manage_subscriptions ? reviewRows : [], error: null };
     if (name === 'can_edit_internal_org' || name === 'can_manage_employee_directory') return { data: true, error: null };
     unexpected.push({ module: 'supabase', name });
     throw new Error(`Unexpected synthetic RPC ${name}`);

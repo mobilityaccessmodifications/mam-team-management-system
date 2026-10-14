@@ -143,6 +143,7 @@ try {
   console.log('PASS: after-annual offboarding portable MODEL source, query, dispatch and readback controls');
   if (!reportingSpliceOnly) {
   console.log(command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests/subscription-review-tasks.sql')]));
+  console.log(command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests/subscription-review-mail.sql')]));
   console.log(command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests/task-notes.sql')]));
   const reviewReleaseUnit = spawnSync('python3', ['-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_subscription_review_release.py', '-v'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
   if (reviewReleaseUnit.status !== 0) throw new Error('Subscription review release helper tests failed');

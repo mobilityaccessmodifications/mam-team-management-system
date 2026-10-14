@@ -39,7 +39,7 @@ test('worker confirms only exact To/CC receipts and retains failures for retry w
 
 test('mail cron accepts only its separately scoped credential',async()=>{
  const oldCron=process.env.CRON_SECRET,oldScoped=process.env.MAM_SUBSCRIPTION_REQUEST_CRON_SECRET;process.env.CRON_SECRET='synthetic-other-worker';process.env.MAM_SUBSCRIPTION_REQUEST_CRON_SECRET='synthetic-subscription-worker';let calls=0;
- try{const route=loadModule('src/app/api/cron/subscription-requests/route.ts',{'@/lib/subscription-request-mail':{dispatchSubscriptionRequestMail:async()=>{calls++;return {ok:true,claimed:0,sent:0};}}});
+ try{const route=loadModule('src/app/api/cron/subscription-requests/route.ts',{'@/lib/subscription-review-mail':{dispatchSubscriptionReviewMail:async()=>({ok:true,selected:0,sent:0})},'@/lib/subscription-request-mail':{dispatchSubscriptionRequestMail:async()=>{calls++;return {ok:true,claimed:0,sent:0};}}});
  for(const token of ['',process.env.CRON_SECRET])assert.equal((await route.GET(new Request('https://example.test/api/cron/subscription-requests',{headers:{authorization:'Bearer '+token}}))).status,401);
  assert.equal(calls,0);assert.equal((await route.GET(new Request('https://example.test/api/cron/subscription-requests',{headers:{authorization:'Bearer '+process.env.MAM_SUBSCRIPTION_REQUEST_CRON_SECRET}}))).status,200);assert.equal(calls,1);
  }finally{if(oldCron===undefined)delete process.env.CRON_SECRET;else process.env.CRON_SECRET=oldCron;if(oldScoped===undefined)delete process.env.MAM_SUBSCRIPTION_REQUEST_CRON_SECRET;else process.env.MAM_SUBSCRIPTION_REQUEST_CRON_SECRET=oldScoped;}
