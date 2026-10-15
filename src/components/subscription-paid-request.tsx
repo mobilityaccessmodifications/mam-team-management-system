@@ -136,13 +136,13 @@ export function usePaidSubscriptionRequest({ formRef, onSubmitted, onDenied }: C
 type Composer = ReturnType<typeof usePaidSubscriptionRequest>;
 export function PaidSubscriptionRequestFields({ composer }: { composer: Composer }) {
   const { context, billing, payment, category, setBilling, setPayment, setCategory } = composer;
-  if (!context || composer.denied) return null;
-  const version3 = context.requestFormVersion === 3;
+  if (composer.denied) return null;
+  const version3 = !context || context.requestFormVersion === 3;
   return <div className={styles.paidExpansion}>
     <fieldset className={styles.requestGroup}>
       <legend>Request details</legend>
       <div className={styles.formGrid}>
-        <label><span>Requested by</span><input value={context.viewerName ?? ""} readOnly /></label>
+        <label><span>Requested by</span><input value={context?.viewerName ?? ""} readOnly /></label>
         {version3 ? <label><span>Category</span><select name="requestCategory" value={category} onChange={event => { setCategory(event.target.value); if (event.target.value === "one_off_service") setBilling("one_off"); }}><option value="subscription">Subscription</option><option value="software_app">Software / App</option><option value="hardware">Hardware</option><option value="one_off_service">One-off service</option></select></label> : null}
         <label className={styles.fullWidth}><span>Purpose <b aria-hidden="true">*</b></span><textarea name="requestPurpose" rows={2} required maxLength={4000} /></label>
         {version3 ? <label className={styles.fullWidth}><span>Website link <small>Optional</small></span><input name="requestWebsite" type="url" maxLength={2048} /></label> : null}

@@ -71,6 +71,53 @@ test.afterEach(async ({ page }) => {
   expect(await page.evaluate(() => window.unifiedRoleFixture?.unexpected ?? [])).toEqual([]);
 });
 
+for (const mode of ['enabled', 'legacy']) test(`inline paid shows fields before the ${mode} workspace response arrives`, async ({ page }) => {
+  const dialog = await openModal(page, mode);
+  await commonFields(dialog);
+  await dialog.getByLabel(/^Start date/).fill('2026-11-01');
+  await page.evaluate(() => window.unifiedRoleFixture.holdNext('loadSubscriptionRequests'));
+  await field(dialog, 'Paid').click();
+  await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain('loadSubscriptionRequests:');
+  await dialog.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
+  const initialScroll = await dialog.locator('form > div').first().evaluate(node => node.scrollTop);
+  for (const name of ['Request details', 'Costs', 'Payment']) await expect(dialog.getByRole('group', { name, exact: true })).toBeVisible();
+  await expect(field(dialog, 'Purpose')).toBeVisible();
+  await expect(field(dialog, 'Purpose')).toBeDisabled();
+  await expect(field(dialog, 'Requested by')).toHaveValue('');
+  await expect(submitFor(dialog)).toBeDisabled();
+  expect(await writes(page)).toEqual([]);
+  const purpose = await field(dialog, 'Purpose').elementHandle();
+  await page.evaluate(() => window.unifiedRoleFixture.finish('loadSubscriptionRequests'));
+  await expect(field(dialog, 'Requested by')).toHaveValue('Synthetic Applicant');
+  await expect(submitFor(dialog)).toBeEnabled();
+  await expect(field(dialog, 'Purpose')).toBeEnabled();
+  expect(await dialog.locator('form > div').first().evaluate(node => node.scrollTop)).toBe(initialScroll);
+  expect(await purpose.evaluate(node => node === document.querySelector('textarea[name=requestPurpose]'))).toBe(true);
+  await expect(dialog.getByLabel(/^Service name/)).toHaveValue('Synthetic inline subscription');
+  await expect(dialog.getByLabel(/^Start date/)).toHaveValue('2026-11-01');
+  await expect(field(dialog, 'Category')).toHaveCount(mode === 'legacy' ? 0 : 1);
+  await expect(field(dialog, 'Preferred billing')).toHaveValue('annual');
+  await expect(field(dialog, 'Payment method')).toHaveValue('card');
+  expect(await writes(page)).toEqual([]);
+});
+
+test('inline paid pending initial denial removes the expansion and clears common values', async ({ page }) => {
+  const dialog = await openModal(page, 'denied');
+  await commonFields(dialog);
+  await page.evaluate(() => window.unifiedRoleFixture.holdNext('loadSubscriptionRequests'));
+  await field(dialog, 'Paid').click();
+  await expect(field(dialog, 'Purpose')).toBeVisible();
+  await expect(submitFor(dialog)).toBeDisabled();
+  await page.evaluate(() => window.unifiedRoleFixture.finish('loadSubscriptionRequests'));
+  await expect(dialog.getByRole('alert')).toBeVisible();
+  await expect(field(dialog, 'Purpose')).toHaveCount(0);
+  await expect(dialog.getByLabel(/^Service name/)).toHaveValue('');
+  await expect(dialog.getByLabel(/^Plan/)).toHaveValue('');
+  await expect(dialog.getByLabel(/^Company/)).toHaveValue('');
+  await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
+  expect(await writes(page)).toEqual([]);
+});
+
 test('inline paid preserves common and paid drafts when switching Free and Paid', async ({ page }) => {
   const dialog = await openModal(page);
   await expect(dialog.getByLabel(/^Service name/)).toBeFocused();
@@ -226,8 +273,16 @@ test('inline paid failed initial load can retry without navigating or mutating',
   await commonFields(dialog);
   await page.evaluate(() => window.unifiedRoleFixture.failNext('loadSubscriptionRequests', undefined, 'transport'));
   await field(dialog, 'Paid').click();
+  await expect(field(dialog, 'Purpose')).toBeVisible();
+  const purpose = await field(dialog, 'Purpose').elementHandle();
+  await page.evaluate(() => window.unifiedRoleFixture.holdNext('loadSubscriptionRequests'));
   await dialog.getByRole('button', { name: 'Reload requests', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain('loadSubscriptionRequests:');
+  await expect(field(dialog, 'Purpose')).toBeVisible();
+  await expect(submitFor(dialog)).toBeDisabled();
+  await page.evaluate(() => window.unifiedRoleFixture.finish('loadSubscriptionRequests'));
   await expect(field(dialog, 'Requested by')).toHaveValue('Synthetic Applicant');
+  expect(await purpose.evaluate(node => node === document.querySelector('textarea[name=requestPurpose]'))).toBe(true);
   await expect(dialog.getByLabel(/^Service name/)).toHaveValue('Synthetic inline subscription');
   await expect(submitFor(dialog)).toBeEnabled();
   expect(await writes(page)).toEqual([]);
@@ -292,8 +347,10 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
 for (const viewport of [{ width: 1440, height: 1000 }, { width: 1440, height: 800 }, { width: 390, height: 844 }]) test(`inline paid native wheel reaches the bottom and returns at ${viewport.width}x${viewport.height}`, async ({ page }) => {
   await page.setViewportSize(viewport);
   const dialog = await openModal(page);
+  await dialog.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
   await field(dialog, 'Paid').click();
   await expect(field(dialog, 'Requested by')).toHaveValue('Synthetic Applicant');
+  await expect(submitFor(dialog)).toBeEnabled();
   const scroller = dialog.locator('form > div').first();
   const header = dialog.locator(':scope > header');
   const footer = dialog.locator('form > footer');
