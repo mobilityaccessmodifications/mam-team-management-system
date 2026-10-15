@@ -766,3 +766,42 @@
   .emptySelection { display: flex; padding-block: 0; border: 0; background: transparent; }
   .emptySelection > span { display: none; }
 }
+
+.inlineModal { display: flex; flex-direction: column; border-color: var(--surface-border, #dfe5e2); border-radius: 22px; }
+.inlineModal > header { display: flex; flex: 0 0 auto; align-items: center; padding: 22px 24px; }
+.inlineModal > header h2 { margin: 0; color: var(--subscription-ink); font-size: 18px; font-weight: 700; letter-spacing: -.025em; }
+.inlineModal > header > button { width: 44px; height: 44px; border-radius: 12px; }
+.inlineModal > form { display: flex; flex-direction: column; min-height: 0; overflow: hidden; gap: 0; padding: 0; }
+.inlineModal .editorFields { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 22px 24px; gap: 20px; }
+.inlineModal .formGrid { align-items: start; gap: 16px; }
+.inlineModal label { gap: 8px; font-weight: 650; line-height: 1.4; }
+.inlineModal input:not([type="radio"]), .inlineModal select, .modal textarea { min-width: 0; width: 100%; min-height: 44px; box-sizing: border-box; border: 1px solid var(--surface-border-strong, #cbd4d0); border-radius: 10px; background: var(--surface-raised, #fff); color: var(--text-primary, #263b35); font: inherit; font-size: 13px; padding: 11px 12px; }
+.modal textarea { resize: vertical; line-height: 1.5; }
+.modal input:focus-visible, .modal select:focus-visible, .modal textarea:focus-visible { border-color: var(--mam-orange-strong, #c34d14); outline: 3px solid rgb(239 106 36 / 15%); outline-offset: 1px; }
+.inlineModal input[readonly] { background: var(--surface-muted, #f5f7f6); color: var(--text-secondary, #53625e); }
+.inlineModal .pricingFieldset { gap: 0; padding: 8px 14px; background: var(--surface-muted, #f5f7f6); }
+.inlineModal .pricingChoices { display: flex; gap: 24px; }
+.inlineModal .pricingChoices label { gap: 8px; font-size: 13px; }
+.inlineModal .pricingChoices input { width: 16px; height: 16px; margin: 0; }
+.inlineModal > form > footer { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--surface-border, #dfe5e2); background: var(--surface-raised, #fff); }
+.inlineModal > form > footer button { min-height: 44px; }
+.inlineModal > form > .inlineError { display: flex; flex: 0 0 auto; margin: 0 24px 16px; }
+.paidFields, .freeFields { display: grid; min-width: 0; gap: 14px; margin: 0; padding: 0; border: 0; }
+.paidExpansion { display: grid; min-width: 0; gap: 22px; }
+.requestGroup { min-width: 0; margin: 0; padding: 18px 0 0; border: 0; border-top: 1px solid var(--surface-border, #dfe5e2); }
+.requestGroup > legend { padding: 0 10px 0 0; color: var(--text-primary, #263b35); font-size: 13px; font-weight: 750; }
+.fullWidth { grid-column: 1 / -1; }
+.conditionalFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-column: 1 / -1; min-width: 0; gap: 16px; margin: 0; padding: 0; border: 0; }
+.requestLoading { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text-secondary, #53625e); font-size: 13px; }
+.inlineModal input[type="file"] { overflow: hidden; padding: 8px; font-size: 12px; }
+.inlineModal input[type="file"]::file-selector-button { min-height: 30px; margin-right: 10px; border: 0; border-radius: 6px; background: var(--surface-muted, #f5f7f6); color: var(--text-primary, #263b35); font: inherit; padding: 5px 10px; }
+.modal [hidden] { display: none !important; }
+@media (max-width: 760px) {
+  .inlineModal { max-height: min(92dvh, var(--dialog-viewport-height, 92dvh)); border-radius: 22px 22px 0 0; }
+  .inlineModal > header { padding: 16px 18px; }
+  .inlineModal .editorFields { padding: 18px; }
+  .inlineModal .formGrid, .inlineModal .conditionalFields { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .inlineModal input:not([type="radio"]), .inlineModal select, .inlineModal textarea { font-size: 16px; }
+  .inlineModal > form > footer { padding: 14px 18px max(14px, env(safe-area-inset-bottom)); }
+  .inlineModal > form > .inlineError { margin: 0 18px 14px; }
+}
