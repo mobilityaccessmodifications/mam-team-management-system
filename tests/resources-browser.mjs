@@ -17,11 +17,12 @@ export async function installResourcesFixture(page) {
     scheduler: "scheduler/cjs/scheduler.production.js",
   })) modules[id] = readFileSync(new URL(`node_modules/${file}`, root), "utf8");
   for (const path of [
-    "components/subscription-register.tsx", "components/subscription-credential-vault.tsx",
+    "components/subscription-register.tsx", "components/subscription-paid-request.tsx", "components/subscription-credential-vault.tsx",
     "components/subscription-delegation-dialog.tsx",
     "components/employee-picker.tsx", "components/ui/use-dialog-focus.ts",
     "components/ui/modal-backdrop.tsx", "components/ui/mobile-register-tools.tsx",
     "lib/subscription-types.ts", "lib/subscription-bulk.ts",
+    "lib/subscription-request-types.ts", "lib/subscription-request-form.ts",
     "lib/subscription-review-date.ts", "lib/subscription-editor-state.ts",
   ]) {
     const id = `@/${path.replace(/\.tsx?$/, "")}`;
@@ -48,6 +49,7 @@ export async function installResourcesFixture(page) {
     } });
     function require(id) {
       if (id.endsWith(".css")) return { default: new Proxy({}, { get: (_, key) => String(key) }) };
+      if (id === "next/navigation") return { useRouter: () => ({ push: (url) => { results.navigation = url; } }) };
       if (id === "lucide-react") return new Proxy({}, { get: () => () => null });
       if (id.startsWith("@/app/")) return actions;
       if (cache[id]) return cache[id].exports;

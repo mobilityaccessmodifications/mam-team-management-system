@@ -31,3 +31,22 @@ test('simplified request compares independent AUD prices and locks the chosen qu
   assert.throws(()=>validateRequestPayload({...simple,annualCostCents:null},true),/selected/i);
   for(const extra of [{requestedBy:'Other person'},{password:'forbidden'},{currency:'USD'},{duration:'Forever'},{kind:'renewal'},{service:'x'.repeat(161)}])assert.throws(()=>validateRequestPayload({...simple,...extra},true));
 });
+
+export const templatePayload={formVersion:3,kind:'new_purchase',service:'Synthetic Tool',purpose:'Project work',company:'mam',duration:'ongoing',billing:'annual',currency:'AUD',monthlyCostCents:1200,annualCostCents:10000,oneOffCostCents:2500,quoteCents:10000,audEstimateCents:10000,payment:'invoice',intendedUsers:'Synthetic team',websiteUrl:'https://example.test/product',category:'software_app',usageFrequency:'Daily',invoiceEmail:'accounts@example.test',invoiceContact:'Synthetic accounts'};
+test('template request keeps upfront and recurring costs separate and supports standalone purchases',()=>{
+  const {validateRequestPayload}=load();
+  assert.deepEqual(validateRequestPayload(templatePayload,true),templatePayload);
+  assert.throws(()=>validateRequestPayload({...templatePayload,quoteCents:12500,audEstimateCents:12500},true),/billing cost/);
+  const oneOff={...templatePayload,billing:'one_off',monthlyCostCents:null,annualCostCents:null,quoteCents:2500,audEstimateCents:2500,category:'hardware'};
+  assert.deepEqual(validateRequestPayload(oneOff,true),oneOff);
+  assert.throws(()=>validateRequestPayload({...oneOff,oneOffCostCents:0,quoteCents:0,audEstimateCents:0},true),/cost/);
+  for(const extra of [{category:''},{category:'unknown'},{websiteUrl:'javascript:alert(1)'},{websiteUrl:'https://user:secret@example.test'},{websiteUrl:'https://example.test/ space'},{invoiceEmail:'invalid'},{approvedByName:'Synthetic'},{budgetApproved:true},{requestedBy:'Synthetic'},{password:'forbidden'},{oneOffCostCents:0.5}])assert.throws(()=>validateRequestPayload({...templatePayload,...extra},true));
+  assert.throws(()=>validateRequestPayload({...templatePayload,formVersion:2},true),/field/);
+});
+test('finance approval requires an explicit budget decision and rejects forged actor metadata',()=>{
+  const {validateRequestFinance}=load();
+  const finance={budgetApproved:true,invoiceEmail:'accounts@example.test',invoiceContact:'Synthetic accounts'};
+  assert.deepEqual(validateRequestFinance(finance,'approve'),finance);
+  assert.deepEqual(validateRequestFinance({budgetApproved:false},'return'),{budgetApproved:false});
+  for(const value of [{budgetApproved:false},{budgetApproved:'yes'},{...finance,approvedByName:'Forged'},{...finance,approvedAt:'2026-01-01'},{...finance,invoiceEmail:'invalid'},{...finance,invoiceContact:'x'.repeat(161)}])assert.throws(()=>validateRequestFinance(value,'approve'));
+});

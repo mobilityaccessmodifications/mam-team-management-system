@@ -40,6 +40,7 @@ type SubscriptionRpcRow = {
   amount_cents: number | string | null;
   currency_code: string;
   renewal_date: string | null;
+  start_date?: string | null;
   seat_count: number | string | null;
   credit_card_used: boolean | null;
   credit_card_holder: string | null;
@@ -123,6 +124,12 @@ function optionalDate(value: unknown, label: string) {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value !== "string" || !ISO_DATE_PATTERN.test(value)) throw new Error(`${label} is invalid.`);
   return value;
+}
+
+function optionalStartDate(value: unknown) {
+  const date = optionalDate(value, "Start date");
+  if (date && (date.startsWith("0000") || !Number.isFinite(Date.parse(date + "T00:00:00Z")) || new Date(date + "T00:00:00Z").toISOString().slice(0,10) !== date)) throw new Error("Start date is invalid.");
+  return date;
 }
 
 function optionalAmountCents(value: unknown) {
@@ -253,6 +260,7 @@ function mapSubscription(row: unknown): Subscription {
   const amountRaw = value?.amount_cents;
   const amountCents = amountRaw === null || amountRaw === undefined ? null : Number(amountRaw);
   const renewalDate = nullableText(value?.renewal_date);
+  const startDate = optionalStartDate(value?.start_date);
   const seatRaw = value?.seat_count;
   const seatCount = seatRaw === null || seatRaw === undefined ? null : Number(seatRaw);
   const creditCardUsed = value?.credit_card_used ?? value?.mam_credit_card_used ?? null;
@@ -309,6 +317,7 @@ function mapSubscription(row: unknown): Subscription {
     amountCents,
     currency: "AUD",
     renewalDate,
+    startDate,
     seatCount,
     creditCardUsed,
     creditCardHolder,
@@ -372,7 +381,10 @@ export async function listSubscriptionPeople(): Promise<SubscriptionPerson[]> {
 export async function createSubscription(input: CreateSubscriptionInput): Promise<Subscription> {
   const supabase = await requireSubscriptionAdministrator(GENERIC_SAVE_ERROR);
   const values = validateSubscriptionInput(input, false);
-  const { data, error } = await supabase.rpc("create_subscription_v4", values);
+  const startDate = optionalStartDate(input.startDate);
+  const { data, error } = input.startDate === undefined
+    ? await supabase.rpc("create_subscription_v4", values)
+    : await supabase.rpc("create_subscription_v5", { ...values, p_start_date: startDate });
   if (error || !data || Array.isArray(data)) throw mutationError(error, "The subscription could not be added. Refresh and try again.");
   const subscription = mapSubscription(data);
   revalidatePath("/");
@@ -382,11 +394,15 @@ export async function createSubscription(input: CreateSubscriptionInput): Promis
 export async function updateSubscription(input: UpdateSubscriptionInput): Promise<Subscription> {
   const supabase = await requireSubscriptionAdministrator(GENERIC_SAVE_ERROR);
   const values = validateSubscriptionInput(input, true);
-  const { data, error } = await supabase.rpc("update_subscription_v4", {
+  const startDate = optionalStartDate(input.startDate);
+  const parameters = {
     p_subscription_id: requiredUuid(input.subscriptionId, "The subscription record is invalid."),
     p_expected_version: requiredVersion(input.version),
     ...values,
-  });
+  };
+  const { data, error } = input.startDate === undefined
+    ? await supabase.rpc("update_subscription_v4", parameters)
+    : await supabase.rpc("update_subscription_v5", { ...parameters, p_start_date: startDate });
   if (error || !data || Array.isArray(data)) throw mutationError(error);
   const subscription = mapSubscription(data);
   revalidatePath("/");

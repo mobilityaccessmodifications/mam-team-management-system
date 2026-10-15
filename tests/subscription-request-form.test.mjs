@@ -10,3 +10,12 @@ test('AUD entry retains cents without float rounding or inventing annual quotes'
   assert.deepEqual(withSelectedRequestCost({billing:'annual',monthlyCostCents:1200,annualCostCents:10000}),{billing:'annual',monthlyCostCents:1200,annualCostCents:10000,quoteCents:10000,audEstimateCents:10000});
   assert.equal(withSelectedRequestCost({billing:'annual',monthlyCostCents:1200}).quoteCents,null);
 });
+
+test('additional setup fees never change the chosen recurring price',()=>{
+  const {withSelectedRequestCost}=loadModule('src/lib/subscription-request-form.ts');
+  const base={formVersion:3,billing:'annual',monthlyCostCents:1200,annualCostCents:10000,oneOffCostCents:2500};
+  assert.equal(withSelectedRequestCost(base).quoteCents,10000);
+  assert.equal(withSelectedRequestCost({...base,billing:'monthly'}).quoteCents,1200);
+  assert.equal(withSelectedRequestCost({...base,billing:'one_off'}).quoteCents,2500);
+  assert.equal(withSelectedRequestCost({...base,billing:'one_off',oneOffCostCents:null}).quoteCents,null);
+});

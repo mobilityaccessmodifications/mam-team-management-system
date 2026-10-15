@@ -159,6 +159,7 @@ const subscriptionRow = {
 const subscription = {
   id: recordId, company: "mam", subscriptionCode: "MAM-SUB-000001",
   serviceName: "Synthetic Service", planName: "", status: "active", pricingModel: "free",
+  startDate: null,
   billingCycle: null, amountCents: null, currency: "AUD", renewalDate: null, seatCount: null,
   creditCardUsed: null, creditCardHolder: null, billingDate: null, nextBillingOn: null,
   lastReviewedOn: null, nextReviewOn: "2027-01-15",

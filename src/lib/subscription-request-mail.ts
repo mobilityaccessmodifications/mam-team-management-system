@@ -2,13 +2,14 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const SUBSCRIPTION_REQUEST_MAIL_PATH = "/webhook/mam-subscription-request-mail-v2";
+export const SUBSCRIPTION_REQUEST_TEMPLATE_MAIL_PATH = "/webhook/mam-subscription-request-mail-v3";
 const email = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
 function receiver() {
   const secret = process.env.MAM_N8N_LEAVE_WEBHOOK_SECRET?.trim();
   const origin = new URL(process.env.MAM_N8N_LEAVE_WEBHOOK_ORIGIN ?? "");
   if (!secret || origin.protocol !== "https:" || origin.pathname !== "/" || origin.username || origin.password || origin.search || origin.hash) throw Error("not_configured");
-  return { url: new URL(SUBSCRIPTION_REQUEST_MAIL_PATH, origin), secret };
+  return { origin, secret };
 }
 
 export async function dispatchSubscriptionRequestMail(requestId: string | null = null) {
@@ -20,10 +21,11 @@ export async function dispatchSubscriptionRequestMail(requestId: string | null =
     let sent = 0;
     for (const row of claimed.data) {
       const payload = row.payload;
-      if (!payload || !row.claim_token || payload.version !== 2 || typeof payload.applicantWorkEmail !== "string" || !email.test(payload.applicantWorkEmail) || typeof payload.approverWorkEmail !== "string" || !email.test(payload.approverWorkEmail)) continue;
+      if (!payload || !row.claim_token || (payload.version !== 2 && payload.version !== 3) || typeof payload.applicantWorkEmail !== "string" || !email.test(payload.applicantWorkEmail) || typeof payload.approverWorkEmail !== "string" || !email.test(payload.approverWorkEmail)) continue;
       const cc = payload.applicantWorkEmail === payload.approverWorkEmail ? "" : payload.applicantWorkEmail;
       try {
-        const response = await fetch(target.url, {
+        const path = payload.version === 3 ? SUBSCRIPTION_REQUEST_TEMPLATE_MAIL_PATH : SUBSCRIPTION_REQUEST_MAIL_PATH;
+        const response = await fetch(new URL(path, target.origin), {
           method: "POST", redirect: "error", cache: "no-store", signal: AbortSignal.timeout(15_000),
           headers: { "Content-Type": "application/json", "X-MAM-Notification-Secret": target.secret },
           body: JSON.stringify(payload),

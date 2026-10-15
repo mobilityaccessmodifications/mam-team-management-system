@@ -48,6 +48,7 @@ import { subscriptionEditorSnapshot, unavailableSubscriptionMemberIds } from "@/
 import { SubscriptionCredentialEditor } from "@/components/subscription-credential-vault";
 import { SubscriptionDelegationDialog } from "@/components/subscription-delegation-dialog";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
+import { PaidSubscriptionRequestFields, usePaidSubscriptionRequest } from "@/components/subscription-paid-request";
 import toolbar from "@/components/people-toolbar.module.css";
 import styles from "@/components/subscription-register.module.css";
 import {
@@ -613,7 +614,7 @@ export function SubscriptionRegister({
     </div> : null}
 
     {showBulkEdit && !readOnly ? <SubscriptionBulkModal subscriptions={selectedSubscriptions} people={people} fallbackFocusRef={selectionFocusRef} onClose={() => setShowBulkEdit(false)} onCompleted={bulkEditCompleted} /> : null}
-    {showAdd ? <SubscriptionModal people={people} fallbackFocusRef={subscriptionDialogReturnFocusRef} onClose={() => setShowAdd(false)} onCreated={subscriptionCreated} /> : null}
+    {showAdd ? <SubscriptionModal people={people} fallbackFocusRef={subscriptionDialogReturnFocusRef} onClose={() => setShowAdd(false)} onCreated={subscriptionCreated} onRequested={() => { setShowAdd(false); setNotice("Request submitted for approval."); }} /> : null}
     {editTarget ? <SubscriptionModal people={people} subscription={editTarget} fallbackFocusRef={subscriptionDialogReturnFocusRef} onClose={() => setEditTarget(null)} onUpdated={(next) => { replaceSubscription(next, `${next.serviceName} has been updated.`); setEditTarget(null); }} onReview={() => recordReview(editTarget)} /> : null}
     {credentialTarget ? <SubscriptionCredentialEditor
       subscriptionId={credentialTarget.id}
@@ -697,6 +698,7 @@ function SubscriptionModal({
   fallbackFocusRef = null,
   onClose,
   onCreated,
+  onRequested,
   onUpdated,
   onReview,
 }: {
@@ -705,6 +707,7 @@ function SubscriptionModal({
   fallbackFocusRef?: RefObject<HTMLElement | null> | null;
   onClose: () => void;
   onCreated?: (subscription: Subscription) => void;
+  onRequested?: () => void;
   onUpdated?: (subscription: Subscription) => void;
   onReview?: () => Promise<void>;
 }) {
@@ -718,7 +721,11 @@ function SubscriptionModal({
   const [memberPersonIds, setMemberPersonIds] = useState<string[]>(subscription?.memberPersonIds ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const closeWhenReady = useCallback(() => { if (!saving) onClose(); }, [onClose, saving]);
+  const paid = usePaidSubscriptionRequest({ formRef, onSubmitted: () => onRequested?.(), onDenied: () => { setMemberPersonIds([]); setError(""); } });
+  const isPaidRequest = !isEditing && pricingModel === "paid";
+  const paidLocked = paid.posting || paid.uncertain || paid.loading;
+  const isPaidLocked = paid.isLocked;
+  const closeWhenReady = useCallback(() => { if (!saving && !isPaidLocked()) onClose(); }, [onClose, saving, isPaidLocked]);
   const passwordReminder = passwordReviewInstruction(subscription);
   const unavailableMemberIds = unavailableSubscriptionMemberIds(people, memberPersonIds);
   useDialogFocus(true, dialogRef, initialFocusRef, closeWhenReady, fallbackFocusRef);
@@ -731,12 +738,13 @@ function SubscriptionModal({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || paid.isLocked() || paid.denied) return;
+    const form = new FormData(event.currentTarget);
+    if (isPaidRequest) { await paid.submit(form); return; }
     if (unavailableMemberIds.length) {
       setError("Remove inactive or unavailable members under Employee access before saving.");
       return;
     }
-    const form = new FormData(event.currentTarget);
     const amountText = String(form.get("amount") ?? "");
     const amountCents = pricingModel === "paid" ? amountToCents(amountText) : null;
     const seatCount = pricingModel === "paid" ? Number(form.get("seatCount")) : null;
@@ -755,6 +763,7 @@ function SubscriptionModal({
       billingCycle: pricingModel === "paid" ? String(form.get("billingCycle") ?? "") as SubscriptionBillingCycle : undefined,
       amountCents,
       renewalDate: String(form.get("renewalDate") ?? "") || null,
+      startDate: String(form.get("startDate") ?? "") || null,
       seatCount,
       creditCardUsed: pricingModel === "paid" ? cardChoice === "yes" : null,
       creditCardHolder: creditCardHolder || null,
@@ -797,23 +806,25 @@ function SubscriptionModal({
   }
 
   return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeWhenReady()}>
-    <section className={styles.modal} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="subscription-dialog-title" tabIndex={-1}>
-      <header><div><h2 id="subscription-dialog-title">{isEditing ? "Edit subscription" : "Add subscription"}</h2>{isEditing && subscription ? <p>{subscription.subscriptionCode}</p> : null}</div><button type="button" onClick={closeWhenReady} disabled={saving} aria-label="Close subscription form"><X size={19} /></button></header>
+    <section className={`${styles.modal} ${!isEditing ? styles.inlineModal : ""}`} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="subscription-dialog-title" tabIndex={-1}>
+      <header><div><h2 id="subscription-dialog-title">{isEditing ? "Edit subscription" : "Add subscription"}</h2>{isEditing && subscription ? <p>{subscription.subscriptionCode}</p> : null}</div><button type="button" onClick={closeWhenReady} disabled={saving || paidLocked} aria-label="Close subscription form"><X size={19} /></button></header>
       <form ref={formRef} onSubmit={submit}>
-        <fieldset className={styles.editorFields} disabled={saving}>
+        <div className={styles.editorScroll}>
+        <fieldset className={styles.editorFields} disabled={saving || paidLocked || paid.denied}>
         <div className={styles.formGrid}>
           <label><span>Service name <b aria-hidden="true">*</b></span><input name="serviceName" ref={initialFocusRef} required maxLength={160} defaultValue={subscription?.serviceName ?? ""} placeholder="Microsoft 365, Adobe Creative Cloud…" /></label>
           <label><span>Plan <small>Optional</small></span><input name="planName" maxLength={160} defaultValue={subscription?.planName ?? ""} placeholder="Business Standard, Teams…" /></label>
           <label><span>Company <b aria-hidden="true">*</b></span><select name="company" required defaultValue={subscription?.company ?? ""}><option value="" disabled>Select company</option>{SUBSCRIPTION_COMPANIES.map((company) => <option value={company} key={company}>{subscriptionCompanyLabel(company)}</option>)}</select></label>
+          <label><span>Start date <small>Optional</small></span><input name="startDate" type="date" defaultValue={subscription?.startDate ?? ""} /></label>
         </div>
         {isEditing ? <label><span>Status <b aria-hidden="true">*</b></span><select name="status" defaultValue={subscription?.status ?? "active"}><option value="active">Active</option><option value="paused">Paused</option><option value="cancelled">Cancelled</option></select></label> : null}
         <fieldset className={styles.pricingFieldset}>
           <legend>Pricing</legend>
           <div className={styles.pricingChoices}>
-            <label><input type="radio" name="pricingModel" value="free" checked={pricingModel === "free"} onChange={() => setPricingModel("free")} /> Free</label>
-            <label><input type="radio" name="pricingModel" value="paid" checked={pricingModel === "paid"} onChange={() => setPricingModel("paid")} /> Paid</label>
+            <label><input type="radio" name="pricingModel" value="free" checked={pricingModel === "free"} onChange={() => { if (!paid.isLocked() && !paid.denied) setPricingModel("free"); }} /> Free</label>
+            <label><input type="radio" name="pricingModel" value="paid" checked={pricingModel === "paid"} onChange={() => { if (paid.isLocked() || paid.denied) return; setPricingModel("paid"); if (!isEditing) void paid.load(); }} /> Paid</label>
           </div>
-          {pricingModel === "paid" ? <>
+          {isEditing && pricingModel === "paid" ? <>
             <div className={styles.formGrid}>
               <label><span>Billing cycle <b aria-hidden="true">*</b></span><select name="billingCycle" required defaultValue={subscription?.billingCycle ?? "monthly"}>{SUBSCRIPTION_BILLING_CYCLES.map((cycle) => <option key={cycle} value={cycle}>{billingCycleLabels[cycle]}</option>)}</select></label>
               <label><span>Amount (AUD) <b aria-hidden="true">*</b></span><input name="amount" inputMode="decimal" required defaultValue={centsToAmount(subscription?.amountCents ?? null)} placeholder="0.00" /></label>
@@ -825,6 +836,11 @@ function SubscriptionModal({
             <p className={styles.formHelp}><CalendarClock size={15} /> Use a known charge date. Monthly, quarterly and annual next billing dates are calculated automatically.</p>
           </> : null}
         </fieldset>
+        {!isEditing ? <fieldset className={styles.paidFields} hidden={!isPaidRequest} disabled={!isPaidRequest || !paid.ready || paid.posting} aria-busy={paid.loading || paid.posting}>
+          {paid.loading ? <p className={styles.requestLoading} role="status"><LoaderCircle className={styles.spinner} size={16} />Loading request details…</p> : null}
+          <PaidSubscriptionRequestFields composer={paid} />
+        </fieldset> : null}
+        <fieldset className={styles.freeFields} hidden={isPaidRequest} disabled={isPaidRequest}>
         <div className={styles.formGrid}>
           <label><span>Renewal date <small>Optional</small></span><input name="renewalDate" type="date" defaultValue={subscription?.renewalDate ?? ""} /></label>
           <label><span>Responsible person <b aria-hidden="true">*</b></span><EmployeePicker assignees={people} defaultValue={subscription?.responsible.personId ?? ""} name="responsiblePersonId" disabled={!people.length} /></label>
@@ -834,8 +850,11 @@ function SubscriptionModal({
 
         {isEditing && passwordReminder ? <p className={styles.formHelp}><KeyRound size={15} /> {passwordReminder} </p> : null}
         </fieldset>
+        </fieldset>
+        </div>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
-        <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving}>Cancel</button>{isEditing && onReview && subscription && hasQuarterlyReview(subscription) ? <button className={styles.secondaryAction} type="button" onClick={() => void reviewNow()} disabled={saving}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CalendarClock size={16} />}{saving ? "Saving…" : "Mark review complete"}</button> : null}<button className={styles.primaryAction} type="submit" disabled={saving || !people.length}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CreditCard size={16} />}{saving ? "Saving…" : isEditing ? "Save changes" : "Add subscription"}</button></footer>
+        {isPaidRequest && paid.error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{paid.error}</p> : null}
+        <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving || paidLocked}>Cancel</button>{isPaidRequest && (paid.uncertain || (!paid.context && !paid.denied && !paid.loading)) ? <button className={styles.secondaryAction} type="button" onClick={() => void paid.load(true)} disabled={paid.loading || paid.posting}>Reload requests</button> : null}{isEditing && onReview && subscription && hasQuarterlyReview(subscription) ? <button className={styles.secondaryAction} type="button" onClick={() => void reviewNow()} disabled={saving}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CalendarClock size={16} />}{saving ? "Saving…" : "Mark review complete"}</button> : null}<button className={styles.primaryAction} type="submit" disabled={saving || paid.denied || (isPaidRequest ? !paid.ready || paid.posting : !people.length)}>{saving || paid.posting ? <LoaderCircle className={styles.spinner} size={16} /> : <CreditCard size={16} />}{paid.posting ? "Submitting…" : saving ? "Saving…" : isEditing ? "Save changes" : isPaidRequest ? "Submit request" : "Add subscription"}</button></footer>
       </form>
     </section>
   </ModalBackdrop>;

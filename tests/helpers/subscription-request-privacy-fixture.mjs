@@ -12,8 +12,8 @@ export const evidence = {name:'SYNTHETIC_PRIVATE_HISTORY.pdf',mime:'application/
 export const row = {id:requestId,applicant:personId,status:'returned',version:3,revision:1,evidenceVersion:1,payload,evidence:[evidence],events:[{version:1,operation:'submit',actor:personId,at:'2026-10-01T00:00:00Z',reason:'SYNTHETIC_PRIVATE_HISTORY_REASON',payload:{...payload,service:'SYNTHETIC_PRIVATE_HISTORY_PAYLOAD'},evidence:[evidence]}],canEdit:true,canDecide:true,canWithdraw:true};
 export const workspace = {enabled:true,canApply:true,requests:[row,{...row,id:'b1000000-0000-4000-8000-000000000102',payload:{...payload,service:'SYNTHETIC_PRIVATE_LIST_SIBLING'}}],people:[{id:personId,name:'SYNTHETIC_PRIVATE_PERSON'}]};
 export const initialPayload = {formVersion:2,kind:'new_purchase',company:'mam',duration:'ongoing',billing:'annual',currency:'AUD',payment:'card'};
-export const actionNames = ['loadSubscriptionRequests','mutateSubscriptionRequest','downloadRequestEvidence','activateSubscriptionRequest'];
-export const actionArgs = {loadSubscriptionRequests:[],mutateSubscriptionRequest:[{id:requestId,version:3,operation:'approve',payload,reason:'SYNTHETIC_PRIVATE_DECISION'}],downloadRequestEvidence:[requestId,1,0],activateSubscriptionRequest:[{id:requestId,version:3,seatCount:1,billingAnchorDate:'2026-10-14',renewalDate:'2027-10-14',responsiblePersonId:personId,memberPersonIds:[personId]}]};
+export const actionNames = ['loadSubscriptionRequests','mutateSubscriptionRequest','downloadRequestEvidence','activateSubscriptionRequest','completeSubscriptionRequestPurchase'];
+export const actionArgs = {completeSubscriptionRequestPurchase:[requestId,3],loadSubscriptionRequests:[],mutateSubscriptionRequest:[{id:requestId,version:3,operation:'approve',payload,reason:'SYNTHETIC_PRIVATE_DECISION'}],downloadRequestEvidence:[requestId,1,0],activateSubscriptionRequest:[{id:requestId,version:3,seatCount:1,billingAnchorDate:'2026-10-14',renewalDate:'2027-10-14',responsiblePersonId:personId,memberPersonIds:[personId]}]};
 export const denialScenarios = ['no-user','sdk-session-missing','sdk-session-missing-thrown','auth-401','auth-403','sql-42501'];
 
 export function actionHarness(scenario='success') {
@@ -47,6 +47,7 @@ export function actionHarness(scenario='success') {
     if(name==='sr_workspace') return {data:structuredClone(workspace),error:null};
     if(name==='sr_mutate') return {data:{...structuredClone(row),version:4,payload:args.p_payload??structuredClone(payload)},error:null};
     if(name==='sr_activate') return {data:{...structuredClone(row),version:4,status:'approved',canActivate:false,canWithdraw:false,linkedSubscriptionId:'c1000000-0000-4000-8000-000000000101'},error:null};
+    if(name==='subscription_request_complete_purchase_v3') return {data:{...structuredClone(row),version:4,status:'approved',canCompletePurchase:false,canWithdraw:false,completedAt:'2026-10-15T00:00:00Z',linkedSubscriptionId:null},error:null};
     if(name==='sr_download') return {data:{name:evidence.name,mime:evidence.mime,base64:bytes.toString('base64')},error:null};
     throw new Error('Unexpected RPC');
   };

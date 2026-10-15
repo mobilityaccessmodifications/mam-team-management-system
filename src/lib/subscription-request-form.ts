@@ -14,6 +14,6 @@ export function formatRequestAmount(value: number | null | undefined): string {
 }
 
 export function withSelectedRequestCost(payload: RequestPayload): RequestPayload {
-  const cost = payload.billing === "monthly" ? payload.monthlyCostCents : payload.annualCostCents;
+  const cost = payload.billing === "one_off" ? payload.oneOffCostCents : payload.billing === "monthly" ? payload.monthlyCostCents : payload.annualCostCents;
   return { ...payload, quoteCents: cost ?? null, audEstimateCents: cost ?? null };
 }
