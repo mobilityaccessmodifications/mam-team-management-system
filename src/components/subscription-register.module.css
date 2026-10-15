@@ -772,7 +772,8 @@
 .inlineModal > header h2 { margin: 0; color: var(--subscription-ink); font-size: 18px; font-weight: 700; letter-spacing: -.025em; }
 .inlineModal > header > button { width: 44px; height: 44px; border-radius: 12px; }
 .inlineModal > form { display: flex; flex-direction: column; min-height: 0; overflow: hidden; gap: 0; padding: 0; }
-.inlineModal .editorFields { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 22px 24px; gap: 20px; }
+.inlineModal .editorScroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 22px 24px; }
+.inlineModal .editorFields { gap: 20px; }
 .inlineModal .formGrid { align-items: start; gap: 16px; }
 .inlineModal label { gap: 8px; font-weight: 650; line-height: 1.4; }
 .inlineModal input:not([type="radio"]), .inlineModal select, .modal textarea { min-width: 0; width: 100%; min-height: 44px; box-sizing: border-box; border: 1px solid var(--surface-border-strong, #cbd4d0); border-radius: 10px; background: var(--surface-raised, #fff); color: var(--text-primary, #263b35); font: inherit; font-size: 13px; padding: 11px 12px; }
@@ -799,7 +800,7 @@
 @media (max-width: 760px) {
   .inlineModal { max-height: min(92dvh, var(--dialog-viewport-height, 92dvh)); border-radius: 22px 22px 0 0; }
   .inlineModal > header { padding: 16px 18px; }
-  .inlineModal .editorFields { padding: 18px; }
+  .inlineModal .editorScroll { padding: 18px; }
   .inlineModal .formGrid, .inlineModal .conditionalFields { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .inlineModal input:not([type="radio"]), .inlineModal select, .inlineModal textarea { font-size: 16px; }
   .inlineModal > form > footer { padding: 14px 18px max(14px, env(safe-area-inset-bottom)); }

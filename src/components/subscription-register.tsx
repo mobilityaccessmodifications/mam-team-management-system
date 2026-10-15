@@ -809,6 +809,7 @@ function SubscriptionModal({
     <section className={`${styles.modal} ${!isEditing ? styles.inlineModal : ""}`} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="subscription-dialog-title" tabIndex={-1}>
       <header><div><h2 id="subscription-dialog-title">{isEditing ? "Edit subscription" : "Add subscription"}</h2>{isEditing && subscription ? <p>{subscription.subscriptionCode}</p> : null}</div><button type="button" onClick={closeWhenReady} disabled={saving || paidLocked} aria-label="Close subscription form"><X size={19} /></button></header>
       <form ref={formRef} onSubmit={submit}>
+        <div className={styles.editorScroll}>
         <fieldset className={styles.editorFields} disabled={saving || paidLocked || paid.denied}>
         <div className={styles.formGrid}>
           <label><span>Service name <b aria-hidden="true">*</b></span><input name="serviceName" ref={initialFocusRef} required maxLength={160} defaultValue={subscription?.serviceName ?? ""} placeholder="Microsoft 365, Adobe Creative Cloud…" /></label>
@@ -850,6 +851,7 @@ function SubscriptionModal({
         {isEditing && passwordReminder ? <p className={styles.formHelp}><KeyRound size={15} /> {passwordReminder} </p> : null}
         </fieldset>
         </fieldset>
+        </div>
         {error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{error}</p> : null}
         {isPaidRequest && paid.error ? <p className={styles.inlineError} role="alert"><AlertCircle size={15} />{paid.error}</p> : null}
         <footer><button className={styles.secondaryAction} type="button" onClick={closeWhenReady} disabled={saving || paidLocked}>Cancel</button>{isPaidRequest && (paid.uncertain || (!paid.context && !paid.denied && !paid.loading)) ? <button className={styles.secondaryAction} type="button" onClick={() => void paid.load(true)} disabled={paid.loading || paid.posting}>Reload requests</button> : null}{isEditing && onReview && subscription && hasQuarterlyReview(subscription) ? <button className={styles.secondaryAction} type="button" onClick={() => void reviewNow()} disabled={saving}>{saving ? <LoaderCircle className={styles.spinner} size={16} /> : <CalendarClock size={16} />}{saving ? "Saving…" : "Mark review complete"}</button> : null}<button className={styles.primaryAction} type="submit" disabled={saving || paid.denied || (isPaidRequest ? !paid.ready || paid.posting : !people.length)}>{saving || paid.posting ? <LoaderCircle className={styles.spinner} size={16} /> : <CreditCard size={16} />}{paid.posting ? "Submitting…" : saving ? "Saving…" : isEditing ? "Save changes" : isPaidRequest ? "Submit request" : "Add subscription"}</button></footer>
