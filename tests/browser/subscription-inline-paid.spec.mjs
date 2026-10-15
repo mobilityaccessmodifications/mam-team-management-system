@@ -288,3 +288,35 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
   await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeFocused();
   expect(await writes(page)).toEqual([]);
 });
+
+for (const viewport of [{ width: 1440, height: 1000 }, { width: 1440, height: 800 }, { width: 390, height: 844 }]) test(`inline paid native wheel reaches the bottom and returns at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+  await page.setViewportSize(viewport);
+  const dialog = await openModal(page);
+  await field(dialog, 'Paid').click();
+  await expect(field(dialog, 'Requested by')).toHaveValue('Synthetic Applicant');
+  const scroller = dialog.locator('form > div').first();
+  const header = dialog.locator(':scope > header');
+  const footer = dialog.locator('form > footer');
+  const headerBounds = await header.boundingBox();
+  const footerBounds = await footer.boundingBox();
+  const scrollBounds = await scroller.boundingBox();
+  const backgroundTop = await page.evaluate(() => window.scrollY);
+  expect(await scroller.evaluate(node => node.scrollTop)).toBe(0);
+  const purposeBounds = await field(dialog, 'Purpose').boundingBox();
+  await page.mouse.move(purposeBounds.x + 20, Math.min(purposeBounds.y + 20, scrollBounds.y + scrollBounds.height - 20));
+  await page.mouse.wheel(0, 500);
+  await expect.poll(() => scroller.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+  await page.mouse.move(scrollBounds.x + 6, scrollBounds.y + scrollBounds.height / 2);
+  await page.mouse.wheel(0, 5000);
+  await expect.poll(() => scroller.evaluate(node => node.scrollHeight - node.clientHeight - node.scrollTop)).toBeLessThanOrEqual(1);
+  const evidenceBounds = await dialog.getByLabel(/^Evidence/).boundingBox();
+  expect(evidenceBounds.y).toBeGreaterThanOrEqual(scrollBounds.y);
+  expect(evidenceBounds.y + evidenceBounds.height).toBeLessThanOrEqual(scrollBounds.y + scrollBounds.height + 1);
+  expect(await header.boundingBox()).toEqual(headerBounds);
+  expect(await footer.boundingBox()).toEqual(footerBounds);
+  expect(await page.evaluate(() => window.scrollY)).toBe(backgroundTop);
+  await page.mouse.wheel(0, -5000);
+  await expect.poll(() => scroller.evaluate(node => node.scrollTop)).toBe(0);
+  await expect(field(dialog, 'Paid')).toBeChecked();
+  expect(await writes(page)).toEqual([]);
+});
