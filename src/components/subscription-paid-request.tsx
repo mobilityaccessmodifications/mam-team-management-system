@@ -63,7 +63,7 @@ export function usePaidSubscriptionRequest({ formRef, onSubmitted, onDenied }: C
       }
       const row = reconcile ? result.data.requests.find(item => item.id === idRef.current) : null;
       if (row && ["submitted", "approved"].includes(row.status)) { onSubmitted(row.payload.service ?? "Subscription"); return; }
-      if (!result.data.enabled || !result.data.canApply || result.data.requestFormVersion !== 3) { setContext(null); contextRef.current = null; setError("Subscription requests are unavailable."); return; }
+      if (!result.data.enabled || !result.data.canApply || ![2, 3].includes(result.data.requestFormVersion)) { setContext(null); contextRef.current = null; setError("Subscription requests are unavailable."); return; }
       const next = { enabled: result.data.enabled, canApply: result.data.canApply, requestFormVersion: result.data.requestFormVersion, viewerName: result.data.viewerName };
       contextRef.current = next; setContext(next);
       idRef.current ??= crypto.randomUUID();

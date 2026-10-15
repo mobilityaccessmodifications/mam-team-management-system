@@ -9,7 +9,7 @@ function requestWorkspace() {
   if (inlineRequestMode === 'denied') return { ok: false, denied: true, message: 'You do not have permission for this request.' };
   return { ok: true, data: {
     enabled: Boolean(inlineRequestMode) && inlineRequestMode !== 'unavailable', canApply: Boolean(inlineRequestMode) && inlineRequestMode !== 'no-apply',
-    requestFormVersion: inlineRequestMode === 'legacy' ? 2 : 3,
+    requestFormVersion: inlineRequestMode === 'legacy' ? 2 : inlineRequestMode === 'unsupported' ? 1 : 3,
     viewerName: requestApplicant.name, viewerPersonId: requestApplicant.id, canManageCredentials: false,
     requests: requestRows, people: syntheticRolePeople.map(person => ({ id: person.id, name: person.name })),
   } };

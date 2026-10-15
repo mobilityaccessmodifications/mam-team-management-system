@@ -234,7 +234,30 @@ test('inline paid failed initial load can retry without navigating or mutating',
   expect(await page.evaluate(() => window.fixtureNavigation)).toBeUndefined();
 });
 
-for (const mode of ['unavailable', 'no-apply', 'legacy', 'denied']) test(`inline paid ${mode} workspace cannot submit a new request`, async ({ page }) => {
+test('inline paid staged V2 request submits with its supported fields and optional start date', async ({ page }) => {
+  const dialog = await openModal(page, 'legacy');
+  await commonFields(dialog);
+  await field(dialog, 'Paid').click();
+  await expect(field(dialog, 'Requested by')).toHaveValue('Synthetic Applicant');
+  await expect(field(dialog, 'Category')).toHaveCount(0);
+  await expect(field(dialog, 'Website link')).toHaveCount(0);
+  await field(dialog, 'Purpose').fill('Synthetic staged request');
+  await field(dialog, 'Intended users').fill('Synthetic delivery team');
+  await dialog.getByLabel(/^Start date/).fill('2026-11-01');
+  await field(dialog, 'Annual cost (AUD)').fill('255.00');
+  await field(dialog, 'Monthly cost (AUD)').fill('25.50');
+  await field(dialog, 'Payment method').selectOption('non_card');
+  await submitFor(dialog).click();
+  await expect(dialog).toHaveCount(0);
+  const calls = await writes(page);
+  expect(calls.map(call => call.name)).toEqual(['mutateSubscriptionRequest']);
+  const payload = calls[0].args[0].payload;
+  expect(payload).toMatchObject({ formVersion: 2, startDate: '2026-11-01', billing: 'annual', payment: 'non_card', quoteCents: 25500 });
+  for (const key of ['category', 'websiteUrl', 'usageFrequency', 'oneOffCostCents', 'invoiceEmail', 'invoiceContact']) expect(payload).not.toHaveProperty(key);
+  expect(await page.evaluate(() => window.fixtureNavigation)).toBeUndefined();
+});
+
+for (const mode of ['unavailable', 'no-apply', 'unsupported', 'denied']) test(`inline paid ${mode} workspace cannot submit a new request`, async ({ page }) => {
   const dialog = await openModal(page, mode);
   await commonFields(dialog);
   await field(dialog, 'Paid').click();
