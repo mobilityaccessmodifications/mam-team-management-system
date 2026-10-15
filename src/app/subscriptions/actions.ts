@@ -72,21 +72,23 @@ async function requireSubscriptionViewer() {
   if (userError || !userData.user) throw new Error("Your session has expired. Sign in again.");
 
   const { data: allowed, error: permissionError } = await supabase.rpc("can_view_subscription_register");
-  if (permissionError || allowed !== true) {
+  if (permissionError?.code === "42501" || (!permissionError && allowed === false)) {
     throw new Error("You do not have permission to view subscriptions.");
   }
+  if (permissionError || allowed !== true) throw new Error(GENERIC_LOAD_ERROR);
   return supabase;
 }
 
-async function requireSubscriptionAdministrator() {
+async function requireSubscriptionAdministrator(fallback = GENERIC_LOAD_ERROR) {
   const supabase = await createClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) throw new Error("Your session has expired. Sign in again.");
 
   const { data: allowed, error: permissionError } = await supabase.rpc("can_manage_subscriptions");
-  if (permissionError || allowed !== true) {
+  if (permissionError?.code === "42501" || (!permissionError && allowed === false)) {
     throw new Error("You do not have permission to manage subscriptions.");
   }
+  if (permissionError || allowed !== true) throw new Error(fallback);
   return supabase;
 }
 
@@ -377,7 +379,7 @@ export async function listSubscriptionPeople(): Promise<SubscriptionPerson[]> {
 }
 
 export async function createSubscription(input: CreateSubscriptionInput): Promise<Subscription> {
-  const supabase = await requireSubscriptionAdministrator();
+  const supabase = await requireSubscriptionAdministrator(GENERIC_SAVE_ERROR);
   const values = validateSubscriptionInput(input, false);
   const startDate = optionalStartDate(input.startDate);
   const { data, error } = input.startDate === undefined
@@ -390,7 +392,7 @@ export async function createSubscription(input: CreateSubscriptionInput): Promis
 }
 
 export async function updateSubscription(input: UpdateSubscriptionInput): Promise<Subscription> {
-  const supabase = await requireSubscriptionAdministrator();
+  const supabase = await requireSubscriptionAdministrator(GENERIC_SAVE_ERROR);
   const values = validateSubscriptionInput(input, true);
   const startDate = optionalStartDate(input.startDate);
   const parameters = {
@@ -409,7 +411,7 @@ export async function updateSubscription(input: UpdateSubscriptionInput): Promis
 
 /** Records the quarterly review and lets the database set the next date. */
 export async function markSubscriptionReviewed(input: ReviewSubscriptionInput): Promise<Subscription> {
-  const supabase = await requireSubscriptionAdministrator();
+  const supabase = await requireSubscriptionAdministrator(GENERIC_SAVE_ERROR);
   const { data, error } = await supabase.rpc("mark_subscription_reviewed_v2", {
     p_subscription_id: requiredUuid(input.subscriptionId, "The subscription record is invalid."),
     p_expected_version: requiredVersion(input.version),

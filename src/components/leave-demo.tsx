@@ -848,8 +848,9 @@ export function LeaveDemo({
   }, [contactScopeEpoch, previewPersonId, refreshWorkScheduleWorkspace]);
 
   const loadAccounts = useCallback(async () => {
-    const epoch = profileScopeEpoch.current;
-    if (!isAdmin || !canManageEmployeeDirectory) {
+    const epoch = contactScopeEpoch;
+    if (epoch !== profileScopeEpoch.current) return;
+    if (dataRoleCapabilities?.can_manage_accounts !== true) {
       setAccounts([]);
       setAccountsError("");
       setAccountsLoading(false);
@@ -866,7 +867,7 @@ export function LeaveDemo({
     } finally {
       if (epoch === profileScopeEpoch.current) setAccountsLoading(false);
     }
-  }, [canManageEmployeeDirectory, isAdmin]);
+  }, [contactScopeEpoch, dataRoleCapabilities]);
 
   const loadOrganisation = useCallback(async () => {
     if (!directorySupabase) return;
@@ -989,10 +990,9 @@ export function LeaveDemo({
   }, [directorySupabase, loadOrganisation, loadSelfProfile, refreshLeaveWorkspace, refreshWorkScheduleWorkspace]);
 
   useEffect(() => {
-    if (!isAdmin || !canManageEmployeeDirectory) return;
     const timer = window.setTimeout(() => void loadAccounts(), 0);
     return () => window.clearTimeout(timer);
-  }, [canManageEmployeeDirectory, contactScopeEpoch, isAdmin, loadAccounts]);
+  }, [loadAccounts]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadSelfProfile(), 0);
@@ -1266,8 +1266,8 @@ export function LeaveDemo({
   const controlledAccessRole: AccessRole = ownCapabilities?.app_role ?? "employee";
   const adminProfile: Profile = { ...signedInProfile, accessRole: controlledAccessRole };
 
-  const selectedCapabilities = selectedRoleState?.personId === selectedPreviewPersonId ? selectedRoleState.capabilities : null;
-  const activeCapabilities = selectedPreviewCandidate ? selectedCapabilities : ownCapabilities;
+  const activeCapabilities = previewPersonId && !selectedPreviewCandidate ? null : dataRoleCapabilities;
+  const selectedCapabilities = selectedPreviewCandidate ? activeCapabilities : null;
   const rolePermissionsError = selectedRoleState?.personId === (selectedPreviewPersonId ?? "") ? selectedRoleState.error : "";
   const scopeIsCurrent = () => contactScopeEpoch === profileScopeEpoch.current;
   const scopedCheckInResources = checkInResources ? { ...checkInResources, canApproveEmploymentDecisions: activeCapabilities?.can_approve_employment_decisions === true } : undefined;
@@ -1323,7 +1323,7 @@ export function LeaveDemo({
   const showManagerDirectory = activeProfile.accessRole === "manager"
     && hasManagerPeopleWorkspace;
   const showManagerCheckIns = activeProfile.accessRole === "manager"
-    && hasManagerPeopleWorkspace;
+    && activeCapabilities?.can_view_check_in_workspace === true;
 
   // Change profile mirrors the selected employee's role-level tabs. The real
   // session still authorises every RPC, but an employee preview must not show
@@ -2155,7 +2155,7 @@ export function LeaveDemo({
                 onLoadMyDevices={employeeDirectoryDeviceLoader}
                 onLoadMySubscriptions={employeeDirectorySubscriptionLoader}
               /> : undefined}
-              renderCheckInRegister={showHrWorkspace
+              renderCheckInRegister={showHrWorkspace && activeCapabilities.can_view_check_in_workspace
                 ? <CheckInRegister
                     onRecordsChanged={() => void refreshLeaveWorkspace()}
                     readOnly={false}
@@ -2172,14 +2172,14 @@ export function LeaveDemo({
               renderCheckInTasks={activeCapabilities
                 ? (toolbarAction) => <><CheckInTasks
                     key={isPreviewingEmployeeAccess ? activeProfile.id : "self"}
-                    showSubscriptionReviewTasks={Boolean(activeCapabilities.person_id)}
+                    showSubscriptionReviewTasks={Boolean(activeCapabilities.person_id && activeCapabilities.can_manage_subscriptions)}
                     workScheduleWorkspace={visibleWorkScheduleWorkspace}
                     onScheduleReview={reviewWorkScheduleRequest}
                     onScheduleRefresh={refreshWorkScheduleWorkspace}
                     previewPersonId={isPreviewingEmployeeAccess ? activeProfile.id : undefined}
                     readOnly={false}
                     toolbarAction={toolbarAction}
-                    showCheckInTasks={true}
+                    showCheckInTasks={activeCapabilities.can_view_check_in_workspace}
                     scheduleContent={<WorkScheduleTasks
                       showReviews={false}
                       workspace={visibleWorkScheduleWorkspace}
@@ -2191,7 +2191,7 @@ export function LeaveDemo({
                     />}
                   />{!isPreviewingEmployeeAccess ? <SubscriptionRequestTasks /> : null}</>
                 : undefined}
-              renderAccounts={showHrWorkspace ? accountsLoading
+              renderAccounts={activeCapabilities.can_manage_accounts ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
                 : accountsError
                 ? <div className={styles.emptyState}><ShieldCheck size={24} /><strong>Accounts could not be loaded</strong><span>{accountsError}</span><button className={styles.primaryButton} type="button" onClick={() => { if (scopeIsCurrent()) void loadAccounts(); }}>Retry accounts</button></div>

@@ -68,15 +68,16 @@ type ItAssetAssigneeRpcRow = {
   company_key: string;
 };
 
-async function requireItAssetAdministrator() {
+async function requireItAssetAdministrator(fallback = GENERIC_LOAD_ERROR) {
   const supabase = await createClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) throw new Error("Your session has expired. Sign in again.");
 
   const { data: allowed, error: permissionError } = await supabase.rpc("can_manage_it_assets");
-  if (permissionError || allowed !== true) {
+  if (permissionError?.code === "42501" || (!permissionError && allowed === false)) {
     throw new Error("You do not have permission to manage IT assets.");
   }
+  if (permissionError || allowed !== true) throw new Error(fallback);
   return supabase;
 }
 
@@ -356,7 +357,7 @@ async function loadItAssetById(supabase: Awaited<ReturnType<typeof createClient>
 
 /** Generates the database-owned unique MAM asset code and records its custodian. */
 export async function createItAsset(input: CreateItAssetInput): Promise<ItAsset> {
-  const supabase = await requireItAssetAdministrator();
+  const supabase = await requireItAssetAdministrator(GENERIC_SAVE_ERROR);
   const values = validateCreateInput(input);
   const { data, error } = await supabase.rpc("create_it_asset", values);
   if (error || !Array.isArray(data)) throw mutationError(error, "The device could not be added. Refresh and try again.");
@@ -368,7 +369,7 @@ export async function createItAsset(input: CreateItAssetInput): Promise<ItAsset>
 
 /** Changes an existing device's accountable employee with database version checks. */
 export async function reassignItAsset(input: ReassignItAssetInput): Promise<ItAsset> {
-  const supabase = await requireItAssetAdministrator();
+  const supabase = await requireItAssetAdministrator(GENERIC_SAVE_ERROR);
   const values = validateReassignmentInput(input);
   const { data, error } = await supabase.rpc("reassign_it_asset", values);
   if (error || !Array.isArray(data)) throw mutationError(error);
@@ -380,7 +381,7 @@ export async function reassignItAsset(input: ReassignItAssetInput): Promise<ItAs
 
 /** Closes the current custody period without deleting the asset or its history. */
 export async function returnItAsset(input: ReturnItAssetInput): Promise<ItAsset> {
-  const supabase = await requireItAssetAdministrator();
+  const supabase = await requireItAssetAdministrator(GENERIC_SAVE_ERROR);
   const values = validateReturnInput(input);
   const { data, error } = await supabase.rpc("return_it_asset", values);
   if (error || !Array.isArray(data)) {
@@ -393,7 +394,7 @@ export async function returnItAsset(input: ReturnItAssetInput): Promise<ItAsset>
 
 /** Hides an incorrect entry from the active register while retaining its audit history. */
 export async function retireItAsset(input: RetireItAssetInput): Promise<ItAsset> {
-  const supabase = await requireItAssetAdministrator();
+  const supabase = await requireItAssetAdministrator(GENERIC_SAVE_ERROR);
   const values = validateRetirementInput(input);
   const { data, error } = await supabase.rpc("retire_it_asset", values);
   if (error || !Array.isArray(data)) throw mutationError(error, "The device could not be retired. Refresh and try again.");

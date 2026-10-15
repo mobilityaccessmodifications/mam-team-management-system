@@ -156,14 +156,15 @@ test('Manager check-in controls do not inherit P0 employment decisions',async()=
   const checkIns=component(tree,'PeopleOperationsDemo').props.renderCheckInRegister;
   assert.equal(checkIns.props.resources.canApproveEmploymentDecisions,false);
 });
-test('Team member and Account keep their own target-scoped check-in tasks',async()=>{
+test('Team member and Account keep allowed Tasks without requesting check-in reviews',async()=>{
   for(const role of ['employee','account']){
     const ui=portal({targetRole:role});await ui.settle();ui.select(targetId);const tree=await ui.settle();
     const taskTree=component(tree,'PeopleOperationsDemo').props.renderCheckInTasks();
     assert.equal(component(taskTree,'SubscriptionRequestTasks'),undefined);
     const tasks=component(taskTree,'CheckInTasks');
     assert.equal(tasks.props.previewPersonId,targetId);
-    assert.equal(tasks.props.showCheckInTasks,true);
+    assert.equal(tasks.props.showCheckInTasks,false);
+    assert.equal(tasks.props.showSubscriptionReviewTasks,false);
   }
 });
 test('an old A work-schedule callback cannot dispatch after B becomes active',async()=>{
@@ -271,6 +272,7 @@ test('Employee subscription preview uses only its independent grants, never P0 a
     await ui.settle(); ui.select(targetId); const tree = await ui.settle();
     const people = component(tree,'PeopleOperationsDemo').props;
     assert.equal(people.activeProfile.accessRole,'employee');
+    assert.equal(component(people.renderCheckInTasks(),'CheckInTasks').props.showSubscriptionReviewTasks,management);
     const panel = people.renderSubscriptionRegister;
     assert.equal(Boolean(panel),management || vault);
     if (management) {
@@ -285,6 +287,53 @@ test('Employee subscription preview uses only its independent grants, never P0 a
     }
     assert.ok(!people.renderAccounts && !people.renderAssetRegister && !people.renderAnalyticsApiManagement);
   }
+});
+for(const role of ['manager','admin']) test(`Check-in panels require their own current ${role} capability`,async()=>{
+  const ui=portal({targetRole:role,grants:{can_view_check_in_workspace:false}});
+  await ui.settle();ui.select(targetId);const people=component(await ui.settle(),'PeopleOperationsDemo').props;
+  assert.ok(people.renderEmployeeDirectory);
+  assert.equal(people.renderCheckInRegister,undefined);
+  assert.equal(component(people.renderCheckInTasks(),'CheckInTasks').props.showCheckInTasks,false);
+});
+test('Accounts visibility follows its own capability rather than Directory administration',async()=>{
+  const ui=portal();ui.props.actorCapabilities={...capabilities('system_admin',null),can_manage_accounts:false};
+  const people=component(await ui.settle(),'PeopleOperationsDemo').props;
+  assert.ok(people.renderEmployeeDirectory);
+  assert.equal(people.renderAccounts,undefined);
+  assert.equal(ui.calls.filter(([name])=>name==='accounts').length,0);
+});
+for(const role of ['employee','manager','account']) test(`Accounts is not prefetched for an unentitled ${role} preview`,async()=>{
+  const ui=portal({targetRole:role});await ui.settle();
+  const before=ui.calls.filter(([name])=>name==='accounts').length;
+  assert.ok(before>0,'authorized P0 workspace loads Accounts');
+  ui.select(targetId);const tree=await ui.settle();
+  assert.ok(!component(tree,'PeopleOperationsDemo').props.renderAccounts);
+  assert.equal(ui.calls.filter(([name])=>name==='accounts').length,before);
+});
+test('Accounts waits for a current allowed capability response before loading an Admin preview',async()=>{
+  const response=deferred(),ui=portal({capabilityResult:()=>response.promise});await ui.settle();
+  const before=ui.calls.filter(([name])=>name==='accounts').length;
+  ui.select(targetId);await ui.settle();
+  assert.equal(ui.calls.filter(([name])=>name==='accounts').length,before);
+  response.resolve({ok:true,capabilities:capabilities('admin',targetId)});
+  const tree=await ui.settle();
+  assert.ok(component(tree,'PeopleOperationsDemo').props.renderAccounts);
+  assert.equal(ui.calls.filter(([name])=>name==='accounts').length,before+1);
+});
+test('own workspace withholds privileged modules until refreshed capabilities succeed',async()=>{
+  const response=deferred(),ui=portal({capabilityResult:()=>response.promise});
+  let tree=await ui.settle();
+  const before=ui.calls.filter(([name])=>name==='accounts').length;
+  await component(tree,'PeopleOperationsDemo').props.renderEmployeeDirectory.props.onRecordsChanged();
+  tree=await ui.settle();
+  assert.equal(component(tree,'PeopleOperationsDemo'),undefined);
+  assert.equal(component(tree,'HomeView'),undefined);
+  assert.equal(ui.calls.filter(([name])=>name==='accounts').length,before);
+  response.resolve({ok:true,capabilities:capabilities('system_admin',null)});
+  tree=await ui.settle();
+  const people=component(tree,'PeopleOperationsDemo').props;
+  assert.ok(people.renderEmployeeDirectory && people.renderAccounts && people.renderAssetRegister);
+  assert.equal(ui.calls.filter(([name])=>name==='accounts').length,before+1);
 });
 test('late Employee delegation capabilities cannot grant the newer selected Employee access', async () => {
   const old = deferred();

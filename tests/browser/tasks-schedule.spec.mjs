@@ -106,7 +106,7 @@ for (const [buttonName, decision] of [['Approve request', 'approved'], ['Decline
 }
 
 test('a disappearing task releases a held Notes save so the list remains usable', async ({ page }) => {
-  await page.goto(ownRoute);
+  await page.goto(`${ownRoute}&actor-role=manager`);
   await openTasks(page);
   await expect(notes(page)).toBeEditable();
   await notes(page).fill('Synthetic note finishing after request cancellation');
