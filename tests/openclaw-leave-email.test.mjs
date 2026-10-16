@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import { loadUatSafety } from './helpers/uat-safety-loader.mjs';
 
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
@@ -21,13 +22,14 @@ const environment = {
 
 // No live environment, client or fetch can enter these route/dispatcher tests.
 function load(file, imports, { fetch = () => assert.fail('Unexpected network'), warnings = [] } = {}) {
+  const fixtureEnvironment = { ...environment };
   const mod = { exports: {} };
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   new Function('require', 'module', 'exports', 'process', 'console', 'fetch', code)(
-    key => { assert(key in imports, `Unexpected import ${key}`); return imports[key]; },
-    mod, mod.exports, { env: { ...environment } }, { warn: (...args) => warnings.push(args) }, fetch,
+    key => { if (key === '@/lib/uat-safety') return loadUatSafety(fixtureEnvironment); assert(key in imports, `Unexpected import ${key}`); return imports[key]; },
+    mod, mod.exports, { env: fixtureEnvironment }, { warn: (...args) => warnings.push(args) }, fetch,
   );
   return mod.exports;
 }

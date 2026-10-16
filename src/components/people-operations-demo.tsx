@@ -42,7 +42,7 @@ import {
 import styles from "@/components/people-operations-demo.module.css";
 
 type AccessRole = "employee" | "manager" | "account" | "admin" | "system_admin" | null;
-type PeopleSection = "profile" | "directory" | "organisation" | "tasks" | "checkins" | "accounts" | "assets" | "subscriptions" | "analytics";
+type PeopleSection = "profile" | "directory" | "organisation" | "tasks" | "checkins" | "accounts" | "assets" | "subscriptions" | "analytics" | "performance";
 type PeopleTaskSection = "onboarding" | "offboarding" | "checkins";
 type WorkflowKind = "onboarding" | "offboarding";
 type TaskOwner = "HR" | "Team Leader" | "IT" | "Accounts" | "Analyst" | "Warehouse" | "Employee";
@@ -287,6 +287,7 @@ export function PeopleOperationsDemo({
   initialSection,
   renderSubscriptionRegister,
   renderAnalyticsApiManagement,
+  renderPerformanceReviews,
   legacyCheckInFormsUrl,
   showProfile = true,
   showOrganisation = false,
@@ -313,11 +314,12 @@ export function PeopleOperationsDemo({
   renderAccounts?: ReactNode;
   /** System-admin asset register. The component rechecks its own server capability. */
   renderAssetRegister?: ReactNode;
-  initialSection?: "assets" | "accounts" | "subscriptions" | "tasks";
+  initialSection?: "assets" | "accounts" | "subscriptions" | "tasks" | "performance";
   /** System Admin-managed subscription register; managers receive its read-only projection. */
   renderSubscriptionRegister?: ReactNode;
   /** System Admin-only analytics key lifecycle and integration guide. */
   renderAnalyticsApiManagement?: ReactNode;
+  renderPerformanceReviews?: ReactNode;
   /** Optional deployment-configured link used only by the legacy demo view. */
   legacyCheckInFormsUrl?: string | null;
   /** Lets a constrained employee workspace omit the legacy Profile tab. */
@@ -341,7 +343,8 @@ export function PeopleOperationsDemo({
     ...(renderAssetRegister ? ["assets" as const] : []),
     ...(renderSubscriptionRegister ? ["subscriptions" as const] : []),
     ...(renderAnalyticsApiManagement ? ["analytics" as const] : []),
-  ], [hasTasks, renderAccounts, renderAnalyticsApiManagement, renderAssetRegister, renderCheckInRegister, renderEmployeeDirectory, renderSubscriptionRegister, showOrganisation, showProfile]);
+    ...(renderPerformanceReviews ? ["performance" as const] : []),
+  ], [hasTasks, renderAccounts, renderAnalyticsApiManagement, renderAssetRegister, renderCheckInRegister, renderEmployeeDirectory, renderPerformanceReviews, renderSubscriptionRegister, showOrganisation, showProfile]);
   const [section, setSection] = useState<PeopleSection>(() => initialSection ?? availableSections[0] ?? "profile");
   const [taskSection, setTaskSection] = useState<PeopleTaskSection>(
     renderCheckInRegister ? "onboarding" : "checkins",
@@ -522,6 +525,7 @@ export function PeopleOperationsDemo({
     if (value === "assets") return { value, label: "Assets", icon: <Laptop size={16} /> };
     if (value === "subscriptions") return { value, label: "Subscriptions", icon: <CreditCard size={16} /> };
     if (value === "analytics") return { value, label: "Analytics API", icon: <Code2 size={16} /> };
+    if (value === "performance") return { value, label: "Performance reviews", icon: <FileCheck2 size={16} /> };
     return { value, label: "Accounts", icon: <KeyRound size={16} /> };
   });
 
@@ -562,6 +566,7 @@ export function PeopleOperationsDemo({
         {visibleSection === "assets" ? renderAssetRegister : null}
         {visibleSection === "subscriptions" ? renderSubscriptionRegister : null}
         {visibleSection === "analytics" ? renderAnalyticsApiManagement : null}
+        {visibleSection === "performance" ? renderPerformanceReviews : null}
         {visibleSection === "tasks" && hasRealCheckInTasks ? renderCheckInTasks?.(taskAction) : null}
         {visibleSection === "tasks" && !hasRealCheckInTasks ? <nav className={styles.taskSwitch} aria-label="Task type">
           {!isEmployee || employeeLifecycleSection === "onboarding" ? <button type="button" aria-pressed={visibleTaskSection === "onboarding"} onClick={() => setTaskSection("onboarding")}>Onboarding</button> : null}

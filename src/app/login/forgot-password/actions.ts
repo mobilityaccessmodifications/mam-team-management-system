@@ -12,6 +12,7 @@ import {
   type PasswordRecoveryState,
 } from "@/lib/password-recovery";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isUatMode } from "@/lib/uat-safety";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 const unavailable = (): PasswordRecoveryState => ({ status: "error", message: "Password reset is unavailable. Try again later." });
@@ -36,6 +37,7 @@ export async function requestPasswordRecovery(
 ): Promise<PasswordRecoveryState> {
   const email = normalisePortalLogin(String(formData.get("email") ?? ""));
   if (!isPortalLoginEmail(email)) return { status: "error", message: "Enter a valid email address." };
+  if (isUatMode()) return unavailable();
   const config = deliveryConfig();
   if (!config) return unavailable();
   const startedAt = Date.now();
@@ -57,6 +59,7 @@ export async function requestPasswordRecovery(
         if (row.recipient !== email || typeof row.request_id !== "string") return unavailable();
         const resetUrl = `${PEOPLE_HUB_ORIGIN}/login/reset-password#token=${token}`;
         after(async () => {
+          if (isUatMode()) return;
           try {
             const response = await fetch(config.url, {
               method: "POST", headers: { "content-type": "application/json", "x-mam-password-recovery-secret": config.secret },
@@ -89,6 +92,7 @@ export async function resetRecoveredPassword(
   if (!PASSWORD_RECOVERY_TOKEN_PATTERN.test(token)) return invalid();
   if (!PASSWORD_RECOVERY_PASSWORD_PATTERN.test(password)) return { status: "error", message: PASSWORD_RECOVERY_PASSWORD_RULE };
   if (password !== String(formData.get("confirmPassword") ?? "")) return { status: "error", message: "The passwords do not match." };
+  if (isUatMode()) return unavailable();
   let admin: ReturnType<typeof createAdminClient>;
   try { admin = createAdminClient(); } catch { return unavailable(); }
   let claim;

@@ -1,3 +1,4 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { handleLeaveBridge, LEAVE_BRIDGE_PATH } from "@/lib/openclaw-leave-contract";
 import { createLeaveBridgeStore } from "@/lib/openclaw-leave-store";
 import { dispatchLeaveNotificationsForRequest } from "@/lib/leave-notification-outbox";
@@ -12,6 +13,7 @@ const headers = { "Cache-Control": "private, no-store, max-age=0", "X-Content-Ty
 const reply = (code: string, status: number) => Response.json({ code }, { status, headers });
 
 export async function POST(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   // Explicit rollout gate. No credential means no DB access; never reuse the
   // read-only allowlist secret or accept browser/caller-selected identity.
   if (process.env.MAM_OPENCLAW_LEAVE_ENABLED !== "true") return reply("unavailable", 503);

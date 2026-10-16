@@ -3,13 +3,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import * as crypto from "node:crypto";
+import { loadUatSafety } from "./helpers/uat-safety-loader.mjs";
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
 function fixture(responses, secret = "synthetic-cron-key") {
+  const environment = { CRON_SECRET: secret, MAM_OPENCLAW_LEAVE_ENABLED: "false" };
   let calls = 0;
   let clients = 0;
   const mod = { exports: {} };
   const imports = {
+    "@/lib/uat-safety": loadUatSafety(environment),
     "node:crypto": crypto,
     "@/lib/supabase/admin": { createAdminClient: () => {
       clients++;
@@ -22,7 +25,7 @@ function fixture(responses, secret = "synthetic-cron-key") {
   const source = readFileSync("src/app/api/cron/openclaw-leave-cleanup/route.ts", "utf8");
   new Function("require", "module", "exports", "process", ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText)(id => {
     assert.ok(id in imports); return imports[id];
-  }, mod, mod.exports, { env: { CRON_SECRET: secret, MAM_OPENCLAW_LEAVE_ENABLED: "false" } });
+  }, mod, mod.exports, { env: environment });
   return { get: mod.exports.GET, calls: () => calls, clients: () => clients };
 }
 const request = (authorization) => new Request("https://example.invalid/api/cron/openclaw-leave-cleanup", {

@@ -1,4 +1,5 @@
 import "server-only";
+import { isUatMode } from "@/lib/uat-safety";
 import { createHash, timingSafeEqual } from "node:crypto";
 
 export const NOTIFICATION_RECEIPTS_PATH = "/api/internal/integrations/notifications/receipts";
@@ -137,6 +138,7 @@ function deliveryResponse(data: unknown, input: DeliveryInput): Response {
  * An uncertain reserve is never retried here. Only the DB can grant one send.
  */
 export async function handleNotificationReceipts(request: Request, secret: string | undefined, rpc: ReceiptRpc): Promise<Response> {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   const authorization = authenticate(request, secret);
   if (authorization !== 200) return error(authorization === 401 ? "unauthorized" : "unavailable", authorization);
   const url = new URL(request.url);

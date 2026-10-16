@@ -1,3 +1,4 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { timingSafeEqual } from "node:crypto";
 import { GET as leaveNotifications } from "../leave-notifications/route";
 import { GET as checkInReminders } from "../check-in-reminders/route";
@@ -21,6 +22,7 @@ const jobs: Record<string, (request: Request) => Promise<Response>> = {
   "leave-priority-reminders": priorityReminders,
 };
 export async function GET(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   const reply = (code: string, status: number) => Response.json({ ok: false, code }, {
     status, headers: { "Cache-Control": "no-store" },
   });

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
+import { loadUatSafety } from './helpers/uat-safety-loader.mjs';
 
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
@@ -18,7 +19,7 @@ function load(file, imports = {}) {
   }).outputText;
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', source)(
-    (id) => id in imports ? imports[id] : require(id), mod, mod.exports,
+    (id) => id === '@/lib/uat-safety' ? loadUatSafety() : id in imports ? imports[id] : require(id), mod, mod.exports,
   );
   return mod.exports;
 }

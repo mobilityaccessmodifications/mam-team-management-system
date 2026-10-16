@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { loadUatSafety } from "./helpers/uat-safety-loader.mjs";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -38,7 +39,7 @@ function loadRoute({ candidates = [], runError = null, banError = null, confirm 
   };
   const source = ts.transpileModule(readFileSync("src/app/api/cron/scheduled-offboarding/route.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const moduleUnderTest = { exports: {} };
-  new Function("require", "module", "exports", source)((id) => id === "@/lib/supabase/admin" ? { createAdminClient: () => admin } : require(id), moduleUnderTest, moduleUnderTest.exports);
+  new Function("require", "module", "exports", source)((id) => id === "@/lib/uat-safety" ? loadUatSafety() : id === "@/lib/supabase/admin" ? { createAdminClient: () => admin } : require(id), moduleUnderTest, moduleUnderTest.exports);
   return { GET: moduleUnderTest.exports.GET, calls };
 }
 const request = (secret) => new Request("https://example.test/api/cron/scheduled-offboarding", { headers: { authorization: `Bearer ${secret}` } });

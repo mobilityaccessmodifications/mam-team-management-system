@@ -1,3 +1,4 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { createHash, timingSafeEqual } from "node:crypto";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -102,6 +103,7 @@ function allowedDataset(value: string | null): value is AnalyticsDataset {
  * route never exposes the Supabase secret key or direct database tables.
  */
 export async function GET(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   if (!(await matchesAnalyticsKey(request))) {
     return json({ ok: false, code: "unauthorized" }, 401);
   }

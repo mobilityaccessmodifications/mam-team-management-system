@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 
 import { requireSupabaseConfig } from "@/lib/supabase/config";
+import { createUatFetch, isUatMode } from "@/lib/uat-safety";
 
 function createSecretKeyCompatibleFetch(secretKey: string): typeof fetch | undefined {
   // @supabase/supabase-js 2.111.0 still initializes its Auth client with the
@@ -41,7 +42,9 @@ export function createAdminClient() {
       persistSession: false,
     },
     global: {
-      fetch: createSecretKeyCompatibleFetch(secretKey),
+      fetch: isUatMode()
+        ? createUatFetch(createSecretKeyCompatibleFetch(secretKey) ?? globalThis.fetch.bind(globalThis))
+        : createSecretKeyCompatibleFetch(secretKey),
     },
   });
 }

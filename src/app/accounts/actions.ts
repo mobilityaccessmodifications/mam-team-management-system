@@ -12,6 +12,7 @@ import type {
 } from "@/components/account-management";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isUatMode } from "@/lib/uat-safety";
 import { isPortalLoginEmail, normalisePortalLogin } from "@/lib/portal-login";
 import { finalisePortalAccountStatusChange, preparePortalAccountStatusChange } from "@/lib/portal-account-status";
 
@@ -209,7 +210,7 @@ export async function listPortalAccounts(): Promise<AccountDto[]> {
   const unresolvedUserIds = new Set(userIds);
   const lastSignInById = new Map<string, string | null>();
 
-  for (let page = 1; unresolvedUserIds.size > 0; page += 1) {
+  for (let page = 1; !isUatMode() && unresolvedUserIds.size > 0; page += 1) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 100 });
     if (error) throw new Error("Accounts could not be loaded.");
     for (const user of data.users) {
@@ -228,6 +229,7 @@ export async function listPortalAccounts(): Promise<AccountDto[]> {
 }
 
 export async function createPortalAccount(input: CreateAccountInput): Promise<AccountMutationResult> {
+  if (isUatMode()) return { error: "This operation is unavailable in UAT." };
   const { supabase } = await requireAccountAdministrator();
   validateIds(input.personId);
   const loginName = normalisePortalLogin(input.loginName);
@@ -319,6 +321,7 @@ export async function createPortalAccount(input: CreateAccountInput): Promise<Ac
 }
 
 export async function updatePortalLogin(input: UpdateLoginInput): Promise<AccountMutationResult> {
+  if (isUatMode()) return { error: "This operation is unavailable in UAT." };
   const { supabase } = await requireAccountAdministrator();
   validateIds(input.personId, input.userId);
   const loginName = normalisePortalLogin(input.loginName);
@@ -336,6 +339,7 @@ export async function updatePortalLogin(input: UpdateLoginInput): Promise<Accoun
 }
 
 export async function resetPortalPassword(input: ResetPasswordInput): Promise<AccountMutationResult> {
+  if (isUatMode()) return { error: "This operation is unavailable in UAT." };
   const { supabase } = await requireAccountAdministrator();
   validateIds(input.personId, input.userId);
   validatePassword(input.newPassword);
@@ -383,6 +387,7 @@ export async function resetPortalPassword(input: ResetPasswordInput): Promise<Ac
 }
 
 export async function togglePortalAccount(input: ToggleAccountInput): Promise<AccountMutationResult> {
+  if (isUatMode()) return { error: "This operation is unavailable in UAT." };
   const { supabase, actorUserId } = await requireAccountAdministrator();
   validateIds(input.personId, input.userId);
   if (!input.enabled && input.userId === actorUserId) throw new Error("You cannot disable your own login.");

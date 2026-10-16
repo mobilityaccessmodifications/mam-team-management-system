@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { loadUatSafety } from "./helpers/uat-safety-loader.mjs";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -30,7 +31,7 @@ test("leave_requests API returns the computed business_hours field beside raw ho
 
   const moduleUnderTest = { exports: {} };
   new Function("require", "module", "exports", source)(
-    (id) => id === "@/lib/supabase/admin" ? { createAdminClient } : require(id),
+    (id) => id === "@/lib/uat-safety" ? loadUatSafety() : id === "@/lib/supabase/admin" ? { createAdminClient } : require(id),
     moduleUnderTest,
     moduleUnderTest.exports,
   );

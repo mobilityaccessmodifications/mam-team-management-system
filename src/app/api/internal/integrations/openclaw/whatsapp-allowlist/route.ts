@@ -1,3 +1,4 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { allowlistAuthorization, allowlistSnapshot } from "@/lib/openclaw-allowlist";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -12,6 +13,7 @@ const headers = {
 };
 
 export async function GET(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   const status = allowlistAuthorization(request, process.env.MAM_OPENCLAW_ALLOWLIST_SECRET);
   if (status !== 200) {
     return Response.json({ code: status === 401 ? "unauthorized" : "unavailable" }, { status, headers });

@@ -1,3 +1,4 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { timingSafeEqual } from "node:crypto";
 
 import { runLeaveAttachmentMaintenance } from "@/lib/leave-attachment-maintenance";
@@ -18,6 +19,7 @@ function hasValidCronSecret(request: Request, secret: string) {
 
 /** Daily, CRON_SECRET-gated cleanup for expired private file retention. */
 export async function GET(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   const cronSecret = process.env.CRON_SECRET?.trim();
   if (!cronSecret || !hasValidCronSecret(request, cronSecret)) {
     return Response.json({ ok: false, code: "unauthorized" }, {

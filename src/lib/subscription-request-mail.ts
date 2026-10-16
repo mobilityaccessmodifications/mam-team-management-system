@@ -1,4 +1,5 @@
 import "server-only";
+import { isUatMode } from "@/lib/uat-safety";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const SUBSCRIPTION_REQUEST_MAIL_PATH = "/webhook/mam-subscription-request-mail-v2";
@@ -13,6 +14,7 @@ function receiver() {
 }
 
 export async function dispatchSubscriptionRequestMail(requestId: string | null = null) {
+  if (isUatMode()) return { ok: false, claimed: 0, sent: 0 };
   try {
     const target = receiver();
     const admin = createAdminClient();

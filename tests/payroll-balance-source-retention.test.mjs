@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { loadUatSafety } from "./helpers/uat-safety-loader.mjs";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -16,6 +17,7 @@ function load(file, imports = {}) {
   }).outputText;
   const moduleUnderTest = { exports: {} };
   new Function("require", "module", "exports", code)((id) => {
+    if (id === "@/lib/uat-safety") return loadUatSafety();
     if (id in imports) return imports[id];
     throw new Error(`Unexpected import: ${id}`);
   }, moduleUnderTest, moduleUnderTest.exports);

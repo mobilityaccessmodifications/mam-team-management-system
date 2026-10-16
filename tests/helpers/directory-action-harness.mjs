@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import ts from 'typescript';
 import path from 'node:path';
 import { capabilities, loadModule } from './unified-role-harness.mjs';
+import { loadUatSafety } from './uat-safety-loader.mjs';
 const require = createRequire(import.meta.url);
 export const personId = '10000000-0000-4000-8000-000000000001';
 export const draft = {
@@ -29,6 +30,7 @@ export function loadActions({ dbError = null, authError = null, transportError =
   new Function('require', 'module', 'exports', ts.transpileModule(readFileSync(path.join(sourceRoot, 'src/app/people/actions.ts'), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText)((id) => ({
+    '@/lib/uat-safety': loadUatSafety(process.env, sourceRoot),
     '@/lib/employee-teams': team.exports,
     '@/lib/portal-role-capabilities': loadModule(path.join(sourceRoot, 'src/lib/portal-role-capabilities.ts')),
     '@/lib/portal-role-access': loadModule(path.join(sourceRoot, 'src/lib/portal-role-access.ts'), { '@/lib/supabase/server': { createClient: async () => supabase }, '@/lib/portal-role-capabilities': loadModule(path.join(sourceRoot, 'src/lib/portal-role-capabilities.ts')) }),

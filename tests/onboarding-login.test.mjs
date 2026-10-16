@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import ts from 'typescript';
+import { loadUatSafety } from './helpers/uat-safety-loader.mjs';
 
 const require = createRequire(import.meta.url);
 const personId = '10000000-0000-4000-8000-000000000001';
@@ -14,7 +15,7 @@ function load(source, dependencies) {
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', ts.transpileModule(readFileSync(source, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText)((id) => dependencies[id] ?? require(id), mod, mod.exports);
+  }).outputText)((id) => id === '@/lib/uat-safety' ? loadUatSafety() : dependencies[id] ?? require(id), mod, mod.exports);
   return mod.exports;
 }
 function routeFixture(options = {}) {

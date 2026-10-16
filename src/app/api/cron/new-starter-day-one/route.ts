@@ -1,3 +1,4 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { timingSafeEqual } from "node:crypto";
 
 import { readCheckInDeliveryAck } from "@/lib/check-in-delivery-ack";
@@ -133,6 +134,7 @@ async function markFailed(
 }
 
 export async function GET(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   const headers = { "Cache-Control": "no-store" };
   const cronSecret = process.env.CRON_SECRET?.trim();
   if (!cronSecret || !hasValidCronSecret(request, cronSecret)) {

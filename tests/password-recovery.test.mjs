@@ -5,12 +5,13 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 import ts from 'typescript';
 import { buildPasswordRecoveryWorkflow } from '../scripts/build-password-recovery-workflow.mjs';
+import { loadUatSafety } from './helpers/uat-safety-loader.mjs';
 
 const require = createRequire(import.meta.url);
 function load(file, deps = {}) {
   const mod = {exports: {}};
   const code = ts.transpileModule(readFileSync(file, 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022}}).outputText;
-  new Function('require','module','exports',code)((id) => deps[id] ?? require(id), mod, mod.exports);
+  new Function('require','module','exports',code)((id) => id === '@/lib/uat-safety' ? loadUatSafety() : deps[id] ?? require(id), mod, mod.exports);
   return mod.exports;
 }
 const recovery = load('src/lib/password-recovery.ts');

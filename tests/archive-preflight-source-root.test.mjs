@@ -16,6 +16,7 @@ const sourceModules = [
   'src/lib/portal-account-status.ts',
   'src/lib/portal-role-access.ts',
   'src/lib/portal-role-capabilities.ts',
+  'src/lib/uat-safety.ts',
 ];
 const expectedReads = sourceModules.map(relativePath => {
   const filename = path.join(sourceRoot, relativePath);

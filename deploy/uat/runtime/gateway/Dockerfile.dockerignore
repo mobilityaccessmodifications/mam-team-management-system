@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!Dockerfile.dockerignore
+!nginx.conf
+!uat.conf.template
+!entrypoint.sh

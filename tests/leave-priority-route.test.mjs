@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { loadAssetQrModule } from './asset-qr-test-loader.mjs';
 import { Receiver } from './notification-workflow-harness.mjs';
+import { loadUatSafety } from './helpers/uat-safety-loader.mjs';
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
 
@@ -11,6 +12,7 @@ function load(file, imports) {
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const loadedModule = { exports: {} };
   new Function('require', 'module', 'exports', code)((id) => {
+    if (id === '@/lib/uat-safety') return loadUatSafety();
     if (id in imports) return imports[id];
     throw new Error(`Unexpected import: ${id}`);
   }, loadedModule, loadedModule.exports);

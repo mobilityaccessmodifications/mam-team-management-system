@@ -1,0 +1,9 @@
+{
+  "network": "n8n_default",
+  "entrypoint": "websecure",
+  "certresolver": "mytlschallenge",
+  "sourceHashes": {
+    "qa-evidence/uat-20261016/discovery/mam-ingress-readback.json": "61a83c2e882a063046c85a9b3527b38934b3d74cbb9f36d1ad8df6bce7bb8fa6",
+    "qa-evidence/uat-20261016/discovery/mam-runtime-target-readback.json": "56c8752a3898e40f57f22c07e6edf96b643e459ac8b5a642998e28eb67271273"
+  }
+}

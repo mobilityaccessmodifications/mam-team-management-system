@@ -1,0 +1,422 @@
+{
+  "name": "mam-people-hub-uat",
+  "services": {
+    "uat-db": {
+      "platform": "linux/amd64",
+      "image": "library/postgres@sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc",
+      "labels": {
+        "com.mam.uat.owner": "mam-people-hub-uat",
+        "com.mam.uat.instance": "mam-people-hub-uat-v1",
+        "traefik.enable": "false"
+      },
+      "networks": {
+        "backend": {}
+      },
+      "cpus": "1.00",
+      "mem_limit": "1024m",
+      "pids_limit": 128,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "read_only": true,
+      "restart": "unless-stopped",
+      "logging": {
+        "driver": "none"
+      },
+      "tmpfs": [
+        "/tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777",
+        "/var/run/postgresql:rw,nosuid,nodev,noexec,size=16m,uid=999,gid=999,mode=3775"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "postgres",
+          "-d",
+          "mam_uat_people_hub",
+          "-h",
+          "127.0.0.1"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 10,
+        "start_period": "30s"
+      },
+      "cap_add": [
+        "CHOWN",
+        "DAC_OVERRIDE",
+        "FOWNER",
+        "SETGID",
+        "SETUID"
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "db-data",
+          "target": "/var/lib/postgresql/data"
+        }
+      ],
+      "command": [
+        "postgres",
+        "-c",
+        "log_statement=none",
+        "-c",
+        "log_min_error_statement=panic",
+        "-c",
+        "log_parameter_max_length_on_error=0",
+        "-c",
+        "log_connections=off",
+        "-c",
+        "log_disconnections=off",
+        "-c",
+        "log_duration=off"
+      ],
+      "environment": {
+        "POSTGRES_DB": "mam_uat_people_hub",
+        "POSTGRES_USER": "postgres",
+        "POSTGRES_PASSWORD": "${MAM_UAT_POSTGRES_PASSWORD:?required}",
+        "PGDATA": "/var/lib/postgresql/data/pgdata",
+        "POSTGRES_INITDB_ARGS": "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+      }
+    },
+    "uat-auth": {
+      "platform": "linux/amd64",
+      "image": "supabase/gotrue@sha256:7e813221b93fbf54b515036438550e483bfaf057b9db52fe9bc1ce91c47e817e",
+      "labels": {
+        "com.mam.uat.owner": "mam-people-hub-uat",
+        "com.mam.uat.instance": "mam-people-hub-uat-v1",
+        "traefik.enable": "false"
+      },
+      "networks": {
+        "backend": {}
+      },
+      "cpus": "0.50",
+      "mem_limit": "384m",
+      "pids_limit": 128,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "read_only": true,
+      "restart": "unless-stopped",
+      "logging": {
+        "driver": "none"
+      },
+      "tmpfs": [
+        "/tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777"
+      ],
+      "user": "1000:1000",
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "-q",
+          "--spider",
+          "http://127.0.0.1:9999/health"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 10,
+        "start_period": "30s"
+      },
+      "environment": {
+        "GOTRUE_API_HOST": "0.0.0.0",
+        "GOTRUE_API_PORT": "9999",
+        "API_EXTERNAL_URL": "https://supabase-uat.srv1866578.hstgr.cloud",
+        "GOTRUE_SITE_URL": "https://people-hub-uat.srv1866578.hstgr.cloud",
+        "GOTRUE_URI_ALLOW_LIST": "https://people-hub-uat.srv1866578.hstgr.cloud",
+        "GOTRUE_DB_DRIVER": "postgres",
+        "GOTRUE_DB_NAMESPACE": "auth",
+        "GOTRUE_DB_DATABASE_URL": "${MAM_UAT_AUTH_DATABASE_URL:?required}",
+        "GOTRUE_JWT_SECRET": "${MAM_UAT_JWT_SECRET:?required}",
+        "GOTRUE_JWT_ISSUER": "mam-people-hub-uat-v1",
+        "GOTRUE_JWT_AUD": "authenticated",
+        "GOTRUE_JWT_DEFAULT_GROUP_NAME": "authenticated",
+        "GOTRUE_JWT_ADMIN_ROLES": "service_role",
+        "GOTRUE_JWT_ADMIN_GROUP_NAME": "service_role",
+        "GOTRUE_JWT_EXP": "3600",
+        "GOTRUE_DISABLE_SIGNUP": "true",
+        "GOTRUE_EXTERNAL_EMAIL_ENABLED": "true",
+        "GOTRUE_EXTERNAL_EMAIL_MAGIC_LINK_ENABLED": "false",
+        "GOTRUE_MAILER_AUTOCONFIRM": "false",
+        "GOTRUE_MAILER_ALLOW_UNVERIFIED_EMAIL_SIGN_INS": "false",
+        "GOTRUE_EXTERNAL_PHONE_ENABLED": "false",
+        "GOTRUE_SMS_PROVIDER": "",
+        "GOTRUE_SMS_AUTOCONFIRM": "false",
+        "GOTRUE_SMTP_HOST": "127.0.0.1",
+        "GOTRUE_SMTP_PORT": "1",
+        "GOTRUE_SMTP_USER": "",
+        "GOTRUE_SMTP_PASS": "",
+        "GOTRUE_SMTP_ADMIN_EMAIL": "",
+        "GOTRUE_SMTP_SENDER_NAME": "",
+        "GOTRUE_SMTP_LOGGING_ENABLED": "false",
+        "GOTRUE_SAML_ENABLED": "false",
+        "GOTRUE_CUSTOM_OAUTH_ENABLED": "false",
+        "GOTRUE_OAUTH_SERVER_ENABLED": "false",
+        "GOTRUE_PASSKEY_ENABLED": "false",
+        "GOTRUE_PASSWORD_MIN_LENGTH": "8",
+        "GOTRUE_MAILER_TEMPLATE_RELOADING_ENABLED": "false",
+        "GOTRUE_MAILER_EMAIL_BACKGROUND_SENDING": "false",
+        "GOTRUE_MAILER_EMAIL_VALIDATION_SERVICE_URL": "",
+        "GOTRUE_LOG_LEVEL": "error",
+        "GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED": "false",
+        "GOTRUE_EXTERNAL_APPLE_ENABLED": "false",
+        "GOTRUE_EXTERNAL_AZURE_ENABLED": "false",
+        "GOTRUE_EXTERNAL_BITBUCKET_ENABLED": "false",
+        "GOTRUE_EXTERNAL_DISCORD_ENABLED": "false",
+        "GOTRUE_EXTERNAL_FACEBOOK_ENABLED": "false",
+        "GOTRUE_EXTERNAL_SNAPCHAT_ENABLED": "false",
+        "GOTRUE_EXTERNAL_FIGMA_ENABLED": "false",
+        "GOTRUE_EXTERNAL_FLY_ENABLED": "false",
+        "GOTRUE_EXTERNAL_GITHUB_ENABLED": "false",
+        "GOTRUE_EXTERNAL_GITLAB_ENABLED": "false",
+        "GOTRUE_EXTERNAL_GOOGLE_ENABLED": "false",
+        "GOTRUE_EXTERNAL_KAKAO_ENABLED": "false",
+        "GOTRUE_EXTERNAL_NOTION_ENABLED": "false",
+        "GOTRUE_EXTERNAL_KEYCLOAK_ENABLED": "false",
+        "GOTRUE_EXTERNAL_LINKEDIN_ENABLED": "false",
+        "GOTRUE_EXTERNAL_LINKEDIN_OIDC_ENABLED": "false",
+        "GOTRUE_EXTERNAL_SPOTIFY_ENABLED": "false",
+        "GOTRUE_EXTERNAL_SLACK_ENABLED": "false",
+        "GOTRUE_EXTERNAL_SLACK_OIDC_ENABLED": "false",
+        "GOTRUE_EXTERNAL_TWITTER_ENABLED": "false",
+        "GOTRUE_EXTERNAL_TWITCH_ENABLED": "false",
+        "GOTRUE_EXTERNAL_VERCEL_MARKETPLACE_ENABLED": "false",
+        "GOTRUE_EXTERNAL_WORKOS_ENABLED": "false",
+        "GOTRUE_EXTERNAL_X_ENABLED": "false",
+        "GOTRUE_EXTERNAL_ZOOM_ENABLED": "false",
+        "GOTRUE_EXTERNAL_WEB3_SOLANA_ENABLED": "false",
+        "GOTRUE_EXTERNAL_WEB3_ETHEREUM_ENABLED": "false",
+        "GOTRUE_MAILER_NOTIFICATIONS_PASSWORD_CHANGED_ENABLED": "false",
+        "GOTRUE_MAILER_NOTIFICATIONS_EMAIL_CHANGED_ENABLED": "false",
+        "GOTRUE_MAILER_NOTIFICATIONS_PHONE_CHANGED_ENABLED": "false",
+        "GOTRUE_MAILER_NOTIFICATIONS_IDENTITY_LINKED_ENABLED": "false",
+        "GOTRUE_MAILER_NOTIFICATIONS_IDENTITY_UNLINKED_ENABLED": "false",
+        "GOTRUE_MAILER_NOTIFICATIONS_MFA_FACTOR_ENROLLED_ENABLED": "false",
+        "GOTRUE_MAILER_NOTIFICATIONS_MFA_FACTOR_UNENROLLED_ENABLED": "false"
+      }
+    },
+    "uat-rest": {
+      "platform": "linux/amd64",
+      "image": "postgrest/postgrest@sha256:aa7e96af2d01219a09bc00c75de28171b1f9fda17ea455a931e4fb6d317089e0",
+      "labels": {
+        "com.mam.uat.owner": "mam-people-hub-uat",
+        "com.mam.uat.instance": "mam-people-hub-uat-v1",
+        "traefik.enable": "false"
+      },
+      "networks": {
+        "backend": {}
+      },
+      "cpus": "0.50",
+      "mem_limit": "256m",
+      "pids_limit": 128,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "read_only": true,
+      "restart": "unless-stopped",
+      "logging": {
+        "driver": "none"
+      },
+      "tmpfs": [
+        "/tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777"
+      ],
+      "user": "1000:1000",
+      "environment": {
+        "PGRST_DB_URI": "${MAM_UAT_REST_DATABASE_URL:?required}",
+        "PGRST_DB_SCHEMAS": "public",
+        "PGRST_DB_EXTRA_SEARCH_PATH": "public",
+        "PGRST_DB_ANON_ROLE": "anon",
+        "PGRST_JWT_SECRET": "${MAM_UAT_JWT_SECRET:?required}",
+        "PGRST_JWT_AUD": "authenticated",
+        "PGRST_SERVER_HOST": "0.0.0.0",
+        "PGRST_SERVER_PORT": "3000",
+        "PGRST_SERVER_ADMIN_PORT": "3001",
+        "PGRST_DB_POOL": "5",
+        "PGRST_MAX_ROWS": "1000",
+        "PGRST_OPENAPI_MODE": "disabled",
+        "PGRST_LOG_LEVEL": "crit"
+      }
+    },
+    "uat-gateway": {
+      "platform": "linux/amd64",
+      "image": "mam-people-hub-uat-gateway:mam-people-hub-uat-v1",
+      "build": {
+        "context": "./gateway",
+        "dockerfile": "Dockerfile",
+        "args": {
+          "UAT_BASE_IMAGE": "library/nginx@sha256:959ae6b898852db82e5b29b929388e59914f42be0a8f4d44c89a4c1f53b49208"
+        }
+      },
+      "labels": {
+        "com.mam.uat.owner": "mam-people-hub-uat",
+        "com.mam.uat.instance": "mam-people-hub-uat-v1",
+        "traefik.enable": "true",
+        "traefik.docker.network": "n8n_default",
+        "traefik.http.services.mam-people-hub-uat.loadbalancer.server.port": "8081",
+        "traefik.http.services.mam-people-hub-uat.loadbalancer.server.scheme": "http",
+        "traefik.http.routers.mam-people-hub-uat-app.rule": "Host(`people-hub-uat.srv1866578.hstgr.cloud`)",
+        "traefik.http.routers.mam-people-hub-uat-app.entrypoints": "websecure",
+        "traefik.http.routers.mam-people-hub-uat-app.tls": "true",
+        "traefik.http.routers.mam-people-hub-uat-app.tls.certresolver": "mytlschallenge",
+        "traefik.http.routers.mam-people-hub-uat-app.service": "mam-people-hub-uat",
+        "traefik.http.routers.mam-people-hub-uat-api.rule": "Host(`supabase-uat.srv1866578.hstgr.cloud`)",
+        "traefik.http.routers.mam-people-hub-uat-api.entrypoints": "websecure",
+        "traefik.http.routers.mam-people-hub-uat-api.tls": "true",
+        "traefik.http.routers.mam-people-hub-uat-api.tls.certresolver": "mytlschallenge",
+        "traefik.http.routers.mam-people-hub-uat-api.service": "mam-people-hub-uat"
+      },
+      "networks": {
+        "backend": {
+          "aliases": [
+            "uat-gateway-private"
+          ]
+        },
+        "ingress": {}
+      },
+      "cpus": "0.50",
+      "mem_limit": "128m",
+      "pids_limit": 64,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "read_only": true,
+      "restart": "unless-stopped",
+      "logging": {
+        "driver": "none"
+      },
+      "tmpfs": [
+        "/tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777",
+        "/etc/nginx/conf.d:rw,nosuid,nodev,noexec,size=1m,uid=101,gid=101,mode=0700"
+      ],
+      "user": "101:101",
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "nginx",
+          "-t",
+          "-q"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 10,
+        "start_period": "30s"
+      },
+      "sysctls": {
+        "net.ipv4.ip_forward": "0"
+      },
+      "environment": {
+        "MAM_UAT_ANON_KEY": "${MAM_UAT_ANON_KEY:?required}",
+        "MAM_UAT_SERVICE_ROLE_KEY": "${MAM_UAT_SERVICE_ROLE_KEY:?required}",
+        "NGINX_ENVSUBST_FILTER": "^(MAM_UAT_ANON_KEY|MAM_UAT_SERVICE_ROLE_KEY)$$",
+        "NGINX_ENTRYPOINT_QUIET_LOGS": "1"
+      }
+    },
+    "uat-web": {
+      "platform": "linux/amd64",
+      "image": "mam-people-hub-uat-web:mam-people-hub-uat-v1",
+      "build": {
+        "context": "../../..",
+        "dockerfile": "deploy/uat/runtime/web/Dockerfile",
+        "args": {
+          "UAT_BASE_IMAGE": "library/node@sha256:ec857ea6bb60cb3d0fa4d97495590c5fe7d51be8572c307b55957eeb06569cf7",
+          "NEXT_PUBLIC_MAM_UAT_ENABLED": "true",
+          "NEXT_PUBLIC_APP_URL": "https://people-hub-uat.srv1866578.hstgr.cloud",
+          "NEXT_PUBLIC_SUPABASE_URL": "https://supabase-uat.srv1866578.hstgr.cloud",
+          "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "${MAM_UAT_ANON_KEY:?required}"
+        }
+      },
+      "labels": {
+        "com.mam.uat.owner": "mam-people-hub-uat",
+        "com.mam.uat.instance": "mam-people-hub-uat-v1",
+        "traefik.enable": "false"
+      },
+      "networks": {
+        "backend": {}
+      },
+      "cpus": "1.00",
+      "mem_limit": "1024m",
+      "pids_limit": 192,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "read_only": true,
+      "restart": "unless-stopped",
+      "logging": {
+        "driver": "none"
+      },
+      "tmpfs": [
+        "/tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777",
+        "/app/.next/cache:rw,nosuid,nodev,noexec,size=128m,uid=1000,gid=1000,mode=0700"
+      ],
+      "user": "1000:1000",
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "fetch(\"http://127.0.0.1:3000/login\", { redirect: \"error\", signal: AbortSignal.timeout(4000) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 10,
+        "start_period": "30s"
+      },
+      "environment": {
+        "NEXT_PUBLIC_MAM_UAT_ENABLED": "true",
+        "NEXT_PUBLIC_APP_URL": "https://people-hub-uat.srv1866578.hstgr.cloud",
+        "NEXT_PUBLIC_SUPABASE_URL": "https://supabase-uat.srv1866578.hstgr.cloud",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "${MAM_UAT_ANON_KEY:?required}",
+        "NODE_ENV": "production",
+        "HOSTNAME": "0.0.0.0",
+        "PORT": "3000",
+        "NEXT_TELEMETRY_DISABLED": "1",
+        "MAM_UAT_ENABLED": "true",
+        "MAM_APP_ENV": "preview",
+        "MAM_UAT_TARGET": "mam-people-hub-uat-v1",
+        "MAM_UAT_BUILD_ONLY": "false",
+        "MAM_UAT_INTERNAL_SUPABASE_URL": "http://uat-gateway:8080",
+        "SUPABASE_SECRET_KEY": "${MAM_UAT_SERVICE_ROLE_KEY:?required}",
+        "MAM_PERFORMANCE_REVIEW_ENABLED": "true"
+      }
+    }
+  },
+  "networks": {
+    "backend": {
+      "name": "mam-people-hub-uat-backend",
+      "internal": true,
+      "labels": {
+        "com.mam.uat.owner": "mam-people-hub-uat",
+        "com.mam.uat.instance": "mam-people-hub-uat-v1"
+      }
+    },
+    "ingress": {
+      "external": true,
+      "name": "n8n_default"
+    }
+  },
+  "volumes": {
+    "db-data": {
+      "name": "mam-people-hub-uat-db-data",
+      "labels": {
+        "com.mam.uat.owner": "mam-people-hub-uat",
+        "com.mam.uat.instance": "mam-people-hub-uat-v1"
+      }
+    }
+  }
+}

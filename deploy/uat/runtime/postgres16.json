@@ -1,0 +1,11 @@
+{
+  "repository": "library/postgres",
+  "sourceTag": "16-bookworm",
+  "reference": "library/postgres@sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc",
+  "indexDigest": "sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4",
+  "platformManifestDigest": "sha256:ec9f656f17c8b4dfebf49e58cf5c46d493d4846d4ea6d8b85d0637f68ee33bfc",
+  "imageConfigDigest": "sha256:e8538db784b854a9baac5c1be6d059dcf0db257af2d94c8c5807b5fc15f11222",
+  "platform": "linux/amd64",
+  "requiredDatabaseMajor": 16,
+  "reason": "Generated-v5 source bootstrap admits only its actually tested PostgreSQL 16; do not weaken its guard"
+}

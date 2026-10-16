@@ -2,18 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import { loadUatSafety } from './helpers/uat-safety-loader.mjs';
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
 test('route is disabled by default, rejects browser input and caps streamed body before database access', async () => {
   let calls = 0;
   const imports = {
+    '@/lib/uat-safety': loadUatSafety(),
     'next/server': { after: () => assert.fail('Rejected requests cannot schedule email') },
     '@/lib/leave-notification-outbox': { dispatchLeaveNotificationsForRequest: () => assert.fail('Rejected requests cannot dispatch email') },
     '@/lib/openclaw-leave-contract': { LEAVE_BRIDGE_PATH: '/api/internal/integrations/openclaw/leave', handleLeaveBridge: async () => { calls++; return { status: 401, body: { code: 'unauthorized' } }; } },
     '@/lib/openclaw-leave-store': { createLeaveBridgeStore: () => ({}) },
   };
   const mod = { exports: {} };
-  new Function('require','module','exports',ts.transpileModule(fs.readFileSync('src/app/api/internal/integrations/openclaw/leave/route.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(id=>imports[id],mod,mod.exports);
+  new Function('require','module','exports',ts.transpileModule(fs.readFileSync('src/app/api/internal/integrations/openclaw/leave/route.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(id=>{ assert.ok(id in imports, `Unexpected import: ${id}`); return imports[id]; },mod,mod.exports);
   const names=['MAM_OPENCLAW_LEAVE_ENABLED','MAM_OPENCLAW_LEAVE_BRIDGE_SECRET','MAM_OPENCLAW_LEAVE_ACCOUNT'];
   const previous=names.map(n=>process.env[n]);
   const request=(body='{}',extra={},query='')=>new Request('https://example.test/api/internal/integrations/openclaw/leave'+query,{method:'POST',headers:{'content-type':'application/json','x-mam-timestamp':String(Date.now()),'x-mam-signature':'0'.repeat(64),...extra},body});

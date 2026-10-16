@@ -3,12 +3,13 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { loadAssetQrModule } from './asset-qr-test-loader.mjs';
 import test from 'node:test';
+import { loadUatSafety } from './helpers/uat-safety-loader.mjs';
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
 function load(file, imports) {
   const js = ts.transpileModule(readFileSync(file,'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
   const mod = {exports:{}};
-  new Function('require','module','exports',js)((id)=>id in imports ? imports[id] : require(id),mod,mod.exports);
+  new Function('require','module','exports',js)((id)=>id === '@/lib/uat-safety' ? loadUatSafety() : id in imports ? imports[id] : require(id),mod,mod.exports);
   return mod.exports;
 }
 const checkInAck = load('src/lib/check-in-delivery-ack.ts', {});

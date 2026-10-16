@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { loadPortalLoginModule } from "./portal-login-test-loader.mjs";
+import { loadUatSafety } from "./helpers/uat-safety-loader.mjs";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -12,6 +13,7 @@ export function loadAccountActions(admin, client, entry = "src/app/accounts/acti
     }).outputText;
     const target = { exports: {} };
     new Function("require", "module", "exports", source)((id) => {
+      if (id === "@/lib/uat-safety") return loadUatSafety();
       if (id === "server-only") return {};
       if (id === "next/cache") return { revalidatePath() {} };
       if (id === "@/lib/supabase/admin") return { createAdminClient: () => admin };

@@ -1,3 +1,4 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { timingSafeEqual } from "node:crypto";
 import { dispatchLeaveNotificationOutbox, dispatchPayrollComparisonAlerts } from "@/lib/leave-notification-outbox";
 
@@ -6,6 +7,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function GET(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   const secret = process.env.CRON_SECRET?.trim();
   const expected = Buffer.from(`Bearer ${secret ?? ""}`);
   const supplied = Buffer.from(request.headers.get("authorization") ?? "");

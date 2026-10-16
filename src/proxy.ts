@@ -1,11 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { assetLoginReturnPath } from "@/lib/asset-qr";
+import { createUatFetch, isUatMode } from "@/lib/uat-safety";
 
 import { isSupabaseConfigured, requireSupabaseConfig } from "@/lib/supabase/config";
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  if (isUatMode() && (pathname === "/api" || pathname.startsWith("/api/") || pathname === "/auth/confirm")) {
+    return NextResponse.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
+  }
   // This exact endpoint authenticates the existing bearer through its own
   // read-only RPC. Ordinary session loading/refresh must not precede it.
   if (pathname === "/api/internal/payroll/session-proof") {
@@ -48,6 +52,7 @@ export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(supabaseUrl, supabasePublishableKey, {
+    ...(isUatMode() ? { global: { fetch: createUatFetch(globalThis.fetch.bind(globalThis)) } } : {}),
     cookies: {
       getAll() {
         return request.cookies.getAll();

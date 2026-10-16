@@ -1,3 +1,4 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { createHash, timingSafeEqual } from "node:crypto";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -385,6 +386,7 @@ async function dispatchPayrollBalanceEmailReminders(
  * immediate stop once both current-month company snapshots are complete.
  */
 export async function GET(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   const cronSecret = process.env.CRON_SECRET?.trim();
   if (!cronSecret || !hasValidCronSecret(request, cronSecret)) {
     return response({ ok: false }, 401);

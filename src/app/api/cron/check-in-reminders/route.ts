@@ -1,3 +1,4 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { timingSafeEqual } from "node:crypto";
 
 import { readCheckInDeliveryAck } from "@/lib/check-in-delivery-ack";
@@ -425,6 +426,7 @@ async function dispatchReviewNotifications(
  * accepts a recipient/email body from the request.
  */
 export async function GET(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   const cronSecret = process.env.CRON_SECRET?.trim();
   if (!cronSecret || !hasValidCronSecret(request, cronSecret)) {
     return Response.json({ ok: false, code: "unauthorized" }, {

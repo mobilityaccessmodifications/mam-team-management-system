@@ -4,4 +4,6 @@ export async function register() {
   const { assertSandboxEnvironment, installSandboxFetchGuard } = await import("./lib/sandbox-safety");
   assertSandboxEnvironment();
   installSandboxFetchGuard();
+  const { installUatFetchGuard } = await import("./lib/uat-safety");
+  installUatFetchGuard();
 }
