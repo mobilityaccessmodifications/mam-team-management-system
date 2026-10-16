@@ -88,6 +88,9 @@ jobs:
         # initdb refuses root. This creates a new UNIX-socket-only cluster as
         # the container's unprivileged postgres user. No service URL/secrets.
         run: runuser -u postgres -- node scripts/test-sql.mjs
+      - name: PostgreSQL 17 performance release envelope and native feature gate
+        if: matrix.postgres == '17'
+        run: runuser -u postgres -- npm run test:sql:performance
 
   annual-leave-all-submitters:
     runs-on: ubuntu-latest
