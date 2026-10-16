@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isUatMode } from "@/lib/uat-safety";
 
 const STORAGE_PATH_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:pdf|heic|heif|jpg|png|webp)$/i;
 const PAYROLL_ARCHIVE_PATH_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:csv|xlsx)$/i;
@@ -36,6 +37,7 @@ function payrollArchive(value: unknown): { archiveId: string; storagePath: strin
  * API. Metadata retention is pruned by separate service-role-only RPCs.
  */
 export async function runLeaveAttachmentMaintenance() {
+  if (isUatMode()) throw new Error("This operation is unavailable in UAT.");
   const admin = createAdminClient();
   let removedObjects = 0;
   let cleanupBatches = 0;

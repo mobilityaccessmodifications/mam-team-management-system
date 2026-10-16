@@ -1,3 +1,4 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { timingSafeEqual } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -10,6 +11,7 @@ type Candidate = { person_id: string; auth_user_id: string | null; is_active: bo
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   const secret = process.env.CRON_SECRET?.trim();
   const supplied = Buffer.from(request.headers.get("authorization") ?? "");
   const expected = Buffer.from(`Bearer ${secret ?? ""}`);

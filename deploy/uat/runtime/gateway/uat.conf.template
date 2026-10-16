@@ -1,0 +1,434 @@
+upstream uat_auth { server uat-auth:9999; }
+
+upstream uat_rest { server uat-rest:3000; }
+
+upstream uat_web { server uat-web:3000; }
+
+map "$http_origin" $uat_origin_ok {
+    "default" "0";
+    "" "1";
+    "~^https://people\\-hub\\-uat\\.srv1866578\\.hstgr\\.cloud$" "1";
+}
+
+map "$http_origin" $uat_cors_origin {
+    "default" "";
+    "~^https://people\\-hub\\-uat\\.srv1866578\\.hstgr\\.cloud$" "$http_origin";
+}
+
+map "$request_method:$http_origin" $uat_preflight_origin_ok {
+    "default" "1";
+    "OPTIONS:" "0";
+}
+
+map "$request_method" $uat_policy_method {
+    "default" "$request_method";
+    "OPTIONS" "$http_access_control_request_method";
+}
+
+map "$http_host" $uat_app_host_ok {
+    "default" "0";
+    "~^people\\-hub\\-uat\\.srv1866578\\.hstgr\\.cloud(?::443)?$" "1";
+}
+
+map "$http_host" $uat_api_host_ok {
+    "default" "0";
+    "~^supabase\\-uat\\.srv1866578\\.hstgr\\.cloud(?::443)?$" "1";
+}
+
+map "$http_host" $uat_private_host_ok {
+    "default" "0";
+    "uat-gateway:8080" "1";
+}
+
+map "$request_method" $uat_app_method_ok {
+    "default" "0";
+    "GET" "1";
+    "HEAD" "1";
+    "POST" "1";
+}
+
+map "$http_apikey" $uat_api_key {
+    "default" "invalid";
+    "~^\\Q${MAM_UAT_ANON_KEY}\\E$" "anon";
+    "~^\\Q${MAM_UAT_SERVICE_ROLE_KEY}\\E$" "service";
+}
+
+map "$http_authorization" $uat_bearer {
+    "default" "user";
+    "" "absent";
+    "~\\Q${MAM_UAT_SERVICE_ROLE_KEY}\\E" "service";
+}
+
+map "$uat_api_key:$uat_bearer" $uat_public_credential_ok {
+    "default" "0";
+    "anon:absent" "1";
+    "anon:user" "1";
+}
+
+map "$request_method:$request_uri" $uat_login_rpc {
+    "default" "0";
+    "~^POST:/rest/v1/rpc/(?:claim_portal_login_attempt|resolve_portal_login_auth_email|clear_portal_login_rate_limit)$" "1";
+}
+
+map "$uat_api_key:$uat_bearer:$uat_login_rpc" $uat_private_credential_ok {
+    "default" "0";
+    "anon:absent:0" "1";
+    "anon:absent:1" "1";
+    "anon:user:0" "1";
+    "anon:user:1" "1";
+    "service:service:1" "1";
+}
+
+map "$uat_policy_method:$request_uri" $uat_auth_route {
+    "default" "0";
+    "~^POST:/auth/v1/token[?]grant_type=(?:password|refresh_token)$" "1";
+    "~^POST:/auth/v1/logout(?:[?]scope=(?:local|global|others))?$" "1";
+    "~^GET:/auth/v1/(?:user|settings|[.]well-known/jwks[.]json)$" "1";
+}
+
+map "$uat_policy_method:$request_uri" $uat_rest_route {
+    "default" "0";
+    "~^(?:GET|HEAD|POST):/rest/v1/(?:rpc/)?[a-z][a-z0-9_]*(?:[?].*)?$" "1";
+}
+
+server { listen 8081 default_server; server_name _; return 444; }
+
+server { listen uat-gateway-private:8080 default_server; server_name _; return 444; }
+
+server {
+    listen 8081;
+    server_name people-hub-uat.srv1866578.hstgr.cloud;
+    if ($uat_app_host_ok = 0) { return 444; }
+    if ($uat_origin_ok = 0) { return 403; }
+    location / {
+        if ($uat_app_method_ok = 0) { return 405; }
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Connection "";
+        proxy_ignore_headers X-Accel-Redirect;
+        proxy_buffering off;
+        proxy_redirect off;
+        proxy_pass http://uat_web;
+    }
+}
+
+server {
+    listen 8081;
+    server_name supabase-uat.srv1866578.hstgr.cloud;
+    if ($uat_api_host_ok = 0) { return 444; }
+    if ($uat_origin_ok = 0) { return 403; }
+    if ($uat_preflight_origin_ok = 0) { return 403; }
+    proxy_intercept_errors on;
+    proxy_ignore_headers X-Accel-Redirect;
+    error_page 300 301 302 303 304 305 306 307 308 309 310 311 312 313 314 315 316 317 318 319 320 321 322 323 324 325 326 327 328 329 330 331 332 333 334 335 336 337 338 339 340 341 342 343 344 345 346 347 348 349 350 351 352 353 354 355 356 357 358 359 360 361 362 363 364 365 366 367 368 369 370 371 372 373 374 375 376 377 378 379 380 381 382 383 384 385 386 387 388 389 390 391 392 393 394 395 396 397 398 399 =502 @uat_redirect_denied;
+    proxy_hide_header Location;
+    proxy_hide_header Refresh;
+    proxy_hide_header X-Accel-Redirect;
+    proxy_hide_header Access-Control-Allow-Origin;
+    proxy_hide_header Access-Control-Allow-Credentials;
+    proxy_hide_header Access-Control-Allow-Headers;
+    proxy_hide_header Access-Control-Allow-Methods;
+    proxy_hide_header Access-Control-Expose-Headers;
+    location @uat_redirect_denied { return 502; }
+    add_header Access-Control-Allow-Origin $uat_cors_origin always;
+    add_header Vary Origin always;
+    add_header Access-Control-Allow-Methods "GET, HEAD, POST, OPTIONS" always;
+    add_header Access-Control-Allow-Headers "apikey, authorization, content-type, x-client-info, accept, accept-profile, content-profile, prefer, range, range-unit, x-supabase-api-version" always;
+    add_header Access-Control-Expose-Headers "content-range, range-unit" always;
+    location = /auth/v1/token {
+        if ($uat_auth_route = 0) { return 404; }
+        if ($request_method = OPTIONS) { return 204; }
+        if ($uat_public_credential_ok = 0) { return 401; }
+        proxy_http_version 1.1;
+        proxy_pass_request_headers off;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $http_content_type;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Profile $http_accept_profile;
+        proxy_set_header Content-Profile $http_content_profile;
+        proxy_set_header Prefer $http_prefer;
+        proxy_set_header Range $http_range;
+        proxy_set_header Range-Unit $http_range_unit;
+        proxy_set_header X-Client-Info $http_x_client_info;
+        proxy_set_header X-Supabase-Api-Version $http_x_supabase_api_version;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_redirect off;
+        proxy_set_header Host supabase-uat.srv1866578.hstgr.cloud;
+        proxy_pass http://uat_auth/token;
+    }
+    location = /auth/v1/logout {
+        if ($uat_auth_route = 0) { return 404; }
+        if ($request_method = OPTIONS) { return 204; }
+        if ($uat_public_credential_ok = 0) { return 401; }
+        proxy_http_version 1.1;
+        proxy_pass_request_headers off;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $http_content_type;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Profile $http_accept_profile;
+        proxy_set_header Content-Profile $http_content_profile;
+        proxy_set_header Prefer $http_prefer;
+        proxy_set_header Range $http_range;
+        proxy_set_header Range-Unit $http_range_unit;
+        proxy_set_header X-Client-Info $http_x_client_info;
+        proxy_set_header X-Supabase-Api-Version $http_x_supabase_api_version;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_redirect off;
+        proxy_set_header Host supabase-uat.srv1866578.hstgr.cloud;
+        proxy_pass http://uat_auth/logout;
+    }
+    location = /auth/v1/user {
+        if ($uat_auth_route = 0) { return 404; }
+        if ($request_method = OPTIONS) { return 204; }
+        if ($uat_public_credential_ok = 0) { return 401; }
+        proxy_http_version 1.1;
+        proxy_pass_request_headers off;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $http_content_type;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Profile $http_accept_profile;
+        proxy_set_header Content-Profile $http_content_profile;
+        proxy_set_header Prefer $http_prefer;
+        proxy_set_header Range $http_range;
+        proxy_set_header Range-Unit $http_range_unit;
+        proxy_set_header X-Client-Info $http_x_client_info;
+        proxy_set_header X-Supabase-Api-Version $http_x_supabase_api_version;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_redirect off;
+        proxy_set_header Host supabase-uat.srv1866578.hstgr.cloud;
+        proxy_pass http://uat_auth/user;
+    }
+    location = /auth/v1/settings {
+        if ($uat_auth_route = 0) { return 404; }
+        if ($request_method = OPTIONS) { return 204; }
+        if ($uat_public_credential_ok = 0) { return 401; }
+        proxy_http_version 1.1;
+        proxy_pass_request_headers off;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $http_content_type;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Profile $http_accept_profile;
+        proxy_set_header Content-Profile $http_content_profile;
+        proxy_set_header Prefer $http_prefer;
+        proxy_set_header Range $http_range;
+        proxy_set_header Range-Unit $http_range_unit;
+        proxy_set_header X-Client-Info $http_x_client_info;
+        proxy_set_header X-Supabase-Api-Version $http_x_supabase_api_version;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_redirect off;
+        proxy_set_header Host supabase-uat.srv1866578.hstgr.cloud;
+        proxy_pass http://uat_auth/settings;
+    }
+    location = /auth/v1/.well-known/jwks.json {
+        if ($uat_auth_route = 0) { return 404; }
+        if ($request_method = OPTIONS) { return 204; }
+        if ($uat_public_credential_ok = 0) { return 401; }
+        proxy_http_version 1.1;
+        proxy_pass_request_headers off;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $http_content_type;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Profile $http_accept_profile;
+        proxy_set_header Content-Profile $http_content_profile;
+        proxy_set_header Prefer $http_prefer;
+        proxy_set_header Range $http_range;
+        proxy_set_header Range-Unit $http_range_unit;
+        proxy_set_header X-Client-Info $http_x_client_info;
+        proxy_set_header X-Supabase-Api-Version $http_x_supabase_api_version;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_redirect off;
+        proxy_set_header Host supabase-uat.srv1866578.hstgr.cloud;
+        proxy_pass http://uat_auth/.well-known/jwks.json;
+    }
+    location ~ ^/rest/v1/(?:rpc/)?[a-z][a-z0-9_]*$ {
+        if ($uat_rest_route = 0) { return 404; }
+        if ($request_method = OPTIONS) { return 204; }
+        if ($uat_public_credential_ok = 0) { return 401; }
+        proxy_http_version 1.1;
+        proxy_pass_request_headers off;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $http_content_type;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Profile $http_accept_profile;
+        proxy_set_header Content-Profile $http_content_profile;
+        proxy_set_header Prefer $http_prefer;
+        proxy_set_header Range $http_range;
+        proxy_set_header Range-Unit $http_range_unit;
+        proxy_set_header X-Client-Info $http_x_client_info;
+        proxy_set_header X-Supabase-Api-Version $http_x_supabase_api_version;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_redirect off;
+        proxy_set_header Host supabase-uat.srv1866578.hstgr.cloud;
+        rewrite ^/rest/v1/(.*)$ /$1 break;
+        proxy_pass http://uat_rest;
+    }
+    location / { return 404; }
+}
+
+server {
+    listen uat-gateway-private:8080;
+    server_name uat-gateway;
+    if ($uat_private_host_ok = 0) { return 444; }
+    if ($uat_origin_ok = 0) { return 403; }
+    if ($uat_preflight_origin_ok = 0) { return 403; }
+    proxy_intercept_errors on;
+    proxy_ignore_headers X-Accel-Redirect;
+    error_page 300 301 302 303 304 305 306 307 308 309 310 311 312 313 314 315 316 317 318 319 320 321 322 323 324 325 326 327 328 329 330 331 332 333 334 335 336 337 338 339 340 341 342 343 344 345 346 347 348 349 350 351 352 353 354 355 356 357 358 359 360 361 362 363 364 365 366 367 368 369 370 371 372 373 374 375 376 377 378 379 380 381 382 383 384 385 386 387 388 389 390 391 392 393 394 395 396 397 398 399 =502 @uat_redirect_denied;
+    proxy_hide_header Location;
+    proxy_hide_header Refresh;
+    proxy_hide_header X-Accel-Redirect;
+    proxy_hide_header Access-Control-Allow-Origin;
+    proxy_hide_header Access-Control-Allow-Credentials;
+    proxy_hide_header Access-Control-Allow-Headers;
+    proxy_hide_header Access-Control-Allow-Methods;
+    proxy_hide_header Access-Control-Expose-Headers;
+    location @uat_redirect_denied { return 502; }
+    add_header Access-Control-Allow-Origin $uat_cors_origin always;
+    add_header Vary Origin always;
+    add_header Access-Control-Allow-Methods "GET, HEAD, POST, OPTIONS" always;
+    add_header Access-Control-Allow-Headers "apikey, authorization, content-type, x-client-info, accept, accept-profile, content-profile, prefer, range, range-unit, x-supabase-api-version" always;
+    add_header Access-Control-Expose-Headers "content-range, range-unit" always;
+    location = /auth/v1/token {
+        if ($uat_auth_route = 0) { return 404; }
+        if ($request_method = OPTIONS) { return 204; }
+        if ($uat_private_credential_ok = 0) { return 401; }
+        proxy_http_version 1.1;
+        proxy_pass_request_headers off;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $http_content_type;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Profile $http_accept_profile;
+        proxy_set_header Content-Profile $http_content_profile;
+        proxy_set_header Prefer $http_prefer;
+        proxy_set_header Range $http_range;
+        proxy_set_header Range-Unit $http_range_unit;
+        proxy_set_header X-Client-Info $http_x_client_info;
+        proxy_set_header X-Supabase-Api-Version $http_x_supabase_api_version;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_redirect off;
+        proxy_set_header Host supabase-uat.srv1866578.hstgr.cloud;
+        proxy_pass http://uat_auth/token;
+    }
+    location = /auth/v1/logout {
+        if ($uat_auth_route = 0) { return 404; }
+        if ($request_method = OPTIONS) { return 204; }
+        if ($uat_private_credential_ok = 0) { return 401; }
+        proxy_http_version 1.1;
+        proxy_pass_request_headers off;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $http_content_type;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Profile $http_accept_profile;
+        proxy_set_header Content-Profile $http_content_profile;
+        proxy_set_header Prefer $http_prefer;
+        proxy_set_header Range $http_range;
+        proxy_set_header Range-Unit $http_range_unit;
+        proxy_set_header X-Client-Info $http_x_client_info;
+        proxy_set_header X-Supabase-Api-Version $http_x_supabase_api_version;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_redirect off;
+        proxy_set_header Host supabase-uat.srv1866578.hstgr.cloud;
+        proxy_pass http://uat_auth/logout;
+    }
+    location = /auth/v1/user {
+        if ($uat_auth_route = 0) { return 404; }
+        if ($request_method = OPTIONS) { return 204; }
+        if ($uat_private_credential_ok = 0) { return 401; }
+        proxy_http_version 1.1;
+        proxy_pass_request_headers off;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $http_content_type;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Profile $http_accept_profile;
+        proxy_set_header Content-Profile $http_content_profile;
+        proxy_set_header Prefer $http_prefer;
+        proxy_set_header Range $http_range;
+        proxy_set_header Range-Unit $http_range_unit;
+        proxy_set_header X-Client-Info $http_x_client_info;
+        proxy_set_header X-Supabase-Api-Version $http_x_supabase_api_version;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_redirect off;
+        proxy_set_header Host supabase-uat.srv1866578.hstgr.cloud;
+        proxy_pass http://uat_auth/user;
+    }
+    location = /auth/v1/settings {
+        if ($uat_auth_route = 0) { return 404; }
+        if ($request_method = OPTIONS) { return 204; }
+        if ($uat_private_credential_ok = 0) { return 401; }
+        proxy_http_version 1.1;
+        proxy_pass_request_headers off;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $http_content_type;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Profile $http_accept_profile;
+        proxy_set_header Content-Profile $http_content_profile;
+        proxy_set_header Prefer $http_prefer;
+        proxy_set_header Range $http_range;
+        proxy_set_header Range-Unit $http_range_unit;
+        proxy_set_header X-Client-Info $http_x_client_info;
+        proxy_set_header X-Supabase-Api-Version $http_x_supabase_api_version;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_redirect off;
+        proxy_set_header Host supabase-uat.srv1866578.hstgr.cloud;
+        proxy_pass http://uat_auth/settings;
+    }
+    location = /auth/v1/.well-known/jwks.json {
+        if ($uat_auth_route = 0) { return 404; }
+        if ($request_method = OPTIONS) { return 204; }
+        if ($uat_private_credential_ok = 0) { return 401; }
+        proxy_http_version 1.1;
+        proxy_pass_request_headers off;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $http_content_type;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Profile $http_accept_profile;
+        proxy_set_header Content-Profile $http_content_profile;
+        proxy_set_header Prefer $http_prefer;
+        proxy_set_header Range $http_range;
+        proxy_set_header Range-Unit $http_range_unit;
+        proxy_set_header X-Client-Info $http_x_client_info;
+        proxy_set_header X-Supabase-Api-Version $http_x_supabase_api_version;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_redirect off;
+        proxy_set_header Host supabase-uat.srv1866578.hstgr.cloud;
+        proxy_pass http://uat_auth/.well-known/jwks.json;
+    }
+    location ~ ^/rest/v1/(?:rpc/)?[a-z][a-z0-9_]*$ {
+        if ($uat_rest_route = 0) { return 404; }
+        if ($request_method = OPTIONS) { return 204; }
+        if ($uat_private_credential_ok = 0) { return 401; }
+        proxy_http_version 1.1;
+        proxy_pass_request_headers off;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $http_content_type;
+        proxy_set_header Accept $http_accept;
+        proxy_set_header Accept-Profile $http_accept_profile;
+        proxy_set_header Content-Profile $http_content_profile;
+        proxy_set_header Prefer $http_prefer;
+        proxy_set_header Range $http_range;
+        proxy_set_header Range-Unit $http_range_unit;
+        proxy_set_header X-Client-Info $http_x_client_info;
+        proxy_set_header X-Supabase-Api-Version $http_x_supabase_api_version;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_redirect off;
+        proxy_set_header Host supabase-uat.srv1866578.hstgr.cloud;
+        rewrite ^/rest/v1/(.*)$ /$1 break;
+        proxy_pass http://uat_rest;
+    }
+    location / { return 404; }
+}

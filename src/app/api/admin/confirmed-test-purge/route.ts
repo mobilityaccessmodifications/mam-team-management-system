@@ -1,7 +1,9 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { confirmedTestIdentityPurge } from "@/app/confirmed-test-purge/actions";
 import type { ConfirmedTestPurgeInput } from "@/lib/confirmed-test-identity-purge";
 
 export async function POST(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   if (request.headers.get("origin") !== new URL(request.url).origin) return Response.json({ error: "Same-origin operator request required." }, { status: 403 });
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") return Response.json({ error: "JSON required." }, { status: 415 });
   const length = request.headers.get("content-length");

@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
+import { loadUatSafety } from './helpers/uat-safety-loader.mjs';
 
 const require = createRequire(import.meta.url);
 const receiptModule = { exports: {} };
 new Function('require', 'module', 'exports', ts.transpileModule(readFileSync('src/lib/notification-receipts.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText)(id => id === 'server-only' ? {} : require(id), receiptModule, receiptModule.exports);
+}).outputText)(id => id === '@/lib/uat-safety' ? loadUatSafety() : id === 'server-only' ? {} : require(id), receiptModule, receiptModule.exports);
 const { handleNotificationReceipts: handle, NOTIFICATION_RECEIPTS_PATH: path } = receiptModule.exports;
 const secret = 'synthetic-notification-secret-'.repeat(3);
 const id = '10000000-0000-4000-8000-000000000001';

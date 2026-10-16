@@ -1,0 +1,47 @@
+{
+  "db": {
+    "repository": "library/postgres",
+    "sourceTag": "17-bookworm",
+    "reference": "library/postgres@sha256:66aafa11cf15800a3c94763f7e11d1e7b2e37e5e84bc4ce027cb6e1e4bfaf4df",
+    "indexDigest": "sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826",
+    "platformManifestDigest": "sha256:66aafa11cf15800a3c94763f7e11d1e7b2e37e5e84bc4ce027cb6e1e4bfaf4df",
+    "imageConfigDigest": "sha256:589f742565e4f6d22149176b032974f55f8201a8a37b71ed587ec5c6902e689f",
+    "platform": "linux/amd64"
+  },
+  "auth": {
+    "repository": "supabase/gotrue",
+    "sourceTag": "v2.196.0",
+    "reference": "supabase/gotrue@sha256:7e813221b93fbf54b515036438550e483bfaf057b9db52fe9bc1ce91c47e817e",
+    "indexDigest": "sha256:c0c25187a6b835e65a6f6e6c6b39d090e832d40e6de5186f2c038e0411944232",
+    "platformManifestDigest": "sha256:7e813221b93fbf54b515036438550e483bfaf057b9db52fe9bc1ce91c47e817e",
+    "imageConfigDigest": "sha256:688edbb786f6d736edaa478438f23c7044a22a6a5f19502a7138d38caca6c2f6",
+    "platform": "linux/amd64"
+  },
+  "rest": {
+    "repository": "postgrest/postgrest",
+    "sourceTag": "v14.17",
+    "reference": "postgrest/postgrest@sha256:aa7e96af2d01219a09bc00c75de28171b1f9fda17ea455a931e4fb6d317089e0",
+    "indexDigest": "sha256:c9dc201e555f5d8e37e7f39cdd4df0229774996e213bfd7de8d10ac609030f2c",
+    "platformManifestDigest": "sha256:aa7e96af2d01219a09bc00c75de28171b1f9fda17ea455a931e4fb6d317089e0",
+    "imageConfigDigest": "sha256:fc3d286fec899d5a5bebbb98eac771ced1ccaa44deac8ce2fc23fe5d262eb3d9",
+    "platform": "linux/amd64"
+  },
+  "gateway": {
+    "repository": "library/nginx",
+    "sourceTag": "stable-alpine",
+    "reference": "library/nginx@sha256:959ae6b898852db82e5b29b929388e59914f42be0a8f4d44c89a4c1f53b49208",
+    "indexDigest": "sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5",
+    "platformManifestDigest": "sha256:959ae6b898852db82e5b29b929388e59914f42be0a8f4d44c89a4c1f53b49208",
+    "imageConfigDigest": "sha256:0d831f5435ede3eeaba5768270c9e6f542d58306f69bb61f148e5c2374b57c56",
+    "platform": "linux/amd64"
+  },
+  "web": {
+    "repository": "library/node",
+    "sourceTag": "24-bookworm-slim",
+    "reference": "library/node@sha256:ec857ea6bb60cb3d0fa4d97495590c5fe7d51be8572c307b55957eeb06569cf7",
+    "indexDigest": "sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5",
+    "platformManifestDigest": "sha256:ec857ea6bb60cb3d0fa4d97495590c5fe7d51be8572c307b55957eeb06569cf7",
+    "imageConfigDigest": "sha256:a797d6440ed0b09e51fb884f30e47ec14cbf58482c5e19db681a0cb8df45b089",
+    "platform": "linux/amd64"
+  }
+}

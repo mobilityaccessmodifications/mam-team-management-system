@@ -1,3 +1,4 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -8,6 +9,7 @@ const headers = { "Cache-Control": "private, no-store" };
 
 /** Protocol-cache cleanup only; never deletes the HR leave/audit records. */
 export async function GET(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   const secret = process.env.CRON_SECRET?.trim();
   const candidate = Buffer.from(request.headers.get("authorization") ?? "");
   const expected = Buffer.from(`Bearer ${secret ?? ""}`);

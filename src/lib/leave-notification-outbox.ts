@@ -1,4 +1,5 @@
 import "server-only";
+import { isUatMode } from "@/lib/uat-safety";
 import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -27,6 +28,7 @@ function receiver() {
 
 /** Only database-owned payloads are dispatched; never accept browser notes/recipients here. */
 export async function dispatchLeaveNotificationOutbox(requestId: string | null = null) {
+  if (isUatMode()) return { ok: false, code: "not_configured", claimed: 0, sent: 0, failed: 0 };
   let target: ReturnType<typeof receiver>;
   try { target = receiver(); } catch { return { ok: false, code: "not_configured", claimed: 0, sent: 0, failed: 0 }; }
   const admin = createAdminClient();
@@ -91,6 +93,7 @@ export async function dispatchLeaveNotificationOutbox(requestId: string | null =
 
 /** A best-effort immediate drain after an authorised mutation; cron is the durable fallback. */
 export async function dispatchLeaveNotificationsForRequest(requestId: string) {
+  if (isUatMode()) return;
   try {
     const result = await dispatchLeaveNotificationOutbox(requestId);
     if (!result.ok) console.warn("Leave notification remains queued.", { code: result.code });
@@ -99,6 +102,7 @@ export async function dispatchLeaveNotificationsForRequest(requestId: string) {
 
 /** Durable, server-owned comparison alerts; amounts never enter the email. */
 export async function dispatchPayrollComparisonAlerts() {
+  if (isUatMode()) return { ok: false, claimed: 0, sent: 0 };
   const target = receiver();
   const admin = createAdminClient();
   const claimed = await admin.rpc("claim_payroll_comparison_alerts");

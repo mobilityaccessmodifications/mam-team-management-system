@@ -14,6 +14,7 @@ import {
 } from "@/lib/employee-directory";
 import { getOrganisationPersonWorkEmailForMember } from "@/lib/organisation-directory";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isUatMode } from "@/lib/uat-safety";
 import { preparePortalAccountStatusChange, finalisePortalAccountStatusChange, recoverPortalAccountStatusChange } from "@/lib/portal-account-status";
 import type {
   CreateEmployeeDirectoryInput,
@@ -74,6 +75,11 @@ class DirectoryCommittedReadError extends DirectoryInputError {
 }
 
 async function requireDirectoryMutationManager() {
+  if (isUatMode()) throw new DirectoryInputError("This operation is unavailable in UAT.");
+  return requireDirectoryManager();
+}
+
+async function requireDirectoryManager() {
   try {
     return await requireEmployeeDirectoryManager();
   } catch (error) {
@@ -179,7 +185,7 @@ export async function getEmployeeTeamManagerDefault(input: {
   teamName: string;
 }): Promise<EmployeeTeamManagerDefaultResult> {
   try {
-    const { supabase } = await requireDirectoryMutationManager();
+    const { supabase } = await requireDirectoryManager();
     const value = inputObject(input);
     return await resolveTeamManagerDefault(supabase, company(value.company), validatedTeam(value.teamName));
   } catch (error) {
@@ -453,6 +459,7 @@ export async function updateEmployeeDirectoryRole(input: {
 }): Promise<DirectoryRole | { error: string; committed?: false } | { error: string; committed: true; personId: string }> {
   let committedPersonId: string | null = null;
   try {
+    if (isUatMode()) return { error: "This operation is unavailable in UAT." };
     const value = inputObject(input);
     if (typeof value.personId !== "string" || !UUID_PATTERN.test(value.personId)
       || !ORDINARY_PORTAL_ROLES.includes(value.role as DirectoryRole)
@@ -664,6 +671,7 @@ export async function archiveEmployeeDirectoryRecord(input: {
 
 
   try {
+    if (isUatMode()) return { ok: false, message: "This operation is unavailable in UAT." };
     const inputValue = inputObject(input);
     if (typeof inputValue.personId !== "string" || !UUID_PATTERN.test(inputValue.personId)) {
       return { ok: false, message: "The employee record is invalid." };
@@ -899,6 +907,7 @@ export async function deleteEmployeeDirectoryRecord(input: {
   personVersion: number;
 }): Promise<DeleteEmployeeDirectoryResult> {
   try {
+    if (isUatMode()) return { ok: false, message: "This operation is unavailable in UAT." };
     const inputValue = inputObject(input);
     if (typeof inputValue.personId !== "string" || !UUID_PATTERN.test(inputValue.personId)) {
       return { ok: false, message: "The employee record is invalid." };

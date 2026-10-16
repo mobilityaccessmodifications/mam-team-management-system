@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 import ts from 'typescript';
 import { loadModule } from './helpers/unified-role-harness.mjs';
+import { loadUatSafety } from './helpers/uat-safety-loader.mjs';
 const require = createRequire(import.meta.url);
 const personId = '10000000-0000-4000-8000-000000000001';
 function fixture({ startDate = '2020-01-01', workEmail = 'work@example.test', personalEmail = 'home@example.test', accountFails = false } = {}) {
@@ -19,6 +20,7 @@ function fixture({ startDate = '2020-01-01', workEmail = 'work@example.test', pe
   const source = ts.transpileModule(readFileSync('src/app/people/actions.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const mod = { exports: {} };
   new Function('require','module','exports',source)((id) => ({
+    '@/lib/uat-safety': loadUatSafety(),
     'next/cache': { revalidatePath: () => {} },
     '@/lib/portal-role-capabilities': loadModule('src/lib/portal-role-capabilities.ts'),
     '@/lib/portal-role-access': loadModule('src/lib/portal-role-access.ts', { '@/lib/supabase/server': { createClient: async () => client } }),

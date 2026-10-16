@@ -1,3 +1,4 @@
+import { isUatMode } from "@/lib/uat-safety";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -20,6 +21,7 @@ function recipient(value: unknown): string | null {
 }
 
 export async function GET(request: Request) {
+  if (isUatMode()) return Response.json({ error: "This operation is unavailable in UAT." }, { status: 403 });
   if (!authorised(request)) return Response.json({ ok: false, code: "unauthorized" }, { status: 401, headers });
   const url = process.env.ONBOARDING_CREDENTIAL_WEBHOOK_URL;
   const secret = process.env.ONBOARDING_CREDENTIAL_WEBHOOK_SECRET;

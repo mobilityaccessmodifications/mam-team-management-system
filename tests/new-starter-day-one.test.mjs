@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 import ts from 'typescript';
 import { loadModule } from './helpers/unified-role-harness.mjs';
+import { loadUatSafety } from './helpers/uat-safety-loader.mjs';
 
 import {
   buildNewStarterDayOneWorkflow,
@@ -26,7 +27,7 @@ function loadRoute(admin) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const mod = { exports: {} };
-  new Function('require','module','exports',source)((id) => id === '@/lib/supabase/admin'
+  new Function('require','module','exports',source)((id) => id === '@/lib/uat-safety' ? loadUatSafety() : id === '@/lib/supabase/admin'
     ? { createAdminClient: () => admin } : id === '@/lib/check-in-delivery-ack'
       ? ackModule.exports : require(id), mod, mod.exports);
   return mod.exports;
@@ -223,6 +224,7 @@ test('new active employee creation still requires a start date before mutation',
   const supabase = { rpc: async () => { rpcCalls += 1; throw new Error('must not mutate'); } };
   const mod = { exports: {} };
   new Function('require','module','exports',source)((id) => ({
+    '@/lib/uat-safety': loadUatSafety(),
     '@/lib/portal-role-capabilities': loadModule('src/lib/portal-role-capabilities.ts'),
     '@/lib/portal-role-access': loadModule('src/lib/portal-role-access.ts', { '@/lib/supabase/server': { createClient: async () => supabase } }),
     '@/lib/employee-teams': teamModule.exports,
@@ -261,6 +263,7 @@ test('active directory-only create without email skips portal-account provisioni
   } };
   const mod = { exports: {} };
   new Function('require','module','exports',source)((id) => ({
+    '@/lib/uat-safety': loadUatSafety(),
     '@/lib/portal-role-capabilities': loadModule('src/lib/portal-role-capabilities.ts'),
     '@/lib/portal-role-access': loadModule('src/lib/portal-role-access.ts', { '@/lib/supabase/server': { createClient: async () => supabase } }),
     '@/lib/employee-teams': teamModule.exports,
