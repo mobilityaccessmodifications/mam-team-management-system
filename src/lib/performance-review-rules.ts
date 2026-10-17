@@ -18,7 +18,7 @@ export function uuid(value: unknown): string {
   return value;
 }
 function text(value: unknown): string {
-  if (typeof value !== "string" || value.length > 8000 || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|\u0000/.test(value)) invalid();
+  if (typeof value !== "string" || value.length > 8000 || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffe\uffff]/.test(value)) invalid();
   return value;
 }
 function strings(value: unknown): string[] {

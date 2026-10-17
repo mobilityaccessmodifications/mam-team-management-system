@@ -13,6 +13,7 @@ const REQUIRED = [0, 3, 4, 5, 6, 7, 8, 9, 10];
 const RATED = [0, 1, 2, 6, 7, 8, 9];
 const RATINGS = [["1 Needs improvement", "1 Needs improvement"], ["2 Meets expectations", "2 Meets expectations"], ["3 Exceeds expectations", "3 Exceeds expectations"], ["N Not enough evidence", "N Not enough evidence"]];
 type PendingOperation = { operationId: string; reviewId: string | null; phase: "pending" | "uncertain" };
+type ConflictScope = { generation: number; actorUserId: string; personId: string | null; role: PerformanceWorkspace["viewerContext"]["role"]; reviewId: string; employeePersonId: string; audience: PerformanceReview["audience"]; command: PerformanceMutationInput["command"] };
 const EMPTY_MEETING: PerformanceMeeting = { date: "", time: "", duration: 30, mode: "in_person", location: "", notes: "" };
 
 function selfRow(row: PerformanceReview): PerformanceSelfReview {
@@ -74,21 +75,24 @@ export default function PerformanceReviewWorkspace() {
   const busyRef = useRef(false);
   const busyOwner = useRef<symbol | null>(null);
   const operationRef = useRef<PendingOperation | null>(null);
+  const conflict = useRef<ConflictScope | null>(null);
   const [operation, setOperation] = useState<PendingOperation | null>(null);
   const urls = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const retire = useCallback(() => { epoch.current += 1; }, []);
   const selected = workspace?.reviews.find(row => row.id === selectedId);
-  const track = useCallback((next: PendingOperation | null) => { operationRef.current = next; setOperation(next); }, []);
+  const track = useCallback((next: PendingOperation | null) => { if (next) conflict.current = null; operationRef.current = next; setOperation(next); }, []);
   const advance = useCallback(() => {
     if (operationRef.current?.phase === "pending") track({ ...operationRef.current, phase: "uncertain" });
     busyOwner.current = null; busyRef.current = false; setBusy(false);
-    const next = ++epoch.current; setGeneration(next); return next;
+    const next = ++epoch.current;
+    if (conflict.current) conflict.current = conflict.current.generation === next - 1 ? { ...conflict.current, generation: next } : null;
+    setGeneration(next); return next;
   }, [track]);
   function claimBusy() { const owner = Symbol(); busyOwner.current = owner; busyRef.current = true; setBusy(true); setMessage(""); return owner; }
   function releaseBusy(owner: symbol) { if (busyOwner.current === owner) { busyOwner.current = null; busyRef.current = false; setBusy(false); } }
   const unknown = useCallback(() => { if (operationRef.current) track({ ...operationRef.current, phase: "uncertain" }); setMessage("The update could not be confirmed. Reconcile before submitting again."); }, [track]);
   const choose = useCallback((row: PerformanceReview | null) => {
-    advance(); dirty.current = false; dirtyParts.current = { assessment: false, meeting: false }; setAssessmentDirty(false);
+    advance(); conflict.current = null; dirty.current = false; dirtyParts.current = { assessment: false, meeting: false }; setAssessmentDirty(false);
     selection.current = row ? { id: row.id, audience: row.audience } : null;
     setRevision(row ? row.audience === "employee" ? row.selfRevision : row.audience === "manager" ? row.managerRevision : row.readRevision : "");
     setSelectedId(row?.id ?? null); setAnswers(row ? [...row.selfAnswers] : []);
@@ -108,7 +112,7 @@ export default function PerformanceReviewWorkspace() {
     if (writing) track(null);
     setMessage(result.message);
   }, [clearPrivate, unknown, track]);
-  const applyLoaded = useCallback((input: PerformanceWorkspace, preferredId: string | null) => {
+  const applyLoaded = useCallback((input: PerformanceWorkspace, preferredId: string | null, recovery: ConflictScope | null = null) => {
     if (nativeActor.current === null || (nativeActor.current !== undefined && nativeActor.current !== input.viewerContext.actorUserId)) { clearPrivate("Your session has changed."); return; }
     const data = ownedWorkspace(input), previous = viewer.current;
     const changed = previous !== null && (previous.actorUserId !== data.viewerContext.actorUserId || previous.role !== data.viewerContext.role || previous.personId !== data.viewerContext.personId);
@@ -121,7 +125,15 @@ export default function PerformanceReviewWorkspace() {
       else choose(null);
       return;
     }
-    if (changed || (!dirty.current && !operationRef.current) || selection.current?.id !== row.id || selection.current.audience !== row.audience) choose(row);
+    if (changed || selection.current?.id !== row.id || selection.current.audience !== row.audience) { choose(row); return; }
+    if (recovery && recovery === conflict.current && recovery.generation === epoch.current && !operationRef.current && recovery.actorUserId === data.viewerContext.actorUserId && recovery.personId === data.viewerContext.personId && recovery.role === data.viewerContext.role && recovery.reviewId === row.id && recovery.employeePersonId === row.employee.id && recovery.audience === row.audience) {
+      conflict.current = null;
+      const editable = row.audience === "employee" ? !row.selfSubmittedAt && (recovery.command === "save_self" ? row.capabilities.saveSelf : recovery.command === "submit_self" && row.capabilities.submitSelf)
+        : row.audience === "manager" && !row.finalisedAt && (recovery.command === "save_manager" ? row.capabilities.saveManager : recovery.command === "complete_manager" ? row.capabilities.completeManager : recovery.command === "save_meeting" ? row.capabilities.saveMeeting : recovery.command === "submit_review" && row.capabilities.submitReview);
+      if (editable) setRevision(row.audience === "employee" ? row.selfRevision : row.audience === "manager" ? row.managerRevision : row.readRevision);
+      return;
+    }
+    if (!dirty.current && !operationRef.current && !conflict.current) choose(row);
   }, [clearPrivate, choose]);
   function accept(row: PerformanceReview, notice: string, channel: PerformanceMutationInput["command"] | null = null) {
     const keepAssessment = channel === "save_meeting" && dirtyParts.current.assessment;
@@ -186,11 +198,12 @@ export default function PerformanceReviewWorkspace() {
   async function reload() {
     if (epoch.current !== generation || nativeActor.current === null) return;
     const ticket = advance();
+    const recovery = conflict.current;
     try {
       const result = await loadPerformanceReviews();
       if (epoch.current !== ticket) return;
       if (!result.ok) { handleFailure(result); return; }
-      applyLoaded(result.data, selectedId);
+      applyLoaded(result.data, selectedId, recovery);
     } catch { if (epoch.current === ticket) setMessage("Reviews could not be loaded."); }
   }
   async function run(command: PerformanceMutationInput["command"]) {
@@ -219,7 +232,11 @@ export default function PerformanceReviewWorkspace() {
     try {
       const result = await mutatePerformanceReview(mutation);
       if (epoch.current !== ticket) return;
-      if (!result.ok) { handleFailure(result, true); return; }
+      if (!result.ok) {
+        handleFailure(result, true);
+        if (result.code === "conflict" && !result.uncertain) conflict.current = { generation: ticket, actorUserId: workspace.viewerContext.actorUserId, personId: workspace.viewerContext.personId, role: workspace.viewerContext.role, reviewId: selected.id, employeePersonId: selected.employee.id, audience: selected.audience, command };
+        return;
+      }
       if (result.committed !== true || result.operationId !== operationId || result.review.id !== selected.id || result.review.audience !== selected.audience) { unknown(); return; }
       const row = ownedRow(result.review, workspace.viewerContext);
       if (!row) { unknown(); return; }

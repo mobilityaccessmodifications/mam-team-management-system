@@ -39,6 +39,7 @@ def http(name, url, body, mail=False):
         'options': {'timeout': 20000, 'redirect': {'redirect': {'followRedirects': False}},
         'response': {'response': {'fullResponse': True, 'neverError': True, 'responseFormat': 'text' if mail else 'json'}}}}
     if mail:
+        parameters['options']['response']['response']['outputPropertyName'] = 'body'
         parameters['nodeCredentialType'] = 'microsoftOutlookOAuth2Api'
         credentials = {'microsoftOutlookOAuth2Api': {'id': '__PARENT_OUTLOOK_ID__', 'name': '__PARENT_OUTLOOK_NAME__'}}
     else:

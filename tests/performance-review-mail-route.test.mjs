@@ -36,7 +36,7 @@ test('GET exact readiness probes only the dedicated native Header Auth ready tri
 
 test('authenticated GET without params drains only the native new outbox with safe aggregate output', async () => {
   const h = loadMailHarness({ rpc: (name, args) => {
-    if (name === 'claim_performance_review_mail') { assert.deepEqual(args, { p_review_id: null, p_limit: 10 }); return { data: [fixture()], error: null }; }
+    if (name === 'claim_performance_review_mail') { assert.deepEqual(args, { p_review_id: null, p_limit: 1 }); return { data: [fixture()], error: null }; }
     assert.equal(name, 'finish_performance_review_mail'); return { data: true, error: null };
   }, fetch: (_, init) => ack(JSON.parse(init.body)) });
   const response = await h.route().GET(request());

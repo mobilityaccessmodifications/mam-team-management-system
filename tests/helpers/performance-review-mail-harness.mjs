@@ -51,7 +51,7 @@ export function environment(patch = {}) {
     MAM_N8N_PERFORMANCE_WEBHOOK_URL: hook, MAM_N8N_PERFORMANCE_WEBHOOK_SECRET: sharedSecret,
     CRON_SECRET: cronSecret, NEXT_PUBLIC_APP_URL: app, ...patch };
 }
-export function loadMailHarness({ env = environment(), rpc, fetch: transport, timers, sourcePatch = {} } = {}) {
+export function loadMailHarness({ env = environment(), rpc, fetch: transport, timers, clock = Date, sourcePatch = {} } = {}) {
   const sources = new Map(sourcePaths.filter(p => existsSync(path.join(root, p))).map(p => [p, readFileSync(path.join(root, p), 'utf8')]));
   for (const [p, source] of Object.entries(sourcePatch)) {
     if (!sourcePaths.includes(p)) throw Error('Unowned fixture source ' + p);
@@ -67,7 +67,7 @@ export function loadMailHarness({ env = environment(), rpc, fetch: transport, ti
     }
     const mod = { exports: {} }; cache.set(file, mod);
     const compiled = ts.transpileModule(sources.get(file), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-    new Function('require', 'module', 'exports', 'process', 'fetch', 'console', 'setTimeout', 'clearTimeout', compiled)(id => {
+    new Function('require', 'module', 'exports', 'process', 'fetch', 'console', 'setTimeout', 'clearTimeout', 'Date', compiled)(id => {
       if (id === 'server-only') return {};
       if (id === '@/lib/supabase/admin') return { createAdminClient() {
         clients++;
@@ -93,7 +93,7 @@ export function loadMailHarness({ env = environment(), rpc, fetch: transport, ti
       requests.push({ url: String(url), init });
       if (!transport) throw Error('Unspecified inert transport');
       return transport(url, init);
-    }, Object.fromEntries(['error', 'warn', 'log', 'info', 'debug'].map(key => [key, (...args) => logs.push({ key, args })])), timers?.setTimeout ?? setTimeout, clearTimeout);
+    }, Object.fromEntries(['error', 'warn', 'log', 'info', 'debug'].map(key => [key, (...args) => logs.push({ key, args })])), timers?.setTimeout ?? setTimeout, clearTimeout, clock);
     return mod.exports;
   }
   return { mail: load('src/lib/performance-review-mail.ts'), route: () => load('src/app/api/performance-reviews/mail/route.ts'), load, calls, requests, logs, rpcRetries, env, get clients() { return clients; }, sources };

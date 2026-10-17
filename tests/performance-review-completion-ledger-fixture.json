@@ -1,0 +1,1206 @@
+[
+  {
+    "name": "initial_team_management",
+    "version": "20260803070713",
+    "dimensions": "[1:45]",
+    "statementCount": 45,
+    "sourceArraySha256": "219ee92647f0ff6b7669d789aa97da78f60da1f053e4061d77e9ddceb9b95b3a"
+  },
+  {
+    "name": "shared_synthetic_demo",
+    "version": "20260804233927",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "5c2d9047af984672903ab4a21fca641b00e056c988892c0f0a902ef964325f9d"
+  },
+  {
+    "name": "tighten_shared_demo_reset",
+    "version": "20260804235031",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "5f35b267fb05152cf74ec4c389f6d240f95714265e6fd777de82a942d19256e6"
+  },
+  {
+    "name": "scope_shared_demo_reset",
+    "version": "20260804235212",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "181f6b8b018e42f6a6fa4e4535634d9ef61674699a7e74043c95037775acdf92"
+  },
+  {
+    "name": "manager_direct_leave_and_multiday_times",
+    "version": "20260805001419",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "41c766344a1702b1c900e06fe58aaf40bf9f432e3cf4604399d3acf1650f6851"
+  },
+  {
+    "name": "private_leave_evidence",
+    "version": "20260811090018",
+    "dimensions": "[1:18]",
+    "statementCount": 18,
+    "sourceArraySha256": "bdbf673d92b96a6b223008c9e36e3e5aa05f8820e54eb7ee94dcfa864cc8aa76"
+  },
+  {
+    "name": "internal_org_directory",
+    "version": "20260812223349",
+    "dimensions": "[1:58]",
+    "statementCount": 58,
+    "sourceArraySha256": "7b2a04d24479848daffd33dca60d7a11c7ec2cb28faa838c068bdf0492170026"
+  },
+  {
+    "name": "portal_account_management",
+    "version": "20260813051743",
+    "dimensions": null,
+    "statementCount": 0,
+    "sourceArraySha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+  },
+  {
+    "name": "serialise_portal_password_resets",
+    "version": "20260814011500",
+    "dimensions": null,
+    "statementCount": 0,
+    "sourceArraySha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+  },
+  {
+    "name": "tighten_portal_account_privacy",
+    "version": "20260814023000",
+    "dimensions": null,
+    "statementCount": 0,
+    "sourceArraySha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+  },
+  {
+    "name": "hr_employee_directory",
+    "version": "20260814112000",
+    "dimensions": "[1:41]",
+    "statementCount": 41,
+    "sourceArraySha256": "28c3c707e7a9b84fa8d5dd7c0b23e83fefc0ba5fdb2bf5a1fb1090904dd54a9c"
+  },
+  {
+    "name": "fix_portal_password_reset_claim_conflict",
+    "version": "20260814113000",
+    "dimensions": "[1:5]",
+    "statementCount": 5,
+    "sourceArraySha256": "8e50a54b593bee225a352a6415ae6b06806b5dde6d271ec5c0f64ae56f42e517"
+  },
+  {
+    "name": "public_org_work_contact",
+    "version": "20260814114000",
+    "dimensions": "[1:6]",
+    "statementCount": 6,
+    "sourceArraySha256": "21634ec3d17bcd6afbe6d68ca75436a19a2255d4807bf9118cdcc549cc60010c"
+  },
+  {
+    "name": "restrict_portal_account_admin_to_hr",
+    "version": "20260814115000",
+    "dimensions": "[1:5]",
+    "statementCount": 5,
+    "sourceArraySha256": "5bb31877e8a4901c3eeb295778cb6bd310a7fe8f9c327d22e4ae5ef9e4981c0f"
+  },
+  {
+    "name": "self_service_employee_profile",
+    "version": "20260814120000",
+    "dimensions": "[1:18]",
+    "statementCount": 18,
+    "sourceArraySha256": "58bc7314f6ee747de5b17333fc0bb0adf4aaf83f343dc108e6f7b77a29432a52"
+  },
+  {
+    "name": "hr_selected_employee_profile",
+    "version": "20260814130000",
+    "dimensions": "[1:10]",
+    "statementCount": 10,
+    "sourceArraySha256": "8b3513e73dde9fc9ced6702d6cbf5223537e29e454b443991259105cd205e988"
+  },
+  {
+    "name": "allow_non_roster_system_admin_workspace",
+    "version": "20260814131000",
+    "dimensions": "[1:6]",
+    "statementCount": 6,
+    "sourceArraySha256": "cabfd3f80a7291a0f94035fd2d6d32dd6297ba5ac24df0880264d778c73f3b81"
+  },
+  {
+    "name": "authoritative_roster_import_support",
+    "version": "20260814132000",
+    "dimensions": "[1:35]",
+    "statementCount": 35,
+    "sourceArraySha256": "c1b9be14b08caea8199be1390d84791b2aaecc98c945a78590a4e3f4c6f73238"
+  },
+  {
+    "name": "keep_external_manager_labels_hr_only",
+    "version": "20260814133000",
+    "dimensions": "[1:6]",
+    "statementCount": 6,
+    "sourceArraySha256": "8f22e19557ddc676a4cba2107ebb29d0a89b048dd5dfec40f4ff03255386be7f"
+  },
+  {
+    "name": "keep_external_roots_generic",
+    "version": "20260814134000",
+    "dimensions": "[1:8]",
+    "statementCount": 8,
+    "sourceArraySha256": "4af261a17c9c0bc781de6b461d3c161bdf53040ca3071184bb31c4805c276e0f"
+  },
+  {
+    "name": "persist_leave_workspace",
+    "version": "20260817120000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "dd1da9a38c0a68a8c5d62e9db81dd1ef0dd9b862e6dec565deebc9a9ff77a1a9"
+  },
+  {
+    "name": "configurable_leave_approval_grants",
+    "version": "20260818130000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "1b0017bf889727f3181e046e1a58c283ef093a40388b0770b20d26e76e6ed90e"
+  },
+  {
+    "name": "shared_calendar_birthdays",
+    "version": "20260818140000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "f08e58ed423d7982f167e0630bf6b78829e3dfe6c764b6702d2057a79ddc1ba8"
+  },
+  {
+    "name": "hr_hardware_asset_fields",
+    "version": "20260818150000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "cabbdba7c143e6cb8c7d88b312af54a090c5c96ac71c1bd3a4d4ccef12c52248"
+  },
+  {
+    "name": "system_admin_test_sessions",
+    "version": "20260818160000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "b051422c7821d6c20a89e85f8979219e3c4e8d604496ff103ce486cd7741e3c5"
+  },
+  {
+    "name": "cancel_approved_leave_requests",
+    "version": "20260818170000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "f3e21636b218dca08352c4780bd373be81d3591aa8121ad716b8d4d7fa2d586a"
+  },
+  {
+    "name": "20260819120000_employee_check_in_reminders",
+    "version": "20260819033552",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "c30218e409f6e495c9f1042bad50c2961713e40d4159f5b3eaaba2eabf642e12"
+  },
+  {
+    "name": "20260819143000_automate_and_scope_employee_check_ins",
+    "version": "20260819074544",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "2868b560c7eb4ff99dff3bf33f7994e4111716f2f9c11b65111827903e175728"
+  },
+  {
+    "name": "20260819150000_fix_org_directory_start_date_privacy",
+    "version": "20260819090402",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "8da35015c2462e35959bb5ebb933048e417e97dffd7dae2a5f9dbcfa85e0dd63"
+  },
+  {
+    "name": "super_admin_change_view",
+    "version": "20260820100000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "6c670cf50423b811069c802313168b30c6d9efeadf17eaff026ceaf053c6adb8"
+  },
+  {
+    "name": "manager_check_in_tasks",
+    "version": "20260820103000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "08da9810a5a60fddda10f9bcf70f990170bf8464d80aac887d800928c1d7a54b"
+  },
+  {
+    "name": "automatic_manager_check_in_access",
+    "version": "20260820150000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "0ea368b7c1669ccddec530f4f802c9167284e2ee67a9865fa8d9326147157426"
+  },
+  {
+    "name": "preview_manager_check_in_scope",
+    "version": "20260820152000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "52975aeadebd1167ca92412f7ea4e53bd0df69377682446623d38173c9fc36b0"
+  },
+  {
+    "name": "optimize_check_in_loads",
+    "version": "20260820160000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "e387458e0ced16896581cdc6ed631c563ad9b070c70289d4a7eb3dbae8303251"
+  },
+  {
+    "name": "set_based_check_in_scope",
+    "version": "20260820170000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "3040055a4c5cb61a15771047ed670a92cd068fa25a5dacfe038521eab1541a03"
+  },
+  {
+    "name": "profile_lifecycle_and_checkin_calendar",
+    "version": "20260821070935",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "6cce402a57d0efa5259c3e59cf689049b3542b12d96b129c961f866207fe7a2a"
+  },
+  {
+    "name": "leave_manager_notification_routing",
+    "version": "20260824150100",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "95b855709cb58886263619a1829fbbb8e9f2c8365c05444c62e9f3cc137eaf17"
+  },
+  {
+    "name": "role_aligned_manager_leave_notifications",
+    "version": "20260825120000",
+    "dimensions": null,
+    "statementCount": null,
+    "sourceArraySha256": "8ab60881072b62721284dd0081f2a14de0bbf755fa88c55ddd64a319bb23a734"
+  },
+  {
+    "name": "people_tab_role_access",
+    "version": "20260825173000",
+    "dimensions": null,
+    "statementCount": null,
+    "sourceArraySha256": "8ab60881072b62721284dd0081f2a14de0bbf755fa88c55ddd64a319bb23a734"
+  },
+  {
+    "name": "manager_scoped_employee_directory",
+    "version": "20260825190000",
+    "dimensions": null,
+    "statementCount": 0,
+    "sourceArraySha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+  },
+  {
+    "name": "leave_employee_notification_recipients",
+    "version": "20260826100000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "3b3d1dfbb8c586710004311230ee9af14c1d78dd32d40d1f7300d751607f9cf3"
+  },
+  {
+    "name": "cancel_selected_employee_leave",
+    "version": "20260826143000",
+    "dimensions": "[1:6]",
+    "statementCount": 6,
+    "sourceArraySha256": "dec21906593102499e9043e2037c152380397606b8d4e697490d1cc58ab34a65"
+  },
+  {
+    "name": "it_asset_register",
+    "version": "20260827110000",
+    "dimensions": "[1:25]",
+    "statementCount": 25,
+    "sourceArraySha256": "698899629139a8bbcc9f954830d5b4577ef18e2c23268ea2d31040ad811eeaf5"
+  },
+  {
+    "name": "assign_it_assets_to_employees",
+    "version": "20260828100000",
+    "dimensions": "[1:44]",
+    "statementCount": 44,
+    "sourceArraySha256": "4d0133593af91bc3674ed3e16c46cdc0be1e1084ea31b683ba5125f0f431d8b4"
+  },
+  {
+    "name": "employee_self_it_assets",
+    "version": "20260828130000",
+    "dimensions": null,
+    "statementCount": null,
+    "sourceArraySha256": "8ab60881072b62721284dd0081f2a14de0bbf755fa88c55ddd64a319bb23a734"
+  },
+  {
+    "name": "employee_preview_it_assets",
+    "version": "20260828140000",
+    "dimensions": null,
+    "statementCount": null,
+    "sourceArraySha256": "8ab60881072b62721284dd0081f2a14de0bbf755fa88c55ddd64a319bb23a734"
+  },
+  {
+    "name": "subscription_management",
+    "version": "20260828150000",
+    "dimensions": "[1:66]",
+    "statementCount": 66,
+    "sourceArraySha256": "a952a8da841f24eddc39c913cd5bcf200ab3c7c11c9f74bd4ddeabdeffd78387"
+  },
+  {
+    "name": "fix_subscription_rpc_projection_ambiguity",
+    "version": "20260831100000",
+    "dimensions": "[1:7]",
+    "statementCount": 7,
+    "sourceArraySha256": "65fdddabf001dbf66d36ae1042318dc9731dc1adb00f3a20b8a0749a6d34cd5a"
+  },
+  {
+    "name": "it_asset_custody_history",
+    "version": "20260831110000",
+    "dimensions": "[1:41]",
+    "statementCount": 41,
+    "sourceArraySha256": "f27b9a5fc808305a0ed4c718893a94859a5191a2c296aedb9735b36002d2b660"
+  },
+  {
+    "name": "fail_closed_portal_login_hardening",
+    "version": "20260902090000",
+    "dimensions": "[1:26]",
+    "statementCount": 26,
+    "sourceArraySha256": "c16354c29e10cfff48d503770fdcaee1651efd6c60b624e5193385711a6f67dd"
+  },
+  {
+    "name": "authoritative_leave_preview",
+    "version": "20260902091000",
+    "dimensions": "[1:7]",
+    "statementCount": 7,
+    "sourceArraySha256": "20ee8671fe233b219744c4eba65af803f14eccf399882a6a386a1162c1fde29a"
+  },
+  {
+    "name": "least_privilege_subscription_access",
+    "version": "20260902092000",
+    "dimensions": "[1:5]",
+    "statementCount": 5,
+    "sourceArraySha256": "67613a53a4290856f603b0f68ce968db3b09c5f3013e18cf7f22f1d99c197e86"
+  },
+  {
+    "name": "workspace_and_record_projections",
+    "version": "20260902093000",
+    "dimensions": "[1:16]",
+    "statementCount": 16,
+    "sourceArraySha256": "494e94f6ba45c5cce705e1ec8561e4b6ff54d728e5d3b465720b2df0d44f6763"
+  },
+  {
+    "name": "allow_cancellation_of_any_leave_request",
+    "version": "20260903110000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "81535c355596935aac501e923964e4023b58879c672ce9ea3967b7d8b9699a44"
+  },
+  {
+    "name": "20260904110000_analytics_dashboard_api",
+    "version": "20260904022514",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "fec562298e5c02eb4ff5c15783b3c64e15d0d98faaac57d9063ca44d9e026f28"
+  },
+  {
+    "name": "employment_leave_entitlements",
+    "version": "20260904090000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "19784a50d3c84d91cefecbaff4d788f5b4ed62601459ff4da92a69dd9d69d845"
+  },
+  {
+    "name": "employee_work_schedule",
+    "version": "20260904120000",
+    "dimensions": "[1:25]",
+    "statementCount": 25,
+    "sourceArraySha256": "33a5d604412c5b506841bdee436bd61ccb9963b8ec28aa57eb3d82c6a4a2f41f"
+  },
+  {
+    "name": "analytics_api_key_management",
+    "version": "20260904121000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "c3efd41f26e0254a401b3eaf2556608f4e23d661ccb5f895e540b0d82a041ddd"
+  },
+  {
+    "name": "employee_work_schedule_change_requests",
+    "version": "20260904152000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "cde02f9a48027c83b0476742529a1498e7bf8a25c579b3c431f4050763987892"
+  },
+  {
+    "name": "fix_leave_preview_employee_person_id",
+    "version": "20260907033546",
+    "dimensions": "[1:7]",
+    "statementCount": 7,
+    "sourceArraySha256": "9ec3d56007ea3786ea9a9b58a6016075c007431ac33cff287a872da382ac7699"
+  },
+  {
+    "name": "priority_leave_workflows",
+    "version": "20260907051607",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "6aa2b4d460fa4359824a458209e0910a6f0e46d5f4da14a06776ed90eb224eff"
+  },
+  {
+    "name": "own_leave_balance_visibility",
+    "version": "20260907221806",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "9550c83a5ae8076aa86cd2ddf6e03e9f610fd91052bb14fe01fda49448293eae"
+  },
+  {
+    "name": "birthday_previous_workday_7am",
+    "version": "20260907231208",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "ebf469555d48d183afdee4d342729ac4f2643958a2b999a9592bfc63474bc217"
+  },
+  {
+    "name": "leave_reminder_three_business_days",
+    "version": "20260907233208",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "3f5f37528a225a6736087d7d566769c3ca21433865b5f14ea54e10d6a43e10e5"
+  },
+  {
+    "name": "20260907230409_archive_combined_employment_account_disable",
+    "version": "20260908000020",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "45504e6651dceebdc75ca2e5b262c1514afc831c2ab6503ee3f43db9d6005184"
+  },
+  {
+    "name": "security_notification_outbox_and_grant_audit",
+    "version": "20260908015416",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "c70767e9ca56015f099be6e6e8637d8901253120e88a7141ad50bab7c595696a"
+  },
+  {
+    "name": "payroll_balance_visibility",
+    "version": "20260910012953",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "86640e7af4a9640fe1fff7290b6b4ef9a7cb14cababeb1b7ab3549b0b8577afc"
+  },
+  {
+    "name": "payroll_import_register",
+    "version": "20260910015007",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "548730af5519bd8fc5082077da54249165e68e9aa09d309a3da583037eb4c2f0"
+  },
+  {
+    "name": "automatic_leave_accrual",
+    "version": "20260910023719",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "c063f1e4617725ad96c9a8edfb6444b20b1e01dfebe6b71c6d0299591409d510"
+  },
+  {
+    "name": "manager_leave_reviewers",
+    "version": "20260910041150",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "8362e4035e9592e7d8122835e2d9427d7632c6fb374326da88486a1870178aae"
+  },
+  {
+    "name": "leave_email_balance_snapshot",
+    "version": "20260911010000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "79bd79cfb6821815503f13d8028649721c712e63a02f4ea86b291141fd68eea8"
+  },
+  {
+    "name": "reviewer_leave_balance_access",
+    "version": "20260911020000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "cbe8b0bcdc999c20783c88b854a610ce56545162fa10573056a389ef1f14773e"
+  },
+  {
+    "name": "expose_leave_accrual_policy_note",
+    "version": "20260914230000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "01f2a732c007f7a2c238904b335d9dc5e630bfb055b4760e599022ade82f9310"
+  },
+  {
+    "name": "advisor_security_and_policy_cleanup",
+    "version": "20260915010000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "7078b17dfee83a05a8fe654bffe2b8aaa728be629886322d587d7747a272008e"
+  },
+  {
+    "name": "payroll_balance_self_service_import",
+    "version": "20260915120000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "74ce51be71a0d8ecefe802051d4a36bc744bcb26dc389f9665e27a503206552a"
+  },
+  {
+    "name": "subscription_billing_details",
+    "version": "20260915130000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "3729523a8d77b5d1d3f9200244f49949009b3d6dfa4337e95a64b5f4a493dbe0"
+  },
+  {
+    "name": "payroll_balance_email_reminder",
+    "version": "20260915140000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "d6297440cbfab8b32685301501f87c9f524f32a9c14e5eedb65e222ac3f4b7de"
+  },
+  {
+    "name": "weekday_recurring_payroll_balance_email_reminder",
+    "version": "20260915150000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "8814f69e52344a392ea38cea3f2e9a1564412000395df0e14d73b053e413d9b6"
+  },
+  {
+    "name": "subscription_credit_card_holder",
+    "version": "20260915160000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "149116580fa01239316478387867a9a99ac7454ab412db969f36edc1fd3efe72"
+  },
+  {
+    "name": "leave_balance_tab_attachment_owner_delete",
+    "version": "20260916090000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "b32eaf7aada120f6aa9b896903621856f2cfe6ae98508d44734884d9d5375b2a"
+  },
+  {
+    "name": "serialise_portal_account_status_changes",
+    "version": "20260916120000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "1d289ab88fcaa8d5ad323ded650054413999d589c9f22604f69726a10db7da60"
+  },
+  {
+    "name": "personal_calendar_scope",
+    "version": "20260916130000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "8f260f809d460df9a066b70f709cf918bf5df3787f14fdfee881832a946e0f1f"
+  },
+  {
+    "name": "private_team_calendar_birthdays",
+    "version": "20260916140000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "05dc469346f1f6d58cb5797b5cee8101a6f076d105bf54ba61079ddb6928a4f8"
+  },
+  {
+    "name": "optional_work_schedule_times",
+    "version": "20260916150000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "ae2739efba43cbf4900d5a579731cd8360d3f7a6b797b6479d16ddfbc002bb05"
+  },
+  {
+    "name": "openclaw_phone_allowlist",
+    "version": "20260917045203",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "f8afecd86f328e36163d91a0c037d9694b6e216a3650bb019f153d33d3a626a1"
+  },
+  {
+    "name": "openclaw_phone_country_context",
+    "version": "20260917051434",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "a28dda2b9089ad09a86dbf93147ffbaa5b265bab958ecc8fb8d13a169b681191"
+  },
+  {
+    "name": "leave_duration_balance_breakdown",
+    "version": "20260917090100",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "95ebb3722d69cb63310d128a73f474ac2b3a4931356e257b374ba783a3dca48e"
+  },
+  {
+    "name": "victorian_public_holiday_workdays",
+    "version": "20260917110640",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "41b1c9faa0fbfa7dde83b856f3dd65d7a1be1f896ce38b9efce6acc2d44132dd"
+  },
+  {
+    "name": "people_operational_tab_access",
+    "version": "20260917123501",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "7be5db0a585a130e403843c59aa812f0bc3580a84c209a65380b7b596e3321a8"
+  },
+  {
+    "name": "openclaw_leave_bridge",
+    "version": "20260917223558",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "1764c5edf98ad9240f7635c6e46889675a099da954bd75c3d08abdc691a025c3"
+  },
+  {
+    "name": "payroll_balance_source_file_retention",
+    "version": "20260918100000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "48e5e1892c7413d02e2b9afbdd09dff193caeae8bca46f515a4e74a4f60c6664"
+  },
+  {
+    "name": "employee_email_login",
+    "version": "20260918110000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "299bbdc4850ff977e57687d7d65d8f509c47d5f561d784700ff8cc47607beb0a"
+  },
+  {
+    "name": "openclaw_self_profile",
+    "version": "20260918120000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "7deb901f1e20658a5682af721627cf88614650f38ec3d2955361157b1f0bcd5a"
+  },
+  {
+    "name": "openclaw_quoted_confirm",
+    "version": "20260920120000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "3b253554406463ce29b28df15ab0ff7acb7c733aa689535c5b1edfab10583e02"
+  },
+  {
+    "name": "openclaw_confirm_only",
+    "version": "20260921150000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "bab326bbe762594c978df6b7f79931ecdf14dbca14a4c5ced1ad91d910514165"
+  },
+  {
+    "name": "manager_team_leave_calendar",
+    "version": "20260921160000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "1bdbf6451b112c6f292579a5c16369d38c4c17b2b4d8940def0f5ee609307ac5"
+  },
+  {
+    "name": "self_service_leave_notice",
+    "version": "20260921170000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "a736d2e4eb7bbd3258f5597737dfc750bffad1ab4bcb1b72bc9cdc236999f933"
+  },
+  {
+    "name": "calendar_team_filters",
+    "version": "20260921180000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "c1debebcd4af7675b9f3dc1f41a82e642f604b3d67c156d7e2e487a718e7517c"
+  },
+  {
+    "name": "reliable_leave_submission",
+    "version": "20260921190000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "3944c757ee50fc4642581c24d803228268e1eb6680caf29a027208097e5cdb63"
+  },
+  {
+    "name": "check_in_retry_catchup",
+    "version": "20260921191000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "602532d4de6566abddd71fed04cf27668b1f7afc9ba950c02a3a09d150ac5e1d"
+  },
+  {
+    "name": "banked_annual_leave_request_limit",
+    "version": "20260922120000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "d980d3b57a563f78fcc9c37c28de5c9da6f1c81c39b6dd713be3065242945ec4"
+  },
+  {
+    "name": "projected_annual_leave_request_limit",
+    "version": "20260922140000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "00c4196a0082558e3b3be06dd7031c8a2da559b38fff248acbe55456eab19ba6"
+  },
+  {
+    "name": "payroll_comparison_alerts",
+    "version": "20260922150000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "a961badd7f7c9ae3c4360d6a12feac239e5ddb32106614886096867fc50cca88"
+  },
+  {
+    "name": "subscription_company_and_managers",
+    "version": "20260922160000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "bdda12e93a7981706a2ad208e6d7e559e5fec392d37a2d61791b6c344aacd68d"
+  },
+  {
+    "name": "restore_authorised_leave_email_route",
+    "version": "20260922170000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "fc50ec85ddbe93a5eeb5539a3dc608dc7f8cf60b0ac57e03dfb021aed966ee70"
+  },
+  {
+    "name": "automatic_leave_balance_required_hours",
+    "version": "20260922180000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "7cab24039bc0863098d2df12478b6fefe8e5ef3c76c7feca880db1b9a2ca63da"
+  },
+  {
+    "name": "subscription_bulk_edit",
+    "version": "20260922200000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "641d1795f15ea3ec8bc050cad97f80379bdfcff6c6a7d2da543937daaa41a778"
+  },
+  {
+    "name": "exclusive_portal_account_status_executor",
+    "version": "20260922210000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "740b9fc79552da135916d4d61bbe94c23e30cc11564d328673212ed4cf1c8f69"
+  },
+  {
+    "name": "core_review_safety_fixes",
+    "version": "20260922220000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "32b635d42a13a05ac2d774ecf1854781c0c004d9511fbb7158f6f4b36c1a13fc"
+  },
+  {
+    "name": "openclaw_verified_phone_identity",
+    "version": "20260922230000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "bbf260c1558f34e078a8af3135f2ba528eb9f10b1f318d965131b28fcec037fc"
+  },
+  {
+    "name": "durable_notification_delivery_receipts",
+    "version": "20260923010000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "61289d2cd3607015296fb97d48a632c51d3619cd3e220fd671e2a201d364bfc0"
+  },
+  {
+    "name": "new_starter_day_one_reminders",
+    "version": "20260923120000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "7504605e9b5c78127081e2aebc29fc94f6a0900f2cb8429a1b2d456bc8bca768"
+  },
+  {
+    "name": "two_week_new_starter_check_in",
+    "version": "20260923124500",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "250e03d9fdccbb8a6f5a8e1bbb3f586d3fad949f772e9d5d655e3ab819df3394"
+  },
+  {
+    "name": "five_employee_teams",
+    "version": "20260923150000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "3751aa711fe59bef2a6630a63a6708d630d9ad3ab4a92ed00aaa1d598f1f03e2"
+  },
+  {
+    "name": "employee_team_calendar",
+    "version": "20260923160000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "86da52c0e6dbbacddbc5d264cfaaa725e076703fc218024d638d164c8491e9c8"
+  },
+  {
+    "name": "employee_team_directory",
+    "version": "20260923170000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "7e29918dcba1e7de3d14cef420d2cba52b9ec0ac88c84a11ca95f2809da3b825"
+  },
+  {
+    "name": "one_month_new_starter_check_in",
+    "version": "20260923180000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "6c2f9382149569e631d61833168749baffcc53fe7555b3911eee10bf31cd5828"
+  },
+  {
+    "name": "two_month_stay_interview",
+    "version": "20260923193000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "71c816cc3c289b9707758642d3ec3dad48b5058287a6ff389f58d7596d34525c"
+  },
+  {
+    "name": "three_month_midpoint_probation_review",
+    "version": "20260923210000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "74e80fb1bffadb8fe38f45c73acb21692055fa6a2d2e7ea8f36ffb62512e9029"
+  },
+  {
+    "name": "check_in_review_outcomes",
+    "version": "20260923230000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "7934450a3eee05718cb078a11b6e6d245f13e1e224716948a245e39e2f7e1490"
+  },
+  {
+    "name": "five_month_no_surprises_review",
+    "version": "20260924200000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "9e60f0fe65145e3fe089ebdb8fbe065ea86890616929d3ce9855b8dc41d9357d"
+  },
+  {
+    "name": "six_month_check_in_review",
+    "version": "20260924230000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "ee10e95c064e1747a3d5439239a1ce69774f5cfb4ba94715e7ebacafaf02b0fb"
+  },
+  {
+    "name": "powerbi_hr_employee_directory",
+    "version": "20260924235000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "80da5fcba8d0cdfe2b99cceba58073b5364889d3a873940a22e3d0ac000e7e2a"
+  },
+  {
+    "name": "six_month_casual_check_in",
+    "version": "20260925010000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "497815befdad8692bcd79d79c1046c5b0fa839b2a3988e1668bcb3c15b38180e"
+  },
+  {
+    "name": "six_month_notification_receipt_keys",
+    "version": "20260925020000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "738b5347894868b1d01663fe5d75712f9ed9fb6a93373eb0ca0b27463ac97f84"
+  },
+  {
+    "name": "analytics_employee_names",
+    "version": "20260925030000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "6e43089cb78b7d1431a535b30f166ae835f40f5a1b199b25dff14a4c5ad82de5"
+  },
+  {
+    "name": "staff_leave_calendar_details",
+    "version": "20260929120000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "806d5d3516d12f6a7377f09894e8dc7e8771cbfe9ba01ceb842b8b7a0888c387"
+  },
+  {
+    "name": "leave_register_read_grants",
+    "version": "20260929133000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "fe77e6a6a03dfa8236fc44f8575624d46f21d62c4149368b1d155b649b8c2bd8"
+  },
+  {
+    "name": "analytics_employee_org_fields",
+    "version": "20260929140000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "d02712cacfbebb6d7967e3f8a75c1b9fe9fec63c8ff0b10557a9014ba2ea3acf"
+  },
+  {
+    "name": "leave_read_grant_employee_preview",
+    "version": "20260929150000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "f360a0935b17dff8f395afdadadfb72d83533c283b57e9628aeaafae2b01f90f"
+  },
+  {
+    "name": "rename_mam_admin_team",
+    "version": "20260930120000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "7eb751a67b776da45a5f214f27abe55e4b3fd607b680ab4af12310522097dd8a"
+  },
+  {
+    "name": "onboarding_credentials",
+    "version": "20260930120100",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "789f437738a26c175be53a437f5f0733c5e4a2429aadcbf54e85806309a37425"
+  },
+  {
+    "name": "directory_role_control",
+    "version": "20260930130000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "8bc355001abff91dd54b5857710b16e572f33505666b81180e14045ee213c5dd"
+  },
+  {
+    "name": "directory_role_service_acl",
+    "version": "20260930130001",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "304117415c0275bf7af5cedca422b17b31ffe7a220a02ff12c226e0a5856afd2"
+  },
+  {
+    "name": "scheduled_employee_offboarding",
+    "version": "20260930150000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "49674e9306b68ce2976674f13fdd5e70e43d6778b44499c8716e1861284e2d51"
+  },
+  {
+    "name": "offboarding_schedule_service_acl",
+    "version": "20260930150001",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "6f63345804de13a90007c8aa2d5eb85768630502e3422a594ae503c1d91e8413"
+  },
+  {
+    "name": "directory_overseas_employment",
+    "version": "20260930170000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "14642762b411cd17a0ae7a7a2d75c56ed987484aabe398758b9de1d107743f0f"
+  },
+  {
+    "name": "analytics_leave_business_hours",
+    "version": "20260930180000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "b3c6eb7cd535c97df752fd38919812f4b40b15c669bb8c810f21bf1bc042f227"
+  },
+  {
+    "name": "password_reset_credential_preflight",
+    "version": "20261001100000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "2a7e34aa036b083b475442c94d36dd68fdbc43634bb298caf28baa684515a2fb"
+  },
+  {
+    "name": "confirmed_test_identity_cleanup",
+    "version": "20261001130000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "9b543df93a2ffb537ea6d7891e995157837f972543d232182bd9783caf78e4d1"
+  },
+  {
+    "name": "confirmed_test_purge_delivered_leave_history",
+    "version": "20261001140000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "94f750686422de4cca4a431322467ad4c4efacd65914730d43770848e0c98dd7"
+  },
+  {
+    "name": "payroll_closing_carryforward",
+    "version": "20261001150000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "278949ab142ea48edb59b4a751f33c0ec6eb1ae604cf2954fc71d76ab8814156"
+  },
+  {
+    "name": "payroll_operator_session_proof",
+    "version": "20261003090000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "30a01f6bb609ed7c9fd032e77ae87f856de6ffb3f34d76b5f07618e63bac37e9"
+  },
+  {
+    "name": "employee_identity_consolidation",
+    "version": "20261006102000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "b8e31b1e615f84edce8aabb23a57d7a68f352749b9045eb89fd9e1d66a06adb5"
+  },
+  {
+    "name": "employee_directory_optional_details",
+    "version": "20261006102500",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "05e5e39f6dc381565481892d48d65653faeb693b5aee00c9bdd1141aeb07ac1e"
+  },
+  {
+    "name": "mam_six_canonical_role_assignments",
+    "version": "20261006103000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "94f97e0e9de2ab1216e45277e646834f482f73ec40b9c96dd8f8e36a31a194d9"
+  },
+  {
+    "name": "unified_portal_roles",
+    "version": "20261006104000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "56b7c2fe1ddd3abe6833914dde4bd81b2d06b42311099e6979fcc8c3de90acb3"
+  },
+  {
+    "name": "onboarding_credential_review",
+    "version": "20261006105000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "a9fc8b51aa6a294d27427b865e3315fbe62990ace5f9c4fc5eeeeb76cce01888"
+  },
+  {
+    "name": "annual_leave_all_submitter_gate",
+    "version": "20261006106000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "0e5f696ae491bcd62c90bd3b9ace9ef14d4b75fc2bd3c80bb69f2ae7393399de"
+  },
+  {
+    "name": "subscription_employee_delegation",
+    "version": "20261008110000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "f7bd093ebd898639d6a6f64d3e0d598c95e067b995fc404fc92ed2c637588621"
+  },
+  {
+    "name": "employee_team_manager_defaults",
+    "version": "20261008140000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "2c6b22dbba6e80f3a197d7384e8aa991a16e178285d614a3285075312217e6a3"
+  },
+  {
+    "name": "annual_source_bank_reconciliation",
+    "version": "20261008150000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "99bb9ef00ebbc97633b0fc6ddf9f8d50dc51a45171e12afff075b98624a48b9c"
+  },
+  {
+    "name": "subscription_requests_milestone1",
+    "version": "20261008160000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "c7bd1d8080c7a9b8abddd3780df9468bee229c5f8dcec7af6e58650d83a47ecc"
+  },
+  {
+    "name": "trade_school_leave",
+    "version": "20261012110000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "648abe72690805bc68be68a2d538d688b20c677694772446b6a0cf86afaee3ec"
+  },
+  {
+    "name": "employee_removal_reporting_splice",
+    "version": "20261012170000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "d3e8bd9756b96d88c63bad31ce5a0cc552d2f7ca1a07cfcc6f19c8f38a2a824a"
+  },
+  {
+    "name": "archived_account_status_finalizer",
+    "version": "20261013081500",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "2522b7f2565311957709884671cbb8935b539c9d45089e4630a5ff27388fe191"
+  },
+  {
+    "name": "annual_continuous_accrual",
+    "version": "20261013120000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "b36d758a3a3798c99f04a07f2a4384ed48288e66126defda0990da05649bae6c"
+  },
+  {
+    "name": "offboarding_version_conflict_responses",
+    "version": "20261013153500",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "afc6a46472b577eb711ed04ca175d6a6be7104315a9d4c01ed1b0faf56baa315"
+  },
+  {
+    "name": "subscription_review_tasks",
+    "version": "20261013170000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "8bebd98702d502f2f29d71d3c67e6be1b7f3aade4998873ff9d46ff7043d22d7"
+  },
+  {
+    "name": "leave_required_employee_note",
+    "version": "20261013180000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "5136be7f2fe371c2e48653e9973101f4de0b914346d6009eeb4210d782f456b6"
+  },
+  {
+    "name": "day_one_reporting_splice_claims",
+    "version": "20261013200000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "fc724a0dda3623aab4759d14cb421e7035519c921959bf398cc27886b55634a5"
+  },
+  {
+    "name": "reconcile_storage_0073_catalog",
+    "version": "20261013223523",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "bb8e0dc003180a95616c754fac7ff70c5b1074e95d55ed01ecc565201db30173"
+  },
+  {
+    "name": "task_follow_up_notes",
+    "version": "20261013223556",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "45831981ee19f2597eaa2a1639b7cff1d1c49e9e66c5ed204962be88034fee5e"
+  },
+  {
+    "name": "portal_password_recovery",
+    "version": "20261014001025",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "d71a404f11add86abae7d4116f838fb7d0f2638ed1ccd395a595351121672a7b"
+  },
+  {
+    "name": "subscription_request_mail",
+    "version": "20261014100000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "5b203c84a1c991c1861ae7d378335fc1a95eec21a6b18148ff82a74bc3275025"
+  },
+  {
+    "name": "subscription_review_managers_mail",
+    "version": "20261014110000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "03f36f6dc846f1f767b7b287f38ead02fef931a568cedd66db5a41e4606fc474"
+  },
+  {
+    "name": "subscription_request_simple_activation",
+    "version": "20261014120000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "7230e0982a131d085938879e3c49111089c83c8510e1d98138e1a874365a7814"
+  },
+  {
+    "name": "subscription_request_penny_mail",
+    "version": "20261014130000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "6541cae7f271fddc3dc0c448a4ae53999f27a104360f49cc7cee84c1fdb84605"
+  },
+  {
+    "name": "subscription_departure_password_tasks",
+    "version": "20261014140000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "d23a3f11f603c37abad69a41393fe0bd1f596f80579720d8196785b71d65218c"
+  },
+  {
+    "name": "subscription_request_template_completion",
+    "version": "20261014220111",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "ce8bded2d89e4d385fa3de3f753895cd039ac893d728ada9329f0be5a2f06bd1"
+  },
+  {
+    "name": "subscription_request_start_date",
+    "version": "20261014233948",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "b9c8ee136d30c3d9b8f7b8fa8264213c11f5877c55da21d4faf06b047e2781cd"
+  },
+  {
+    "name": "performance_reviews_and_mail",
+    "version": "20261016150000",
+    "dimensions": "[1:1]",
+    "statementCount": 1,
+    "sourceArraySha256": "f2da9cfa802c60f3557ba15a3dd62c00018970f10774aa3b760562808dd2508a"
+  }
+]

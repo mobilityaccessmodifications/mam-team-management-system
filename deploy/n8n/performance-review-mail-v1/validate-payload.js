@@ -10,7 +10,8 @@ if (!descriptor || !Object.hasOwn(descriptor, 'value')) return reject();
 const p = descriptor.value;
 const keys = ['version','event','eventKey','deliveryId','reviewId','reviewCode','claimToken','employeeName','managerName','finalisedAt','recipient','managerNote','attachment'];
 if (!closed(p, keys)) return reject();
-const text = (value, max, nonempty = false) => typeof value === 'string' && value.length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value) && (!nonempty || value.trim().length > 0);
+const text = (value, max, nonempty = false) => typeof value === 'string' && value.length <= max && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffe\uffff]/.test(value) && (!nonempty || value.trim().length > 0);
+const name = value => text(value, 240, true) && Array.from(value).length <= 120;
 const date = value => {
   if (typeof value !== 'string' || value.length > 40 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(Date.parse(value))) return false;
   const [year, month, day] = value.slice(0, 10).split('-').map(Number);
@@ -20,7 +21,7 @@ const date = value => {
 if (p.version !== 1 || p.event !== 'performance-review-finalised' || !uuid(p.deliveryId) || !uuid(p.reviewId) || !uuid(p.claimToken)
   || p.eventKey !== `performance-review:${p.reviewId}:finalised` || p.recipient !== 'careers@mobilityaccess.com.au'
   || typeof p.reviewCode !== 'string' || p.reviewCode.length > 64 || !/^PR-\d{4}-\d+$/.test(p.reviewCode)
-  || !text(p.employeeName, 200, true) || !text(p.managerName, 200, true) || !text(p.managerNote, 12000) || !date(p.finalisedAt)) return reject();
+  || !name(p.employeeName) || !name(p.managerName) || !text(p.managerNote, 8000, true) || !date(p.finalisedAt)) return reject();
 const a = p.attachment;
 if (!closed(a, ['fileName','mimeType','contentBase64','sha256']) || a.fileName !== `${p.reviewCode}-manager.docx`
   || a.mimeType !== 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'

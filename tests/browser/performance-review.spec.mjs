@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { unzipSync, strFromU8 } from 'fflate';
 import { workspace, review, ids, failure } from '../performance-review-fixtures.mjs';
 import { QUESTIONS } from '../../src/lib/performance-review-questions.mjs';
+import './performance-review-conflict-cases.mjs';
 
 const ORIGIN = process.env.MAM_PERFORMANCE_ORIGIN;
 test.skip(!ORIGIN, 'Dedicated synthetic performance-component bundle required; not real Auth.');

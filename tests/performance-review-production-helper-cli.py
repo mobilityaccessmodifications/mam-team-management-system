@@ -6,7 +6,7 @@ mode=sys.argv[1]
 sha=lambda b:hashlib.sha256(b).hexdigest()
 base=Path(tempfile.mkdtemp(prefix='prcli'))
 root=base/'source'; root.mkdir(); private=base/'operator';private.mkdir(mode=0o700)
-paths=['scripts/deploy-performance-reviews.py','scripts/deploy-staff-leave-calendar.py']+[str(p.relative_to(ROOT)) for p in (ROOT/'supabase/migrations').glob('*.sql')]
+paths=['scripts/deploy-performance-reviews.py','scripts/deploy-staff-leave-calendar.py']+[str(p.relative_to(ROOT)) for p in (ROOT/'supabase/migrations').glob('*.sql') if p.name[:14]<='20261016150000']
 for name in paths:
  p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes((ROOT/name).read_bytes())
 helper=root/'scripts/deploy-performance-reviews.py';migration=root/'supabase/migrations/20261016150000_performance_reviews_and_mail.sql'; predecessor=root/'supabase/migrations/20261014233948_subscription_request_start_date.sql'

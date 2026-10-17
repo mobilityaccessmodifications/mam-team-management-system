@@ -17,7 +17,7 @@ test('live worker sends canonical closed Careers payload and native Word bytes w
   const row = fixture(); let wire;
   const h = loadMailHarness({
     rpc: (name, args) => {
-      if (name === 'claim_performance_review_mail') { assert.deepEqual(args, { p_review_id: null, p_limit: 10 }); return { data: [row], error: null }; }
+      if (name === 'claim_performance_review_mail') { assert.deepEqual(args, { p_review_id: null, p_limit: 1 }); return { data: [row], error: null }; }
       assert.equal(name, 'finish_performance_review_mail');
       assert.deepEqual(args, { p_delivery_id: ids.delivery, p_claim_token: ids.claim, p_outcome: 'provider_accepted', p_attachment_sha256: wire.attachment.sha256 });
       return { data: true, error: null };

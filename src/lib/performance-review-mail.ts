@@ -17,7 +17,7 @@ export function validatePerformanceReviewMailPayload(raw: unknown): void {
   const v = closed(raw, ["version", "event", "eventKey", "deliveryId", "reviewId", "reviewCode", "claimToken", "employeeName", "managerName", "finalisedAt", "recipient", "managerNote", "attachment"]);
   const a = closed(v.attachment, ["fileName", "mimeType", "contentBase64", "sha256"]);
   const text = (value: unknown) => typeof value === "string" && value.length <= 8000 && Boolean(value.trim())
-    && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|\u0000/.test(value);
+    && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffe\uffff]/.test(value);
   if (v.version !== 1 || v.event !== "performance-review-finalised" || !performanceMailUuid(v.reviewId)
     || !performanceMailUuid(v.deliveryId) || !performanceMailUuid(v.claimToken)
     || v.eventKey !== `performance-review:${v.reviewId}:finalised` || v.recipient !== CAREERS
@@ -46,7 +46,7 @@ function payloadForClaim(raw: unknown, reviewId: string | null) {
     || REQUIRED_ANSWERS.some(i => !document.selfAnswers[i].trim() || !document.managerAnswers[i].trim())
     || RATING_INDICES.some(i => !document.ratings[i])
     || typeof payload.managerNote !== "string" || !payload.managerNote.trim() || payload.managerNote.length > 8000
-    || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|\u0000/.test(payload.managerNote)
+    || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffe\uffff]/.test(payload.managerNote)
     || typeof payload.finalisedAt !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(payload.finalisedAt)
     || Temporal.Instant.from(payload.finalisedAt).epochMilliseconds < meetingEndMillis(document.meeting)) throw new Error("invalid_snapshot");
   const download = buildPerformanceReviewDownload(document);
@@ -68,12 +68,13 @@ export async function dispatchPerformanceReviewMailOutbox(reviewId: string | nul
   if (reviewId !== null && !performanceMailUuid(reviewId)) return { ok: false, code: "invalid_review", ...empty };
   let target: ReturnType<typeof performanceReviewMailTarget>;
   try { target = performanceReviewMailTarget(); } catch { return { ok: false, code: "invalid_configuration", ...empty }; }
+  if (budget.remaining() < 22_000) return { ok: false, code: "deadline", ...empty };
   let admin: ReturnType<typeof createAdminClient>;
   let rows: unknown[];
   try {
     admin = createAdminClient();
-    const claimed = await budget.run(signal => admin.rpc("claim_performance_review_mail", { p_review_id: reviewId, p_limit: reviewId ? 1 : 10 }).retry(false).abortSignal(signal));
-    if (!performanceMailRpcSucceeded(claimed) || !Array.isArray(claimed.data) || claimed.data.length > (reviewId ? 1 : 10)) throw new Error("invalid_claims");
+    const claimed = await budget.run(signal => admin.rpc("claim_performance_review_mail", { p_review_id: reviewId, p_limit: 1 }).retry(false).abortSignal(signal));
+    if (!performanceMailRpcSucceeded(claimed) || !Array.isArray(claimed.data) || claimed.data.length > 1) throw new Error("invalid_claims");
     rows = claimed.data;
     const deliveries = new Set(), reviews = new Set();
     for (const raw of rows) {

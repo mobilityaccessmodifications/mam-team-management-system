@@ -1,0 +1,13 @@
+{
+  "classification": "FINITE_NONSECRET_CAPTURED_INSTALLED_HTTP_PRODUCER_OFFLINE_FIXTURE",
+  "n8nVersion": "2.32.6",
+  "nodesBaseVersion": "2.32.4",
+  "sourcePackagePath": "n8n-nodes-base/dist/nodes/HttpRequest/V3/HttpRequestV3.node.js",
+  "sha256": "5d3572c369e0e088cfe83400d37d874ff443b7453e854804f03c81a1b7a90e00",
+  "bytes": 48137,
+  "fixtureEncoding": "gzip",
+  "fixtureSha256": "8c580a8e4d371b0813fcfa9e2fbf847e5c97a00bf3e32877a37fcd55f618a80a",
+  "acquisitionManifestSha256": "f47bafae8b9fe7767b94d7ff8732aab498004c820c567bde004182fd7cfe0ad8",
+  "reviewProbeSha256": "e441a8f98fa34be2ced31e438123f6b86351c2493525dd75785a01a0fdb1f27d",
+  "scope": "Full unchanged HttpRequestV3.execute with memory-only dependency/terminal ports; no n8n runtime or provider acceptance"
+}
