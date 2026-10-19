@@ -64,7 +64,9 @@ select * from pg_temp.performance_admin_preserved_catalog();
 create temporary table performance_admin_column_before on commit drop as
 select to_jsonb(a)-'attnotnull' metadata from pg_attribute a where a.attrelid='private.performance_reviews'::regclass and a.attname='assigned_manager_person_id';
 create temporary table performance_admin_function_metadata_before on commit drop as
-select s.signature,to_jsonb(p)-'prosrc' metadata from pg_temp.performance_admin_function_spec s join pg_proc p on p.oid=to_regprocedure(s.signature);
+select s.signature,to_jsonb(p)-'prosrc'-'proargdefaults' metadata,
+  regexp_replace(p.proargdefaults::text,' :location -?[0-9]+',' :location -1','g') default_tree
+from pg_temp.performance_admin_function_spec s join pg_proc p on p.oid=to_regprocedure(s.signature);
 
 alter table private.performance_reviews alter column assigned_manager_person_id drop not null;
 alter table private.performance_reviews add column assigned_admin_user_id uuid;
@@ -370,7 +372,8 @@ begin
     union all (select definition collate "C" from pg_temp.performance_admin_preserved_catalog()
       except all select definition collate "C" from pg_temp.performance_admin_preserved_before))
     or exists(select 1 from pg_temp.performance_admin_function_metadata_before b
-      join pg_proc p on p.oid=to_regprocedure(b.signature) where to_jsonb(p)-'prosrc' is distinct from b.metadata)
+      join pg_proc p on p.oid=to_regprocedure(b.signature) where to_jsonb(p)-'prosrc'-'proargdefaults' is distinct from b.metadata
+        or regexp_replace(p.proargdefaults::text,' :location -?[0-9]+',' :location -1','g') is distinct from b.default_tree)
     or exists((select id,document from pg_temp.performance_admin_rows_before
       except all select id,to_jsonb(r)-'assigned_admin_user_id' from private.performance_reviews r)
       union all (select id,to_jsonb(r)-'assigned_admin_user_id' from private.performance_reviews r

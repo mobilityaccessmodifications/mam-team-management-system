@@ -8,6 +8,7 @@ import {ownedCluster,definition,rows,q,user,person,env} from './performance-revi
 const migration='supabase/migrations/20261019225516_performance_review_admin_reviewer.sql';
 const source=readFileSync(migration,'utf8');
 const db='mam_test_pr_admin';
+const major=Number(process.env.MAM_PERFORMANCE_ADMIN_TEST_PG_MAJOR??'17');
 const changed=[
  'private.performance_review_audience(private.performance_reviews)',
  'private.performance_review_project(private.performance_reviews)',
@@ -52,7 +53,7 @@ function predecessor(database){
  for(const file of ['20261019105639_performance_review_readonly_preview.sql','20261019110000_performance_review_notifications.sql','20261019211233_performance_review_p0_manager_delegation.sql'])c.sql(database,readFileSync('supabase/migrations/'+file,'utf8'));
 }
 before(()=>{
- c=ownedCluster(17);predecessor(db);
+ c=ownedCluster(major);predecessor(db);
  nativeReview=run(signed(2,`select ${start(1,'2031')};`)).at(-1).review.id;
  foreignReview=run(signed(8,`select ${start(7,'2031')};`)).at(-1).review.id;
  run(signed(1,`select ${mutate(nativeReview,'self:0','submit_self',selfInput)};`));
@@ -243,6 +244,33 @@ test('unrelated catalog/data drift inside migration rolls back the complete delt
   c.sql(database,`begin;${signed(2,`select ${start(1,'2031')};`)}commit;`);
   const result=c.run(database,source.replace('do $admin_catalog_after$',injection+'\ndo $admin_catalog_after$'));
   assert.notEqual(result.status,0);assert.match(result.stderr,/55000.*Performance Admin unrelated catalog or data delta/s);
+  assert.equal(c.sql(database,"select exists(select 1 from pg_attribute where attrelid='private.performance_reviews'::regclass and attname='assigned_admin_user_id' and not attisdropped);").trim(),'f');
+ }
+});
+
+test('routine default source offsets may change while default values remain exact',()=>{
+ const database='mam_test_pr_admin_default_location';predecessor(database);
+ const defaults="select jsonb_object_agg(p.oid::regprocedure::text,jsonb_build_object('tree',p.proargdefaults::text,'expression',pg_get_expr(p.proargdefaults,0))) from pg_proc p where p.oid in('public.claim_performance_review_notifications(uuid,integer)'::regprocedure,'public.reserve_performance_review_notification_mail(text,text,text,uuid,text)'::regprocedure);";
+ const before=rows(c.sql(database,defaults))[0];
+ const padded=source.replace('p_limit integer default 1)','p_limit integer default    1)');
+ assert.notEqual(padded,source);c.sql(database,padded);
+ const after=rows(c.sql(database,defaults))[0];
+ for(const signature of Object.keys(before)){
+  assert.equal(after[signature].expression,before[signature].expression);
+  assert.equal(after[signature].tree.replaceAll(/ :location -?[0-9]+/g,' :location -1'),before[signature].tree.replaceAll(/ :location -?[0-9]+/g,' :location -1'));
+  if(major===16)assert.notEqual(after[signature].tree,before[signature].tree);
+ }
+});
+
+test('routine default value or unrelated metadata changes roll back the complete delta',()=>{
+ for(const [label,changedSource] of [
+  ['limit',source.replace('p_limit integer default 1)','p_limit integer default 2)')],
+  ['legacy',source.replace('p_legacy_event_key text default null',"p_legacy_event_key text default 'unapproved'")],
+  ['cost',source.replace('do $admin_catalog_after$','alter function public.claim_performance_review_notifications(uuid,integer) cost 200;\ndo $admin_catalog_after$')],
+ ]){
+  const database='mam_test_pr_admin_default_'+label;predecessor(database);
+  assert.notEqual(changedSource,source);
+  const result=c.run(database,changedSource);assert.notEqual(result.status,0);assert.match(result.stderr,/55000.*Performance Admin unrelated catalog or data delta/s);
   assert.equal(c.sql(database,"select exists(select 1 from pg_attribute where attrelid='private.performance_reviews'::regclass and attname='assigned_admin_user_id' and not attisdropped);").trim(),'f');
  }
 });
