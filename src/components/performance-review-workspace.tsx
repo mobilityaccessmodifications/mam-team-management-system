@@ -16,6 +16,14 @@ type PendingOperation = { operationId: string; reviewId: string | null; phase: "
 type ConflictScope = { generation: number; actorUserId: string; personId: string | null; role: PerformanceWorkspace["viewerContext"]["role"]; reviewId: string; employeePersonId: string; audience: PerformanceReview["audience"]; command: PerformanceMutationInput["command"] };
 const EMPTY_MEETING: PerformanceMeeting = { date: "", time: "", duration: 30, mode: "in_person", location: "", notes: "" };
 
+function newReviewDraft() {
+  const parts = new Intl.DateTimeFormat("en-AU", { timeZone: "Australia/Melbourne", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(value => value.type === type)!.value;
+  const cycle = part("year");
+  const dueDate = new Date(Date.UTC(Number(cycle), Number(part("month")) - 1, Number(part("day")) + 7)).toISOString().slice(0, 10);
+  return { employeePersonId: "", cycle, dueDate };
+}
+
 function selfRow(row: PerformanceReview): PerformanceSelfReview {
   return {
     id: row.id, code: row.code, employee: { ...row.employee }, manager: { ...row.manager },
@@ -63,6 +71,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const [held, setHeld] = useState(false);
   const [creating, setCreating] = useState(false);
   const [startDraft, setStartDraft] = useState({ employeePersonId: "", cycle: "", dueDate: "" });
+  const [startYear, setStartYear] = useState(0);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -83,6 +92,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const urls = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const retire = useCallback(() => { epoch.current += 1; }, []);
   const selected = workspace?.reviews.find(row => row.id === selectedId);
+  const startPerson = workspace?.startablePeople.find(person => person.id === startDraft.employeePersonId);
   const track = useCallback((next: PendingOperation | null) => { if (next) conflict.current = null; operationRef.current = next; setOperation(next); }, []);
   const advance = useCallback(() => {
     if (operationRef.current?.phase === "pending") track({ ...operationRef.current, phase: "uncertain" });
@@ -302,17 +312,23 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const meetingDisabled = blocked || selected?.audience !== "manager" || !selected.capabilities.saveMeeting || Boolean(selected.finalisedAt);
   const heldDisabled = blocked || selected?.audience !== "manager" || !selected.capabilities.submitReview || Boolean(selected.finalisedAt);
   return <section className={styles.workspace} aria-label="Performance reviews" aria-busy={busy || loading}>
-    <header className={styles.toolbar}><h1>Performance reviews</h1><button type="button" onClick={() => reload()} disabled={busy}>Reload</button>{workspace?.startablePeople.length ? <button type="button" disabled={blocked} onClick={() => { if (epoch.current === generation && !blocked) setCreating(true); }}>New yearly review</button> : null}</header>
+    <header className={styles.toolbar}><h1>Performance reviews</h1><button type="button" onClick={() => reload()} disabled={busy}>Reload</button>{workspace?.startablePeople.length ? <button type="button" className={styles.primaryButton} disabled={blocked} onClick={() => { if (epoch.current !== generation || blocked) return; if (!creating) { const draft = newReviewDraft(); setStartDraft({ ...draft, employeePersonId: workspace.startablePeople[0].id }); setStartYear(Number(draft.cycle)); } setCreating(true); }}>New yearly review</button> : null}</header>
     {message ? <p role={["Saved.", "Submitted.", "Review opened.", "Review created.", "Update confirmed."].includes(message) ? "status" : "alert"}>{message}</p> : null}
-    {loading ? <p role="status">Loading performance reviews…</p> : !message && workspace?.reviews.length === 0 ? <p role="status">No performance reviews yet.</p> : null}
+    {loading ? <p role="status">Loading performance reviews…</p> : !creating && !message && workspace?.reviews.length === 0 ? <p role="status">No performance reviews yet.</p> : null}
     {operation?.phase === "uncertain" ? <button type="button" disabled={busy} onClick={() => reconcile()}>Reconcile update</button> : null}
-    {creating ? <form aria-label="New yearly review" onSubmit={event => { event.preventDefault(); void start(); }}>
-      <label>Employee<select name="start-person" disabled={blocked} value={startDraft.employeePersonId} onChange={event => { if (epoch.current === generation && !blocked) setStartDraft(current => ({ ...current, employeePersonId: event.target.value })); }}><option value="">Select employee</option>{workspace?.startablePeople.map(person => <option key={person.id} value={person.id}>{person.name} — {person.company}</option>)}</select></label>
-      <label>Cycle<input name="start-cycle" maxLength={4} inputMode="numeric" disabled={blocked} value={startDraft.cycle} onChange={event => { if (epoch.current === generation && !blocked) setStartDraft(current => ({ ...current, cycle: event.target.value })); }} /></label>
-      <label>Due date<input name="start-dueDate" type="date" disabled={blocked} value={startDraft.dueDate} onChange={event => { if (epoch.current === generation && !blocked) setStartDraft(current => ({ ...current, dueDate: event.target.value })); }} /></label>
-      <div className={styles.toolbar}><button type="submit" disabled={blocked}>Create review</button><button type="button" disabled={blocked} onClick={() => { if (epoch.current !== generation || blocked) return; advance(); setCreating(false); setStartDraft({ employeePersonId: "", cycle: "", dueDate: "" }); }}>Cancel</button></div>
-    </form> : null}
-    <div className={styles.columns}>
+    {creating ? <div className={styles.startLayout}>
+      <nav className={styles.employeeList} aria-label="Review employees">{workspace?.startablePeople.map(person => <button type="button" key={person.id} aria-label={`${person.name} — ${person.company}`} aria-pressed={person.id === startDraft.employeePersonId} disabled={blocked} onClick={() => { if (epoch.current === generation && !blocked && !busyRef.current && !operationRef.current) setStartDraft(current => ({ ...current, employeePersonId: person.id })); }}>
+        <span className={styles.avatar} aria-hidden="true">{person.name.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join("")}</span>
+        <span className={styles.employeeDetails}><strong>{person.name}</strong><span>{person.jobTitle} · {person.team}</span></span>
+        <span className={styles.company}>{person.company}</span>
+      </button>)}</nav>
+      <form className={styles.startForm} aria-label="New yearly review" onSubmit={event => { event.preventDefault(); void start(); }}>
+        {startPerson ? <header><h2>{startPerson.name} — {startPerson.company}</h2><p>{startPerson.jobTitle} · {startPerson.team}</p></header> : null}
+        <label>Cycle<select name="start-cycle" disabled={blocked} value={startDraft.cycle} onChange={event => { if (epoch.current === generation && !blocked) setStartDraft(current => ({ ...current, cycle: event.target.value })); }}>{[startYear - 1, startYear, startYear + 1].map(year => <option key={year} value={String(year)}>{year}</option>)}</select></label>
+        <label>Due date<input name="start-dueDate" type="date" disabled={blocked} value={startDraft.dueDate} onChange={event => { if (epoch.current === generation && !blocked) setStartDraft(current => ({ ...current, dueDate: event.target.value })); }} /></label>
+        <div className={styles.startActions}><button type="button" disabled={blocked} onClick={() => { if (epoch.current !== generation || blocked) return; advance(); setCreating(false); setStartDraft({ employeePersonId: "", cycle: "", dueDate: "" }); }}>Cancel</button><button type="submit" className={styles.primaryButton} disabled={blocked || !startPerson}>Start review</button></div>
+      </form>
+    </div> : <div className={styles.columns}>
       <nav aria-label="Review list">{workspace?.reviews.map(row => <button type="button" key={row.id} disabled={operation !== null} aria-pressed={row.id === selectedId} onClick={() => { if (epoch.current === generation && !operationRef.current) choose(row); }}>{row.code} — {row.employee.name} — {row.cycle}</button>)}</nav>
       {selected ? <article className={styles.card}><h2>{selected.employee.name} — {selected.employee.company}</h2>
         {selected.capabilities.downloadDocument ? <button type="button" disabled={busy} onClick={() => download()}>Download Word</button> : null}
@@ -342,6 +358,6 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
           {selected.managerCompletedAt ? <p>Assessment completed: {selected.managerCompletedAt}</p> : null}{selected.finalisedAt ? <p>Finalised: {selected.finalisedAt}</p> : null}
         </form> : null}
       </article> : null}
-    </div>
+    </div>}
   </section>;
 }

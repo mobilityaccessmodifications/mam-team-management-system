@@ -157,14 +157,66 @@ test('meeting registration is not held and finalisation requires explicit held p
   h.unmount();
 });
 
+test('new yearly review defaults follow Melbourne calendar boundaries and refresh after cancellation', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-12-31T13:30:00Z') });
+  const data = workspace('manager'); data.startablePeople = [data.reviews[0].employee];
+  const h = mount(data); await h.settle();
+  for (const [instant, year, dueDate] of [
+    ['2026-12-31T13:30:00Z', '2027', '2027-01-08'],
+    ['2026-10-03T14:30:00Z', '2026', '2026-10-11'],
+    ['2028-02-22T13:30:00Z', '2028', '2028-03-01'],
+  ]) {
+    t.mock.timers.setTime(new Date(instant).getTime());
+    h.click('New yearly review'); h.render();
+    assert.equal(h.field('start-cycle').type, 'select');
+    assert.equal(h.field('start-cycle').props.value, year);
+    assert.equal(h.field('start-dueDate').props.value, dueDate);
+    h.change('start-dueDate', '2029-01-01'); h.click('New yearly review'); h.render();
+    assert.equal(h.field('start-dueDate').props.value, '2029-01-01');
+    h.click('Cancel'); h.render();
+  }
+  assert.equal(h.calls.filter(call => call.name === 'startPerformanceReview').length, 0);
+  h.unmount();
+});
+
+test('creation shows eligible employees beside editable defaults and preserves edits when selecting a report', async () => {
+  const first = review().employee, second = { ...first, id: ids.other, name: 'Synthetic Second' };
+  const data = workspace('manager', 'MAM', { startablePeople: [first, second] });
+  const pending = deferred();
+  const h = mount(data, { startPerformanceReview: () => pending.promise }); await h.settle();
+  h.click('New yearly review'); h.render();
+  const label = person => `${person.name} — ${person.company}`;
+  assert.equal(h.button(label(first)).props['aria-pressed'], true);
+  assert.equal(h.all.filter(node => node.type === 'nav' && node.props['aria-label'] === 'Review list').length, 0);
+  assert.equal(h.all.filter(node => node.type === 'nav' && node.props['aria-label'] === 'Review employees')[0].props.children.length, 2);
+  h.change('start-cycle', '2027'); h.change('start-dueDate', '2027-11-30');
+  h.click(label(second)); h.render();
+  assert.equal(h.button(label(first)).props['aria-pressed'], false);
+  assert.equal(h.button(label(second)).props['aria-pressed'], true);
+  assert.equal(h.field('start-cycle').props.value, '2027');
+  assert.equal(h.field('start-dueDate').props.value, '2027-11-30');
+  const oldSelect = h.button(label(first)).props.onClick;
+  h.submit('New yearly review'); await h.settle();
+  assert.equal(h.calls.at(-1).args[0].employeePersonId, second.id);
+  assert.equal(h.button(label(first)).props.disabled, true);
+  oldSelect(); h.render();
+  assert.equal(h.button(label(second)).props['aria-pressed'], true);
+  pending.resolve(failure('invalid')); await h.settle(); h.click('Cancel'); h.render();
+  assert.ok(h.text.includes('Manager assessment'));
+  h.unmount();
+});
+
 test('yearly creation selects only startable people, validates date/cycle and submits once', async () => {
   const data = workspace('manager'); data.startablePeople = [data.reviews[0].employee];
   const pending = deferred(); const h = mount(data, { startPerformanceReview: () => pending.promise }); await h.settle();
   h.click('New yearly review'); h.render();
-  assert.equal(h.all.filter(n => n.type === 'option' && n.props.value === data.startablePeople[0].id).length, 1);
-  h.change('start-person', 'unlisted-person'); h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30'); h.submit('New yearly review'); await h.settle();
+  const employeeLabel = `${data.startablePeople[0].name} — ${data.startablePeople[0].company}`;
+  assert.equal(h.button(employeeLabel).props['aria-pressed'], true);
+  h.ports.loadPerformanceReviews = async () => ({ ok: true, data: { ...data, startablePeople: [] } });
+  h.click('Reload'); await h.settle(); h.submit('New yearly review'); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'startPerformanceReview').length, 0);
-  h.change('start-person', data.startablePeople[0].id); h.change('start-cycle', '26'); h.submit('New yearly review'); await h.settle();
+  h.ports.loadPerformanceReviews = async () => ({ ok: true, data }); h.click('Reload'); await h.settle();
+  h.click(employeeLabel); h.render(); h.change('start-cycle', '26'); h.submit('New yearly review'); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'startPerformanceReview').length, 0);
   h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-02-30'); h.submit('New yearly review'); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'startPerformanceReview').length, 0);
@@ -263,7 +315,7 @@ test('uncertain writes retain drafts, never replay and require explicit committe
 test('uncertain yearly creation reconciles with null review id and does not create twice', async () => {
   const data = workspace('manager'); data.startablePeople = [data.reviews[0].employee];
   const h = mount(data, { startPerformanceReview: async () => failure('uncertain', true), reconcilePerformanceReviewOperation: async () => ({ ok: true, data: { status: 'committed', review: data.reviews[0] } }) }); await h.settle();
-  h.click('New yearly review'); h.render(); h.change('start-person', data.startablePeople[0].id); h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30');
+  h.click('New yearly review'); h.render(); h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30');
   h.submit('New yearly review'); await h.settle(); h.submit('New yearly review'); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'startPerformanceReview').length, 1);
   assert.equal(h.field('start-cycle').props.value, '2026');
@@ -288,8 +340,9 @@ test('native logout clears private DTOs, drafts, creation form and Blob URLs bef
   const h = mount(data, { getPerformanceReviewDocument: async () => ({ ok: true, document: documentFor(data.reviews[0]) }) }); await h.settle();
   h.auth('INITIAL_SESSION', ids.actor);
   await h.click('Download Word'); await h.settle();
-  h.change('managerNote', 'PRIVATE-UNSAVED-AUTH-DRAFT'); h.click('New yearly review'); h.render(); h.change('start-cycle', '2026');
+  h.change('managerNote', 'PRIVATE-UNSAVED-AUTH-DRAFT');
   const oldSave = h.button('Save manager draft').props.onClick, oldDownload = h.button('Download Word').props.onClick, oldCreate = h.button('New yearly review').props.onClick;
+  h.click('New yearly review'); h.render(); h.change('start-cycle', '2026');
   const pending = deferred(); h.ports.loadPerformanceReviews = () => pending.promise; h.click('Reload'); h.render();
   h.auth('SIGNED_OUT');
   assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-'));
@@ -314,7 +367,7 @@ test('definitive action permission loss clears private state while transient fai
     if (route === 'mutation' || route === 'reconcile') { h.click('Save manager draft'); await h.settle(); }
     if (route === 'document') h.click('Download Word');
     if (route === 'reconcile') h.click('Reconcile update');
-    if (route === 'start') { h.click('New yearly review'); h.render(); h.change('start-person', data.startablePeople[0].id); h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30'); h.submit('New yearly review'); }
+    if (route === 'start') { h.click('New yearly review'); h.render(); h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30'); h.submit('New yearly review'); }
     await h.settle(); assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-'), route+' clears private state'); assert.equal(h.all.filter(n => n.type === 'form').length, 0); h.unmount();
   }
   for (const code of ['conflict', 'unavailable']) {
@@ -568,15 +621,15 @@ test('uncertain delegated create stays held until its target-bound receipt is re
   const h = mount(data, { startPerformanceReview: async () => failure('uncertain', true), reconcilePerformanceReviewOperation: async () => ({ ok: true, data: { status: 'committed', review: review('manager') } }) }, { previewPersonId: ids.manager });
   try {
     await h.settle(); h.click('New yearly review'); h.render();
-    h.change('start-person', ids.person); h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30');
+    h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30');
     h.submit('New yearly review'); await h.settle();
     const started = h.calls.at(-1);
     assert.equal(started.name, 'startPerformanceReview'); assert.equal(started.args[1], ids.manager);
-    assert.equal(h.button('Create review').props.disabled, true);
+    assert.equal(h.button('Start review').props.disabled, true);
     h.submit('New yearly review'); await h.settle();
     assert.equal(h.calls.filter(call => call.name === 'startPerformanceReview').length, 1);
     h.click('Reload'); await h.settle();
-    assert.equal(h.button('Create review').props.disabled, true);
+    assert.equal(h.button('Start review').props.disabled, true);
     h.click('Reconcile update'); await h.settle();
     assert.deepEqual(h.calls.at(-1), { name: 'reconcilePerformanceReviewOperation', args: [{ operationId: started.args[0].operationId, reviewId: null }, ids.manager] });
     assert.ok(h.text.includes('Update confirmed.')); assert.equal(h.field('managerNote').props.disabled, false);
@@ -609,7 +662,7 @@ test('delegated create passes its target and rejects an employee-shaped success 
   const h = mount(data, { startPerformanceReview: async input => ({ ok: true, committed: true, operationId: input.operationId, review: review('employee', 'MAM', { employee: { ...review().employee, id: ids.manager } }) }) }, { previewPersonId: ids.manager });
   try {
     await h.settle(); h.click('New yearly review'); h.render();
-    h.change('start-person', ids.person); h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30');
+    h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30');
     h.submit('New yearly review'); await h.settle();
     assert.equal(h.calls.at(-1).args[1], ids.manager);
     assert.ok(h.text.includes('Reconcile before submitting again.'));

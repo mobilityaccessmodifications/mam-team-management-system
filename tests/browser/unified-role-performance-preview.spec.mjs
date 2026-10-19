@@ -126,16 +126,45 @@ for (const returnToA of [false, true]) test(`late Performance manager load canno
   if (returnToA) await assertManagerEditable(page); else await assertReadOnly(page);
 });
 
+test('yearly review form uses the orange primary button and current Melbourne year with a seven-day due date', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-12-31T13:30:00Z'));
+  await selectProfile(page, 'manager'); await openPerformance(page);
+  const panel = workspace(page);
+  const button = panel.getByRole('button', { name: 'New yearly review', exact: true });
+  await expect(button).toHaveCSS('background-color', 'rgb(195, 77, 20)');
+  await expect(button).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await button.hover();
+  await expect(button).toHaveCSS('background-color', 'rgb(168, 63, 13)');
+  await expect(button).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await button.click();
+  const create = panel.getByRole('form', { name: 'New yearly review', exact: true });
+  await expect(create.getByRole('combobox', { name: 'Cycle', exact: true })).toHaveValue('2027');
+  await expect(create.locator('[name="start-dueDate"]')).toHaveValue('2027-01-08');
+  await create.getByRole('combobox', { name: 'Cycle', exact: true }).selectOption('2026');
+  await create.locator('[name="start-dueDate"]').fill('2027-01-10');
+  await button.click();
+  await expect(create.locator('[name="start-cycle"]')).toHaveValue('2026');
+  await expect(create.locator('[name="start-dueDate"]')).toHaveValue('2027-01-10');
+  await create.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.clock.setFixedTime(new Date('2027-01-01T13:30:00Z'));
+  await button.click();
+  await expect(create.locator('[name="start-cycle"]')).toHaveValue('2027');
+  await expect(create.locator('[name="start-dueDate"]')).toHaveValue('2027-01-09');
+  await create.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(await writes(page)).toEqual([]);
+});
+
 test('P0 creates and completes assigned manager work with the target on every write while own self stays read-only', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-20T00:00:00Z'));
   await selectProfile(page, 'manager'); await openPerformance(page);
   const panel = workspace(page);
   await assertManagerEditable(page);
   await panel.getByRole('button', { name: 'New yearly review', exact: true }).click();
   const create = panel.getByRole('form', { name: 'New yearly review', exact: true });
-  await create.locator('[name="start-person"]').selectOption({ label: 'Synthetic A candidate — MAM' });
-  await create.locator('[name="start-cycle"]').fill('2027');
+  await panel.getByRole('navigation', { name: 'Review employees' }).getByRole('button', { name: 'Synthetic A candidate — MAM', exact: true }).click();
+  await create.locator('[name="start-cycle"]').selectOption('2027');
   await create.locator('[name="start-dueDate"]').fill('2027-11-30');
-  await create.getByRole('button', { name: 'Create review', exact: true }).click();
+  await create.getByRole('button', { name: 'Start review', exact: true }).click();
   await expect(panel.getByRole('status')).toHaveText('Review created.');
   await expect(panel.getByRole('heading', { name: 'Synthetic A candidate — MAM', exact: true })).toBeVisible();
   expect((await calls(page, 'startPerformanceReview')).at(-1).args[1]).toBe(people.manager.id);
@@ -164,22 +193,23 @@ test('P0 creates and completes assigned manager work with the target on every wr
 });
 
 test('P0 uncertain manager creation reconciles the original target without replaying create', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-20T00:00:00Z'));
   await selectProfile(page, 'manager'); await openPerformance(page);
   const panel = workspace(page);
   await page.evaluate(id => window.unifiedRoleFixture.holdNext('startPerformanceReview', id), people.manager.id);
   await panel.getByRole('button', { name: 'New yearly review', exact: true }).click();
   const create = panel.getByRole('form', { name: 'New yearly review', exact: true });
-  await create.locator('[name="start-person"]').selectOption({ label: 'Synthetic A candidate — MAM' });
-  await create.locator('[name="start-cycle"]').fill('2027');
+  await panel.getByRole('navigation', { name: 'Review employees' }).getByRole('button', { name: 'Synthetic A candidate — MAM', exact: true }).click();
+  await create.locator('[name="start-cycle"]').selectOption('2027');
   await create.locator('[name="start-dueDate"]').fill('2027-11-30');
-  await create.getByRole('button', { name: 'Create review', exact: true }).click();
+  await create.getByRole('button', { name: 'Start review', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain(`startPerformanceReview:${people.manager.id}`);
   await page.evaluate(id => window.unifiedRoleFixture.rejectPending('startPerformanceReview', id), people.manager.id);
   await expect(panel.getByRole('alert')).toContainText('Reconcile before submitting again.');
-  await expect(create.getByRole('button', { name: 'Create review', exact: true })).toBeDisabled();
+  await expect(create.getByRole('button', { name: 'Start review', exact: true })).toBeDisabled();
   await panel.getByRole('button', { name: 'Reload', exact: true }).click();
   await expect(panel).toHaveAttribute('aria-busy', 'false');
-  await expect(create.getByRole('button', { name: 'Create review', exact: true })).toBeDisabled();
+  await expect(create.getByRole('button', { name: 'Start review', exact: true })).toBeDisabled();
   await panel.getByRole('button', { name: 'Reconcile update', exact: true }).click();
   await expect(panel.getByRole('status')).toHaveText('Update confirmed.');
   await expect(panel.getByRole('heading', { name: 'Synthetic A candidate — MAM', exact: true })).toBeVisible();
