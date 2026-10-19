@@ -26,7 +26,9 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const requestedView = view === "about" ? "people"
     : view === "leave" || view === "calendar" || view === "people" ? view : "home";
   return <LeaveDemo
-    key={JSON.stringify(actor)}
+    key={`${userData.user.id}:${JSON.stringify(actor)}`}
+    authActorId={userData.user.id}
+    performanceReviewEnabled={process.env.MAM_PERFORMANCE_REVIEW_ENABLED === "true"}
     actorCapabilities={actor}
     currentPersonId={actor.person_id ?? undefined}
     isNonRosterSystemAdmin={actor.is_super_admin && !actor.person_id}
@@ -42,7 +44,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       view: requestedView,
       section: section === "approvals" || section === "balance" ? section : "requests",
       requestId: firstValue(params.request),
-      peopleSection: peopleSection === "assets" || peopleSection === "accounts" || peopleSection === "subscriptions" || peopleSection === "tasks" ? peopleSection : undefined,
+      peopleSection: peopleSection === "assets" || peopleSection === "accounts" || peopleSection === "subscriptions" || peopleSection === "tasks" || peopleSection === "performance" ? peopleSection : undefined,
     }}
   />;
 }

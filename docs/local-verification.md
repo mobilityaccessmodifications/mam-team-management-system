@@ -18,6 +18,25 @@ same browser-cache variable. PostgreSQL's `initdb`, `pg_ctl`, `createdb`, and
 the complete replay/OpenClaw job in both PostgreSQL 16 and 17 containers as the
 unprivileged `postgres` OS user; the older focused SQL fixture job remains separate.
 
+Performance review release-envelope tests are an explicit PostgreSQL 17 gate:
+
+```sh
+npm run test:sql:performance
+```
+
+Supply PostgreSQL 17 `initdb`, `pg_ctl`, `postgres`, `createdb`, `psql` and
+`pg_dump`, plus Python and Git, on PATH. The gate fails if they are absent or
+the selected major is not 17. It creates fresh marked socket-only clusters
+under `os.tmpdir()` with a C locale, creates its own private evidence parent,
+and verifies stop status, pid and socket absence. A short private TMPDIR may
+be supplied; no Homebrew or user-profile path is required. Optional
+`MAM_PERFORMANCE_TEST_EVIDENCE` selects a new task-owned evidence directory.
+CI runs this gate explicitly in the 17 replay matrix entry. The full ordered
+replay still runs every migration under both 16 and 17; the new feature core
+admits only its exact version-selected metadata variants. The production
+release helper still requires exactly 17. Standard `npm test` contains only
+portable helper/Git fixtures and does not register these native suites.
+
 ## Disposable PostgreSQL
 
 `test:sql` creates a unique `/tmp/mam-openclaw-pg.*` directory, initializes a new

@@ -125,6 +125,13 @@ try {
     });
     process.exitCode = await new Promise((resolve, reject) => { contact.on("error", reject); contact.on("exit", resolve); }) ?? 1;
   }
+  if (process.exitCode === 0) {
+    const performance = spawn(process.execPath, ["tests/browser/performance-review-runner.mjs", ...browserArgs], {
+      env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, MAM_BROWSER_SOURCE_ROOT: sourceRoot },
+      stdio: "inherit",
+    });
+    process.exitCode = await new Promise((resolve, reject) => { performance.on("error", reject); performance.on("exit", resolve); }) ?? 1;
+  }
 } finally {
   await new Promise((resolve) => server.close(resolve));
   rmSync(scratch, { recursive: true, force: true });

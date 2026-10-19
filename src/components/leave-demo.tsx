@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 import { approvalBalanceCoverage, approvalRequestHours } from "@/lib/leave-priority";
 
@@ -139,6 +140,7 @@ const SubscriptionCredentialVault = dynamic(() => import("@/components/subscript
 const SubscriptionRegister = dynamic(() => import("@/components/subscription-register").then((module) => module.SubscriptionRegister), { loading: PanelLoading });
 const TeamCalendar = dynamic(() => import("@/components/team-calendar").then((module) => module.TeamCalendar), { loading: PanelLoading });
 const PeopleOperationsDemo = dynamic(() => import("@/components/people-operations-demo").then((module) => module.PeopleOperationsDemo), { loading: PanelLoading });
+const PerformanceReviewWorkspace = dynamic(() => import("@/components/performance-review-workspace"), { loading: PanelLoading });
 
 function resolveAuthorisedLeaveSection(
   section: LeaveSection,
@@ -280,7 +282,7 @@ type InitialNavigation = {
   view: AppView;
   section: LeaveSection;
   requestId?: string;
-  peopleSection?: "assets" | "accounts" | "subscriptions" | "tasks";
+  peopleSection?: "assets" | "accounts" | "subscriptions" | "tasks" | "performance";
 };
 
 function businessDaysBetween(start: string, end: string) {
@@ -539,8 +541,12 @@ export function LeaveDemo({
   canViewSubscriptionReviewCalendar = false,
   checkInResources,
   actorCapabilities,
+  authActorId,
+  performanceReviewEnabled = false,
 }: {
   actorCapabilities?: PortalRoleCapabilities;
+  authActorId?: string;
+  performanceReviewEnabled?: boolean;
   initialNavigation?: InitialNavigation;
   isAdmin?: boolean;
   currentPersonId?: string;
@@ -583,6 +589,7 @@ export function LeaveDemo({
   const directorySupabase = isSupabaseConfigured() ? createClient() : null;
   const isNonRosterSystemAdminWorkspace = isNonRosterSystemAdmin && !currentPersonId;
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [performanceAuthScope, setPerformanceAuthScope] = useState({ actorId: authActorId, active: true });
   const initialView: AppView = initialNavigation?.view === "calendar" && !(canViewTeamCalendar || canViewSubscriptionReviewCalendar)
     ? "home"
     : initialNavigation?.view ?? "home";
@@ -684,6 +691,16 @@ export function LeaveDemo({
       ? selectedRoleState.capabilities
       : null
     : ownCapabilities;
+
+  useEffect(() => {
+    if (!performanceReviewEnabled || !authActorId || !directorySupabase) return;
+    const { data: { subscription } } = directorySupabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      if (event === "SIGNED_OUT" || !session?.user || session.user.id !== authActorId) {
+        setPerformanceAuthScope((scope) => ({ ...scope, active: false }));
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [authActorId, directorySupabase, performanceReviewEnabled]);
 
   useDialogFocus(
     profilePickerOpen,
@@ -2112,6 +2129,9 @@ export function LeaveDemo({
               showProfile={false}
               showTasks={Boolean(activeCapabilities)}
               isAccessPreview={isPreviewingEmployeeAccess}
+              renderPerformanceReviews={performanceReviewEnabled && !isSigningOut && activeView === "people" && !previewPersonId && authActorId && performanceAuthScope.active && performanceAuthScope.actorId === authActorId && activeCapabilities.account_status === "active"
+                ? <PerformanceReviewWorkspace key={`${authActorId}:${contactScopeEpoch}:${JSON.stringify(activeCapabilities)}`} />
+                : undefined}
               legacyCheckInFormsUrl={checkInResources?.legacyFormsFolderUrl}
               onCreateOrganisationPerson={createOrganisationPerson}
               onUpdateOrganisationPerson={updateOrganisationPerson}

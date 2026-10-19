@@ -51,11 +51,12 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Install Python for complete migration replay
+      - name: Install Python and Git for complete migration replay
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends python3
+          apt-get install -y --no-install-recommends python3 git
           runuser -u postgres -- python3 --version
+          runuser -u postgres -- git --version
       - name: Install isolated Chromium with its runtime libraries
         run: npx playwright install --with-deps chromium --only-shell
         env:
@@ -88,6 +89,9 @@ jobs:
         # initdb refuses root. This creates a new UNIX-socket-only cluster as
         # the container's unprivileged postgres user. No service URL/secrets.
         run: runuser -u postgres -- node scripts/test-sql.mjs
+      - name: PostgreSQL 17 performance release envelope and native feature gate
+        if: matrix.postgres == '17'
+        run: runuser -u postgres -- npm run test:sql:performance
 
   annual-leave-all-submitters:
     runs-on: ubuntu-latest

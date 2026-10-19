@@ -1,0 +1,26 @@
+{
+  "classification": "MECHANICAL_HTTP_INTERFACE_SUPPLEMENT_NO_BUSINESS_CHANGE",
+  "version": 1,
+  "recipient": "careers@mobilityaccess.com.au",
+  "businessWebhookPath": "/webhook/mam-people-hub-performance-review-mail-v1",
+  "readinessWebhookPath": "/webhook/mam-people-hub-performance-review-mail-v1-ready",
+  "hubCallbackPath": "/api/performance-reviews/mail",
+  "sharedHeaderName": "X-MAM-Performance-Secret",
+  "httpResponseShapes": {
+    "hubReadinessAcknowledgement": {"ok": true, "ready": true},
+    "hubBeginPermitTrue": {"ok": true, "allowed": true},
+    "hubBeginPermitFalse": {"ok": true, "allowed": false},
+    "hubFinishAcknowledgementTrue": {"ok": true, "recorded": true},
+    "hubFinishAcknowledgementFalse": {"ok": true, "recorded": false},
+    "n8nReadinessAcknowledgement": {"ok": true, "ready": true}
+  },
+  "scalarBooleanRpcs": "RPC data must itself be exactly Boolean; the route maps it into the HTTP object above, without truthiness coercion or recipient content",
+  "noActualTestEmail": true,
+  "existingFrozenSeedFilesEdited": false,
+  "officialPrimaryReferencesRead": [
+    "https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0",
+    "https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/",
+    "https://raw.githubusercontent.com/n8n-io/n8n/master/packages/nodes-base/credentials/MicrosoftOutlookOAuth2Api.credentials.ts"
+  ],
+  "primaryReferenceScope": "JSON sendMail supports fileAttachment/contentBytes and empty 202 acceptance, not delivery; HTTP Request supports predefined credentials; current Outlook credential defaultScopes omit User.Read and expose useShared/userPrincipalName. These references do not verify the installed sender identity or node runtime."
+}
