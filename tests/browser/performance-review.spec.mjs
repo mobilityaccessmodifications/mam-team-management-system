@@ -43,7 +43,7 @@ for (const company of ['MAM', 'Equipsy']) for (const audience of ['employee', 'm
     await expect(field(page, 'managerNote')).toBeDisabled();
     await submit(page, 'Self assessment'); await submit(page, 'Manager assessment'); await submit(page, 'Review meeting');
     expect(await calls(page, 'mutatePerformanceReview')).toHaveLength(0);
-    await expect(page.getByRole('button', { name: /Save|Complete|Finalise|Create/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Save|Complete|Finalise|Create|Start review/ })).toHaveCount(0);
   }
   const downloaded = page.waitForEvent('download'); await page.getByRole('button', { name: 'Download Word', exact: true }).click();
   const download = await downloaded;
@@ -52,6 +52,46 @@ for (const company of ['MAM', 'Equipsy']) for (const audience of ['employee', 'm
   expect(xml).not.toContain('PRIVATE-SYNTHETIC-MANAGER-NOTE');
   expect(xml).toContain(company === 'MAM' ? 'Your Safety First' : 'Purpose Built');
   if (audience === 'employee') expect(xml).not.toContain('Synthetic feedback');
+});
+
+test('native manager yearly review defaults cross daylight saving by calendar days and keep the selected cycle in its payload', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-03T14:30:00Z'));
+  await open(page, 'manager');
+  await page.evaluate(id => { const person = window.performanceReviewFixture.workspace.startablePeople[0]; window.performanceReviewFixture.workspace.startablePeople.push({ ...person, id, name: 'Synthetic Second' }); }, ids.other);
+  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await page.getByRole('button', { name: 'New yearly review', exact: true }).click();
+  const form = page.getByRole('form', { name: 'New yearly review', exact: true });
+  await expect(form.getByRole('combobox', { name: 'Cycle', exact: true })).toHaveValue('2026');
+  await expect(field(page, 'start-dueDate')).toHaveValue('2026-10-11');
+  const employees = page.getByRole('navigation', { name: 'Review employees' });
+  await expect(employees.getByRole('button')).toHaveCount(2);
+  await expect(employees.getByRole('button').first()).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('navigation', { name: 'Review list' })).toHaveCount(0);
+  const listBox = await employees.boundingBox(), formBox = await form.boundingBox();
+  expect(formBox.x).toBeGreaterThanOrEqual(listBox.x + listBox.width);
+  const startButton = form.getByRole('button', { name: 'Start review', exact: true }), startBox = await startButton.boundingBox();
+  expect(Math.abs(startBox.x + startBox.width - formBox.x - formBox.width + 24)).toBeLessThan(2);
+  expect(Math.abs(startBox.y + startBox.height - formBox.y - formBox.height + 24)).toBeLessThan(2);
+  await expect(startButton).toHaveCSS('background-color', 'rgb(195, 77, 20)');
+  await employees.getByRole('button', { name: 'Synthetic Second — MAM', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(employees.getByRole('button').last()).toHaveAttribute('aria-pressed', 'true');
+  await expect(form.getByRole('heading', { name: 'Synthetic Second — MAM', exact: true })).toBeVisible();
+  await form.getByRole('combobox', { name: 'Cycle', exact: true }).selectOption('2027');
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileList = await employees.boundingBox(), mobileForm = await form.boundingBox();
+  expect(mobileForm.y).toBeGreaterThanOrEqual(mobileList.y + mobileList.height);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(form.getByRole('combobox', { name: 'Cycle', exact: true })).toHaveValue('2027');
+  await expect(field(page, 'start-dueDate')).toHaveValue('2026-10-11');
+  await hold(page, 'startPerformanceReview');
+  await form.getByRole('button', { name: 'Start review', exact: true }).click();
+  await waitPending(page, 'startPerformanceReview');
+  const writes = await calls(page, 'startPerformanceReview');
+  expect(writes).toHaveLength(1);
+  expect(writes[0].args[0]).toMatchObject({ employeePersonId: ids.other, cycle: '2027', dueDate: '2026-10-11' });
+  await expect(page.getByRole('button', { name: 'New yearly review', exact: true })).toBeDisabled();
+  await expect(employees.getByRole('button').first()).toBeDisabled();
 });
 
 test('self immediate duplicate guard, committed submit lock and exact payload', async ({ page }) => {

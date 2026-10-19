@@ -17,9 +17,24 @@
 .workspace :is(input, select, textarea):disabled { background: var(--surface-muted); color: var(--text-secondary); cursor: not-allowed; opacity: 1; }
 .workspace button { display: inline-flex; min-width: 0; min-height: 44px; align-items: center; justify-content: center; gap: 6px; padding: 10px 14px; border: 1px solid var(--surface-border-strong); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; overflow-wrap: anywhere; }
 .workspace button:hover:not(:disabled) { background: var(--surface-warm); color: var(--mam-orange-dark); }
-.workspace button[type="submit"] { border-color: var(--mam-orange-strong); background: var(--mam-orange-strong); color: var(--text-on-inverse); }
+.workspace button[type="submit"], .workspace .primaryButton { border-color: var(--mam-orange-strong); background: var(--mam-orange-strong); color: var(--text-on-inverse); }
+.workspace .primaryButton:hover:not(:disabled) { border-color: var(--mam-orange-dark); background: var(--mam-orange-dark); color: var(--text-on-inverse); }
 .workspace button:disabled { opacity: .55; cursor: not-allowed; }
 .workspace :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--mam-orange-strong); outline-offset: 3px; }
 .columns > nav > button { justify-content: flex-start; text-align: left; }
 .columns > nav > button[aria-pressed="true"] { background: var(--surface-warm); box-shadow: inset 3px 0 var(--mam-orange); color: var(--mam-orange-dark); }
-@media (max-width: 760px) { .workspace { padding: 16px; } .columns { grid-template-columns: minmax(0, 1fr); } .card { padding: 16px; } }
+.startLayout { display: grid; grid-template-columns: minmax(240px, 32%) minmax(0, 1fr); min-height: 400px; overflow: hidden; border: 1px solid var(--surface-border); border-radius: var(--radius-md); }
+.employeeList { min-width: 0; background: var(--surface-muted); border-right: 1px solid var(--surface-border); }
+.workspace .employeeList > button { display: flex; width: 100%; min-height: 80px; justify-content: flex-start; gap: 10px; padding: 14px; border: 0; border-bottom: 1px solid var(--surface-border); border-radius: 0; text-align: left; }
+.workspace .employeeList > button:focus-visible { outline-offset: -3px; }
+.workspace .employeeList > button[aria-pressed="true"] { background: var(--surface-warm); box-shadow: inset 3px 0 var(--mam-orange); }
+.avatar { display: grid; flex: 0 0 40px; width: 40px; height: 40px; place-items: center; border: 1px solid var(--surface-border); border-radius: var(--radius-sm); background: var(--surface-warm); color: var(--mam-orange-dark); font-size: 11px; }
+.employeeDetails { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.employeeDetails strong { overflow: hidden; color: var(--text-primary); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.employeeDetails > span { overflow: hidden; color: var(--text-secondary); font-size: 12px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.company { flex-shrink: 0; padding: 2px 5px; border-radius: 20px; background: var(--surface-warm); color: var(--mam-orange-dark); font-size: 10px; }
+.workspace .startForm { display: flex; flex-direction: column; gap: 20px; padding: 24px; }
+.startForm > header { display: grid; gap: 6px; }
+.startForm > header p { color: var(--text-secondary); }
+.startActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: auto; padding-top: 24px; }
+@media (max-width: 760px) { .workspace { padding: 16px; } .columns { grid-template-columns: minmax(0, 1fr); } .card { padding: 16px; } .startLayout { grid-template-columns: minmax(0, 1fr); } .employeeList { border-right: 0; border-bottom: 1px solid var(--surface-border); } .workspace .startForm { min-height: 340px; padding: 16px; } }
