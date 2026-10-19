@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import ssl
 import sys
 import time
 from contextlib import redirect_stderr, redirect_stdout
@@ -188,6 +189,9 @@ def inventory_page(url):
 
 
 class InertHTTPS(HTTPSHandler):
+    def __init__(self):
+        super().__init__(context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT))
+
     def https_open(self, request):
         global active
         assert request.get_header('X-n8n-api-key') == marker
