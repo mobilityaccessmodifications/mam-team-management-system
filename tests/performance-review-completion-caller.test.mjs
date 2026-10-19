@@ -3,7 +3,7 @@ import test from 'node:test';
 import {readFileSync,realpathSync} from 'node:fs';
 import ts from 'typescript';
 import os from 'node:os';
-const suites=['tests/performance-review-production-sql.native.mjs','tests/performance-review-production-envelope.native.mjs','tests/performance-review-completion.native.mjs','tests/performance-review-completion-envelope.native.mjs','tests/performance-review-completion-races.native.mjs','tests/performance-review-completion-release.native.mjs'];
+const suites=['tests/performance-review-production-sql.native.mjs','tests/performance-review-production-envelope.native.mjs','tests/performance-review-completion.native.mjs','tests/performance-review-completion-envelope.native.mjs','tests/performance-review-completion-races.native.mjs','tests/performance-review-completion-release.native.mjs','tests/performance-review-notifications.native.mjs'];
 function run({major=17,status=0}={}) {
  const calls=[],source=readFileSync('scripts/test-performance-review-production.mjs','utf8');
  const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;

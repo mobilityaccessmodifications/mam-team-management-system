@@ -41,7 +41,7 @@ export function parseAssetQrCode(value: string): string | null {
 }
 
 export function assetLoginReturnPath(value: unknown): string | null {
-  if (value === "/?view=people&tab=tasks") return value;
+  if (value === "/?view=people&tab=tasks" || value === "/?view=people&tab=performance") return value;
   if (value === "/assets/scan") return value;
   if (typeof value !== "string" || !value.startsWith("/assets/")) return null;
   const code = value.slice("/assets/".length);

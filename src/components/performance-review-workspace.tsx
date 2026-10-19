@@ -63,6 +63,7 @@ export default function PerformanceReviewWorkspace() {
   const [startDraft, setStartDraft] = useState({ employeePersonId: "", cycle: "", dueDate: "" });
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [generation, setGeneration] = useState(0);
   const [revision, setRevision] = useState("");
   const epoch = useRef(0);
@@ -83,7 +84,7 @@ export default function PerformanceReviewWorkspace() {
   const track = useCallback((next: PendingOperation | null) => { if (next) conflict.current = null; operationRef.current = next; setOperation(next); }, []);
   const advance = useCallback(() => {
     if (operationRef.current?.phase === "pending") track({ ...operationRef.current, phase: "uncertain" });
-    busyOwner.current = null; busyRef.current = false; setBusy(false);
+    busyOwner.current = null; busyRef.current = false; setBusy(false); setLoading(false);
     const next = ++epoch.current;
     if (conflict.current) conflict.current = conflict.current.generation === next - 1 ? { ...conflict.current, generation: next } : null;
     setGeneration(next); return next;
@@ -199,12 +200,14 @@ export default function PerformanceReviewWorkspace() {
     if (epoch.current !== generation || nativeActor.current === null) return;
     const ticket = advance();
     const recovery = conflict.current;
+    setLoading(true); setMessage("");
     try {
       const result = await loadPerformanceReviews();
       if (epoch.current !== ticket) return;
       if (!result.ok) { handleFailure(result); return; }
       applyLoaded(result.data, selectedId, recovery);
     } catch { if (epoch.current === ticket) setMessage("Reviews could not be loaded."); }
+    finally { if (epoch.current === ticket) setLoading(false); }
   }
   async function run(command: PerformanceMutationInput["command"]) {
     if (epoch.current !== generation || busyRef.current || operationRef.current || !selected || !workspace) return;
@@ -258,6 +261,7 @@ export default function PerformanceReviewWorkspace() {
         if (event === "INITIAL_SESSION" && (previous === undefined || previous === id)) return;
         if (previous !== id || event === "SIGNED_IN") clearPrivate("");
         const ticket = advance();
+        setLoading(true); setMessage("");
         void Promise.resolve().then(async () => {
           if (!active || epoch.current !== ticket) return;
           try {
@@ -266,17 +270,22 @@ export default function PerformanceReviewWorkspace() {
             if (!result.ok) { handleFailure(result); return; }
             applyLoaded(result.data, selection.current?.id ?? null);
           } catch { if (active && epoch.current === ticket) setMessage("Reviews could not be loaded."); }
+          finally { if (active && epoch.current === ticket) setLoading(false); }
         });
       });
       unsubscribe = () => subscription.unsubscribe();
     } catch { void Promise.resolve().then(() => { if (active) clearPrivate("Reviews could not be loaded."); }); return; }
     const ticket = epoch.current;
-    void loadPerformanceReviews().then(result => {
-      if (!active || epoch.current !== ticket) return;
+    void Promise.resolve().then(() => {
+      if (!active || epoch.current !== ticket) return null;
+      setLoading(true);
+      return loadPerformanceReviews();
+    }).then(result => {
+      if (!result || !active || epoch.current !== ticket) return;
       setGeneration(ticket);
       if (!result.ok) { handleFailure(result); return; }
       applyLoaded(result.data, null);
-    }).catch(() => { if (active && epoch.current === ticket) { setGeneration(ticket); setMessage("Reviews could not be loaded."); } });
+    }).catch(() => { if (active && epoch.current === ticket) { setGeneration(ticket); setMessage("Reviews could not be loaded."); } }).finally(() => { if (active && epoch.current === ticket) setLoading(false); });
     return () => {
       active = false; retire(); unsubscribe(); busyOwner.current = null; busyRef.current = false; operationRef.current = null;
       for (const [url, timer] of downloads) { clearTimeout(timer); URL.revokeObjectURL(url); } downloads.clear();
@@ -286,9 +295,10 @@ export default function PerformanceReviewWorkspace() {
   const selfDisabled = blocked || selected?.audience !== "employee" || !selected.capabilities.saveSelf || Boolean(selected.selfSubmittedAt);
   const managerDisabled = blocked || selected?.audience !== "manager" || !selected.capabilities.saveManager || Boolean(selected.finalisedAt);
   const meetingDisabled = blocked || selected?.audience !== "manager" || !selected.capabilities.saveMeeting || Boolean(selected.finalisedAt);
-  return <section className={styles.workspace} aria-label="Performance reviews" aria-busy={busy}>
+  return <section className={styles.workspace} aria-label="Performance reviews" aria-busy={busy || loading}>
     <header className={styles.toolbar}><h1>Performance reviews</h1><button type="button" onClick={() => reload()} disabled={busy}>Reload</button>{workspace?.startablePeople.length ? <button type="button" disabled={blocked} onClick={() => { if (epoch.current === generation && !blocked) setCreating(true); }}>New yearly review</button> : null}</header>
     {message ? <p role={["Saved.", "Submitted.", "Review opened.", "Review created.", "Update confirmed."].includes(message) ? "status" : "alert"}>{message}</p> : null}
+    {loading ? <p role="status">Loading performance reviews…</p> : !message && workspace?.reviews.length === 0 ? <p role="status">No performance reviews yet.</p> : null}
     {operation?.phase === "uncertain" ? <button type="button" disabled={busy} onClick={() => reconcile()}>Reconcile update</button> : null}
     {creating ? <form aria-label="New yearly review" onSubmit={event => { event.preventDefault(); void start(); }}>
       <label>Employee<select name="start-person" disabled={blocked} value={startDraft.employeePersonId} onChange={event => { if (epoch.current === generation && !blocked) setStartDraft(current => ({ ...current, employeePersonId: event.target.value })); }}><option value="">Select employee</option>{workspace?.startablePeople.map(person => <option key={person.id} value={person.id}>{person.name} — {person.company}</option>)}</select></label>

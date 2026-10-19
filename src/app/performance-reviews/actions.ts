@@ -1,5 +1,6 @@
 "use server";
 
+import { dispatchPerformanceReviewNotificationsForReview } from "@/lib/performance-review-notifications";
 import { after } from "next/server";
 import { dispatchPerformanceReviewMailForReview } from "@/lib/performance-review-mail";
 
@@ -31,6 +32,9 @@ function schedulePerformanceReviewMail(reviewId: string): void {
     });
   } catch { return; }
 }
+function schedulePerformanceReviewNotification(reviewId: string): void {
+  try { after(() => dispatchPerformanceReviewNotificationsForReview(reviewId)); } catch { return; }
+}
 function disabled(): PerformanceFailure { return { ok: false, code: "unavailable", uncertain: false, message: "Performance reviews are not available." }; }
 export async function loadPerformanceReviews(): Promise<PerformanceLoadResult> {
   if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
@@ -57,6 +61,7 @@ export async function startPerformanceReview(input: PerformanceStartInput): Prom
     const receipt = closed(data, ["committed", "operationId", "review", "existing"]);
     const review = parseReview(receipt.review);
     if (receipt.committed !== true || receipt.operationId !== request.operationId || typeof receipt.existing !== "boolean" || review.audience !== "manager" || review.manager.id !== capabilities.person_id || review.employee.id !== request.employeePersonId || review.cycle !== request.cycle || (!receipt.existing && review.dueDate !== request.dueDate)) return failure("uncertain");
+    if (!receipt.existing) schedulePerformanceReviewNotification(review.id);
     return { ok: true, committed: true, operationId: request.operationId, review, existing: receipt.existing };
   } catch (error) { return failure(!dispatched && error instanceof PerformanceReviewAccessError ? error.code : dispatched ? "uncertain" : "unavailable"); }
 }
@@ -77,6 +82,7 @@ export async function mutatePerformanceReview(input: PerformanceMutationInput): 
     const review = parseReview(receipt.review);
     const self = request.command === "save_self" || request.command === "submit_self";
     if (receipt.committed !== true || receipt.operationId !== request.operationId || review.id !== request.reviewId || (self ? review.audience !== "employee" || review.employee.id !== capabilities.person_id : review.audience !== "manager" || review.manager.id !== capabilities.person_id)) return failure("uncertain");
+    if (request.command === "submit_self") schedulePerformanceReviewNotification(review.id);
     if (request.command === "submit_review") schedulePerformanceReviewMail(review.id);
     return { ok: true, committed: true, operationId: request.operationId, review };
   } catch (error) { return failure(!dispatched && error instanceof PerformanceReviewAccessError ? error.code : dispatched ? "uncertain" : "unavailable"); }

@@ -94,6 +94,14 @@ test("sign-in returns to the scanned device while rejecting external destination
   }
 });
 
+test("performance notification sign-in returns only to the exact allowlisted destination", async () => {
+  const path = '/?view=people&tab=performance';
+  await assert.rejects(loadSignIn().submit('admin', path), error => error.message === 'redirect:' + path);
+  for (const next of [path + '&next=https://attacker.example', 'https://attacker.example' + path, path + '#other']) {
+    await assert.rejects(loadSignIn().submit('admin', next), error => error.message === 'redirect:/');
+  }
+});
+
 test("unknown email and rate-limited account fail identically through dummy authentication", async () => {
   const unknown=loadSignIn({resolved:null});
   const limited=loadSignIn({allowed:false});
