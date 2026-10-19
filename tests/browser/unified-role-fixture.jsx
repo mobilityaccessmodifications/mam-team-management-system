@@ -1,7 +1,7 @@
 import '@/app/globals.css';
 import { createRoot } from 'react-dom/client';
 import { LeaveDemo } from '@/components/leave-demo';
-import { actorCapabilities, actorPersonId } from './unified-role-boundary.mjs';
+import { actorCapabilities, actorPersonId, actorAuthId, performanceReviewEnabled } from './unified-role-boundary.mjs';
 import { SubscriptionDelegationDialog } from '@/components/subscription-delegation-dialog';
 import { useState } from 'react';
 
@@ -14,6 +14,6 @@ createRoot(document.getElementById('root')).render(new URLSearchParams(location.
   initialNavigation={new URLSearchParams(location.search).has('leave-completed') ? {
     view: 'leave', section: 'requests', requestId: new URLSearchParams(location.search).get('request') ?? undefined,
   } : undefined}
-  actorCapabilities={actorCapabilities} isNonRosterSystemAdmin={!actorPersonId} currentPersonId={actorPersonId} canViewTeamCalendar={true}
+  actorCapabilities={actorCapabilities} authActorId={actorAuthId} performanceReviewEnabled={performanceReviewEnabled} isNonRosterSystemAdmin={!actorPersonId} currentPersonId={actorPersonId} canViewTeamCalendar={true}
   checkInResources={{ managerGuideUrl: null, checkInFormUrl: null, probationTemplatesUrl: null, legacyFormsFolderUrl: null, deliveryConfigured: false, canApproveEmploymentDecisions: true }}
 />);
