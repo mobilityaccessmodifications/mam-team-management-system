@@ -15,8 +15,19 @@ from urllib.response import addinfourl
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / 'scripts/publish-performance-review-mail-workflow.py'
-CASE = sys.argv[1]
-OUT = ROOT / 'qa-evidence/performance-release-20261016/n8n-fix-r1/cases' / (CASE + '-' + str(os.getpid()) + '-' + str(time.monotonic_ns()))
+try:
+    CASE = sys.argv[1]
+    scratch = Path(sys.argv[2])
+    if not scratch.is_absolute():
+        raise ValueError
+    scratch = scratch.resolve(strict=True)
+    if not scratch.is_dir() or scratch == ROOT or ROOT in scratch.parents or not CASE or Path(CASE).name != CASE or '\0' in CASE:
+        raise ValueError
+except (IndexError, OSError, ValueError, RuntimeError):
+    print('INVALID_FIXTURE_OUTPUT', file=sys.stderr)
+    raise SystemExit(2)
+OUT = scratch / ('performance-review-n8n-repair-' + str(os.getpid()) + '-' + str(time.monotonic_ns())) / (CASE + '-' + str(os.getpid()) + '-' + str(time.monotonic_ns()))
+OUT.parent.mkdir(mode=0o700)
 OUT.mkdir(parents=True, mode=0o700)
 (OUT / 'SYNTHETIC_ONLY').write_text('INERT OWNED NAMESPACE; NO NETWORK OR REAL CONFIG\n')
 source = TARGET.read_bytes()

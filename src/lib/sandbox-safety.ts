@@ -15,6 +15,7 @@ const FORBIDDEN_OUTBOUND_VARIABLES = [
   "MAM_N8N_PERFORMANCE_WEBHOOK_ORIGIN",
   "MAM_N8N_PERFORMANCE_WEBHOOK_URL",
   "MAM_N8N_PERFORMANCE_WEBHOOK_SECRET",
+  "MAM_N8N_PERFORMANCE_MASTER_SYNC_SECRET",
   "N8N_CHECKIN_REMINDER_WEBHOOK_ORIGIN",
   "N8N_CHECKIN_REMINDER_WEBHOOK_URL",
   "N8N_CHECKIN_REMINDER_WEBHOOK_SECRET",
@@ -75,6 +76,11 @@ export function assertSandboxEnvironment(environment: Environment = process.env)
   if (environment.PERFORMANCE_REVIEW_EMAIL_MODE?.trim()
     && environment.PERFORMANCE_REVIEW_EMAIL_MODE !== "disabled") {
     throw new Error(`${SANDBOX_FLAG} forbids PERFORMANCE_REVIEW_EMAIL_MODE live configuration.`);
+  }
+
+  if (environment.PERFORMANCE_REVIEW_MASTER_SYNC_MODE?.trim()
+    && environment.PERFORMANCE_REVIEW_MASTER_SYNC_MODE !== "disabled") {
+    throw new Error(`${SANDBOX_FLAG} forbids PERFORMANCE_REVIEW_MASTER_SYNC_MODE live configuration.`);
   }
 
   const configuredOutbound = FORBIDDEN_OUTBOUND_VARIABLES.filter(

@@ -6,7 +6,7 @@ mode=sys.argv[1]
 sha=lambda b:hashlib.sha256(b).hexdigest()
 base=Path(tempfile.mkdtemp(prefix='prcli'))
 root=base/'source'; root.mkdir(); private=base/'operator';private.mkdir(mode=0o700)
-paths=['scripts/deploy-performance-review-completion.py','scripts/deploy-staff-leave-calendar.py']+['scripts/deploy-performance-reviews.py', 'src/lib/performance-review-rules.ts', 'src/lib/performance-review-word.mjs', 'src/lib/performance-review-questions.mjs', 'src/lib/performance-review-document.ts', 'src/lib/performance-review-types.ts', 'src/lib/performance-review-auth.ts', 'src/app/performance-reviews/actions.ts', 'package.json', 'package-lock.json']+[str(p.relative_to(ROOT)) for p in (ROOT/'supabase/migrations').glob('*.sql')]
+paths=['scripts/deploy-performance-review-completion.py','scripts/deploy-staff-leave-calendar.py']+['scripts/deploy-performance-reviews.py', 'src/lib/performance-review-rules.ts', 'src/lib/performance-review-word.mjs', 'src/lib/performance-review-questions.mjs', 'src/lib/performance-review-document.ts', 'src/lib/performance-review-types.ts', 'src/lib/performance-review-auth.ts', 'src/app/performance-reviews/actions.ts', 'package.json', 'package-lock.json']+[str(p.relative_to(ROOT)) for p in (ROOT/'supabase/migrations').glob('*.sql') if mode=='pending-master' or p.name.split('_',1)[0]<='20261017103000']
 for name in paths:
  p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes((ROOT/name).read_bytes())
 helper=root/'scripts/deploy-performance-review-completion.py';migration=root/'supabase/migrations/20261017103000_performance_review_completion_guards.sql'; predecessor=root/'supabase/migrations/20261016150000_performance_reviews_and_mail.sql'
@@ -85,6 +85,13 @@ def invoke(command,extra=()):
  finally:sys.argv=oldargv;os.chdir(oldcwd)
 try:
  results=[]
+ if mode=='pending-master':
+  pending=root/'supabase/migrations/20261019000000_performance_review_master_sync.sql'
+  assert pending.read_bytes()==(ROOT/'supabase/migrations'/pending.name).read_bytes()
+  denied=invoke('inspect');assert denied['exit']!=0,denied
+  assert denied['stderr']=='Later or unrelated pending local migration',denied
+  assert counts=={'projectReads':0,'metadataReads':0,'mutationDispatches':0},counts
+  print(json.dumps({'classification':'MODEL_CLI_INERT_MANAGEMENT_REAL_GIT','scenario':mode,'counts':counts,'results':trace}));sys.exit(0)
  if mode=='closure-assume':
   word=root/'src/lib/performance-review-word.mjs';fixture_git('update-index','--assume-unchanged','src/lib/performance-review-word.mjs');word.write_bytes(word.read_bytes()+b'\n')
   denied=invoke('inspect');assert denied['exit']!=0,denied;assert counts=={'projectReads':0,'metadataReads':0,'mutationDispatches':0}
