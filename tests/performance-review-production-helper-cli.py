@@ -4,7 +4,7 @@ from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1]
 mode=sys.argv[1]
 sha=lambda b:hashlib.sha256(b).hexdigest()
-base=Path(tempfile.mkdtemp(prefix='prcli'))
+base=Path(tempfile.mkdtemp(prefix='prcli')).resolve()
 root=base/'source'; root.mkdir(); private=base/'operator';private.mkdir(mode=0o700)
 paths=['scripts/deploy-performance-reviews.py','scripts/deploy-staff-leave-calendar.py']+[str(p.relative_to(ROOT)) for p in (ROOT/'supabase/migrations').glob('*.sql') if p.name[:14]<='20261016150000']
 for name in paths:

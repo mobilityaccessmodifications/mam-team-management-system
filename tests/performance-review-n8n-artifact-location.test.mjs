@@ -142,7 +142,7 @@ test('actual repair fixture keeps its public control and all artifacts inside a 
   assert.equal(lstatSync(dirname(result.namespace)).mode & 0o777, 0o700);
   assert.equal(lstatSync(result.namespace).mode & 0o777, 0o700);
   assert.match(readFileSync(join(result.namespace, 'SYNTHETIC_ONLY'), 'utf8'), /^INERT OWNED NAMESPACE;/);
-  const files = regularArtifacts(base);
+  const files = regularArtifacts(realpathSync(base));
   assert.ok(files.includes(join(result.namespace, 'result.json')));
   assert.ok(files.length > 1);
   assert.ok(observed.writes.length > 0);
