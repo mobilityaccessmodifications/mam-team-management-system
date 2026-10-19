@@ -490,6 +490,9 @@ the manager assessment and records the review meeting. Final submission requires
 the meeting to have ended and the manager to confirm it was held. It queues the
 completed Word document to careers@mobilityaccess.com.au; the private manager
 note stays in the email body. HR/Admin/P0 retain the read-only overview.
+P0 can also use Change profile to act for a selected active Manager on that
+Manager's eligible employees and assigned reviews, with the real P0 actor audited.
+Employee self assessments and other selected-role previews remain read-only.
 Excel/SharePoint master totals and synchronization are not part of this workflow.
 
 Production activation uses `MAM_PERFORMANCE_REVIEW_ENABLED=true` and

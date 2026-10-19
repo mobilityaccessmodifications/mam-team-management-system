@@ -21,16 +21,27 @@ async function openPerformance(page) {
   await page.getByRole('tablist', { name: 'People sections' }).getByRole('tab', { name: 'Performance reviews', exact: true }).click();
   await expect(workspace(page)).toBeVisible();
 }
-async function assertReadOnly(page) {
+async function assertReadOnly(page, managerScope = false) {
   const panel = workspace(page);
   await expect(panel.locator('[name="self-0"]')).toBeVisible();
   const fields = panel.locator('input, textarea, select');
   expect(await fields.count()).toBeGreaterThan(0);
   for (const field of await fields.all()) await expect(field).toBeDisabled();
-  for (const button of await panel.getByRole('button', { name: /^(?:New yearly review|Save self draft|Submit self assessment|Save manager draft|Complete manager assessment|Save meeting|Finalise review|Reconcile update)$/ }).all()) await expect(button).toBeDisabled();
+  for (const button of await panel.getByRole('button', { name: /^(?:New yearly review|Save self draft|Submit self assessment|Save manager draft|Complete manager assessment|Save meeting|Finalise review|Reconcile update)$/ }).all()) {
+    if (managerScope && await button.textContent() === 'New yearly review') continue;
+    await expect(button).toBeDisabled();
+  }
   for (const form of await panel.locator('form').all()) await form.evaluate(node => node.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   await expect(panel.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   expect(await writes(page)).toEqual([]);
+}
+async function assertManagerEditable(page) {
+  const panel = workspace(page);
+  await expect(panel.locator('[name="managerNote"]')).toBeEnabled();
+  await expect(panel.locator('[name="self-0"]')).toBeDisabled();
+  await expect(panel.locator('[name="meeting-date"]')).toBeEnabled();
+  await expect(panel.locator('[name="held"]')).toBeEnabled();
+  await expect(panel.getByRole('button', { name: 'New yearly review', exact: true })).toBeEnabled();
 }
 
 test.beforeEach(async ({ page, context, baseURL }) => {
@@ -49,7 +60,7 @@ test.afterEach(async ({ page }) => {
   expect(await page.evaluate(() => window.unifiedRoleFixture.unexpected)).toEqual([]);
 });
 
-test('actual LeaveDemo Performance preview switches P0 through distinct manager employee account admin scopes with no writes', async ({ page }) => {
+test('actual LeaveDemo P0 profile switching permits assigned manager delegation and keeps other audiences read-only', async ({ page }) => {
   test.setTimeout(60_000);
   await openPerformance(page);
   await expect(workspace(page).getByRole('heading', { name: 'Synthetic P0 scope — MAM', exact: true })).toBeVisible();
@@ -57,16 +68,14 @@ test('actual LeaveDemo Performance preview switches P0 through distinct manager 
     await selectProfile(page, key); await openPerformance(page);
     const panel = workspace(page);
     await expect(panel.getByRole('heading', { name: `${name} — MAM`, exact: true })).toBeVisible();
-    await assertReadOnly(page);
+    if (key.startsWith('manager')) await assertManagerEditable(page); else await assertReadOnly(page);
     expect((await calls(page, 'loadPerformanceReviews')).at(-1).args).toEqual([people[key].id]);
     const rowButtons = panel.getByRole('navigation', { name: 'Review list' }).getByRole('button');
     await expect(rowButtons).toHaveCount(key.startsWith('manager') ? 2 : 1);
     if (key.startsWith('manager')) {
-      await expect(panel.getByRole('button', { name: 'New yearly review', exact: true })).toBeDisabled();
-      await expect(panel.locator('[name="held"]')).toBeDisabled();
       await rowButtons.filter({ hasText: people[key].name }).click();
       await expect(panel.locator('[name="self-0"]')).toHaveValue(`${people[key].name} answer 1`);
-      await assertReadOnly(page);
+      await assertReadOnly(page, true);
       await rowButtons.filter({ hasText: name }).click();
     } else if (key === 'employee' || key === 'account') {
       await expect(panel.locator('[name="managerNote"]')).toHaveCount(0);
@@ -114,7 +123,86 @@ for (const returnToA of [false, true]) test(`late Performance manager load canno
     await expect(workspace(page).locator('[name="self-0"]')).toHaveValue('Synthetic Employee answer 1');
     await expect(workspace(page).locator('[name="managerNote"]')).toHaveCount(0);
   }
-  await assertReadOnly(page);
+  if (returnToA) await assertManagerEditable(page); else await assertReadOnly(page);
+});
+
+test('P0 creates and completes assigned manager work with the target on every write while own self stays read-only', async ({ page }) => {
+  await selectProfile(page, 'manager'); await openPerformance(page);
+  const panel = workspace(page);
+  await assertManagerEditable(page);
+  await panel.getByRole('button', { name: 'New yearly review', exact: true }).click();
+  const create = panel.getByRole('form', { name: 'New yearly review', exact: true });
+  await create.locator('[name="start-person"]').selectOption({ label: 'Synthetic A candidate — MAM' });
+  await create.locator('[name="start-cycle"]').fill('2027');
+  await create.locator('[name="start-dueDate"]').fill('2027-11-30');
+  await create.getByRole('button', { name: 'Create review', exact: true }).click();
+  await expect(panel.getByRole('status')).toHaveText('Review created.');
+  await expect(panel.getByRole('heading', { name: 'Synthetic A candidate — MAM', exact: true })).toBeVisible();
+  expect((await calls(page, 'startPerformanceReview')).at(-1).args[1]).toBe(people.manager.id);
+  await panel.getByRole('navigation', { name: 'Review list' }).getByRole('button').filter({ hasText: 'Synthetic A report' }).click();
+  await panel.locator('[name="managerNote"]').fill('Synthetic delegated manager evidence');
+  await panel.getByRole('button', { name: 'Save manager draft', exact: true }).click();
+  await expect(panel.getByRole('status')).toHaveText('Saved.');
+  await panel.getByRole('button', { name: 'Complete manager assessment', exact: true }).click();
+  await expect(panel.getByRole('status')).toHaveText('Submitted.');
+  await panel.locator('[name="meeting-notes"]').fill('Synthetic delegated meeting');
+  await panel.getByRole('button', { name: 'Save meeting', exact: true }).click();
+  await expect(panel.getByRole('status')).toHaveText('Saved.');
+  await panel.locator('[name="held"]').check();
+  await panel.getByRole('button', { name: 'Finalise review', exact: true }).click();
+  await expect(panel.getByRole('status')).toHaveText('Submitted.');
+  await expect(panel.locator('[name="managerNote"]')).toBeDisabled();
+  const mutations = await calls(page, 'mutatePerformanceReview');
+  expect(mutations.map(call => call.args[0].command)).toEqual(['save_manager', 'complete_manager', 'save_meeting', 'submit_review']);
+  expect(mutations.every(call => call.args[1] === people.manager.id)).toBe(true);
+  const before = (await writes(page)).length;
+  await panel.getByRole('navigation', { name: 'Review list' }).getByRole('button').filter({ hasText: people.manager.name }).click();
+  await expect(panel.locator('[name="self-0"]')).toBeDisabled();
+  await panel.getByRole('form', { name: 'Self assessment', exact: true }).evaluate(node => node.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect((await writes(page)).length).toBe(before);
+  await expect(panel.locator('[name="managerNote"]')).toHaveCount(0);
+});
+
+test('P0 uncertain manager creation reconciles the original target without replaying create', async ({ page }) => {
+  await selectProfile(page, 'manager'); await openPerformance(page);
+  const panel = workspace(page);
+  await page.evaluate(id => window.unifiedRoleFixture.holdNext('startPerformanceReview', id), people.manager.id);
+  await panel.getByRole('button', { name: 'New yearly review', exact: true }).click();
+  const create = panel.getByRole('form', { name: 'New yearly review', exact: true });
+  await create.locator('[name="start-person"]').selectOption({ label: 'Synthetic A candidate — MAM' });
+  await create.locator('[name="start-cycle"]').fill('2027');
+  await create.locator('[name="start-dueDate"]').fill('2027-11-30');
+  await create.getByRole('button', { name: 'Create review', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain(`startPerformanceReview:${people.manager.id}`);
+  await page.evaluate(id => window.unifiedRoleFixture.rejectPending('startPerformanceReview', id), people.manager.id);
+  await expect(panel.getByRole('alert')).toContainText('Reconcile before submitting again.');
+  await expect(create.getByRole('button', { name: 'Create review', exact: true })).toBeDisabled();
+  await panel.getByRole('button', { name: 'Reload', exact: true }).click();
+  await expect(panel).toHaveAttribute('aria-busy', 'false');
+  await expect(create.getByRole('button', { name: 'Create review', exact: true })).toBeDisabled();
+  await panel.getByRole('button', { name: 'Reconcile update', exact: true }).click();
+  await expect(panel.getByRole('status')).toHaveText('Update confirmed.');
+  await expect(panel.getByRole('heading', { name: 'Synthetic A candidate — MAM', exact: true })).toBeVisible();
+  const starts = await calls(page, 'startPerformanceReview'), reconciles = await calls(page, 'reconcilePerformanceReviewOperation');
+  expect(starts).toHaveLength(1); expect(reconciles).toHaveLength(1);
+  expect(reconciles[0].args).toEqual([{ operationId: starts[0].args[0].operationId, reviewId: null }, people.manager.id]);
+});
+
+test('a late delegated manager write cannot replace a new Employee target or release its private fields', async ({ page }) => {
+  await selectProfile(page, 'manager'); await openPerformance(page);
+  await page.evaluate(id => window.unifiedRoleFixture.holdNext('mutatePerformanceReview', id), people.manager.id);
+  await workspace(page).locator('[name="managerNote"]').fill('Synthetic retired manager note');
+  await workspace(page).getByRole('button', { name: 'Save manager draft', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain(`mutatePerformanceReview:${people.manager.id}`);
+  await selectProfile(page, 'employee'); await openPerformance(page);
+  await expect(workspace(page).locator('[name="self-0"]')).toHaveValue('Synthetic Employee answer 1');
+  await page.evaluate(id => window.unifiedRoleFixture.finish('mutatePerformanceReview', id), people.manager.id);
+  await expect.poll(() => page.evaluate(id => window.unifiedRoleFixture.responses.some(item => item.key === `mutatePerformanceReview:${id}`), people.manager.id)).toBe(true);
+  await expect(workspace(page).locator('[name="self-0"]')).toHaveValue('Synthetic Employee answer 1');
+  await expect(workspace(page).locator('[name="managerNote"]')).toHaveCount(0);
+  await expect(workspace(page).getByRole('button', { name: 'Reconcile update', exact: true })).toHaveCount(0);
+  expect((await writes(page)).map(call => call.args[1])).toEqual([people.manager.id]);
+  await expect(workspace(page).locator('[name="self-0"]')).toBeDisabled();
 });
 
 test('actual manager Performance remains editable outside Change profile preview', async ({ page }) => {

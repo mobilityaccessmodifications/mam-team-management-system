@@ -24,19 +24,19 @@ function harness({ actorRole = 'system_admin', targetRole = 'manager', targetId 
       if (name === 'get_portal_role_capabilities') return args.p_person_id === null
         ? { data: capabilities(actorRole, actorRole === 'system_admin' ? null : personId), error: null, status: 200 }
         : { data: capabilities(targetRole, targetId), error: targetError, status: 200 };
-      assert.ok(['performance_review_workspace_for_preview', 'get_performance_review_document_for_preview'].includes(name), 'Preview must not fall back to the real P0 projection');
+      assert.ok(['performance_review_workspace_for_preview', 'performance_review_workspace_for_delegate', 'get_performance_review_document_for_preview'].includes(name), 'Preview must not fall back to the real P0 projection');
       return { data: response === undefined ? data : typeof response === 'function' ? response(data) : response, error: null, status: 200 };
     },
   } });
   return { ...h, calls, data, business: () => calls.filter(c => c.name !== 'get_portal_role_capabilities') };
 }
 
-test('P0 preview loads each canonical target role with real actor and strictly read-only capabilities', async () => enabled(async () => {
+test('P0 target reads use real actor and route Manager delegation separately from read-only roles', async () => enabled(async () => {
   for (const targetRole of ['employee', 'account', 'manager', 'admin', 'system_admin']) {
     const targetId = targetRole === 'manager' ? managerId : personId;
     const h = harness({ targetRole, targetId });
     assert.deepEqual(await h.actions.loadPerformanceReviews(targetId), { ok: true, data: h.data });
-    assert.deepEqual(h.calls.map(c => c.name), ['get_portal_role_capabilities', 'get_portal_role_capabilities', 'performance_review_workspace_for_preview']);
+    assert.deepEqual(h.calls.map(c => c.name), ['get_portal_role_capabilities', 'get_portal_role_capabilities', targetRole === 'manager' ? 'performance_review_workspace_for_delegate' : 'performance_review_workspace_for_preview']);
     assert.deepEqual(h.business()[0].args, { p_person_id: targetId });
     assert.equal(h.registrations.length + h.dispatches.length + h.notificationDispatches.length, 0);
   }
@@ -64,7 +64,7 @@ test('preview rejects non-P0 actors, invalid targets and unavailable target acco
   assert.equal(missing.calls.length, 0);
 }));
 
-test('preview parser rejects P0 fallback, another target, leaked fields and every write capability', async () => enabled(async () => {
+test('preview parser rejects P0 fallback, another target, leaked fields and unauthorized write capabilities', async () => enabled(async () => {
   const transforms = [
     data => ({ ...data, viewerContext: { ...data.viewerContext, personId } }),
     data => ({ ...data, viewerContext: { ...data.viewerContext, role: 'system_admin', personId: null } }),
@@ -75,9 +75,13 @@ test('preview parser rejects P0 fallback, another target, leaked fields and ever
     const h = harness({ response: transform });
     assert.equal((await h.actions.loadPerformanceReviews(managerId)).code, 'unavailable');
   }
-  for (const key of ['saveSelf', 'submitSelf', 'saveManager', 'completeManager', 'saveMeeting', 'submitReview']) {
+  for (const key of ['saveSelf', 'submitSelf']) {
     const h = harness({ response: data => ({ ...data, reviews: [{ ...data.reviews[0], capabilities: { ...data.reviews[0].capabilities, [key]: true } }] }) });
     assert.equal((await h.actions.loadPerformanceReviews(managerId)).code, 'unavailable');
+  }
+  for (const key of ['saveManager', 'completeManager', 'saveMeeting', 'submitReview']) {
+    const h = harness({ targetRole: 'admin', targetId: personId, response: data => ({ ...data, reviews: [{ ...data.reviews[0], capabilities: { ...data.reviews[0].capabilities, [key]: true } }] }) });
+    assert.equal((await h.actions.loadPerformanceReviews(personId)).code, 'unavailable');
   }
   const leaked = harness({ targetRole: 'employee', targetId: personId, response: data => ({ ...data, reviews: [{ ...data.reviews[0], managerNote: 'PRIVATE' }] }) });
   assert.equal((await leaked.actions.loadPerformanceReviews(personId)).code, 'unavailable');

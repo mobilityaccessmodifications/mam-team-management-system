@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { dispatchPerformanceReviewMailForReview } from "@/lib/performance-review-mail";
 
 import type { PerformanceFailure, PerformanceLoadResult, PerformanceStartInput, PerformanceStartResult, PerformanceMutationInput, PerformanceMutationResult, PerformanceReconcileInput, PerformanceReconcileResult, PerformanceDocumentResult } from "@/lib/performance-review-types";
-import { PerformanceReviewAccessError, requirePerformanceReviewActor, requirePerformanceReviewViewer } from "@/lib/performance-review-auth";
+import { PerformanceReviewAccessError, requirePerformanceReviewActor, requirePerformanceReviewViewer, requirePerformanceReviewManagerDelegate } from "@/lib/performance-review-auth";
 import { closed, uuid, parseDocument, parseReconcileInput, parseMutationInput, parseStartInput, parseReview, parseWorkspace } from "@/lib/performance-review-rules";
 function failure(code: PerformanceFailure["code"]): PerformanceFailure {
   return { ok: false, code, uncertain: code === "uncertain", message: ({ invalid: "Check the review fields.", forbidden: "You do not have access to this review.", unauthenticated: "Sign in before using performance reviews.", conflict: "The review has changed. Reload or reconcile before continuing.", unavailable: "Performance reviews are not available.", uncertain: "The result is unknown. Reconcile this operation before another write." })[code] };
@@ -43,22 +43,25 @@ export async function loadPerformanceReviews(previewPersonId?: string): Promise<
     const { supabase, actorUserId, capabilities } = await requirePerformanceReviewViewer(previewPersonId);
     const { data, error, status } = previewPersonId === undefined
       ? await supabase.rpc("performance_review_workspace")
-      : await supabase.rpc("performance_review_workspace_for_preview", { p_person_id: previewPersonId });
+      : await supabase.rpc(capabilities.app_role === "manager" ? "performance_review_workspace_for_delegate" : "performance_review_workspace_for_preview", { p_person_id: previewPersonId });
     if (status >= 500) return failure("unavailable");
     if (error) return rpcFailure(error, false, status);
-    return { ok: true, data: parseWorkspace(data, actorUserId, capabilities.app_role, capabilities.person_id, previewPersonId !== undefined) };
+    return { ok: true, data: parseWorkspace(data, actorUserId, capabilities.app_role, capabilities.person_id, previewPersonId === undefined ? false : capabilities.app_role === "manager" ? "manager_delegate" : true) };
   } catch (error) { return error instanceof PerformanceReviewAccessError ? failure(error.code) : disabled(); }
 }
-export async function startPerformanceReview(input: PerformanceStartInput): Promise<PerformanceStartResult> {
+export async function startPerformanceReview(input: PerformanceStartInput, previewPersonId?: string): Promise<PerformanceStartResult> {
   if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
   let request: PerformanceStartInput;
-  try { request = parseStartInput(input); } catch { return failure("invalid"); }
+  try { request = parseStartInput(input); if (previewPersonId !== undefined) uuid(previewPersonId); } catch { return failure("invalid"); }
   let dispatched = false;
   try {
-    const { supabase, capabilities } = await requirePerformanceReviewActor();
+    const { supabase, capabilities } = previewPersonId === undefined ? await requirePerformanceReviewActor() : await requirePerformanceReviewManagerDelegate(previewPersonId);
     if (capabilities.app_role !== "manager") return failure("forbidden");
     dispatched = true;
-    const { data, error, status } = await supabase.rpc("start_performance_review", { p_operation_id: request.operationId, p_employee_person_id: request.employeePersonId, p_cycle: request.cycle, p_due_date: request.dueDate });
+    const args = { p_operation_id: request.operationId, p_employee_person_id: request.employeePersonId, p_cycle: request.cycle, p_due_date: request.dueDate };
+    const { data, error, status } = previewPersonId === undefined
+      ? await supabase.rpc("start_performance_review", args)
+      : await supabase.rpc("start_performance_review_for_delegate", { p_person_id: previewPersonId, ...args });
     if (status >= 500) return failure("uncertain");
     if (error) return rpcFailure(error, true, status);
     const receipt = closed(data, ["committed", "operationId", "review", "existing"]);
@@ -68,17 +71,21 @@ export async function startPerformanceReview(input: PerformanceStartInput): Prom
     return { ok: true, committed: true, operationId: request.operationId, review, existing: receipt.existing };
   } catch (error) { return failure(!dispatched && error instanceof PerformanceReviewAccessError ? error.code : dispatched ? "uncertain" : "unavailable"); }
 }
-export async function mutatePerformanceReview(input: PerformanceMutationInput): Promise<PerformanceMutationResult> {
+export async function mutatePerformanceReview(input: PerformanceMutationInput, previewPersonId?: string): Promise<PerformanceMutationResult> {
   if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
   let request: PerformanceMutationInput;
-  try { request = parseMutationInput(input); } catch { return failure("invalid"); }
+  try { request = parseMutationInput(input); if (previewPersonId !== undefined) uuid(previewPersonId); } catch { return failure("invalid"); }
   let dispatched = false;
   try {
-    const { supabase, capabilities } = await requirePerformanceReviewActor();
+    const { supabase, capabilities } = previewPersonId === undefined ? await requirePerformanceReviewActor() : await requirePerformanceReviewManagerDelegate(previewPersonId);
+    if (previewPersonId !== undefined && (request.command === "save_self" || request.command === "submit_self")) return failure("forbidden");
     if (["admin", "system_admin"].includes(capabilities.app_role)) return failure("forbidden");
     if (request.command !== "save_self" && request.command !== "submit_self" && capabilities.app_role !== "manager") return failure("forbidden");
     dispatched = true;
-    const { data, error, status } = await supabase.rpc("mutate_performance_review", { p_operation_id: request.operationId, p_review_id: request.reviewId, p_expected_revision: request.expectedRevision, p_command: request.command, p_input: request.input });
+    const args = { p_operation_id: request.operationId, p_review_id: request.reviewId, p_expected_revision: request.expectedRevision, p_command: request.command, p_input: request.input };
+    const { data, error, status } = previewPersonId === undefined
+      ? await supabase.rpc("mutate_performance_review", args)
+      : await supabase.rpc("mutate_performance_review_for_delegate", { p_person_id: previewPersonId, ...args });
     if (status >= 500) return failure("uncertain");
     if (error) return rpcFailure(error, true, status);
     const receipt = closed(data, ["committed", "operationId", "review"]);
@@ -90,20 +97,23 @@ export async function mutatePerformanceReview(input: PerformanceMutationInput): 
     return { ok: true, committed: true, operationId: request.operationId, review };
   } catch (error) { return failure(!dispatched && error instanceof PerformanceReviewAccessError ? error.code : dispatched ? "uncertain" : "unavailable"); }
 }
-export async function reconcilePerformanceReviewOperation(input: PerformanceReconcileInput): Promise<PerformanceReconcileResult> {
+export async function reconcilePerformanceReviewOperation(input: PerformanceReconcileInput, previewPersonId?: string): Promise<PerformanceReconcileResult> {
   if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
   let request: PerformanceReconcileInput;
-  try { request = parseReconcileInput(input); } catch { return failure("invalid"); }
+  try { request = parseReconcileInput(input); if (previewPersonId !== undefined) uuid(previewPersonId); } catch { return failure("invalid"); }
   try {
-    const { supabase, capabilities } = await requirePerformanceReviewActor();
-    const { data, error, status } = await supabase.rpc("get_performance_review_operation", { p_operation_id: request.operationId, p_review_id: request.reviewId });
+    const { supabase, capabilities } = previewPersonId === undefined ? await requirePerformanceReviewActor() : await requirePerformanceReviewManagerDelegate(previewPersonId);
+    const args = { p_operation_id: request.operationId, p_review_id: request.reviewId };
+    const { data, error, status } = previewPersonId === undefined
+      ? await supabase.rpc("get_performance_review_operation", args)
+      : await supabase.rpc("get_performance_review_operation_for_delegate", { p_person_id: previewPersonId, ...args });
     if (status >= 500) return failure("unavailable");
     if (error) return rpcFailure(error, false, status);
     const receipt = closed(data, ["status", "review"]);
     if (receipt.status === "not_found" && receipt.review === null) return { ok: true, data: { status: "not_found", review: null } };
     if (receipt.status !== "committed") return failure("unavailable");
     const review = parseReview(receipt.review);
-    if ((request.reviewId !== null && review.id !== request.reviewId) || !reviewScope(review, capabilities.app_role, capabilities.person_id)) return failure("unavailable");
+    if ((request.reviewId !== null && review.id !== request.reviewId) || !reviewScope(review, capabilities.app_role, capabilities.person_id) || (previewPersonId !== undefined && review.audience !== "manager")) return failure("unavailable");
     return { ok: true, data: { status: "committed", review } };
   } catch (error) { return failure(error instanceof PerformanceReviewAccessError ? error.code : "unavailable"); }
 }

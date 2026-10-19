@@ -53,8 +53,9 @@ function managerInput(row: PerformanceReview): PerformanceManagerInput | null {
 }
 
 export default function PerformanceReviewWorkspace({ previewPersonId }: { previewPersonId?: string } = {}) {
-  const readOnly = previewPersonId !== undefined;
   const [workspace, setWorkspace] = useState<PerformanceWorkspace | null>(null);
+  const preview = previewPersonId !== undefined;
+  const readOnly = preview && (workspace?.viewerContext.role !== "manager" || workspace.viewerContext.personId !== previewPersonId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<string[]>([]);
   const [assessment, setAssessment] = useState<PerformanceManagerInput | null>(null);
@@ -153,12 +154,13 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     if (readOnly || epoch.current !== generation || busyRef.current || !workspace || pending?.phase !== "uncertain") return;
     const ticket = generation, owner = claimBusy();
     try {
-      const result = await reconcilePerformanceReviewOperation({ operationId: pending.operationId, reviewId: pending.reviewId });
+      const input = { operationId: pending.operationId, reviewId: pending.reviewId };
+      const result = previewPersonId === undefined ? await reconcilePerformanceReviewOperation(input) : await reconcilePerformanceReviewOperation(input, previewPersonId);
       if (epoch.current !== ticket) return;
       if (!result.ok) { handleFailure(result); return; }
       if (result.data.status !== "committed") { setMessage("The update is still unconfirmed."); return; }
       const row = ownedRow(result.data.review, workspace.viewerContext);
-      if (!row || (pending.reviewId !== null && row.id !== pending.reviewId)) { unknown(); return; }
+      if (!row || (preview && row.audience !== "manager") || (pending.reviewId !== null && row.id !== pending.reviewId)) { unknown(); return; }
       accept(row, "Update confirmed.");
     } catch { if (epoch.current === ticket) unknown(); }
     finally { releaseBusy(owner); }
@@ -188,12 +190,13 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     const owner = claimBusy(), operationId = crypto.randomUUID();
     track({ operationId, reviewId: null, phase: "pending" });
     try {
-      const result = await startPerformanceReview({ operationId, ...startDraft });
+      const input = { operationId, ...startDraft };
+      const result = previewPersonId === undefined ? await startPerformanceReview(input) : await startPerformanceReview(input, previewPersonId);
       if (epoch.current !== ticket) return;
       if (!result.ok) { handleFailure(result, true); return; }
       if (result.committed !== true || result.operationId !== operationId || result.review.employee.id !== startDraft.employeePersonId || result.review.cycle !== startDraft.cycle) { unknown(); return; }
       const row = ownedRow(result.review, workspace.viewerContext);
-      if (!row) { unknown(); return; }
+      if (!row || (preview && row.audience !== "manager")) { unknown(); return; }
       accept(row, result.existing ? "Review opened." : "Review created.");
     } catch { if (epoch.current === ticket) unknown(); }
     finally { releaseBusy(owner); }
@@ -217,7 +220,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     let mutation: PerformanceMutationInput;
     const operationId = crypto.randomUUID();
     if (command === "save_self" || command === "submit_self") {
-      if (selected.audience !== "employee" || selected.selfSubmittedAt || !(command === "save_self" ? selected.capabilities.saveSelf : selected.capabilities.submitSelf)) return;
+      if (preview || selected.audience !== "employee" || selected.selfSubmittedAt || !(command === "save_self" ? selected.capabilities.saveSelf : selected.capabilities.submitSelf)) return;
       if (answers.some(answer => answer.length > 8000)) { setMessage("Use at most 8000 characters per answer."); return; }
       if (command === "submit_self" && REQUIRED.some(index => !answers[index]?.trim())) { setMessage("Complete the required answers."); return; }
       mutation = { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { answers: [...answers] } };
@@ -235,7 +238,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     const owner = claimBusy();
     track({ operationId, reviewId: selected.id, phase: "pending" });
     try {
-      const result = await mutatePerformanceReview(mutation);
+      const result = previewPersonId === undefined ? await mutatePerformanceReview(mutation) : await mutatePerformanceReview(mutation, previewPersonId);
       if (epoch.current !== ticket) return;
       if (!result.ok) {
         handleFailure(result, true);
@@ -294,9 +297,10 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     };
   }, [advance, applyLoaded, clearPrivate, handleFailure, retire, previewPersonId]);
   const blocked = readOnly || busy || operation !== null;
-  const selfDisabled = blocked || selected?.audience !== "employee" || !selected.capabilities.saveSelf || Boolean(selected.selfSubmittedAt);
+  const selfDisabled = preview || blocked || selected?.audience !== "employee" || !selected.capabilities.saveSelf || Boolean(selected.selfSubmittedAt);
   const managerDisabled = blocked || selected?.audience !== "manager" || !selected.capabilities.saveManager || Boolean(selected.finalisedAt);
   const meetingDisabled = blocked || selected?.audience !== "manager" || !selected.capabilities.saveMeeting || Boolean(selected.finalisedAt);
+  const heldDisabled = blocked || selected?.audience !== "manager" || !selected.capabilities.submitReview || Boolean(selected.finalisedAt);
   return <section className={styles.workspace} aria-label="Performance reviews" aria-busy={busy || loading}>
     <header className={styles.toolbar}><h1>Performance reviews</h1><button type="button" onClick={() => reload()} disabled={busy}>Reload</button>{workspace?.startablePeople.length ? <button type="button" disabled={blocked} onClick={() => { if (epoch.current === generation && !blocked) setCreating(true); }}>New yearly review</button> : null}</header>
     {message ? <p role={["Saved.", "Submitted.", "Review opened.", "Review created.", "Update confirmed."].includes(message) ? "status" : "alert"}>{message}</p> : null}
@@ -334,7 +338,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
           <label>Mode<select name="meeting-mode" value={meeting.mode} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, mode: event.target.value as PerformanceMeeting["mode"] })); } }}><option value="in_person">In person</option><option value="teams">Teams</option><option value="phone">Phone</option></select></label>
           <label>Location<input name="meeting-location" maxLength={8000} value={meeting.location} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, location: event.target.value })); } }} /></label>
           <label>Meeting notes<textarea name="meeting-notes" maxLength={8000} value={meeting.notes} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, notes: event.target.value })); } }} /></label>
-          {selected.audience === "manager" ? <><label><input type="checkbox" name="held" checked={held} disabled={blocked || Boolean(selected.finalisedAt)} onChange={event => { if (epoch.current === generation && !blocked) setHeld(event.target.checked); }} />Meeting was held</label><div className={styles.toolbar}><button type="button" disabled={meetingDisabled} onClick={() => run("save_meeting")}>Save meeting</button><button type="submit" disabled={blocked || assessmentDirty || !held || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Finalise review</button></div></> : null}
+          {selected.audience === "manager" ? <><label><input type="checkbox" name="held" checked={held} disabled={heldDisabled} onChange={event => { if (epoch.current === generation && !heldDisabled) setHeld(event.target.checked); }} />Meeting was held</label><div className={styles.toolbar}><button type="button" disabled={meetingDisabled} onClick={() => run("save_meeting")}>Save meeting</button><button type="submit" disabled={blocked || assessmentDirty || !held || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Finalise review</button></div></> : null}
           {selected.managerCompletedAt ? <p>Assessment completed: {selected.managerCompletedAt}</p> : null}{selected.finalisedAt ? <p>Finalised: {selected.finalisedAt}</p> : null}
         </form> : null}
       </article> : null}

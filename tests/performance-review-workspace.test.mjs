@@ -492,13 +492,12 @@ test('an unresolved write prevents record reselection from discarding the held d
   h.click(label); h.render(); assert.equal(h.field('self-0').props.value, 'Held draft must not be discarded by navigation'); h.unmount();
 });
 
-test('target preview remains read-only through direct input, submit and create handlers', async () => {
-  for (const audience of ['employee', 'manager', 'admin']) {
+test('nonmanager target preview remains read-only through direct input, submit and create handlers', async () => {
+  for (const [audience, role] of [['employee', 'employee'], ['employee', 'account'], ['admin', 'admin'], ['admin', 'system_admin']]) {
     const data = workspace(audience);
-    const previewPersonId = audience === 'manager' ? ids.manager : ids.person;
+    data.viewerContext.role = role;
+    const previewPersonId = ids.person;
     data.viewerContext.personId = previewPersonId;
-    for (const row of data.reviews) for (const key of Object.keys(row.capabilities)) if (key !== 'downloadDocument') row.capabilities[key] = false;
-    if (audience === 'manager') data.startablePeople = [data.reviews[0].employee];
     const h = mount(data, {}, { previewPersonId });
     try {
       await h.settle();
@@ -530,6 +529,124 @@ test('preview rejects another person projection before reading its private field
     assert.ok(!h.text.includes('Manager assessment'));
     assert.equal(h.all.filter(node => node.type === 'form').length, 0);
   } finally { h.unmount(); }
+});
+
+test('P0 manager delegation writes only assigned manager rows and passes the canonical target on every command', async () => {
+  let row = review('manager', 'MAM', { meeting: { date: '2026-10-01', time: '10:30', duration: 30, mode: 'in_person', location: 'Synthetic room', notes: '' } });
+  const own = review('employee', 'MAM', { id: ids.other, code: 'PR-2026-0002', employee: { ...review().employee, id: ids.manager }, manager: { id: ids.person, name: 'Synthetic other manager' } });
+  const h = mount(workspace('manager', 'MAM', { reviews: [row, own], startablePeople: [row.employee] }), { mutatePerformanceReview: async (input, target) => {
+    assert.equal(target, ids.manager);
+    row = { ...row, managerRevision: `manager:0:${Number(row.managerRevision.split(':').at(-1)) + 1}`,
+      ...(input.command === 'save_manager' || input.command === 'complete_manager' ? { managerAnswers: input.input.answers, ratings: input.input.ratings, summary: input.input.summary, overallRating: input.input.overallRating, managerNote: input.input.managerNote, managerCompletedAt: input.command === 'complete_manager' ? '2026-10-01T02:00:00Z' : null } : { meeting: input.input }),
+      ...(input.command === 'submit_review' ? { finalisedAt: '2026-10-01T03:00:00Z' } : {}) };
+    return { ok: true, committed: true, operationId: input.operationId, review: row };
+  } }, { previewPersonId: ids.manager });
+  try {
+    await h.settle();
+    assert.equal(h.button('New yearly review').props.disabled, false);
+    assert.equal(h.field('self-0').props.disabled, true);
+    assert.equal(h.field('managerNote').props.disabled, false);
+    h.change('managerNote', 'Delegated manager evidence'); h.click('Save manager draft'); await h.settle();
+    h.submit('Manager assessment'); await h.settle();
+    h.change('meeting-notes', 'Delegated meeting'); h.click('Save meeting'); await h.settle();
+    h.change('held', true); h.submit('Review meeting'); await h.settle();
+    const writes = h.calls.filter(call => call.name === 'mutatePerformanceReview');
+    assert.deepEqual(writes.map(call => call.args[0].command), ['save_manager', 'complete_manager', 'save_meeting', 'submit_review']);
+    assert.ok(writes.every(call => call.args[1] === ids.manager));
+    assert.equal(h.field('managerNote').props.disabled, true);
+    h.click(`${own.code} — ${own.employee.name} — ${own.cycle}`); h.render();
+    assert.equal(h.field('self-0').props.disabled, true);
+    h.change('self-0', 'Attempted delegated self write'); h.submit('Self assessment'); await h.settle();
+    assert.equal(h.calls.filter(call => call.name === 'mutatePerformanceReview').length, 4);
+    assert.equal(h.field('self-0').props.value, own.selfAnswers[0]);
+    assert.ok(!h.text.includes('Manager assessment'));
+  } finally { h.unmount(); }
+});
+
+test('uncertain delegated create stays held until its target-bound receipt is reconciled', async () => {
+  const data = workspace('manager', 'MAM', { reviews: [], startablePeople: [review().employee] });
+  const h = mount(data, { startPerformanceReview: async () => failure('uncertain', true), reconcilePerformanceReviewOperation: async () => ({ ok: true, data: { status: 'committed', review: review('manager') } }) }, { previewPersonId: ids.manager });
+  try {
+    await h.settle(); h.click('New yearly review'); h.render();
+    h.change('start-person', ids.person); h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30');
+    h.submit('New yearly review'); await h.settle();
+    const started = h.calls.at(-1);
+    assert.equal(started.name, 'startPerformanceReview'); assert.equal(started.args[1], ids.manager);
+    assert.equal(h.button('Create review').props.disabled, true);
+    h.submit('New yearly review'); await h.settle();
+    assert.equal(h.calls.filter(call => call.name === 'startPerformanceReview').length, 1);
+    h.click('Reload'); await h.settle();
+    assert.equal(h.button('Create review').props.disabled, true);
+    h.click('Reconcile update'); await h.settle();
+    assert.deepEqual(h.calls.at(-1), { name: 'reconcilePerformanceReviewOperation', args: [{ operationId: started.args[0].operationId, reviewId: null }, ids.manager] });
+    assert.ok(h.text.includes('Update confirmed.')); assert.equal(h.field('managerNote').props.disabled, false);
+  } finally { h.unmount(); }
+});
+
+test('manager delegation respects each assigned row capability and does not enable locked direct handlers', async () => {
+  const row = review('manager');
+  for (const key of Object.keys(row.capabilities)) if (key !== 'downloadDocument') row.capabilities[key] = false;
+  const h = mount(workspace('manager', 'MAM', { reviews: [row] }), {}, { previewPersonId: ids.manager });
+  try {
+    await h.settle();
+    for (const field of h.all.filter(node => ['input', 'select', 'textarea'].includes(node.type))) {
+      assert.equal(field.props.disabled, true, field.props.name);
+      field.props.onChange?.({ target: { value: 'Attempted locked delegated edit', checked: true } });
+    }
+    for (const form of h.all.filter(node => node.type === 'form')) form.props.onSubmit({ preventDefault() {} });
+    for (const name of ['Save manager draft', 'Complete manager assessment', 'Save meeting', 'Finalise review']) {
+      assert.equal(h.button(name).props.disabled, true); h.click(name);
+    }
+    await h.settle();
+    assert.equal(h.calls.filter(call => call.name === 'mutatePerformanceReview').length, 0);
+    assert.equal(h.field('held').props.checked, false);
+    assert.equal(h.field('managerNote').props.value, row.managerNote);
+  } finally { h.unmount(); }
+});
+
+test('delegated create passes its target and rejects an employee-shaped success receipt', async () => {
+  const data = workspace('manager', 'MAM', { reviews: [], startablePeople: [review().employee] });
+  const h = mount(data, { startPerformanceReview: async input => ({ ok: true, committed: true, operationId: input.operationId, review: review('employee', 'MAM', { employee: { ...review().employee, id: ids.manager } }) }) }, { previewPersonId: ids.manager });
+  try {
+    await h.settle(); h.click('New yearly review'); h.render();
+    h.change('start-person', ids.person); h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30');
+    h.submit('New yearly review'); await h.settle();
+    assert.equal(h.calls.at(-1).args[1], ids.manager);
+    assert.ok(h.text.includes('Reconcile before submitting again.'));
+    assert.ok(!h.text.includes('Review created.'));
+  } finally { h.unmount(); }
+});
+
+test('changing a delegated target retires pending writes and never reconciles an old operation as the new manager', async () => {
+  const pending = deferred(), nextManager = '22000000-0000-4000-8000-000000000003';
+  const h = mount(workspace('manager'), { mutatePerformanceReview: () => pending.promise }, { previewPersonId: ids.manager });
+  try {
+    await h.settle(); h.change('managerNote', 'PRIVATE-OLD-DELEGATE-DRAFT'); h.click('Save manager draft'); h.render();
+    const old = h.calls.at(-1).args[0];
+    const fresh = review('manager', 'MAM', { manager: { id: nextManager, name: 'Synthetic next manager' }, managerNote: 'Fresh next target' });
+    h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('manager', 'MAM', { viewerContext: { ...workspace('manager').viewerContext, personId: nextManager }, reviews: [fresh] }) });
+    h.setProps({ previewPersonId: nextManager }); await h.settle();
+    pending.resolve({ ok: true, committed: true, operationId: old.operationId, review: review('manager', 'MAM', { managerNote: 'PRIVATE-OLD-LATE-RECEIPT' }) }); await h.settle();
+    assert.equal(h.field('managerNote').props.value, 'Fresh next target');
+    assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-OLD-'));
+    assert.equal(h.all.filter(node => node.type === 'button' && node.props.children === 'Reconcile update').length, 0);
+    h.ports.mutatePerformanceReview = async () => failure('uncertain', true);
+    h.click('Save manager draft'); await h.settle();
+    const current = h.calls.at(-1).args[0];
+    h.ports.reconcilePerformanceReviewOperation = async () => ({ ok: true, data: { status: 'committed', review: fresh } });
+    h.click('Reconcile update'); await h.settle();
+    assert.deepEqual(h.calls.at(-1).args, [{ operationId: current.operationId, reviewId: current.reviewId }, nextManager]);
+    assert.notEqual(current.operationId, old.operationId);
+  } finally { h.unmount(); }
+});
+
+test('unmounted delegated reconciliation cannot restore the old manager state', async () => {
+  const pending = deferred();
+  const h = mount(workspace('manager'), { mutatePerformanceReview: async () => failure('uncertain', true), reconcilePerformanceReviewOperation: () => pending.promise }, { previewPersonId: ids.manager });
+  await h.settle(); h.change('managerNote', 'Held delegated draft'); h.click('Save manager draft'); await h.settle();
+  h.click('Reconcile update'); h.render(); h.unmount();
+  pending.resolve({ ok: true, data: { status: 'committed', review: review('manager', 'MAM', { managerNote: 'PRIVATE-UNMOUNTED-RECEIPT' }) } }); await h.settle();
+  assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-UNMOUNTED-RECEIPT'));
 });
 
 test('preview Word download is bound to the target and late responses retire on unmount', async () => {

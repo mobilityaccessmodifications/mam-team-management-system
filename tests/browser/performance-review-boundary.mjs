@@ -4,9 +4,9 @@ const invoke = (name, args) => {
   return fixture.invoke(name, args);
 };
 export const loadPerformanceReviews = previewPersonId => invoke('loadPerformanceReviews', previewPersonId === undefined ? [] : [previewPersonId]);
-export const startPerformanceReview = input => invoke('startPerformanceReview', [input]);
-export const mutatePerformanceReview = input => invoke('mutatePerformanceReview', [input]);
-export const reconcilePerformanceReviewOperation = input => invoke('reconcilePerformanceReviewOperation', [input]);
+export const startPerformanceReview = (input, previewPersonId) => invoke('startPerformanceReview', previewPersonId === undefined ? [input] : [input, previewPersonId]);
+export const mutatePerformanceReview = (input, previewPersonId) => invoke('mutatePerformanceReview', previewPersonId === undefined ? [input] : [input, previewPersonId]);
+export const reconcilePerformanceReviewOperation = (input, previewPersonId) => invoke('reconcilePerformanceReviewOperation', previewPersonId === undefined ? [input] : [input, previewPersonId]);
 export const getPerformanceReviewDocument = (reviewId, previewPersonId) => invoke('getPerformanceReviewDocument', previewPersonId === undefined ? [reviewId] : [reviewId, previewPersonId]);
 export const createClient = () => ({ auth: { onAuthStateChange(callback) {
   const fixture = window.performanceReviewFixture;

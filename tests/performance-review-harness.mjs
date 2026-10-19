@@ -56,6 +56,7 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
   function render() { let turns = 0; do { changed = false; cursor = 0; tree = expand(Component(componentProps)); for (const effect of effects.splice(0)) effect(); assert.ok(++turns < 30, 'Hook render must settle'); } while (changed); return tree; }
   async function settle() { for (let i = 0; i < 6; i++) { await new Promise(r => setImmediate(r)); render(); } return tree; }
   const api = { calls, ports, downloads, revoked, built, blobs, hooks, render, settle,
+    setProps(props) { componentProps = props; render(); },
     get tree() { return tree; },
     get all() { return nodes(tree); },
     get text() { return text(tree); },

@@ -90,6 +90,7 @@ const outcomeFor = id => {
 };
 export const actorCapabilities = actorPersonId ? outcomeFor(actorPersonId).capabilities : UNIFIED_ROLE_FIXTURE_RESULTS.actor.capabilities;
 const failures = new Map(), held = new Set(), pending = new Map(), responses = [], performanceLabels = new Map();
+const performanceRows = new Map(), performanceCreated = new Map(), performanceReceipts = new Map();
 window.unifiedRoleFixture = {
   calls, unexpected, responses,
   leaveSnapshot(id) { const workspace = leaveWorkspace(id); return { today: completedFixtureToday, requests: workspace.requests, calendarEntries: workspace.calendarEntries }; },
@@ -187,12 +188,52 @@ function performanceWorkspace(previewPersonId) {
   } else {
     reviews = [managed(baseRolePeople[2].id, baseRolePeople[3].id, role === 'admin' ? 'Synthetic HR scope' : 'Synthetic P0 scope', role === 'admin' ? 'PR-2026-0301' : 'PR-2026-0302', 'admin')];
   }
+  reviews = [...(performanceCreated.get(id) ?? []), ...reviews].map(row => performanceRows.get(`${id}:${row.id}`) ?? row);
+  if (previewPersonId !== undefined) reviews = reviews.map(row => row.audience === 'employee' ? { ...row, capabilities: { ...row.capabilities, saveSelf: false, submitSelf: false } } : row);
   return { viewerContext: { actorUserId: actorAuthId, personId: id ?? null, role, displayName: id ? personFor(id).name : 'Synthetic P0' }, reviews, startablePeople };
+}
+
+function performanceManagerScope(id) {
+  const data = performanceWorkspace(id);
+  if (data.viewerContext.role !== 'manager' || (id !== undefined && actorPersonId !== undefined)) throw new Error('Synthetic performance write is outside this manager scope');
+  return data;
+}
+
+function performanceReceipt(input, id, row, extra = {}) {
+  const scopeId = id ?? actorPersonId;
+  performanceRows.set(`${scopeId}:${row.id}`, row);
+  performanceReceipts.set(`${scopeId}:${input.operationId}`, row);
+  return { ok: true, committed: true, operationId: input.operationId, review: row, ...extra };
 }
 
 const handlers = {
   '@/app/performance-reviews/actions': {
     loadPerformanceReviews: id => ({ ok: true, data: performanceWorkspace(id) }),
+    startPerformanceReview: (input, id) => {
+      const data = performanceManagerScope(id), employee = data.startablePeople.find(person => person.id === input.employeePersonId);
+      if (!employee) throw new Error('Synthetic performance employee is not eligible');
+      const row = performanceReview('manager', 'MAM', {
+        id: '33000000-0000-4000-8000-000000009001', code: `PR-${input.cycle}-9001`, cycle: input.cycle, dueDate: input.dueDate,
+        employee, manager: { id: data.viewerContext.personId, name: data.viewerContext.displayName },
+      });
+      const scopeId = id ?? actorPersonId;
+      performanceCreated.set(scopeId, [row, ...(performanceCreated.get(scopeId) ?? [])]);
+      return performanceReceipt(input, id, row, { existing: false });
+    },
+    mutatePerformanceReview: (input, id) => {
+      const data = performanceManagerScope(id), current = data.reviews.find(row => row.id === input.reviewId && row.audience === 'manager');
+      if (!current || current.managerRevision !== input.expectedRevision || !['save_manager', 'complete_manager', 'save_meeting', 'submit_review'].includes(input.command)) throw new Error('Synthetic performance command is outside the assigned row');
+      const row = { ...current, managerRevision: `manager:0:${Number(current.managerRevision.split(':').at(-1)) + 1}` };
+      if (input.command === 'save_manager' || input.command === 'complete_manager') Object.assign(row, { managerAnswers: input.input.answers, ratings: input.input.ratings, summary: input.input.summary, overallRating: input.input.overallRating, managerNote: input.input.managerNote, managerCompletedAt: input.command === 'complete_manager' ? '2026-10-20T00:00:00Z' : null });
+      else row.meeting = { ...input.input };
+      if (input.command === 'submit_review') Object.assign(row, { finalisedAt: '2026-10-20T00:30:00Z', capabilities: { ...row.capabilities, saveManager: false, completeManager: false, saveMeeting: false, submitReview: false } });
+      return performanceReceipt(input, id, row);
+    },
+    reconcilePerformanceReviewOperation: (input, id) => {
+      performanceManagerScope(id);
+      const row = performanceReceipts.get(`${id ?? actorPersonId}:${input.operationId}`);
+      return { ok: true, data: row && (input.reviewId === null || input.reviewId === row.id) ? { status: 'committed', review: row } : { status: 'not_found', review: null } };
+    },
     getPerformanceReviewDocument: (reviewId, id) => {
       const row = performanceWorkspace(id).reviews.find(row => row.id === reviewId);
       if (!row) throw new Error('Synthetic performance document is outside this scope');
@@ -311,7 +352,7 @@ const handlers = {
 
 export async function invokeServerAction(module, name, args) {
   calls.push({ module, name, args: args.map(arg => arg instanceof FormData ? { files: arg.getAll('files').map(file => ({ name: file.name, type: file.type, size: file.size })) } : arg) });
-  const key = `${name}:${['mutateSubscriptionRequest', 'createSubscription'].includes(name) ? '' : args[0]?.personId ?? args[0]?.subscriptionId ?? args[0]?.requestId ?? args[0]?.target?.taskId ?? args[0]?.taskId ?? args[0] ?? ''}`;
+  const key = `${name}:${['startPerformanceReview', 'mutatePerformanceReview', 'reconcilePerformanceReviewOperation'].includes(name) ? args[1] ?? '' : ['mutateSubscriptionRequest', 'createSubscription'].includes(name) ? '' : args[0]?.personId ?? args[0]?.subscriptionId ?? args[0]?.requestId ?? args[0]?.target?.taskId ?? args[0]?.taskId ?? args[0] ?? ''}`;
   const failure = failures.get(key);
   if (failure) {
     failures.delete(key);
