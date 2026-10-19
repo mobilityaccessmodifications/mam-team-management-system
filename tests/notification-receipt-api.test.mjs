@@ -167,3 +167,27 @@ test('route wires bounded admin RPCs and proxy bypass is exact, not an integrati
   assert.ok(proxy.includes(`pathname === "${path}"`));
   assert.ok(!proxy.includes(`pathname.startsWith("/api/internal/integrations/notifications`));
 });
+
+
+test('performance lifecycle reservations require their own claim token and DB recipient wrapper', async () => {
+  for (const event of ['started', 'self-submitted']) {
+    const eventKey = `performance-review:${id}:${event}`;
+    const value = { ...input, eventKey, claimToken: token };
+    const h = harness({ outcome: 'send', eventKey, deliveryToken: token });
+    assert.equal((await h.run(request(value))).status, 200);
+    assert.deepEqual(h.calls, [{ name: 'reserve_performance_review_notification_mail', args: {
+      p_event_key: eventKey, p_recipient: input.recipient, p_cc: '', p_legacy_event_key: null, p_claim_token: token,
+    } }]);
+    for (const claimToken of [undefined, null, 'wrong']) {
+      const invalid = harness();
+      assert.equal((await invalid.run(request({ ...value, claimToken }))).status, 400);
+      assert.equal(invalid.calls.length, 0);
+    }
+    const invalid = harness();
+    assert.equal((await invalid.run(request({ ...value, managerNote: 'PRIVATE' }))).status, 400);
+    assert.equal(invalid.calls.length, 0);
+  }
+  const legacy = harness();
+  assert.equal((await legacy.run(request({ ...input, claimToken: token }))).status, 400);
+  assert.equal(legacy.calls.length, 0);
+});

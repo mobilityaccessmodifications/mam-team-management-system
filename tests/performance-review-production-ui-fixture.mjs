@@ -34,7 +34,7 @@ export function committedReceipt() {
 export function productionActionHarness({ role = 'manager', signedIn = true, accountStatus = 'active', canonicalData,
   canonicalError = null, canonicalStatus = 200, response = { data: committedReceipt(), error: null, status: 200 },
   rpcThrows = false, afterThrows = false, dispatchRejects = false, client: suppliedClient } = {}) {
-  const calls = [], registrations = [], callbacks = [], dispatches = [], loaded = [];
+  const calls = [], registrations = [], callbacks = [], dispatches = [], notificationDispatches = [], loaded = [];
   let authCalls = 0;
   const cache = new Map();
   const client = {
@@ -61,6 +61,7 @@ export function productionActionHarness({ role = 'manager', signedIn = true, acc
       if (afterThrows) throw new Error('PRIVATE-SYNTHETIC-SCHEDULER');
       callbacks.push(callback);
     } },
+    '@/lib/performance-review-notifications': { dispatchPerformanceReviewNotificationsForReview: async (...args) => { notificationDispatches.push(args); } },
     '@/lib/performance-review-mail': { dispatchPerformanceReviewMailForReview: async (...args) => {
       dispatches.push(args);
       if (dispatchRejects) throw new Error('PRIVATE-SYNTHETIC-MAIL');
@@ -85,7 +86,7 @@ export function productionActionHarness({ role = 'manager', signedIn = true, acc
   const actions = load('src/app/performance-reviews/actions.ts');
   assert.deepEqual(Object.keys(actions).sort(), ['getPerformanceReviewDocument', 'loadPerformanceReviews',
     'mutatePerformanceReview', 'reconcilePerformanceReviewOperation', 'startPerformanceReview'].sort());
-  return { actions, calls, registrations, callbacks, dispatches, loaded, authCalls: () => authCalls,
+  return { actions, calls, registrations, callbacks, dispatches, notificationDispatches, loaded, authCalls: () => authCalls,
     business: () => calls.filter(call => call.name !== 'get_portal_role_capabilities') };
 }
 

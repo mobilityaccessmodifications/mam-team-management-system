@@ -81,7 +81,7 @@ test('production no-mail boundary rejects invalid, denied and mismatched final r
   assert.deepEqual(h.registrations, []);
 }));
 
-test('production no-mail boundary preserves all non-final mutations, reads and reconciliation with zero after calls', async () => enabled(async () => {
+test('production boundary keeps drafts and reads silent while lifecycle notifications remain separate from Careers', async () => enabled(async () => {
   const managerInput = { answers: Array(12).fill('Synthetic evidence'), ratings: Array(12).fill('2 Meets expectations'), summary: 'Synthetic summary', overallRating: '2 Meets expectations', managerNote: 'PRIVATE-SYNTHETIC-NOTE' };
   for (const command of ['save_self', 'submit_self', 'save_manager', 'complete_manager', 'save_meeting']) {
     const self = command === 'save_self' || command === 'submit_self';
@@ -90,7 +90,9 @@ test('production no-mail boundary preserves all non-final mutations, reads and r
     const request = { ...mutation(), command, expectedRevision: self ? 'self:0' : 'manager:0:0', input: self ? { answers: Array(12).fill('Synthetic self') } : command === 'save_meeting' ? meeting : managerInput };
     assert.equal((await h.actions.mutatePerformanceReview(request)).ok, true, command);
     assert.equal(h.business().length, 1);
-    assert.deepEqual(h.registrations, []);
+    assert.equal(h.registrations.length, command === 'submit_self' ? 1 : 0);
+    for (const callback of h.callbacks) await callback();
+    assert.deepEqual(h.notificationDispatches, command === 'submit_self' ? [[reviewId]] : []);
     assert.deepEqual(h.dispatches, []);
   }
   const managerReview = review('manager');
@@ -105,7 +107,9 @@ test('production no-mail boundary preserves all non-final mutations, reads and r
     const h = productionActionHarness({ response: { data, error: null, status: 200 } });
     assert.equal((await h.actions[action](...args)).ok, true, action);
     assert.equal(h.business().length, 1);
-    assert.deepEqual(h.registrations, []);
+    assert.equal(h.registrations.length, action === 'startPerformanceReview' ? 1 : 0);
+    for (const callback of h.callbacks) await callback();
+    assert.deepEqual(h.notificationDispatches, action === 'startPerformanceReview' ? [[reviewId]] : []);
     assert.deepEqual(h.dispatches, []);
   }
   await enabled(async () => {

@@ -125,8 +125,8 @@ test('closed payload rejects private fields, malformed identifiers, recipient li
     p => {p.recipient = 'A@example.invalid';}, p => {p.recipient += ',other@example.invalid';},
     p => {p.recipient += ';other@example.invalid';}, p => {p.recipient = ' ' + p.recipient;},
     p => {p.recipient = 'x'.repeat(255) + '@example.invalid';}, p => {p.recipient = 'bad\r\n@example.invalid';},
-    p => {p.employeeName = '';}, p => {p.managerName = 'x'.repeat(241);},
-    p => {p.employeeName = '\ud800';}, p => {p.managerName = 'Synthetic\r\nBcc: other@example.invalid';},
+    p => {p.employeeName = '';}, p => {p.managerName = 'x'.repeat(8001);},
+    p => {p.employeeName = '\ud800';}, p => {p.managerName = 'Synthetic\u0001Manager';},
     p => {delete p.dueDate;}, p => {p[Symbol('extra')] = true;},
     p => {Object.defineProperty(p, 'employeeName', {get() {throw Error('Getter must not run');}, enumerable: true});},
   ];
@@ -141,6 +141,15 @@ test('closed payload rejects private fields, malformed identifiers, recipient li
   const run = new Function('$json', '$input', 'require', node.parameters.jsCode);
   assert.equal(run({body: payload()}, {all: () => [{json: {}}, {json: {}}]}, () => {throw Error('Builtin disabled');})[0].json.valid, false);
   assert.equal(run({body: payload()}, {all: () => [{json: {}}]}, () => {throw Error('Builtin disabled');})[0].json.valid, true);
+});
+
+test('canonical names stay in text body and cannot alter Graph recipients', async () => {
+  const p = payload(); p.employeeName = 'x'.repeat(8000); p.managerName = 'Synthetic\tManager\r\nBcc: other@example.invalid';
+  const h = harness(build(), p); assert.deepEqual((await h.run()).value, returned(p));
+  const mail = h.calls.find(c => c.name === 'Send Performance Notification').body.message;
+  assert.deepEqual(mail.toRecipients, [{emailAddress: {address: p.recipient}}]);
+  assert.deepEqual(mail.ccRecipients, []); assert.deepEqual(mail.bccRecipients, []);
+  assert.ok(mail.body.content.includes(p.employeeName)); assert.ok(mail.body.content.includes(p.managerName));
 });
 
 test('only the exact source-bound grant authorizes sending; wrong business recipient and uncertain reserve stop', async () => {

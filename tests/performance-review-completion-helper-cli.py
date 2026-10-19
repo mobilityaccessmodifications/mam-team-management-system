@@ -6,9 +6,13 @@ mode=sys.argv[1]
 sha=lambda b:hashlib.sha256(b).hexdigest()
 base=Path(tempfile.mkdtemp(prefix='prcli'))
 root=base/'source'; root.mkdir(); private=base/'operator';private.mkdir(mode=0o700)
-paths=['scripts/deploy-performance-review-completion.py','scripts/deploy-staff-leave-calendar.py']+['scripts/deploy-performance-reviews.py', 'src/lib/performance-review-rules.ts', 'src/lib/performance-review-word.mjs', 'src/lib/performance-review-questions.mjs', 'src/lib/performance-review-document.ts', 'src/lib/performance-review-types.ts', 'src/lib/performance-review-auth.ts', 'src/app/performance-reviews/actions.ts', 'package.json', 'package-lock.json']+[str(p.relative_to(ROOT)) for p in (ROOT/'supabase/migrations').glob('*.sql')]
+paths=['scripts/deploy-performance-review-completion.py','scripts/deploy-staff-leave-calendar.py']+['scripts/deploy-performance-reviews.py', 'src/lib/performance-review-rules.ts', 'src/lib/performance-review-word.mjs', 'src/lib/performance-review-questions.mjs', 'src/lib/performance-review-document.ts', 'src/lib/performance-review-types.ts', 'src/lib/performance-review-auth.ts', 'src/app/performance-reviews/actions.ts', 'package.json', 'package-lock.json']+[str(p.relative_to(ROOT)) for p in (ROOT/'supabase/migrations').glob('*.sql') if p.name[:14]<='20261017103000']
 for name in paths:
- p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes((ROOT/name).read_bytes())
+ p=root/name;p.parent.mkdir(parents=True,exist_ok=True)
+ source=ROOT/'tests/fixtures/performance-review-completion-v197/actions.ts.txt' if name=='src/app/performance-reviews/actions.ts' else ROOT/name
+ data=source.read_bytes()
+ if name=='src/app/performance-reviews/actions.ts':assert sha(data)=='8ffd4b5acd702cb0ccac1c7311b0a5990b460b3f4686002ccc28742a0de0f92c'
+ p.write_bytes(data)
 helper=root/'scripts/deploy-performance-review-completion.py';migration=root/'supabase/migrations/20261017103000_performance_review_completion_guards.sql'; predecessor=root/'supabase/migrations/20261016150000_performance_reviews_and_mail.sql'
 source=migration.read_text();spec=json.loads(re.search(r'\$performance_expected\$(.*?)\$performance_expected\$',source,re.S).group(1))['17']
 anchor_text=re.search(r'anchors jsonb; expected jsonb:=\'(.*?)\'::jsonb;',source,re.S).group(1).replace("''", "'")
@@ -85,9 +89,14 @@ def invoke(command,extra=()):
  finally:sys.argv=oldargv;os.chdir(oldcwd)
 try:
  results=[]
+ if mode=='closure-actions':
+  action=root/'src/app/performance-reviews/actions.ts';action.write_bytes(action.read_bytes()+b'\n')
+  denied=invoke('inspect');assert denied['exit']!=0 and 'Completion source dependency differs: src/app/performance-reviews/actions.ts' in denied['stderr'],denied
+  assert counts=={'projectReads':0,'metadataReads':0,'mutationDispatches':0}
+  print(json.dumps({'classification':'MODEL_CLI_INERT_MANAGEMENT_REAL_GIT','scenario':mode,'counts':counts,'results':trace}));sys.exit(0)
  if mode=='closure-assume':
   word=root/'src/lib/performance-review-word.mjs';fixture_git('update-index','--assume-unchanged','src/lib/performance-review-word.mjs');word.write_bytes(word.read_bytes()+b'\n')
-  denied=invoke('inspect');assert denied['exit']!=0,denied;assert counts=={'projectReads':0,'metadataReads':0,'mutationDispatches':0}
+  denied=invoke('inspect');assert denied['exit']!=0 and 'Completion source dependency differs: src/lib/performance-review-word.mjs' in denied['stderr'],denied;assert counts=={'projectReads':0,'metadataReads':0,'mutationDispatches':0}
   print(json.dumps({'classification':'MODEL_CLI_INERT_MANAGEMENT_REAL_GIT','scenario':mode,'counts':counts,'results':trace}));sys.exit(0)
  if mode=='readback-journal':
   captured=invoke('snapshot',[str(private/'before.json')]);assert captured['exit']==0,captured

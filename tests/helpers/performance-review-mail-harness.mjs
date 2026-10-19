@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
 const sourcePaths = [
   'src/lib/performance-review-mail.ts',
+  'src/lib/performance-review-notifications.ts',
   'src/lib/performance-review-mail-policy.ts',
   'src/app/api/performance-reviews/mail/route.ts',
   'src/lib/performance-review-rules.ts',

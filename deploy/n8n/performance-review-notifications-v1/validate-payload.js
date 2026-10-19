@@ -9,8 +9,8 @@ const p = descriptor.value;
 if (!closed(p, ['version','event','eventKey','reviewId','reviewCode','cycle','dueDate','recipient','employeeName','managerName','claimToken'])) return reject();
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 const control = /[\u0000-\u001f\u007f\ufffe\uffff]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
-const name = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 240
-  && Array.from(value).length <= 120 && !control.test(value);
+const name = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 8000
+  && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffe\uffff]/.test(value);
 const date = value => {
   if (typeof value !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)) return false;
   const parsed = new Date(value + 'T00:00:00.000Z');

@@ -1,4 +1,5 @@
 import "server-only";
+import { dispatchPerformanceReviewNotifications } from "@/lib/performance-review-notifications";
 import { timingSafeEqual } from "node:crypto";
 import { dispatchPerformanceReviewMailOutbox, performanceReviewMailReadiness, performanceMailUuid } from "@/lib/performance-review-mail";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -33,13 +34,13 @@ export async function GET(request: Request) {
   if (!secret || !authenticates(request.headers.get("authorization"), `Bearer ${secret}`)) return reply({ ok: false, code: "unauthorized" }, 401);
   let url: URL;
   try { url = routeUrl(request); } catch { return reply({ ok: false, code: "invalid_request" }, 400); }
-  if (url.search && url.search !== "?readiness=1") return reply({ ok: false, code: "invalid_request" }, 400);
+  if (url.search && url.search !== "?readiness=1" && url.search !== "?notifications=1") return reply({ ok: false, code: "invalid_request" }, 400);
   try {
     if (url.search === "?readiness=1") {
       const result = await performanceReviewMailReadiness(expiresAt);
       return reply({ ok: result.ready, ...result }, result.ready ? 200 : 503);
     }
-    const result = await dispatchPerformanceReviewMailOutbox(null, expiresAt);
+    const result = url.search === "?notifications=1" ? await dispatchPerformanceReviewNotifications(null, expiresAt) : await dispatchPerformanceReviewMailOutbox(null, expiresAt);
     return reply(result, result.ok ? 200 : 503);
   } catch { return reply({ ok: false, code: "unavailable" }, 503); }
 }
