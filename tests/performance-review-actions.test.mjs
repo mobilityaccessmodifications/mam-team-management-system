@@ -4,11 +4,12 @@ import { existsSync } from 'node:fs';
 import { loadModule } from './helpers/contact-lifetime-harness.mjs';
 import { productionActionHarness } from './performance-review-production-ui-fixture.mjs';
 import {actorId,personId,managerId,reviewId,operationId,review,document,start,mutation} from './performance-review-backend-fixtures.mjs';
+const actorPerson = role => role === 'system_admin' ? null : ['manager', 'admin'].includes(role) ? managerId : personId;
 const {ROLE_CAPABILITY_FIELDS}=loadModule('src/lib/portal-role-capabilities.ts');
 function harness({data=null,error=null,throws=false,signedIn=true,role='employee',authThrows=false,status=200}={}) {
  assert.ok(existsSync('src/app/performance-reviews/actions.ts'),'Native performance Server Actions are missing');
  const calls=[];let authCalls=0;
- const actions=productionActionHarness({client:{auth:{getUser:async()=>{authCalls++;if(authThrows) throw Error('PRIVATE AUTH');return {data:{user:signedIn?{id:actorId}:null},error:null};}},rpc:async(name,args)=>{calls.push({name,args});if(name==='get_portal_role_capabilities')return {data:[{app_role:role,person_id:role==='manager'?managerId:personId,account_status:'active',...Object.fromEntries(ROLE_CAPABILITY_FIELDS.map(k=>[k,false]))}],error:null};if(throws)throw Error('PRIVATE PROVIDER');return {data,error,status};}}}).actions;
+ const actions=productionActionHarness({client:{auth:{getUser:async()=>{authCalls++;if(authThrows) throw Error('PRIVATE AUTH');return {data:{user:signedIn?{id:actorId}:null},error:null};}},rpc:async(name,args)=>{calls.push({name,args});if(name==='get_portal_role_capabilities')return {data:[{app_role:role,person_id:actorPerson(role),account_status:'active',...Object.fromEntries(ROLE_CAPABILITY_FIELDS.map(k=>[k,false]))}],error:null};if(throws)throw Error('PRIVATE PROVIDER');return {data,error,status};}}}).actions;
  return {actions,calls,authCalls:()=>authCalls,business:()=>calls.filter(c=>c.name!=='get_portal_role_capabilities')};
 }
 test('all five actions reject a nontrue enable flag before every auth or RPC',async()=>{
@@ -22,7 +23,7 @@ test('all five actions reject a nontrue enable flag before every auth or RPC',as
 test('workspace uses native actor and accepts only exact role-specific projections',async()=>{
  process.env.MAM_PERFORMANCE_REVIEW_ENABLED='true';
  for(const [role,audience] of [['employee','employee'],['account','employee'],['manager','manager'],['admin','admin'],['system_admin','admin']]) {
-  const data={viewerContext:{actorUserId:actorId,personId:role==='manager'?managerId:personId,role,displayName:'Synthetic viewer'},reviews:[review(audience)],startablePeople:role==='manager'?[review().employee]:[]};
+  const data={viewerContext:{actorUserId:actorId,personId:actorPerson(role),role,displayName:'Synthetic viewer'},reviews:[review(audience)],startablePeople:role==='manager'?[review().employee]:[]};
   const h=harness({data,role});assert.deepEqual(await h.actions.loadPerformanceReviews(),{ok:true,data});assert.equal(h.authCalls(),1);assert.deepEqual(h.calls.map(c=>c.name),['get_portal_role_capabilities','performance_review_workspace']);
  }
  for(const transform of [v=>({...v,private:'x'}),v=>({...v,reviews:[{...review(),managerNote:'LEAK'}]}),v=>({...v,reviews:[{...review(),selfAnswers:[]}]}),v=>({...v,reviews:[{...review(),capabilities:{saveSelf:true}}]}),v=>({...v,viewerContext:{...v.viewerContext,actorUserId:operationId}})]) {
@@ -86,4 +87,27 @@ test('a 500 response cannot be promoted to success even with a well-shaped paylo
  const loaded=harness({status:500,data:{viewerContext:{actorUserId:actorId,personId,role:'employee',displayName:'Synthetic'},reviews:[review()],startablePeople:[]}});assert.equal((await loaded.actions.loadPerformanceReviews()).code,'unavailable');
  const reconciled=harness({status:500,data:{status:'not_found',review:null}});assert.equal((await reconciled.actions.reconcilePerformanceReviewOperation({operationId,reviewId})).code,'unavailable');
  const doc=harness({status:500,data:document()});assert.equal((await doc.actions.getPerformanceReviewDocument(reviewId)).code,'unavailable');
+});
+
+test('native Admin and standalone P0 start and perform reviewer commands with admin receipts',async()=>{
+ process.env.MAM_PERFORMANCE_REVIEW_ENABLED='true';
+ for(const role of ['admin','system_admin']) {
+  const row=review('admin'); row.manager={id:actorId,name:'Synthetic Admin'};
+  const data={committed:true,operationId,review:row,existing:false};
+  const started=harness({role,data});assert.deepEqual(await started.actions.startPerformanceReview(start()),{ok:true,...data});assert.equal(started.business().length,1);
+  const input={...mutation(),expectedRevision:'read:0:0',command:'save_manager',input:{answers:Array(12).fill(''),ratings:Array(12).fill(''),summary:'',overallRating:'',managerNote:''}};
+  const receipt={committed:true,operationId,review:row};
+  const changed=harness({role,data:receipt});assert.deepEqual(await changed.actions.mutatePerformanceReview(input),{ok:true,...receipt});assert.equal(changed.business().length,1);
+  const wrong=harness({role,data:{...receipt,review:review('manager')}});assert.equal((await wrong.actions.mutatePerformanceReview(input)).code,'uncertain');
+  const reconciled=harness({role,data:{status:'committed',review:row}});assert.equal((await reconciled.actions.reconcilePerformanceReviewOperation({operationId,reviewId})).ok,true);
+ }
+ const wrongPrefix=harness({role:'manager'});assert.equal((await wrongPrefix.actions.mutatePerformanceReview({...mutation(),expectedRevision:'read:0:0',command:'save_manager',input:{answers:Array(12).fill(''),ratings:Array(12).fill(''),summary:'',overallRating:'',managerNote:''}})).code,'forbidden');assert.equal(wrongPrefix.business().length,0);
+ const p0Self=harness({role:'system_admin'});assert.equal((await p0Self.actions.mutatePerformanceReview(mutation())).code,'forbidden');assert.equal(p0Self.business().length,0);
+});
+test('linked Admin edits only their own employee-shaped self assessment and cannot start themselves',async()=>{
+ process.env.MAM_PERFORMANCE_REVIEW_ENABLED='true';
+ const row=review();row.employee.id=managerId;
+ const h=harness({role:'admin',data:{committed:true,operationId,review:row}});assert.equal((await h.actions.mutatePerformanceReview(mutation())).ok,true);
+ const wrong=harness({role:'admin',data:{committed:true,operationId,review:review()}});assert.equal((await wrong.actions.mutatePerformanceReview(mutation())).code,'uncertain');
+ const own=harness({role:'admin'});assert.equal((await own.actions.startPerformanceReview({...start(),employeePersonId:managerId})).code,'forbidden');assert.equal(own.business().length,0);
 });

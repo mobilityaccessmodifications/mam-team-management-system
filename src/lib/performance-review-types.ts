@@ -37,15 +37,7 @@ export type PerformanceManagerCapabilities = {
   downloadDocument: boolean;
 };
 
-export type PerformanceHrCapabilities = {
-  saveSelf: false;
-  submitSelf: false;
-  saveManager: false;
-  completeManager: false;
-  saveMeeting: false;
-  submitReview: false;
-  downloadDocument: boolean;
-};
+export type PerformanceHrCapabilities = PerformanceManagerCapabilities;
 
 export type PerformanceSelfFields = {
   id: string;

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mount } from './performance-review-harness.mjs';
 import { workspace, review, failure, deferred, ids } from './performance-review-fixtures.mjs';
 
+const refresh = h => { const button = h.all.find(node => node.type === 'button' && node.props.children === 'Reload'); return button ? button.props.onClick() : h.auth('TOKEN_REFRESHED', ids.actor); };
 const writes = h => h.calls.filter(call => call.name === 'mutatePerformanceReview');
 const settings = audience => audience === 'employee'
   ? { field: 'self-0', save: 'Save self draft', command: 'save_self', token: 'self:1' }
@@ -35,7 +36,7 @@ for (const audience of ['employee', 'manager']) test(`AM-04 ${audience} conflict
     assert.ok(h.text.includes('Synthetic conflict.'));
     const first = writes(h)[0].args[0];
     h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace(audience, 'MAM', { reviews: [fresh] }) });
-    h.click('Reload'); await h.settle();
+    refresh(h); await h.settle();
     assert.equal(h.field(config.field).props.value, 'Local synthetic conflict draft');
     assert.equal(writes(h).length, 1, 'Reload must not replay a write');
     if (audience === 'manager') {
@@ -72,14 +73,14 @@ for (const audience of ['employee', 'manager']) test(`AM-04 ${audience} terminal
       } else fresh.capabilities = { ...fresh.capabilities, ...(audience === 'employee'
         ? { saveSelf: false, submitSelf: false } : { saveManager: false, completeManager: false, saveMeeting: false, submitReview: false }) };
       h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace(audience, 'MAM', { reviews: [fresh] }) });
-      h.click('Reload'); await h.settle();
+      refresh(h); await h.settle();
       assert.equal(h.field(config.field).props.value, 'Retained read-only conflict draft');
       assert.equal(h.field(config.field).props.disabled, true);
       retired(); h.click(config.save); h.submit(audience === 'employee' ? 'Self assessment' : 'Manager assessment');
       if (audience === 'manager') { h.click('Save meeting'); h.submit('Review meeting'); }
       await h.settle(); assert.equal(writes(h).length, 1);
       h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace(audience, 'MAM', { reviews: [updated(audience)] }) });
-      h.click('Reload'); await h.settle(); h.click(config.save); await h.settle();
+      refresh(h); await h.settle(); h.click(config.save); await h.settle();
       assert.equal(writes(h)[1].args[0].expectedRevision, audience === 'employee' ? 'self:0' : 'manager:0:0', 'Noneditable read must not refresh the conflict token');
     } finally { h.unmount(); }
   }
@@ -90,9 +91,9 @@ for (const audience of ['employee', 'manager']) test(`AM-04 ${audience} only the
   const h = mount(workspace(audience), { mutatePerformanceReview: async () => failure('conflict') });
   try {
     await h.settle(); h.change(config.field, 'Draft before overlapping reloads'); h.click(config.save); await h.settle();
-    h.ports.loadPerformanceReviews = () => first.promise; h.click('Reload'); h.render();
+    h.ports.loadPerformanceReviews = () => first.promise; refresh(h); h.render();
     const obsolete = h.button('Reload').props.onClick;
-    h.ports.loadPerformanceReviews = () => second.promise; h.click('Reload'); h.render();
+    h.ports.loadPerformanceReviews = () => second.promise; refresh(h); h.render();
     h.change(config.field, 'Newest draft edited during reload');
     const fresh = { ...updated(audience), ...(audience === 'employee' ? { selfRevision: 'self:2' } : { managerRevision: 'manager:0:2' }) };
     second.resolve({ ok: true, data: workspace(audience, 'MAM', { reviews: [fresh] }) }); await h.settle();
@@ -113,7 +114,7 @@ for (const audience of ['employee', 'manager']) test(`AM-04 ${audience} ordinary
       await h.settle(); h.change(config.field, 'Ordinary local draft');
       if (code) { h.click(config.save); await h.settle(); }
       h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace(audience, 'MAM', { reviews: [updated(audience)] }) });
-      h.click('Reload'); await h.settle(); h.click(config.save); await h.settle();
+      refresh(h); await h.settle(); h.click(config.save); await h.settle();
       assert.equal(writes(h).at(-1).args[0].expectedRevision, audience === 'employee' ? 'self:0' : 'manager:0:0');
       assert.equal(h.field(config.field).props.value, 'Ordinary local draft');
     } finally { h.unmount(); }
@@ -133,7 +134,7 @@ for (const audience of ['employee', 'manager']) test(`AM-04 ${audience} an unkno
       h.click(config.save); await h.settle();
       const pending = writes(h)[1].args[0];
       h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace(audience, 'MAM', { reviews: [updated(audience)] }) });
-      h.click('Reload'); await h.settle();
+      refresh(h); await h.settle();
       assert.equal(h.field(config.field).props.value, 'Unknown held conflict draft');
       assert.equal(h.button(config.save).props.disabled, true);
       h.click(config.save); h.submit(audience === 'employee' ? 'Self assessment' : 'Manager assessment'); await h.settle();
@@ -156,10 +157,10 @@ for (const audience of ['employee', 'manager']) test(`AM-04 ${audience} a failed
     try {
       await h.settle(); h.change(config.field, 'Draft retained through failed reload'); h.click(config.save); await h.settle();
       h.ports.loadPerformanceReviews = async () => { if (mode === 'throw') throw new Error('Synthetic offline'); return failure('unavailable'); };
-      h.click('Reload'); await h.settle(); assert.equal(writes(h).length, 1);
+      refresh(h); await h.settle(); assert.equal(writes(h).length, 1);
       assert.equal(h.field(config.field).props.value, 'Draft retained through failed reload');
       h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace(audience, 'MAM', { reviews: [updated(audience)] }) });
-      h.click('Reload'); await h.settle(); h.click(config.save); await h.settle();
+      refresh(h); await h.settle(); h.click(config.save); await h.settle();
       assert.equal(writes(h)[1].args[0].expectedRevision, config.token);
     } finally { h.unmount(); }
   }
@@ -171,7 +172,7 @@ for (const audience of ['employee', 'manager']) test(`AM-04 ${audience} unchange
     await h.settle(); const original = h.field(config.field).props.value;
     h.click(config.save); await h.settle();
     h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace(audience, 'MAM', { reviews: [updated(audience)] }) });
-    h.click('Reload'); await h.settle();
+    refresh(h); await h.settle();
     assert.equal(h.field(config.field).props.value, original);
     h.click(config.save); await h.settle(); assert.equal(writes(h)[1].args[0].expectedRevision, config.token);
     assert.deepEqual(writes(h)[1].args[0].input, writes(h)[0].args[0].input);
@@ -190,7 +191,7 @@ for (const scope of ['role', 'person', 'actor', 'audience', 'missing-review']) t
     if (scope === 'audience') data.reviews = [review('employee', 'MAM', { employee: { ...review().employee, id: ids.manager } })];
     if (scope === 'missing-review') data.reviews = [];
     h.ports.loadPerformanceReviews = async () => ({ ok: true, data });
-    h.click('Reload'); await h.settle();
+    refresh(h); await h.settle();
     assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-RETIRED-CONFLICT'));
     retired(); await h.settle(); assert.equal(writes(h).length, 1);
     if (scope === 'role') assert.equal(h.field('managerNote').props.disabled, true);
@@ -198,17 +199,17 @@ for (const scope of ['role', 'person', 'actor', 'audience', 'missing-review']) t
 });
 
 test('AM-04 conflict recovery is retired by review selection A to B to A', async () => {
-  const a = review('manager'), b = review('manager', 'MAM', { id: ids.other, code: 'PR-2026-0002' });
+  const a = review('manager'), b = review('manager', 'MAM', { id: ids.other, code: 'PR-2026-0002', employee: { ...a.employee, id: '22000000-0000-4000-8000-000000000099', name: 'Synthetic B colleague' } });
   const h = mount(workspace('manager', 'MAM', { reviews: [a, b] }), { mutatePerformanceReview: async () => failure('conflict') });
   try {
     await h.settle(); h.change('managerNote', 'PRIVATE-OLD-A-CONFLICT'); h.click('Save manager draft'); await h.settle();
-    const pending = deferred(); h.ports.loadPerformanceReviews = () => pending.promise; h.click('Reload'); h.render();
-    for (const row of [b, a]) { h.click(`${row.code} — ${row.employee.name} — ${row.cycle}`); h.render(); }
+    const pending = deferred(); h.ports.loadPerformanceReviews = () => pending.promise; refresh(h); h.render();
+    for (const row of [b, a]) { h.click(`${row.employee.name} — ${row.employee.company}`); h.render(); }
     h.change('managerNote', 'PRIVATE-NEW-A-DRAFT');
     pending.resolve({ ok: true, data: workspace('manager', 'MAM', { reviews: [updated('manager'), b] }) }); await h.settle();
     assert.equal(h.field('managerNote').props.value, 'PRIVATE-NEW-A-DRAFT');
     h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('manager', 'MAM', { reviews: [updated('manager'), b] }) });
-    h.click('Reload'); await h.settle(); h.click('Save manager draft'); await h.settle();
+    refresh(h); await h.settle(); h.click('Save manager draft'); await h.settle();
     assert.equal(writes(h)[1].args[0].expectedRevision, 'manager:0:0');
     assert.equal(writes(h)[1].args[0].input.managerNote, 'PRIVATE-NEW-A-DRAFT');
   } finally { h.unmount(); }
@@ -222,7 +223,7 @@ test('AM-04 same-actor token refresh never automatically rebases but retains exp
     h.auth('TOKEN_REFRESHED', ids.actor); await h.settle();
     assert.equal(writes(h).length, 1); assert.equal(h.field('self-0').props.value, 'Draft across token refresh');
     h.click('Save self draft'); await h.settle(); assert.equal(writes(h)[1].args[0].expectedRevision, 'self:0');
-    h.click('Reload'); await h.settle(); h.click('Save self draft'); await h.settle();
+    refresh(h); await h.settle(); h.click('Save self draft'); await h.settle();
     assert.equal(writes(h)[2].args[0].expectedRevision, 'self:1');
   } finally { h.unmount(); }
 });
@@ -231,7 +232,7 @@ test('AM-04 logout and actor A to B to A retire conflict reloads and all private
   const h = mount(workspace('manager'), { mutatePerformanceReview: async () => failure('conflict') });
   try {
     await h.settle(); h.change('managerNote', 'PRIVATE-OLD-SESSION-CONFLICT'); h.click('Save manager draft'); await h.settle();
-    const pending = deferred(); h.ports.loadPerformanceReviews = () => pending.promise; h.click('Reload'); h.render();
+    const pending = deferred(); h.ports.loadPerformanceReviews = () => pending.promise; refresh(h); h.render();
     const retired = h.button('Save manager draft').props.onClick;
     h.auth('SIGNED_OUT'); assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-'));
     const actorB = '11000000-0000-4000-8000-000000000099';
@@ -241,7 +242,7 @@ test('AM-04 logout and actor A to B to A retire conflict reloads and all private
     h.auth('SIGNED_IN', ids.actor); await h.settle(); h.change('managerNote', 'New synthetic session draft');
     pending.resolve({ ok: true, data: workspace('manager', 'MAM', { reviews: [updated('manager')] }) }); await h.settle();
     retired(); await h.settle(); assert.equal(writes(h).length, 1);
-    h.click('Reload'); await h.settle(); h.click('Save manager draft'); await h.settle();
+    refresh(h); await h.settle(); h.click('Save manager draft'); await h.settle();
     assert.equal(writes(h)[1].args[0].expectedRevision, 'manager:0:0');
     assert.equal(writes(h)[1].args[0].input.managerNote, 'New synthetic session draft');
   } finally { h.unmount(); }
@@ -275,7 +276,7 @@ for (const command of ['submit_self', 'complete_manager', 'submit_review']) test
     h.submit(form); await h.settle();
     assert.equal(writes(h).length, 1); assert.ok(h.text.includes('Synthetic conflict.'));
     h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace(audience, 'MAM', { reviews: [fresh] }) });
-    h.click('Reload'); await h.settle(); assert.equal(writes(h).length, 1);
+    refresh(h); await h.settle(); assert.equal(writes(h).length, 1);
     h.submit(form); await h.settle();
     assert.equal(writes(h).length, 2); assert.equal(writes(h)[1].args[0].command, command);
     assert.equal(writes(h)[1].args[0].expectedRevision, settings(audience).token);
@@ -295,7 +296,7 @@ test('AM-04 manager meeting conflict keeps assessment draft and held confirmatio
     h.change('meeting-time', '10:00'); h.change('meeting-notes', 'Meeting conflict draft'); h.change('held', true);
     h.click('Save meeting'); await h.settle();
     h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('manager', 'MAM', { reviews: [updated('manager')] }) });
-    h.click('Reload'); await h.settle();
+    refresh(h); await h.settle();
     assert.equal(h.field('managerNote').props.value, 'PRIVATE-UNSAVED-ASSESSMENT');
     assert.equal(h.field('held').props.checked, true);
     h.click('Save meeting'); await h.settle();

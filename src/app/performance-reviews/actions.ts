@@ -20,8 +20,8 @@ function rpcFailure(error: { code?: string }, mutation: boolean, status?: number
   return failure(mutation ? "uncertain" : "unavailable");
 }
 function reviewScope(review: { audience: string; employee: { id: string }; manager: { id: string } }, role: string, personId: string | null): boolean {
-  if (role === "admin" || role === "system_admin") return review.audience === "admin";
   if (review.employee.id === personId) return review.audience === "employee";
+  if (role === "admin" || role === "system_admin") return review.audience === "admin";
   return role === "manager" && review.audience === "manager" && review.manager.id === personId;
 }
 function schedulePerformanceReviewMail(reviewId: string): void {
@@ -56,7 +56,7 @@ export async function startPerformanceReview(input: PerformanceStartInput, previ
   let dispatched = false;
   try {
     const { supabase, capabilities } = previewPersonId === undefined ? await requirePerformanceReviewActor() : await requirePerformanceReviewManagerDelegate(previewPersonId);
-    if (capabilities.app_role !== "manager") return failure("forbidden");
+    if (!["manager", "admin", "system_admin"].includes(capabilities.app_role) || request.employeePersonId === capabilities.person_id) return failure("forbidden");
     dispatched = true;
     const args = { p_operation_id: request.operationId, p_employee_person_id: request.employeePersonId, p_cycle: request.cycle, p_due_date: request.dueDate };
     const { data, error, status } = previewPersonId === undefined
@@ -66,7 +66,7 @@ export async function startPerformanceReview(input: PerformanceStartInput, previ
     if (error) return rpcFailure(error, true, status);
     const receipt = closed(data, ["committed", "operationId", "review", "existing"]);
     const review = parseReview(receipt.review);
-    if (receipt.committed !== true || receipt.operationId !== request.operationId || typeof receipt.existing !== "boolean" || review.audience !== "manager" || review.manager.id !== capabilities.person_id || review.employee.id !== request.employeePersonId || review.cycle !== request.cycle || (!receipt.existing && review.dueDate !== request.dueDate)) return failure("uncertain");
+    if (receipt.committed !== true || receipt.operationId !== request.operationId || typeof receipt.existing !== "boolean" || !reviewScope(review, capabilities.app_role, capabilities.person_id) || review.employee.id !== request.employeePersonId || review.cycle !== request.cycle || (!receipt.existing && review.dueDate !== request.dueDate)) return failure("uncertain");
     if (!receipt.existing) schedulePerformanceReviewNotification(review.id);
     return { ok: true, committed: true, operationId: request.operationId, review, existing: receipt.existing };
   } catch (error) { return failure(!dispatched && error instanceof PerformanceReviewAccessError ? error.code : dispatched ? "uncertain" : "unavailable"); }
@@ -79,8 +79,8 @@ export async function mutatePerformanceReview(input: PerformanceMutationInput, p
   try {
     const { supabase, capabilities } = previewPersonId === undefined ? await requirePerformanceReviewActor() : await requirePerformanceReviewManagerDelegate(previewPersonId);
     if (previewPersonId !== undefined && (request.command === "save_self" || request.command === "submit_self")) return failure("forbidden");
-    if (["admin", "system_admin"].includes(capabilities.app_role)) return failure("forbidden");
-    if (request.command !== "save_self" && request.command !== "submit_self" && capabilities.app_role !== "manager") return failure("forbidden");
+    const self = request.command === "save_self" || request.command === "submit_self";
+    if (self ? capabilities.person_id === null : !["manager", "admin", "system_admin"].includes(capabilities.app_role) || !request.expectedRevision.startsWith(capabilities.app_role === "manager" ? "manager:" : "read:")) return failure("forbidden");
     dispatched = true;
     const args = { p_operation_id: request.operationId, p_review_id: request.reviewId, p_expected_revision: request.expectedRevision, p_command: request.command, p_input: request.input };
     const { data, error, status } = previewPersonId === undefined
@@ -90,8 +90,7 @@ export async function mutatePerformanceReview(input: PerformanceMutationInput, p
     if (error) return rpcFailure(error, true, status);
     const receipt = closed(data, ["committed", "operationId", "review"]);
     const review = parseReview(receipt.review);
-    const self = request.command === "save_self" || request.command === "submit_self";
-    if (receipt.committed !== true || receipt.operationId !== request.operationId || review.id !== request.reviewId || (self ? review.audience !== "employee" || review.employee.id !== capabilities.person_id : review.audience !== "manager" || review.manager.id !== capabilities.person_id)) return failure("uncertain");
+    if (receipt.committed !== true || receipt.operationId !== request.operationId || review.id !== request.reviewId || (self ? review.audience !== "employee" || review.employee.id !== capabilities.person_id : !reviewScope(review, capabilities.app_role, capabilities.person_id) || review.audience === "employee")) return failure("uncertain");
     if (request.command === "submit_self") schedulePerformanceReviewNotification(review.id);
     if (request.command === "submit_review") schedulePerformanceReviewMail(review.id);
     return { ok: true, committed: true, operationId: request.operationId, review };

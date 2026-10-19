@@ -33,7 +33,7 @@ function harness({ actorRole = 'system_admin', targetRole = 'manager', targetId 
 
 test('P0 target reads use real actor and route Manager delegation separately from read-only roles', async () => enabled(async () => {
   for (const targetRole of ['employee', 'account', 'manager', 'admin', 'system_admin']) {
-    const targetId = targetRole === 'manager' ? managerId : personId;
+    const targetId = ['manager', 'admin', 'system_admin'].includes(targetRole) ? managerId : personId;
     const h = harness({ targetRole, targetId });
     assert.deepEqual(await h.actions.loadPerformanceReviews(targetId), { ok: true, data: h.data });
     assert.deepEqual(h.calls.map(c => c.name), ['get_portal_role_capabilities', 'get_portal_role_capabilities', targetRole === 'manager' ? 'performance_review_workspace_for_delegate' : 'performance_review_workspace_for_preview']);
@@ -88,7 +88,7 @@ test('preview parser rejects P0 fallback, another target, leaked fields and unau
 }));
 
 test('preview Word reads use target-bound RPC and preserve employee field isolation', async () => enabled(async () => {
-  for (const [targetRole, audience, targetId] of [['employee', 'employee', personId], ['account', 'employee', personId], ['manager', 'manager', managerId], ['admin', 'admin', personId]]) {
+  for (const [targetRole, audience, targetId] of [['employee', 'employee', personId], ['account', 'employee', personId], ['manager', 'manager', managerId], ['admin', 'admin', managerId]]) {
     const doc = document(audience);
     const h = harness({ targetRole, targetId, response: doc });
     assert.deepEqual(await h.actions.getPerformanceReviewDocument(reviewId, targetId), { ok: true, document: doc });
