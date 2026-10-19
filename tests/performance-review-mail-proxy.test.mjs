@@ -40,7 +40,7 @@ test('AM-01 exact endpoint still rejects missing wrong and swapped secrets befor
 });
 
 test('AM-01 ordinary pages and non-exact mail siblings remain behind browser authentication', async () => {
-  for (const configured of [true, false]) for (const pathname of ['/', '/performance-reviews', '/api/performance-reviews/mail/', '/api/performance-reviews/mail/extra', '/api/performance-reviews/mail-other', '/api/performance-reviews']) {
+  for (const configured of [true, false]) for (const pathname of ['/', '/performance-reviews', '/api/performance-reviews/mail/', '/api/performance-reviews/mail/extra', '/api/performance-reviews/mail-other', '/api/performance-reviews', '/api/performance-reviews/master-sync', '/api/performance-reviews/master-sync/extra']) {
     const p = loadMailProxyHarness({ configured });
     const response = await p.proxy(new NextRequest(app + pathname));
     assert.equal(response.status, 307);
