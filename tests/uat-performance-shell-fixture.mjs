@@ -48,7 +48,8 @@ export function shell({ role = 'employee', enabled = true, actor = capabilities(
     useId: () => take(() => ({ id: 'shell-hook-' + ++sequence })).id,
   };
   function PerformanceSpy(spyProps) {
-    assert.deepEqual(Object.keys(spyProps), [], 'the native review workspace takes no identity/role/preview props');
+    assert.deepEqual(Object.keys(spyProps), ['previewPersonId']);
+    assert.ok(spyProps.previewPersonId === undefined || [personId, secondId].includes(spyProps.previewPersonId));
     const lifetime = current.path;
     react.useEffect(() => { mounts.push(lifetime); return () => unmounts.push(lifetime); }, []);
     return React.createElement('performance-spy');

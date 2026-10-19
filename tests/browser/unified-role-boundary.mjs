@@ -1,5 +1,15 @@
-import { syntheticRolePeople, syntheticRoleOrgRows, syntheticRoleDirectoryRecord, syntheticRoleSubscription } from './unified-role-data.mjs';
+import { syntheticRolePeople as baseRolePeople, syntheticRoleOrgRows as baseRoleOrgRows, syntheticRoleDirectoryRecord, syntheticRoleSubscription, syntheticPerformanceManager } from './unified-role-data.mjs';
 import { completedFixtureToday, leaveCompletedRequests } from './leave-completed-data.mjs';
+import { review as performanceReview, identity as performanceIdentity, documentFor } from '../performance-review-fixtures.mjs';
+
+const performancePreviewMode = new URLSearchParams(location.search).has('performance-preview');
+export const performanceReviewEnabled = performancePreviewMode;
+const syntheticRolePeople = performancePreviewMode ? [...baseRolePeople, syntheticPerformanceManager] : baseRolePeople;
+const syntheticRoleOrgRows = performancePreviewMode ? [...baseRoleOrgRows, {
+  id: syntheticPerformanceManager.id, node_kind: 'person', company_key: 'mam', full_name: syntheticPerformanceManager.name,
+  position_title: 'Coordinator', parent_id: null, sort_order: 4, is_active: true, updated_at: '2026-10-01T00:00:00Z', version: 1,
+}] : baseRoleOrgRows;
+export const actorAuthId = '11000000-0000-4000-8000-000000000001';
 
 const completedMode = new URLSearchParams(location.search).has('leave-completed');
 const inlineRequestMode = new URLSearchParams(location.search).get('subscription-inline');
@@ -21,7 +31,7 @@ const scheduleTasks = combinedTasks && new URLSearchParams(location.search).has(
 const subscriptionReviewsFail = new URLSearchParams(location.search).has('subscription-review-error');
 const requestedActorRole = new URLSearchParams(location.search).get('actor-role');
 const reviewOwnerId = syntheticRolePeople[3].id;
-export const actorPersonId = ordinaryReviewEmployee || ['employee','manager','account','admin'].includes(requestedActorRole) ? reviewOwnerId : undefined;
+export const actorPersonId = performancePreviewMode && requestedActorRole === 'manager' ? baseRolePeople[2].id : ordinaryReviewEmployee || ['employee','manager','account','admin'].includes(requestedActorRole) ? reviewOwnerId : undefined;
 let checkInRows = combinedTasks ? [
   { person_id: reviewOwnerId, full_name: 'Synthetic Check-in Employee', position_title: 'Coordinator', company_key: 'mam', reminders: [
     { id: '66000000-0000-4000-8000-000000000001', milestone: '1_month', sequence: 'initial', dueDate: '2000-01-01', status: 'delivered', needsReviewReason: null },
@@ -79,7 +89,7 @@ const outcomeFor = id => {
   return { ...result, capabilities: { ...result.capabilities, ...grantsById[id] } };
 };
 export const actorCapabilities = actorPersonId ? outcomeFor(actorPersonId).capabilities : UNIFIED_ROLE_FIXTURE_RESULTS.actor.capabilities;
-const failures = new Map(), held = new Set(), pending = new Map(), responses = [];
+const failures = new Map(), held = new Set(), pending = new Map(), responses = [], performanceLabels = new Map();
 window.unifiedRoleFixture = {
   calls, unexpected, responses,
   leaveSnapshot(id) { const workspace = leaveWorkspace(id); return { today: completedFixtureToday, requests: workspace.requests, calendarEntries: workspace.calendarEntries }; },
@@ -87,6 +97,7 @@ window.unifiedRoleFixture = {
     if (!Object.hasOwn(UNIFIED_ROLE_FIXTURE_RESULTS.roles[id], role)) throw new Error('Invalid synthetic role');
     roleById[id] = role;
   },
+  setPerformanceLabel(id, label) { performanceLabels.set(id, label); },
   setContact(id, sourceId) { UNIFIED_ROLE_FIXTURE_RESULTS.contacts[id] = { ...UNIFIED_ROLE_FIXTURE_RESULTS.contacts[sourceId], personId: id }; },
   holdNext(name, id) { held.add(`${name}:${id ?? ''}`); },
   pendingKeys: () => [...pending.keys()],
@@ -149,7 +160,45 @@ function leaveWorkspace(id = actorPersonId) {
   };
 }
 
+function performanceWorkspace(previewPersonId) {
+  const id = previewPersonId ?? actorPersonId;
+  const role = id ? roleById[id] : 'system_admin';
+  const label = performanceLabels.has(id) ? ` ${performanceLabels.get(id)}` : '';
+  const self = (personId, name, code) => performanceReview('employee', 'MAM', {
+    id: `33000000-0000-4000-8000-${code.slice(-4).padStart(12, '0')}`, code,
+    employee: { ...performanceIdentity('MAM', personId), name },
+    selfAnswers: Array.from({ length: 12 }, (_, index) => `${name} answer ${index + 1}${label}`),
+  });
+  const managed = (managerId, employeeId, name, code, audience = 'manager') => performanceReview(audience, 'MAM', {
+    id: `33000000-0000-4000-8000-${code.slice(-4).padStart(12, '0')}`, code,
+    employee: { ...performanceIdentity('MAM', employeeId), name }, manager: { id: managerId, name: personFor(managerId)?.name ?? 'Synthetic Reviewer' },
+    selfAnswers: Array.from({ length: 12 }, (_, index) => `${name} answer ${index + 1}${label}`),
+    managerAnswers: Array.from({ length: 12 }, (_, index) => `${name} feedback ${index + 1}`),
+    managerNote: `${name} private synthetic note${label}`, managerCompletedAt: '2026-10-01T02:00:00Z',
+    meeting: { date: '2026-10-20', time: '10:30', duration: 30, mode: 'in_person', location: 'Synthetic room', notes: 'Synthetic meeting' },
+  });
+  let reviews = [], startablePeople = [];
+  if (role === 'manager') {
+    const managerB = id === syntheticPerformanceManager.id;
+    reviews = [managed(id, managerB ? baseRolePeople[1].id : baseRolePeople[3].id, managerB ? 'Synthetic B report' : 'Synthetic A report', managerB ? 'PR-2026-0103' : 'PR-2026-0101'), self(id, personFor(id).name, managerB ? 'PR-2026-0104' : 'PR-2026-0102')];
+    startablePeople = [{ ...performanceIdentity('MAM', managerB ? baseRolePeople[0].id : baseRolePeople[1].id), name: managerB ? 'Synthetic B candidate' : 'Synthetic A candidate' }];
+  } else if (role === 'employee' || role === 'account') {
+    reviews = [self(id, personFor(id).name, role === 'employee' ? 'PR-2026-0201' : 'PR-2026-0202')];
+  } else {
+    reviews = [managed(baseRolePeople[2].id, baseRolePeople[3].id, role === 'admin' ? 'Synthetic HR scope' : 'Synthetic P0 scope', role === 'admin' ? 'PR-2026-0301' : 'PR-2026-0302', 'admin')];
+  }
+  return { viewerContext: { actorUserId: actorAuthId, personId: id ?? null, role, displayName: id ? personFor(id).name : 'Synthetic P0' }, reviews, startablePeople };
+}
+
 const handlers = {
+  '@/app/performance-reviews/actions': {
+    loadPerformanceReviews: id => ({ ok: true, data: performanceWorkspace(id) }),
+    getPerformanceReviewDocument: (reviewId, id) => {
+      const row = performanceWorkspace(id).reviews.find(row => row.id === reviewId);
+      if (!row) throw new Error('Synthetic performance document is outside this scope');
+      return { ok: true, document: documentFor(row) };
+    },
+  },
   '@/app/roles/actions': { getPortalRoleCapabilities: id => id ? outcomeFor(id) : actorPersonId ? outcomeFor(actorPersonId) : UNIFIED_ROLE_FIXTURE_RESULTS.actor },
   '@/app/profile/actions': { getCurrentEmployeeSelfProfile: () => UNIFIED_ROLE_FIXTURE_RESULTS.contacts[reviewOwnerId], getSelectedEmployeeProfile: id => UNIFIED_ROLE_FIXTURE_RESULTS.contacts[id], updateSelectedEmployeeProfile: input => ({ ...UNIFIED_ROLE_FIXTURE_RESULTS.contactMutations[input.personId], phone: input.phone, personalEmail: input.personalEmail, dateOfBirth: input.dateOfBirth }) },
   '@/app/people/actions': {
@@ -294,6 +343,11 @@ export async function invokeServerAction(module, name, args) {
 }
 
 const client = {
+  auth: { onAuthStateChange(callback) {
+    let active = true;
+    queueMicrotask(() => { if (active) callback('INITIAL_SESSION', { user: { id: actorAuthId } }); });
+    return { data: { subscription: { unsubscribe() { active = false; } } } };
+  } },
   from(table) {
     if (table !== 'internal_org_people') throw new Error(`Unexpected synthetic table ${table}`);
     const query = { select: () => query, order: () => query, then: done => Promise.resolve({ data: syntheticRoleOrgRows, error: null }).then(done) };

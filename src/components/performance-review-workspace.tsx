@@ -52,7 +52,8 @@ function managerInput(row: PerformanceReview): PerformanceManagerInput | null {
   return row.audience === "employee" ? null : { answers: [...row.managerAnswers], ratings: [...row.ratings], summary: row.summary, overallRating: row.overallRating, managerNote: row.managerNote };
 }
 
-export default function PerformanceReviewWorkspace() {
+export default function PerformanceReviewWorkspace({ previewPersonId }: { previewPersonId?: string } = {}) {
+  const readOnly = previewPersonId !== undefined;
   const [workspace, setWorkspace] = useState<PerformanceWorkspace | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<string[]>([]);
@@ -114,6 +115,7 @@ export default function PerformanceReviewWorkspace() {
     setMessage(result.message);
   }, [clearPrivate, unknown, track]);
   const applyLoaded = useCallback((input: PerformanceWorkspace, preferredId: string | null, recovery: ConflictScope | null = null) => {
+    if (previewPersonId !== undefined && input.viewerContext.personId !== previewPersonId) { clearPrivate("Reviews could not be loaded."); return; }
     if (nativeActor.current === null || (nativeActor.current !== undefined && nativeActor.current !== input.viewerContext.actorUserId)) { clearPrivate("Your session has changed."); return; }
     const data = ownedWorkspace(input), previous = viewer.current;
     const changed = previous !== null && (previous.actorUserId !== data.viewerContext.actorUserId || previous.role !== data.viewerContext.role || previous.personId !== data.viewerContext.personId);
@@ -135,7 +137,7 @@ export default function PerformanceReviewWorkspace() {
       return;
     }
     if (!dirty.current && !operationRef.current && !conflict.current) choose(row);
-  }, [clearPrivate, choose]);
+  }, [clearPrivate, choose, previewPersonId]);
   function accept(row: PerformanceReview, notice: string, channel: PerformanceMutationInput["command"] | null = null) {
     const keepAssessment = channel === "save_meeting" && dirtyParts.current.assessment;
     const keepMeeting = (channel === "save_manager" || channel === "complete_manager") && dirtyParts.current.meeting;
@@ -148,7 +150,7 @@ export default function PerformanceReviewWorkspace() {
   }
   async function reconcile() {
     const pending = operationRef.current;
-    if (epoch.current !== generation || busyRef.current || !workspace || pending?.phase !== "uncertain") return;
+    if (readOnly || epoch.current !== generation || busyRef.current || !workspace || pending?.phase !== "uncertain") return;
     const ticket = generation, owner = claimBusy();
     try {
       const result = await reconcilePerformanceReviewOperation({ operationId: pending.operationId, reviewId: pending.reviewId });
@@ -166,7 +168,7 @@ export default function PerformanceReviewWorkspace() {
     const ticket = generation;
     const owner = claimBusy();
     try {
-      const result = await getPerformanceReviewDocument(selected.id);
+      const result = previewPersonId === undefined ? await getPerformanceReviewDocument(selected.id) : await getPerformanceReviewDocument(selected.id, previewPersonId);
       if (epoch.current !== ticket) return;
       if (!result.ok) { handleFailure(result); return; }
       if (result.document.audience !== selected.audience || result.document.employee.id !== selected.employee.id || result.document.code !== selected.code || result.document.cycle !== selected.cycle) { setMessage("The document could not be downloaded."); return; }
@@ -179,7 +181,7 @@ export default function PerformanceReviewWorkspace() {
     finally { releaseBusy(owner); }
   }
   async function start() {
-    if (epoch.current !== generation || busyRef.current || operationRef.current || !creating || !workspace || workspace.viewerContext.role !== "manager") return;
+    if (readOnly || epoch.current !== generation || busyRef.current || operationRef.current || !creating || !workspace || workspace.viewerContext.role !== "manager") return;
     const ticket = generation;
     const parsed = new Date(startDraft.dueDate + "T00:00:00Z");
     if (!workspace.startablePeople.some(person => person.id === startDraft.employeePersonId) || !/^\d{4}$/.test(startDraft.cycle) || !/^\d{4}-\d{2}-\d{2}$/.test(startDraft.dueDate) || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== startDraft.dueDate) { setMessage("Select an eligible employee, four-digit cycle and valid due date."); return; }
@@ -202,7 +204,7 @@ export default function PerformanceReviewWorkspace() {
     const recovery = conflict.current;
     setLoading(true); setMessage("");
     try {
-      const result = await loadPerformanceReviews();
+      const result = await loadPerformanceReviews(previewPersonId);
       if (epoch.current !== ticket) return;
       if (!result.ok) { handleFailure(result); return; }
       applyLoaded(result.data, selectedId, recovery);
@@ -210,7 +212,7 @@ export default function PerformanceReviewWorkspace() {
     finally { if (epoch.current === ticket) setLoading(false); }
   }
   async function run(command: PerformanceMutationInput["command"]) {
-    if (epoch.current !== generation || busyRef.current || operationRef.current || !selected || !workspace) return;
+    if (readOnly || epoch.current !== generation || busyRef.current || operationRef.current || !selected || !workspace) return;
     const ticket = generation;
     let mutation: PerformanceMutationInput;
     const operationId = crypto.randomUUID();
@@ -265,7 +267,7 @@ export default function PerformanceReviewWorkspace() {
         void Promise.resolve().then(async () => {
           if (!active || epoch.current !== ticket) return;
           try {
-            const result = await loadPerformanceReviews();
+            const result = await loadPerformanceReviews(previewPersonId);
             if (!active || epoch.current !== ticket) return;
             if (!result.ok) { handleFailure(result); return; }
             applyLoaded(result.data, selection.current?.id ?? null);
@@ -279,7 +281,7 @@ export default function PerformanceReviewWorkspace() {
     void Promise.resolve().then(() => {
       if (!active || epoch.current !== ticket) return null;
       setLoading(true);
-      return loadPerformanceReviews();
+      return loadPerformanceReviews(previewPersonId);
     }).then(result => {
       if (!result || !active || epoch.current !== ticket) return;
       setGeneration(ticket);
@@ -290,8 +292,8 @@ export default function PerformanceReviewWorkspace() {
       active = false; retire(); unsubscribe(); busyOwner.current = null; busyRef.current = false; operationRef.current = null;
       for (const [url, timer] of downloads) { clearTimeout(timer); URL.revokeObjectURL(url); } downloads.clear();
     };
-  }, [advance, applyLoaded, clearPrivate, handleFailure, retire]);
-  const blocked = busy || operation !== null;
+  }, [advance, applyLoaded, clearPrivate, handleFailure, retire, previewPersonId]);
+  const blocked = readOnly || busy || operation !== null;
   const selfDisabled = blocked || selected?.audience !== "employee" || !selected.capabilities.saveSelf || Boolean(selected.selfSubmittedAt);
   const managerDisabled = blocked || selected?.audience !== "manager" || !selected.capabilities.saveManager || Boolean(selected.finalisedAt);
   const meetingDisabled = blocked || selected?.audience !== "manager" || !selected.capabilities.saveMeeting || Boolean(selected.finalisedAt);

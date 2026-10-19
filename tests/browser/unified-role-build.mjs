@@ -6,12 +6,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { actionFixture, capabilities, loadModule } from '../helpers/unified-role-harness.mjs';
-import { syntheticRolePeople } from './unified-role-data.mjs';
+import { syntheticRolePeople, syntheticPerformanceManager } from './unified-role-data.mjs';
 
 export async function buildUnifiedRoleFixture(sourceRoot, scratch) {
   const results = { roles: {}, contacts: {}, contactMutations: {} };
   const actionsFile = path.join(sourceRoot, 'src/app/roles/actions.ts');
-  for (const person of syntheticRolePeople) {
+  for (const person of [...syntheticRolePeople, syntheticPerformanceManager]) {
     results.roles[person.id] = {};
     for (const role of ['employee', 'manager', 'account', 'admin']) {
       results.roles[person.id][role] = await actionFixture({ target: capabilities(role, person.id) }).load(actionsFile).getPortalRoleCapabilities(person.id);

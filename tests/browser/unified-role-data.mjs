@@ -5,6 +5,8 @@ export const syntheticRolePeople = [
   { id: '11000000-0000-4000-8000-000000000005', role: 'employee', name: 'Synthetic Employee' },
 ].map(person => ({ ...person, title: 'Coordinator', company: 'mam' }));
 
+export const syntheticPerformanceManager = { id: '11000000-0000-4000-8000-000000000006', role: 'manager', name: 'Synthetic Manager B', title: 'Coordinator', company: 'mam' };
+
 export const syntheticRoleOrgRows = syntheticRolePeople.map((person, index) => ({
   id: person.id, node_kind: 'person', company_key: person.company, full_name: person.name,
   position_title: person.title, parent_id: person.role === 'employee' ? syntheticRolePeople[2].id : null,

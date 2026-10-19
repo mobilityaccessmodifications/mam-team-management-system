@@ -343,8 +343,8 @@ test('Change Profile shows task notes read-only and keeps subscription completio
   expect(await actionCalls(page, 'saveTaskNotes')).toEqual([]);
   expect(await actionCalls(page, 'completeMyEmployeeCheckInTask')).toEqual([]);
   expect(await actionCalls(page, 'completeMySubscriptionReviewTask')).toEqual([]);
+  await expect.poll(() => actionCalls(page, 'getTaskNotes')).toHaveLength(2);
   const noteReads = await actionCalls(page, 'getTaskNotes');
-  expect(noteReads).toHaveLength(2);
   expect(noteReads.every(call => call.args[1] === managerId)).toBe(true);
 });
 

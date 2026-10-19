@@ -21,6 +21,25 @@ do $$ declare obj record; signature text; role_name text; begin
     assert not has_function_privilege('anon',signature,'execute'), 'Anonymous service RPC: ' || signature;
     assert not has_function_privilege('authenticated',signature,'execute'), 'User-accessible service RPC: ' || signature;
   end loop;
+  foreach signature in array array[
+    'public.performance_review_workspace_for_preview(uuid)',
+    'public.get_performance_review_document_for_preview(uuid,uuid)'
+  ] loop
+    assert to_regprocedure(signature) is not null, 'Missing Performance preview RPC: '||signature;
+    assert has_function_privilege('authenticated',signature,'execute');
+    assert not has_function_privilege('anon',signature,'execute');
+    assert not has_function_privilege('service_role',signature,'execute');
+    assert (select prosecdef and provolatile='s' and proconfig=array['search_path=""'] from pg_proc where oid=signature::regprocedure);
+  end loop;
+  foreach signature in array array[
+    'private.performance_review_preview_actor(uuid)',
+    'private.performance_review_preview_audience(private.performance_reviews,uuid,text)',
+    'private.performance_review_preview_project(private.performance_reviews,uuid,text,uuid)'
+  ] loop
+    foreach role_name in array array['anon','authenticated','service_role'] loop
+      assert not has_function_privilege(role_name,signature,'execute'), 'Direct preview helper access: '||role_name;
+    end loop;
+  end loop;
   assert has_function_privilege('authenticated','public.patch_subscription_v1(uuid,bigint,jsonb)','execute');
   assert not has_function_privilege('anon','public.patch_subscription_v1(uuid,bigint,jsonb)','execute');
   assert to_regclass('private.portal_account_status_change_claims') is not null;
@@ -58,6 +77,14 @@ set local role authenticated;
 do $$ begin
   begin
     assert (select count(*)=0 from public.profiles), 'Unauthenticated JWT saw profiles';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform public.performance_review_workspace_for_preview(gen_random_uuid());
+    raise exception 'missing actor used Performance preview' using errcode='ZX001';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform public.get_performance_review_document_for_preview(gen_random_uuid(),gen_random_uuid());
+    raise exception 'missing actor downloaded Performance preview' using errcode='ZX001';
   exception when insufficient_privilege then null; end;
   begin
     perform public.patch_subscription_v1(gen_random_uuid(),1,'{"subscription_status":"paused"}');
