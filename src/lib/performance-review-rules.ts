@@ -106,7 +106,7 @@ function activity(value: unknown) {
   if (!Array.isArray(value)) invalid();
   for (const event of value) { const e = closed(event, ["kind", "at"]); text(e.kind); timestamp(e.at, false); }
 }
-export function parseReview(value: unknown): PerformanceReview {
+export function parseReview(value: unknown, readOnly = false): PerformanceReview {
   if (!value || typeof value !== "object") invalid();
   const audience = Object.getOwnPropertyDescriptor(value, "audience")?.value;
   if (!["employee", "manager", "admin"].includes(audience)) invalid();
@@ -117,8 +117,9 @@ export function parseReview(value: unknown): PerformanceReview {
   if (v.selfStatus !== (v.selfSubmittedAt === null ? "awaiting_employee" : "manager_review") || typeof v.selfRevision !== "string" || !/^self:(0|[1-9][0-9]*)$/.test(v.selfRevision)) invalid();
   const caps = closed(v.capabilities, audience === "employee" ? ["saveSelf", "submitSelf", "downloadDocument"] : MANAGER_CAPS);
   if (Object.values(caps).some(c => typeof c !== "boolean")) invalid();
+  if (readOnly && Object.entries(caps).some(([key, enabled]) => key !== "downloadDocument" && enabled !== false)) invalid();
   if (audience === "employee") {
-    if (caps.saveSelf !== (v.selfSubmittedAt === null) || caps.submitSelf !== caps.saveSelf) invalid();
+    if (!readOnly && (caps.saveSelf !== (v.selfSubmittedAt === null) || caps.submitSelf !== caps.saveSelf)) invalid();
   } else {
     strings(v.managerAnswers); const ratings = strings(v.ratings);
     if (ratings.some(r => r !== "" && !RATINGS.includes(r)) || (text(v.overallRating) !== "" && !RATINGS.includes(v.overallRating as string))) invalid();
@@ -132,7 +133,7 @@ export function parseReview(value: unknown): PerformanceReview {
   }
   return structuredClone(v) as PerformanceReview;
 }
-export function parseWorkspace(value: unknown, actorUserId: string, role: string, personId: string | null): PerformanceWorkspace {
+export function parseWorkspace(value: unknown, actorUserId: string, role: string, personId: string | null, readOnly = false): PerformanceWorkspace {
   const v = closed(value, ["viewerContext", "reviews", "startablePeople"]);
   const viewer = closed(v.viewerContext, ["actorUserId", "personId", "role", "displayName"]);
   if (viewer.actorUserId !== actorUserId || viewer.role !== role || viewer.personId !== personId) invalid();
@@ -140,7 +141,7 @@ export function parseWorkspace(value: unknown, actorUserId: string, role: string
   if (!Array.isArray(v.reviews) || !Array.isArray(v.startablePeople) || (role !== "manager" && v.startablePeople.length)) invalid();
   const ids = new Set();
   for (const raw of v.reviews) {
-    const review = parseReview(raw);
+    const review = parseReview(raw, readOnly);
     if (ids.has(review.id)) invalid(); ids.add(review.id);
     if (role === "admin" || role === "system_admin") { if (review.audience !== "admin") invalid(); }
     else if (review.employee.id === personId) { if (review.audience !== "employee") invalid(); }

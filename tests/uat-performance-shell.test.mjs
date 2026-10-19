@@ -70,7 +70,7 @@ test('the native review workspace stays lazy until its tab is opened and unmount
   } finally { ui.cleanup(); }
 });
 
-test('Change profile never mounts reviews even for an Admin target or the actors own linked person', async () => {
+test('Change profile mounts target-bound read-only reviews even for the actors own linked person', async () => {
   const ui = shell({ role: 'system_admin', actor: capabilities('system_admin', personId) });
   try {
     await ui.settle();
@@ -78,12 +78,14 @@ test('Change profile never mounts reviews even for an Admin target or the actors
     ui.preview(previewId);
     await ui.settle();
     ui.navigate('people');
-    const tree = await ui.settle();
+    await ui.settle();
     assert.equal(ui.people().isAccessPreview, true);
     assert.equal(ui.people().activeProfile.accessRole, 'admin');
-    assert.ok(!ui.tabs().options.some(option => option.value === 'performance'));
-    assert.equal(nodes(tree).filter(node => node.type === 'performance-spy').length, 0);
-    assert.equal(ui.mounts.length, 1);
+    assert.ok(ui.tabs().options.some(option => option.value === 'performance'));
+    assert.equal(ui.people().renderPerformanceReviews.props.previewPersonId, previewId);
+    ui.selectTab('performance');
+    assert.equal(nodes(ui.render()).filter(node => node.type === 'performance-spy').length, 1);
+    assert.equal(ui.mounts.length, 2);
     assert.equal(ui.unmounts.length, 1);
     assert.ok(ui.people().renderAccounts);
     assert.ok(ui.people().renderAssetRegister);
@@ -129,13 +131,20 @@ test('actual scope keys retire across Change profile A to B to A and return to t
     await ui.settle();
     const originalKey = ui.people().renderPerformanceReviews.key;
     assert.ok(originalKey.includes(actorId));
+    let expectedMounts = 1;
+    const keys = new Set([originalKey]);
     for (const id of [personId, '92000000-0000-4000-8000-000000000002', personId]) {
       ui.preview(id);
       await ui.settle();
       ui.navigate('people');
       await ui.settle();
-      assert.ok(!ui.tabs().options.some(option => option.value === 'performance'));
-      assert.equal(ui.mounts.length, 1);
+      assert.ok(ui.tabs().options.some(option => option.value === 'performance'));
+      assert.equal(ui.people().renderPerformanceReviews.props.previewPersonId, id);
+      const key = ui.people().renderPerformanceReviews.key;
+      assert.ok(key.includes(actorId) && key.includes(id));
+      assert.ok(!keys.has(key)); keys.add(key);
+      ui.selectTab('performance');
+      assert.equal(ui.mounts.length, ++expectedMounts);
     }
     ui.preview('');
     await ui.settle();
@@ -143,7 +152,9 @@ test('actual scope keys retire across Change profile A to B to A and return to t
     await ui.settle();
     assert.notEqual(ui.people().renderPerformanceReviews.key, originalKey);
     assert.ok(ui.people().renderPerformanceReviews.key.includes(actorId));
-    assert.equal(ui.mounts.length, 2);
+    ui.selectTab('performance');
+    assert.equal(ui.people().renderPerformanceReviews.props.previewPersonId, undefined);
+    assert.equal(ui.mounts.length, ++expectedMounts);
   } finally { ui.cleanup(); }
 });
 

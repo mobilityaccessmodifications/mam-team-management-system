@@ -491,3 +491,61 @@ test('an unresolved write prevents record reselection from discarding the held d
   assert.equal(h.button(label).props.disabled, true);
   h.click(label); h.render(); assert.equal(h.field('self-0').props.value, 'Held draft must not be discarded by navigation'); h.unmount();
 });
+
+test('target preview remains read-only through direct input, submit and create handlers', async () => {
+  for (const audience of ['employee', 'manager', 'admin']) {
+    const data = workspace(audience);
+    const previewPersonId = audience === 'manager' ? ids.manager : ids.person;
+    data.viewerContext.personId = previewPersonId;
+    for (const row of data.reviews) for (const key of Object.keys(row.capabilities)) if (key !== 'downloadDocument') row.capabilities[key] = false;
+    if (audience === 'manager') data.startablePeople = [data.reviews[0].employee];
+    const h = mount(data, {}, { previewPersonId });
+    try {
+      await h.settle();
+      assert.deepEqual(h.calls[0], { name: 'loadPerformanceReviews', args: [previewPersonId] });
+      for (const field of h.all.filter(node => ['input', 'select', 'textarea'].includes(node.type))) {
+        assert.equal(field.props.disabled, true, field.props.name);
+        field.props.onChange?.({ target: { value: 'Attempted preview write', checked: true } });
+      }
+      for (const form of h.all.filter(node => node.type === 'form')) form.props.onSubmit({ preventDefault() {} });
+      for (const button of h.all.filter(node => node.type === 'button' && /Save |Submit |Complete |Finalise|New yearly/.test(String(node.props.children)))) {
+        assert.equal(button.props.disabled, true);
+        button.props.onClick?.();
+      }
+      await h.settle();
+      assert.equal(h.calls.filter(call => /startPerformanceReview|mutatePerformanceReview|reconcilePerformanceReviewOperation/.test(call.name)).length, 0);
+      assert.ok(!h.text.includes('Attempted preview write'));
+      assert.ok(!h.all.some(node => node.type === 'form' && node.props['aria-label'] === 'New yearly review'));
+    } finally { h.unmount(); }
+  }
+});
+
+test('preview rejects another person projection before reading its private fields', async () => {
+  const data = workspace('manager');
+  Object.defineProperty(data.reviews[0], 'managerNote', { get() { throw new Error('Wrong target must not be inspected'); } });
+  const h = mount(data, {}, { previewPersonId: ids.person });
+  try {
+    await h.settle();
+    assert.ok(h.text.includes('Reviews could not be loaded.'));
+    assert.ok(!h.text.includes('Manager assessment'));
+    assert.equal(h.all.filter(node => node.type === 'form').length, 0);
+  } finally { h.unmount(); }
+});
+
+test('preview Word download is bound to the target and late responses retire on unmount', async () => {
+  const data = workspace('employee');
+  data.reviews[0].capabilities.saveSelf = false;
+  data.reviews[0].capabilities.submitSelf = false;
+  const h = mount(data, { getPerformanceReviewDocument: async () => ({ ok: true, document: documentFor(data.reviews[0]) }) }, { previewPersonId: ids.person });
+  try {
+    await h.settle(); await h.click('Download Word');
+    assert.deepEqual(h.calls.at(-1), { name: 'getPerformanceReviewDocument', args: [ids.review, ids.person] });
+    assert.equal(h.downloads.length, 1);
+    const pending = deferred(); h.ports.getPerformanceReviewDocument = () => pending.promise;
+    const downloading = h.click('Download Word');
+    h.unmount();
+    pending.resolve({ ok: true, document: documentFor(data.reviews[0]) }); await downloading;
+    assert.equal(h.downloads.length, 1);
+    assert.equal(h.built.length, 1);
+  } finally { h.unmount(); }
+});

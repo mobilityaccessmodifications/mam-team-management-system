@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 export const sourcePath = 'src/components/performance-review-workspace.tsx';
 export const nodes = tree => tree == null || typeof tree !== 'object' ? [] : Array.isArray(tree) ? tree.flatMap(nodes) : [tree, ...nodes(tree.props?.children)];
 export const text = tree => tree == null || typeof tree === 'boolean' ? '' : typeof tree !== 'object' ? String(tree) : Array.isArray(tree) ? tree.map(text).join('') : text(tree.props?.children);
-export function mount(initial = workspace(), supplied = {}) {
+export function mount(initial = workspace(), supplied = {}, componentProps = {}) {
   assert.ok(existsSync(sourcePath), 'Native performance workspace component must exist');
   let cursor = 0, changed = false, tree, authListener;
   const hooks = [], effects = [], calls = [], downloads = [], revoked = [], built = [], blobs = new Map(), timers = new Map();
@@ -53,7 +53,7 @@ export function mount(initial = workspace(), supplied = {}) {
     if (typeof element.type === 'function') return expand(element.type(element.props));
     return { ...element, props: { ...element.props, children: expand(element.props?.children) } };
   }
-  function render() { let turns = 0; do { changed = false; cursor = 0; tree = expand(Component()); for (const effect of effects.splice(0)) effect(); assert.ok(++turns < 30, 'Hook render must settle'); } while (changed); return tree; }
+  function render() { let turns = 0; do { changed = false; cursor = 0; tree = expand(Component(componentProps)); for (const effect of effects.splice(0)) effect(); assert.ok(++turns < 30, 'Hook render must settle'); } while (changed); return tree; }
   async function settle() { for (let i = 0; i < 6; i++) { await new Promise(r => setImmediate(r)); render(); } return tree; }
   const api = { calls, ports, downloads, revoked, built, blobs, hooks, render, settle,
     get tree() { return tree; },

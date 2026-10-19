@@ -9,7 +9,8 @@ root=base/'source'; root.mkdir(); private=base/'operator';private.mkdir(mode=0o7
 paths=['scripts/deploy-performance-review-completion.py','scripts/deploy-staff-leave-calendar.py']+['scripts/deploy-performance-reviews.py', 'src/lib/performance-review-rules.ts', 'src/lib/performance-review-word.mjs', 'src/lib/performance-review-questions.mjs', 'src/lib/performance-review-document.ts', 'src/lib/performance-review-types.ts', 'src/lib/performance-review-auth.ts', 'src/app/performance-reviews/actions.ts', 'package.json', 'package-lock.json']+[str(p.relative_to(ROOT)) for p in (ROOT/'supabase/migrations').glob('*.sql') if p.name[:14]<='20261017103000']
 for name in paths:
  p=root/name;p.parent.mkdir(parents=True,exist_ok=True)
- source=ROOT/'tests/fixtures/performance-review-completion-v197/actions.ts.txt' if name=='src/app/performance-reviews/actions.ts' else ROOT/name
+ historical={'src/app/performance-reviews/actions.ts':'actions.ts.txt','src/lib/performance-review-auth.ts':'auth.ts.txt','src/lib/performance-review-rules.ts':'rules.ts.txt'}
+ source=ROOT/'tests/fixtures/performance-review-completion-v197'/historical[name] if name in historical else ROOT/name
  data=source.read_bytes()
  if name=='src/app/performance-reviews/actions.ts':assert sha(data)=='8ffd4b5acd702cb0ccac1c7311b0a5990b460b3f4686002ccc28742a0de0f92c'
  p.write_bytes(data)

@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { dispatchPerformanceReviewMailForReview } from "@/lib/performance-review-mail";
 
 import type { PerformanceFailure, PerformanceLoadResult, PerformanceStartInput, PerformanceStartResult, PerformanceMutationInput, PerformanceMutationResult, PerformanceReconcileInput, PerformanceReconcileResult, PerformanceDocumentResult } from "@/lib/performance-review-types";
-import { PerformanceReviewAccessError, requirePerformanceReviewActor } from "@/lib/performance-review-auth";
+import { PerformanceReviewAccessError, requirePerformanceReviewActor, requirePerformanceReviewViewer } from "@/lib/performance-review-auth";
 import { closed, uuid, parseDocument, parseReconcileInput, parseMutationInput, parseStartInput, parseReview, parseWorkspace } from "@/lib/performance-review-rules";
 function failure(code: PerformanceFailure["code"]): PerformanceFailure {
   return { ok: false, code, uncertain: code === "uncertain", message: ({ invalid: "Check the review fields.", forbidden: "You do not have access to this review.", unauthenticated: "Sign in before using performance reviews.", conflict: "The review has changed. Reload or reconcile before continuing.", unavailable: "Performance reviews are not available.", uncertain: "The result is unknown. Reconcile this operation before another write." })[code] };
@@ -36,14 +36,17 @@ function schedulePerformanceReviewNotification(reviewId: string): void {
   try { after(() => dispatchPerformanceReviewNotificationsForReview(reviewId)); } catch { return; }
 }
 function disabled(): PerformanceFailure { return { ok: false, code: "unavailable", uncertain: false, message: "Performance reviews are not available." }; }
-export async function loadPerformanceReviews(): Promise<PerformanceLoadResult> {
+export async function loadPerformanceReviews(previewPersonId?: string): Promise<PerformanceLoadResult> {
   if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
+  try { if (previewPersonId !== undefined) uuid(previewPersonId); } catch { return failure("invalid"); }
   try {
-    const { supabase, actorUserId, capabilities } = await requirePerformanceReviewActor();
-    const { data, error, status } = await supabase.rpc("performance_review_workspace");
+    const { supabase, actorUserId, capabilities } = await requirePerformanceReviewViewer(previewPersonId);
+    const { data, error, status } = previewPersonId === undefined
+      ? await supabase.rpc("performance_review_workspace")
+      : await supabase.rpc("performance_review_workspace_for_preview", { p_person_id: previewPersonId });
     if (status >= 500) return failure("unavailable");
     if (error) return rpcFailure(error, false, status);
-    return { ok: true, data: parseWorkspace(data, actorUserId, capabilities.app_role, capabilities.person_id) };
+    return { ok: true, data: parseWorkspace(data, actorUserId, capabilities.app_role, capabilities.person_id, previewPersonId !== undefined) };
   } catch (error) { return error instanceof PerformanceReviewAccessError ? failure(error.code) : disabled(); }
 }
 export async function startPerformanceReview(input: PerformanceStartInput): Promise<PerformanceStartResult> {
@@ -104,12 +107,14 @@ export async function reconcilePerformanceReviewOperation(input: PerformanceReco
     return { ok: true, data: { status: "committed", review } };
   } catch (error) { return failure(error instanceof PerformanceReviewAccessError ? error.code : "unavailable"); }
 }
-export async function getPerformanceReviewDocument(reviewId: string): Promise<PerformanceDocumentResult> {
+export async function getPerformanceReviewDocument(reviewId: string, previewPersonId?: string): Promise<PerformanceDocumentResult> {
   if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
-  try { uuid(reviewId); } catch { return failure("invalid"); }
+  try { uuid(reviewId); if (previewPersonId !== undefined) uuid(previewPersonId); } catch { return failure("invalid"); }
   try {
-    const { supabase, capabilities } = await requirePerformanceReviewActor();
-    const { data, error, status } = await supabase.rpc("get_performance_review_document", { p_review_id: reviewId });
+    const { supabase, capabilities } = await requirePerformanceReviewViewer(previewPersonId);
+    const { data, error, status } = previewPersonId === undefined
+      ? await supabase.rpc("get_performance_review_document", { p_review_id: reviewId })
+      : await supabase.rpc("get_performance_review_document_for_preview", { p_person_id: previewPersonId, p_review_id: reviewId });
     if (status >= 500) return failure("unavailable");
     if (error) return rpcFailure(error, false, status);
     const document = parseDocument(data);

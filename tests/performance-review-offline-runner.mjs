@@ -16,11 +16,11 @@ const actionModule = '@/app/performance-reviews/actions';
 const boundary = 'tests/browser/performance-review-boundary.mjs';
 const virtualFile = join(ROOT, 'tests/performance-review-virtual-actions.d.ts');
 const contracts = [
-  ['loadPerformanceReviews', '', 'PerformanceLoadResult'],
+  ['loadPerformanceReviews', 'previewPersonId?: string', 'PerformanceLoadResult'],
   ['startPerformanceReview', 'input: PerformanceStartInput', 'PerformanceStartResult'],
   ['mutatePerformanceReview', 'input: PerformanceMutationInput', 'PerformanceMutationResult'],
   ['reconcilePerformanceReviewOperation', 'input: PerformanceReconcileInput', 'PerformanceReconcileResult'],
-  ['getPerformanceReviewDocument', 'reviewId: string', 'PerformanceDocumentResult'],
+  ['getPerformanceReviewDocument', 'reviewId: string, previewPersonId?: string', 'PerformanceDocumentResult'],
 ];
 function typecheck() {
   const config = ts.readConfigFile(join(ROOT, 'tsconfig.json'), ts.sys.readFile);
