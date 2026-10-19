@@ -24,22 +24,57 @@ const withClaim=(setup='')=>`${insert()}${setup}
 const finish=delivered=>`select public.finish_performance_review_notification((select delivery_id from notification_claim),(select claim_token from notification_claim),${delivered});`;
 const transaction=sql=>c.sql(db,`begin;${sql}rollback;`);
 const json=sql=>rows(transaction(sql));
+const setupPredecessor=database=>{
+ c.setup(database);
+ c.sql(database,readFileSync('supabase/migrations/20261017103000_performance_review_completion_guards.sql','utf8'));
+ c.sql(database,"alter table private.employee_directory_details add column work_email text; insert into private.employee_directory_details(person_id,work_email) select id,'person'||right(id::text,1)||'@example.test' from public.internal_org_people;");
+ c.sql(database,readFileSync('supabase/migrations/20260923010000_durable_notification_delivery_receipts.sql','utf8'));
+ c.sql(database,definition('20261014110000_subscription_review_managers_mail.sql','create or replace function private.notification_event_key_valid('));
+};
 
 before(()=>{
  const version=spawnSync('postgres',['--version'],{encoding:'utf8'});
  const major=Number(/PostgreSQL\) (\d+)\./.exec(version.stdout)?.[1]);
  assert.ok([16,17].includes(major),'Use the local PostgreSQL 16 or 17 binaries');
- c=ownedCluster(major);c.setup(db);
- c.sql(db,readFileSync('supabase/migrations/20261017103000_performance_review_completion_guards.sql','utf8'));
- c.sql(db,"alter table private.employee_directory_details add column work_email text; insert into private.employee_directory_details(person_id,work_email) select id,'person'||right(id::text,1)||'@example.test' from public.internal_org_people;");
- c.sql(db,readFileSync('supabase/migrations/20260923010000_durable_notification_delivery_receipts.sql','utf8'));
- c.sql(db,definition('20261014110000_subscription_review_managers_mail.sql','create or replace function private.notification_event_key_valid('));
+ c=ownedCluster(major);setupPredecessor(db);
  c.sql(db,`${insert('c1000000-0000-4000-8000-000000000099','2030')} update private.performance_reviews set self_submitted_at=clock_timestamp();`);
  careersBefore=careersSource();
  c.sql(db,readFileSync(migration,'utf8'));
  c.sql(db,"update private.notification_delivery_control set legacy_import_sha256=repeat('a',64),legacy_import_count=0,legacy_imported_at=clock_timestamp(); select private.set_notification_delivery_ready(true);");
 });
 after(()=>c?.stop());
+
+test('healthy purge catalog baseline advances only through the notification delta',()=>{
+ const database='mam_test_pr_notifications_purge_healthy';setupPredecessor(database);
+ c.sql(database,'update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;');
+ const before=c.sql(database,'select schema_hash from private.confirmed_test_purge_schema where singleton;');
+ c.sql(database,readFileSync(migration,'utf8'));
+ assert.equal(c.sql(database,'select private.confirmed_test_purge_schema_hash()=schema_hash from private.confirmed_test_purge_schema where singleton;').trim(),'t');
+ assert.notEqual(c.sql(database,'select schema_hash from private.confirmed_test_purge_schema where singleton;'),before);
+});
+
+test('preexisting purge catalog drift retains the exact stored baseline and HOLD',()=>{
+ const database='mam_test_pr_notifications_purge_hold';setupPredecessor(database);
+ c.sql(database,'update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;grant select on public.profiles to authenticated;');
+ const before=c.sql(database,'select schema_hash from private.confirmed_test_purge_schema where singleton;');
+ assert.equal(c.sql(database,'select private.confirmed_test_purge_schema_hash()=schema_hash from private.confirmed_test_purge_schema where singleton;').trim(),'f');
+ c.sql(database,readFileSync(migration,'utf8'));
+ assert.equal(c.sql(database,'select schema_hash from private.confirmed_test_purge_schema where singleton;'),before);
+ assert.equal(c.sql(database,'select private.confirmed_test_purge_schema_hash()=schema_hash from private.confirmed_test_purge_schema where singleton;').trim(),'f');
+ assert.equal(c.sql(database,"select to_regclass('private.performance_review_notifications') is not null;").trim(),'t');
+});
+
+test('unrelated catalog changes during migration refuse and roll back the complete delta',()=>{
+ const database='mam_test_pr_notifications_purge_delta';setupPredecessor(database);
+ c.sql(database,'update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;');
+ const before=c.sql(database,'select schema_hash from private.confirmed_test_purge_schema where singleton;');
+ const source=readFileSync(migration,'utf8').replace('do $notification_catalog_after$','grant select on public.profiles to authenticated;\ndo $notification_catalog_after$');
+ const rejected=c.run(database,source);assert.notEqual(rejected.status,0);assert.match(rejected.stderr,/55000.*Performance notification unrelated catalog delta/s);
+ assert.equal(c.sql(database,'select schema_hash from private.confirmed_test_purge_schema where singleton;'),before);
+ assert.equal(c.sql(database,'select private.confirmed_test_purge_schema_hash()=schema_hash from private.confirmed_test_purge_schema where singleton;').trim(),'t');
+ assert.equal(c.sql(database,"select to_regclass('private.performance_review_notifications') is null;").trim(),'t');
+ assert.equal(c.sql(database,"select has_table_privilege('authenticated','public.profiles','SELECT');").trim(),'f');
+});
 
 test('notification migration does not backfill reviews and preserves final Careers functions',()=>{
  assert.equal(c.sql(db,'select count(*) from private.performance_review_notifications;').trim(),'0');

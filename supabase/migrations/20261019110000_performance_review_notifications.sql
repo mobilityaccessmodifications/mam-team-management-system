@@ -2,6 +2,54 @@ begin;
 set local search_path='';
 select pg_advisory_xact_lock(hashtextextended('mam:directory-role-control',0));
 
+do $notification_catalog_lock$
+begin
+  if not pg_try_advisory_xact_lock(hashtextextended('confirmed-test-purge',0)) then
+    raise exception 'Performance notification purge catalog busy.' using errcode='55P03';
+  end if;
+  lock table private.confirmed_test_purge_schema in share row exclusive mode nowait;
+  if (select count(*) from private.confirmed_test_purge_schema)<>1 then
+    raise exception 'Performance notification purge baseline differs.' using errcode='55000';
+  end if;
+end $notification_catalog_lock$;
+create temporary table performance_notification_catalog_before on commit drop as
+select schema_hash stored_hash,private.confirmed_test_purge_schema_hash() actual_hash,
+  (select to_jsonb(p)-'prosrc' from pg_proc p where p.oid='private.notification_event_key_valid(text)'::regprocedure) validator_metadata
+from private.confirmed_test_purge_schema where singleton;
+create function pg_temp.performance_notification_relation_oids() returns oid[] language sql stable set search_path='' as $$
+  select array(select oid from (select to_regclass('private.performance_review_notifications')::oid oid
+    union select indexrelid from pg_index where indrelid=to_regclass('private.performance_review_notifications')) relations where oid is not null)
+$$;
+create temporary table performance_notification_function_spec(signature text primary key) on commit drop;
+insert into performance_notification_function_spec values
+  ('private.notification_event_key_valid(text)'),
+  ('private.queue_performance_review_notification()'),
+  ('private.performance_review_notification_payload(private.performance_reviews,text)'),
+  ('public.claim_performance_review_notifications(uuid,integer)'),
+  ('public.reserve_performance_review_notification_mail(text,text,text,uuid,text)'),
+  ('public.finish_performance_review_notification(uuid,uuid,boolean)');
+do $notification_catalog_projection$
+declare query text; anchor text; constraints_anchor text;
+begin
+  select prosrc into query from pg_proc where oid='private.confirmed_test_purge_schema_hash()'::regprocedure;
+  if encode(extensions.digest(query,'sha256'),'hex') is distinct from 'c142665fb247c8761de408ce241e2f97aabe719c5d0801a5c53905892dd3de16' then
+    raise exception 'Performance notification catalog collector differs.' using errcode='55000';
+  end if;
+  anchor:=E'select encode(extensions.digest(coalesce(string_agg(definition,E''\\n'' order by definition),''''),''sha256''),''hex'') from (';
+  query:=replace(query,anchor,'select definition from (');
+  query:=replace(query,'where n.nspname in (''public'',''private'',''storage'')',
+    'where c.oid<>all(pg_temp.performance_notification_relation_oids()) and n.nspname in (''public'',''private'',''storage'')');
+  constraints_anchor:='where connamespace in (select oid from pg_namespace where nspname in (''public'',''private'',''storage'')) or confrelid=''auth.users''::regclass or confrelid in (select c.oid from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.oid<>all(pg_temp.performance_notification_relation_oids()) and n.nspname in (''public'',''private'',''storage''))';
+  query:=replace(query,constraints_anchor,'where conrelid<>all(pg_temp.performance_notification_relation_oids()) and ('||substr(constraints_anchor,7)||')');
+  query:=replace(query,'and not t.tgisinternal',
+    'and not t.tgisinternal and c.oid<>all(pg_temp.performance_notification_relation_oids()) and not (t.tgrelid=''private.performance_reviews''::regclass and t.tgname in (''performance_review_started_notification'',''performance_review_self_submitted_notification''))');
+  query:=replace(query,'and p.prokind=''f''',
+    'and p.prokind=''f'' and not exists(select 1 from pg_temp.performance_notification_function_spec s where to_regprocedure(s.signature)=p.oid)');
+  execute 'create function pg_temp.performance_notification_preserved_catalog() returns table(definition text) language sql stable set search_path='''' as '||quote_literal(query);
+end $notification_catalog_projection$;
+create temporary table performance_notification_preserved_before on commit drop as
+select * from pg_temp.performance_notification_preserved_catalog();
+
 do $$
 begin
   if encode(extensions.digest((select prosrc from pg_proc where oid='private.notification_event_key_valid(text)'::regprocedure),'sha256'),'hex')
@@ -177,5 +225,26 @@ begin
 end $$;
 revoke all on function public.finish_performance_review_notification(uuid,uuid,boolean) from public,anon,authenticated,service_role;
 grant execute on function public.finish_performance_review_notification(uuid,uuid,boolean) to service_role;
+
+do $notification_catalog_after$
+declare baseline record;
+begin
+  select * into strict baseline from pg_temp.performance_notification_catalog_before;
+  if exists((select definition collate "C" from pg_temp.performance_notification_preserved_before
+      except all select definition collate "C" from pg_temp.performance_notification_preserved_catalog())
+    union all (select definition collate "C" from pg_temp.performance_notification_preserved_catalog()
+      except all select definition collate "C" from pg_temp.performance_notification_preserved_before))
+    or (select to_jsonb(p)-'prosrc' from pg_proc p where p.oid='private.notification_event_key_valid(text)'::regprocedure) is distinct from baseline.validator_metadata
+    or (select schema_hash from private.confirmed_test_purge_schema where singleton) is distinct from baseline.stored_hash then
+    raise exception 'Performance notification unrelated catalog delta.' using errcode='55000';
+  end if;
+  if baseline.actual_hash=baseline.stored_hash then
+    update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash()
+      where singleton and schema_hash=baseline.stored_hash;
+    if not found or private.confirmed_test_purge_schema_hash() is distinct from (select schema_hash from private.confirmed_test_purge_schema where singleton) then
+      raise exception 'Performance notification final purge fingerprint differs.' using errcode='55000';
+    end if;
+  end if;
+end $notification_catalog_after$;
 
 commit;
