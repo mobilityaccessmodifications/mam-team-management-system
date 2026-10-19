@@ -27,7 +27,7 @@ let child;
 try {
   await buildUnifiedRoleFixture(root, scratch);
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  child = spawn(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--config=tests/browser/playwright.config.mjs', 'unified-role.*\\.spec\\.mjs$', ...args], {
+  child = spawn(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--config=tests/browser/playwright.config.mjs', 'unified-role-(?:performance-preview|preview)\\.spec\\.mjs$', ...args], {
     cwd: root, stdio: 'inherit', timeout: 180_000, killSignal: 'SIGTERM',
     env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, CI: process.env.CI ?? '',
       PLAYWRIGHT_BROWSERS_PATH: path.join(root, 'node_modules/.cache/ms-playwright'), MAM_BROWSER_SOURCE_ROOT: root,
