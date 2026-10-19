@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { workspace, review, failure } from '../performance-review-fixtures.mjs';
+import { workspace, review, failure, ids } from '../performance-review-fixtures.mjs';
 
 const origin = process.env.MAM_PERFORMANCE_ORIGIN;
 const field = (page, name) => page.locator(`[name="${name}"]`);
@@ -178,11 +178,11 @@ test('AM-04 browser removed assignment clears the private conflict draft', async
 test('AM-04 browser review A to B to A retires the old conflict recovery', async ({ page }) => {
   await page.goto(`${origin}/?audience=manager`);
   await expect(field(page, 'managerNote')).toBeVisible();
-  const a = review('manager'), b = review('manager', 'MAM', { id: '33000000-0000-4000-8000-000000000002', code: 'PR-2026-0002' });
+  const a = review('manager'), b = review('manager', 'MAM', { id: '33000000-0000-4000-8000-000000000002', code: 'PR-2026-0002', employee: { ...a.employee, id: '22000000-0000-4000-8000-000000000099', name: 'Synthetic B colleague' } });
   const data = workspace('manager', 'MAM', { reviews: [a, b] });
   await enqueue(page, 'loadPerformanceReviews', { ok: true, data });
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
-  await expect(page.getByRole('button', { name: `${b.code} — ${b.employee.name} — ${b.cycle}`, exact: true })).toBeVisible();
+  await page.evaluate(actor => window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor), ids.actor);
+  await expect(page.getByRole('button', { name: `${b.employee.name} — ${b.employee.company}`, exact: true })).toBeVisible();
   await field(page, 'managerNote').fill('PRIVATE-OLD-A-BROWSER-CONFLICT');
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
   await page.getByRole('button', { name: 'Save manager draft', exact: true }).click();
@@ -190,13 +190,13 @@ test('AM-04 browser review A to B to A retires the old conflict recovery', async
   await page.evaluate(() => window.performanceReviewFixture.holdNext('loadPerformanceReviews'));
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await page.waitForFunction(() => window.performanceReviewFixture.pending().some(item => item.name === 'loadPerformanceReviews'));
-  for (const row of [b, a]) await page.getByRole('button', { name: `${row.code} — ${row.employee.name} — ${row.cycle}`, exact: true }).click();
+  for (const row of [b, a]) await page.getByRole('button', { name: `${row.employee.name} — ${row.employee.company}`, exact: true }).click();
   await field(page, 'managerNote').fill('New browser A draft');
   const newer = workspace('manager', 'MAM', { reviews: [{ ...a, managerRevision: 'manager:0:9' }, b] });
   await page.evaluate(result => window.performanceReviewFixture.release('loadPerformanceReviews', result), { ok: true, data: newer });
   await expect(field(page, 'managerNote')).toHaveValue('New browser A draft');
   await enqueue(page, 'loadPerformanceReviews', { ok: true, data: newer });
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await page.evaluate(actor => window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor), ids.actor);
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
   await page.getByRole('button', { name: 'Save manager draft', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Synthetic conflict.');

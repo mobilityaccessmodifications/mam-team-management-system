@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { committedReceipt, enabled, finalInput, productionActionHarness, reviewId, review, mutation, operationId, actorId, personId, managerId, meeting } from './performance-review-production-ui-fixture.mjs';
+import { committedReceipt, enabled, finalInput, finalReview, productionActionHarness, reviewId, review, mutation, operationId, actorId, personId, managerId, meeting } from './performance-review-production-ui-fixture.mjs';
+import { loadModule } from './helpers/contact-lifetime-harness.mjs';
 import { document, start } from './performance-review-backend-fixtures.mjs';
 
 test('validated final submit registers one after callback and dispatches only the exact committed review ID', async () => enabled(async () => {
@@ -119,4 +120,20 @@ test('production boundary keeps drafts and reads silent while lifecycle notifica
     assert.deepEqual(h.calls, []);
     assert.deepEqual(h.registrations, []);
   }, 'false');
+}));
+
+test('native Admin final submission schedules Careers exactly once only after an admin-scoped commit', async () => enabled(async () => {
+  const { ROLE_CAPABILITY_FIELDS } = loadModule('src/lib/portal-role-capabilities.ts');
+  for (const role of ['admin', 'system_admin']) {
+    const canonicalData = [{ app_role: role, person_id: role === 'system_admin' ? null : managerId, account_status: 'active', ...Object.fromEntries(ROLE_CAPABILITY_FIELDS.map(key => [key, false])) }];
+    const row = { ...finalReview(), audience: 'admin', readRevision: 'read:1:3' };delete row.managerRevision;
+    const receipt = { committed: true, operationId, review: row };
+    const request = { ...finalInput(), expectedRevision: 'read:1:2' };
+    const h = productionActionHarness({ role, canonicalData, response: { data: receipt, error: null, status: 200 } });
+    assert.deepEqual(await h.actions.mutatePerformanceReview(request), { ok: true, ...receipt });
+    assert.equal(h.business().length, 1);assert.equal(h.callbacks.length, 1);await h.callbacks[0]();
+    assert.deepEqual(h.dispatches, [[reviewId]]);assert.deepEqual(h.notificationDispatches, []);
+    const mismatched = productionActionHarness({ role, canonicalData });
+    assert.equal((await mismatched.actions.mutatePerformanceReview(request)).code, 'uncertain');assert.deepEqual(mismatched.registrations, []);
+  }
 }));

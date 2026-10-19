@@ -24,7 +24,7 @@ async function openPerformance(page) {
 async function assertReadOnly(page, managerScope = false) {
   const panel = workspace(page);
   await expect(panel.locator('[name="self-0"]')).toBeVisible();
-  const fields = panel.locator('input, textarea, select');
+  const fields = panel.locator('input, textarea, select:not([name="start-cycle"])');
   expect(await fields.count()).toBeGreaterThan(0);
   for (const field of await fields.all()) await expect(field).toBeDisabled();
   for (const button of await panel.getByRole('button', { name: /^(?:New yearly review|Save self draft|Submit self assessment|Save manager draft|Complete manager assessment|Save meeting|Finalise review|Reconcile update)$/ }).all()) {
@@ -32,7 +32,7 @@ async function assertReadOnly(page, managerScope = false) {
     await expect(button).toBeDisabled();
   }
   for (const form of await panel.locator('form').all()) await form.evaluate(node => node.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-  await expect(panel.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
+  await expect(panel.getByRole('button', { name: 'New yearly review', exact: true })).toHaveCount(0);
   expect(await writes(page)).toEqual([]);
 }
 async function assertManagerEditable(page) {
@@ -41,7 +41,7 @@ async function assertManagerEditable(page) {
   await expect(panel.locator('[name="self-0"]')).toBeDisabled();
   await expect(panel.locator('[name="meeting-date"]')).toBeEnabled();
   await expect(panel.locator('[name="held"]')).toBeEnabled();
-  await expect(panel.getByRole('button', { name: 'New yearly review', exact: true })).toBeEnabled();
+  await expect(panel.getByRole('button', { name: 'New yearly review', exact: true })).toHaveCount(0);
 }
 
 test.beforeEach(async ({ page, context, baseURL }) => {
@@ -70,8 +70,8 @@ test('actual LeaveDemo P0 profile switching permits assigned manager delegation 
     await expect(panel.getByRole('heading', { name: `${name} — MAM`, exact: true })).toBeVisible();
     if (key.startsWith('manager')) await assertManagerEditable(page); else await assertReadOnly(page);
     expect((await calls(page, 'loadPerformanceReviews')).at(-1).args).toEqual([people[key].id]);
-    const rowButtons = panel.getByRole('navigation', { name: 'Review list' }).getByRole('button');
-    await expect(rowButtons).toHaveCount(key.startsWith('manager') ? 2 : 1);
+    const rowButtons = panel.getByRole('navigation', { name: 'Review employees' }).getByRole('button');
+    await expect(rowButtons).toHaveCount(key.startsWith('manager') ? 3 : 1);
     if (key.startsWith('manager')) {
       await rowButtons.filter({ hasText: people[key].name }).click();
       await expect(panel.locator('[name="self-0"]')).toHaveValue(`${people[key].name} answer 1`);
@@ -86,7 +86,7 @@ test('actual LeaveDemo P0 profile switching permits assigned manager delegation 
     await download;
     const documentRead = (await calls(page, 'getPerformanceReviewDocument')).at(-1);
     expect(documentRead.args[1]).toBe(people[key].id);
-    await panel.getByRole('button', { name: 'Reload', exact: true }).click();
+    await page.evaluate(() => window.unifiedRoleFixture.emitAuth('TOKEN_REFRESHED'));
     await expect(panel).toHaveAttribute('aria-busy', 'false');
     expect((await calls(page, 'loadPerformanceReviews')).at(-1).args).toEqual([people[key].id]);
     expect(await writes(page)).toEqual([]);
@@ -102,7 +102,7 @@ for (const returnToA of [false, true]) test(`late Performance manager load canno
   await selectProfile(page, 'manager'); await openPerformance(page);
   await expect(workspace(page).locator('[name="managerNote"]')).toHaveValue('Synthetic A report private synthetic note');
   await page.evaluate(id => { window.unifiedRoleFixture.setPerformanceLabel(id, 'OLD'); window.unifiedRoleFixture.holdNext('loadPerformanceReviews', id); }, people.manager.id);
-  await workspace(page).getByRole('button', { name: 'Reload', exact: true }).click();
+  await page.evaluate(() => window.unifiedRoleFixture.emitAuth('TOKEN_REFRESHED'));
   await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain(`loadPerformanceReviews:${people.manager.id}`);
   await selectProfile(page, 'employee'); await openPerformance(page);
   await expect(workspace(page).locator('[name="self-0"]')).toHaveValue('Synthetic Employee answer 1');
@@ -126,31 +126,25 @@ for (const returnToA of [false, true]) test(`late Performance manager load canno
   if (returnToA) await assertManagerEditable(page); else await assertReadOnly(page);
 });
 
-test('yearly review form uses the orange primary button and current Melbourne year with a seven-day due date', async ({ page }) => {
+test('direct yearly review form has editable Melbourne defaults and orange Start review', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-12-31T13:30:00Z'));
   await selectProfile(page, 'manager'); await openPerformance(page);
-  const panel = workspace(page);
-  const button = panel.getByRole('button', { name: 'New yearly review', exact: true });
+  const panel = workspace(page), create = panel.getByRole('form', { name: 'New yearly review', exact: true });
+  const button = create.getByRole('button', { name: 'Start review', exact: true });
+  await expect(panel.getByRole('button', { name: 'New yearly review', exact: true })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Reload', exact: true })).toHaveCount(0);
   await expect(button).toHaveCSS('background-color', 'rgb(195, 77, 20)');
   await expect(button).toHaveCSS('color', 'rgb(255, 255, 255)');
   await button.hover();
   await expect(button).toHaveCSS('background-color', 'rgb(168, 63, 13)');
   await expect(button).toHaveCSS('color', 'rgb(255, 255, 255)');
-  await button.click();
-  const create = panel.getByRole('form', { name: 'New yearly review', exact: true });
-  await expect(create.getByRole('combobox', { name: 'Cycle', exact: true })).toHaveValue('2027');
+  await expect(panel.getByRole('combobox', { name: 'Cycle', exact: true })).toHaveValue('2027');
   await expect(create.locator('[name="start-dueDate"]')).toHaveValue('2027-01-08');
-  await create.getByRole('combobox', { name: 'Cycle', exact: true }).selectOption('2026');
+  await panel.getByRole('combobox', { name: 'Cycle', exact: true }).selectOption('2026');
   await create.locator('[name="start-dueDate"]').fill('2027-01-10');
-  await button.click();
-  await expect(create.locator('[name="start-cycle"]')).toHaveValue('2026');
+  await page.evaluate(() => window.unifiedRoleFixture.emitAuth('TOKEN_REFRESHED'));
+  await expect(panel.locator('[name="start-cycle"]')).toHaveValue('2026');
   await expect(create.locator('[name="start-dueDate"]')).toHaveValue('2027-01-10');
-  await create.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.clock.setFixedTime(new Date('2027-01-01T13:30:00Z'));
-  await button.click();
-  await expect(create.locator('[name="start-cycle"]')).toHaveValue('2027');
-  await expect(create.locator('[name="start-dueDate"]')).toHaveValue('2027-01-09');
-  await create.getByRole('button', { name: 'Cancel', exact: true }).click();
   expect(await writes(page)).toEqual([]);
 });
 
@@ -159,16 +153,16 @@ test('P0 creates and completes assigned manager work with the target on every wr
   await selectProfile(page, 'manager'); await openPerformance(page);
   const panel = workspace(page);
   await assertManagerEditable(page);
-  await panel.getByRole('button', { name: 'New yearly review', exact: true }).click();
   const create = panel.getByRole('form', { name: 'New yearly review', exact: true });
   await panel.getByRole('navigation', { name: 'Review employees' }).getByRole('button', { name: 'Synthetic A candidate — MAM', exact: true }).click();
-  await create.locator('[name="start-cycle"]').selectOption('2027');
+  await panel.locator('[name="start-cycle"]').selectOption('2027');
   await create.locator('[name="start-dueDate"]').fill('2027-11-30');
   await create.getByRole('button', { name: 'Start review', exact: true }).click();
   await expect(panel.getByRole('status')).toHaveText('Review created.');
   await expect(panel.getByRole('heading', { name: 'Synthetic A candidate — MAM', exact: true })).toBeVisible();
   expect((await calls(page, 'startPerformanceReview')).at(-1).args[1]).toBe(people.manager.id);
-  await panel.getByRole('navigation', { name: 'Review list' }).getByRole('button').filter({ hasText: 'Synthetic A report' }).click();
+  await panel.getByRole('navigation', { name: 'Review employees' }).getByRole('button').filter({ hasText: 'Synthetic A report' }).click();
+  await panel.locator('[name="start-cycle"]').selectOption('2026');
   await panel.locator('[name="managerNote"]').fill('Synthetic delegated manager evidence');
   await panel.getByRole('button', { name: 'Save manager draft', exact: true }).click();
   await expect(panel.getByRole('status')).toHaveText('Saved.');
@@ -185,7 +179,7 @@ test('P0 creates and completes assigned manager work with the target on every wr
   expect(mutations.map(call => call.args[0].command)).toEqual(['save_manager', 'complete_manager', 'save_meeting', 'submit_review']);
   expect(mutations.every(call => call.args[1] === people.manager.id)).toBe(true);
   const before = (await writes(page)).length;
-  await panel.getByRole('navigation', { name: 'Review list' }).getByRole('button').filter({ hasText: people.manager.name }).click();
+  await panel.getByRole('navigation', { name: 'Review employees' }).getByRole('button').filter({ hasText: people.manager.name }).click();
   await expect(panel.locator('[name="self-0"]')).toBeDisabled();
   await panel.getByRole('form', { name: 'Self assessment', exact: true }).evaluate(node => node.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   expect((await writes(page)).length).toBe(before);
@@ -197,17 +191,16 @@ test('P0 uncertain manager creation reconciles the original target without repla
   await selectProfile(page, 'manager'); await openPerformance(page);
   const panel = workspace(page);
   await page.evaluate(id => window.unifiedRoleFixture.holdNext('startPerformanceReview', id), people.manager.id);
-  await panel.getByRole('button', { name: 'New yearly review', exact: true }).click();
   const create = panel.getByRole('form', { name: 'New yearly review', exact: true });
   await panel.getByRole('navigation', { name: 'Review employees' }).getByRole('button', { name: 'Synthetic A candidate — MAM', exact: true }).click();
-  await create.locator('[name="start-cycle"]').selectOption('2027');
+  await panel.locator('[name="start-cycle"]').selectOption('2027');
   await create.locator('[name="start-dueDate"]').fill('2027-11-30');
   await create.getByRole('button', { name: 'Start review', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain(`startPerformanceReview:${people.manager.id}`);
   await page.evaluate(id => window.unifiedRoleFixture.rejectPending('startPerformanceReview', id), people.manager.id);
   await expect(panel.getByRole('alert')).toContainText('Reconcile before submitting again.');
   await expect(create.getByRole('button', { name: 'Start review', exact: true })).toBeDisabled();
-  await panel.getByRole('button', { name: 'Reload', exact: true }).click();
+  await page.evaluate(() => window.unifiedRoleFixture.emitAuth('TOKEN_REFRESHED'));
   await expect(panel).toHaveAttribute('aria-busy', 'false');
   await expect(create.getByRole('button', { name: 'Start review', exact: true })).toBeDisabled();
   await panel.getByRole('button', { name: 'Reconcile update', exact: true }).click();
@@ -247,8 +240,8 @@ test('actual manager Performance remains editable outside Change profile preview
   await panel.locator('[name="held"]').check();
   await expect(panel.locator('[name="held"]')).toBeChecked();
   await expect(panel.getByRole('button', { name: 'Save manager draft', exact: true })).toBeEnabled();
-  await expect(panel.getByRole('button', { name: 'New yearly review', exact: true })).toBeEnabled();
-  await panel.getByRole('navigation', { name: 'Review list' }).getByRole('button').filter({ hasText: people.manager.name }).click();
+  await expect(panel.getByRole('button', { name: 'New yearly review', exact: true })).toHaveCount(0);
+  await panel.getByRole('navigation', { name: 'Review employees' }).getByRole('button').filter({ hasText: people.manager.name }).click();
   await expect(panel.locator('[name="self-0"]')).toBeEnabled();
   await panel.locator('[name="self-0"]').fill('Synthetic native self draft');
   await expect(panel.locator('[name="self-0"]')).toHaveValue('Synthetic native self draft');

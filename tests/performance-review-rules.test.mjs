@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { existsSync } from 'node:fs';
+import { actorId, personId, managerId, review } from './performance-review-backend-fixtures.mjs';
 import { loadModule } from './helpers/contact-lifetime-harness.mjs';
 function rules() {
   assert.ok(existsSync('src/lib/performance-review-rules.ts'), 'Native performance input rules are missing');
@@ -47,4 +48,17 @@ test('raw arrays reject symbols and accessors before reading and snapshot accept
  const r=rules();let reads=0;const s=self();Object.defineProperty(s.input.answers,'0',{get(){reads++;return 'hidden';},enumerable:true});assert.throws(()=>r.parseMutationInput(s));assert.equal(reads,0);
  const b=self();b.input.answers[Symbol('hidden')]='x';assert.throws(()=>r.parseMutationInput(b));
  const original=self();const parsed=r.parseMutationInput(original);original.input.answers[0]='changed during auth';assert.equal(parsed.input.answers[0],'');
+});
+
+test('Admin reviewer projections remain role-scoped and every preview remains read-only',()=>{
+ const r=rules();const row=review('admin');row.selfSubmittedAt='2026-10-20T00:00:00Z';row.selfStatus='manager_review';row.selfRevision='self:1';row.readRevision='read:1:0';row.capabilities.saveManager=true;row.capabilities.completeManager=true;
+ const data={viewerContext:{actorUserId:actorId,personId:null,role:'system_admin',displayName:'Synthetic P0'},reviews:[row],startablePeople:[row.employee]};
+ assert.deepEqual(r.parseWorkspace(data,actorId,'system_admin',null),data);
+ assert.throws(()=>r.parseWorkspace(data,actorId,'system_admin',null,true));
+ const other={...data,viewerContext:{...data.viewerContext,personId:managerId,role:'manager'}};
+ assert.throws(()=>r.parseWorkspace(other,actorId,'manager',managerId));
+ const duplicated={...data,startablePeople:[row.employee,row.employee]};assert.throws(()=>r.parseWorkspace(duplicated,actorId,'system_admin',null));
+ const own=review();const ownData={viewerContext:{actorUserId:actorId,personId,role:'admin',displayName:'Synthetic Admin'},reviews:[own],startablePeople:[]};
+ assert.deepEqual(r.parseWorkspace(ownData,actorId,'admin',personId),ownData);
+ assert.throws(()=>r.parseWorkspace({...ownData,reviews:[row]},actorId,'admin',personId));
 });

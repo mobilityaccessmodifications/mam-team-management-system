@@ -7,6 +7,9 @@ import { workspace, review, documentFor, deferred, failure, ids } from './perfor
 import { unzipSync, strFromU8 } from 'fflate';
 import { QUESTIONS } from '../src/lib/performance-review-questions.mjs';
 
+const refresh = h => { const button = h.all.find(node => node.type === 'button' && node.props.children === 'Reload'); return button ? button.props.onClick() : h.auth('TOKEN_REFRESHED', ids.actor); };
+const newCycle = h => h.change('start-cycle', '2027');
+
 test('review loading and empty states remain visible for the read-only Super Admin', async () => {
   const pending = deferred();
   const data = workspace('admin', 'MAM', { reviews: [] });
@@ -22,14 +25,14 @@ test('review loading and empty states remain visible for the read-only Super Adm
   assert.equal(h.all.filter(n => n.type === 'form').length, 0);
   assert.ok(!h.text.includes('New yearly review'));
   h.ports.loadPerformanceReviews = async () => failure('unavailable');
-  await h.click('Reload'); await h.settle();
+  await refresh(h); await h.settle();
   assert.ok(h.text.includes('Synthetic unavailable.'));
   assert.ok(!h.text.includes('No performance reviews yet.'));
   h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('admin', 'MAM', { viewerContext: data.viewerContext }) });
-  await h.click('Reload'); await h.settle();
+  await refresh(h); await h.settle();
   assert.ok(h.text.includes('Manager assessment'));
   assert.ok(!h.text.includes('Synthetic unavailable.'));
-  for (const node of h.all.filter(n => ['input', 'select', 'textarea'].includes(n.type))) assert.equal(node.props.disabled, true);
+  for (const node of h.all.filter(n => ['input', 'select', 'textarea'].includes(n.type) && n.props.name !== 'start-cycle')) assert.equal(node.props.disabled, true);
   h.unmount();
 });
 
@@ -101,9 +104,9 @@ test('assigned manager assesses with original ratings while HR is read-only and 
     await h.settle();
     assert.ok(h.text.includes('Manager assessment'));
     assert.equal(h.field('managerNote').props.value, 'PRIVATE-SYNTHETIC-MANAGER-NOTE');
-    assert.deepEqual(h.all.filter(n => n.type === 'option' && n.props.value).slice(0, 4).map(n => n.props.children), ['1 Needs improvement', '2 Meets expectations', '3 Exceeds expectations', 'N Not enough evidence']);
+    assert.deepEqual(h.field('rating-0').props.children.flat().filter(n => n.type === 'option' && n.props.value).slice(0, 4).map(n => n.props.children), ['1 Needs improvement', '2 Meets expectations', '3 Exceeds expectations', 'N Not enough evidence']);
     if (audience === 'admin') {
-      for (const n of h.all.filter(n => ['input', 'select', 'textarea'].includes(n.type))) assert.equal(n.props.disabled, true);
+      for (const n of h.all.filter(n => ['input', 'select', 'textarea'].includes(n.type) && n.props.name !== 'start-cycle')) assert.equal(n.props.disabled, true);
       h.submit('Self assessment'); h.submit('Manager assessment'); await h.settle();
       assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 0);
       assert.ok(!h.all.some(n => n.type === 'button' && /Save|Complete|Submit/.test(n.props.children)));
@@ -145,7 +148,7 @@ test('meeting registration is not held and finalisation requires explicit held p
   assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1);
   authoritative = { ...authoritative, managerCompletedAt: '2026-10-01T02:00:00Z' };
   h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('manager', 'MAM', { reviews: [authoritative] }) });
-  h.click('Reload'); await h.settle();
+  refresh(h); await h.settle();
   h.change('held', true); h.submit('Review meeting'); await h.settle();
   assert.equal(h.calls.at(-1).args[0].command, 'submit_review');
   assert.equal(h.calls.at(-1).args[0].input.held, true);
@@ -157,26 +160,26 @@ test('meeting registration is not held and finalisation requires explicit held p
   h.unmount();
 });
 
-test('new yearly review defaults follow Melbourne calendar boundaries and refresh after cancellation', async t => {
+test('direct entry defaults follow Melbourne year and calendar boundaries without toolbar controls', async t => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-12-31T13:30:00Z') });
-  const data = workspace('manager'); data.startablePeople = [data.reviews[0].employee];
-  const h = mount(data); await h.settle();
   for (const [instant, year, dueDate] of [
     ['2026-12-31T13:30:00Z', '2027', '2027-01-08'],
     ['2026-10-03T14:30:00Z', '2026', '2026-10-11'],
     ['2028-02-22T13:30:00Z', '2028', '2028-03-01'],
   ]) {
     t.mock.timers.setTime(new Date(instant).getTime());
-    h.click('New yearly review'); h.render();
+    const data = workspace('manager', 'MAM', { reviews: [], startablePeople: [review().employee] });
+    const h = mount(data); await h.settle();
     assert.equal(h.field('start-cycle').type, 'select');
     assert.equal(h.field('start-cycle').props.value, year);
     assert.equal(h.field('start-dueDate').props.value, dueDate);
-    h.change('start-dueDate', '2029-01-01'); h.click('New yearly review'); h.render();
+    assert.equal(h.button('Start review').props.disabled, false);
+    assert.ok(!h.all.some(node => node.type === 'button' && ['Reload', 'New yearly review'].includes(node.props.children)));
+    h.change('start-dueDate', '2029-01-01'); refresh(h); await h.settle();
     assert.equal(h.field('start-dueDate').props.value, '2029-01-01');
-    h.click('Cancel'); h.render();
+    assert.equal(h.calls.filter(call => call.name === 'startPerformanceReview').length, 0);
+    h.unmount();
   }
-  assert.equal(h.calls.filter(call => call.name === 'startPerformanceReview').length, 0);
-  h.unmount();
 });
 
 test('creation shows eligible employees beside editable defaults and preserves edits when selecting a report', async () => {
@@ -184,7 +187,7 @@ test('creation shows eligible employees beside editable defaults and preserves e
   const data = workspace('manager', 'MAM', { startablePeople: [first, second] });
   const pending = deferred();
   const h = mount(data, { startPerformanceReview: () => pending.promise }); await h.settle();
-  h.click('New yearly review'); h.render();
+  newCycle(h); h.render();
   const label = person => `${person.name} — ${person.company}`;
   assert.equal(h.button(label(first)).props['aria-pressed'], true);
   assert.equal(h.all.filter(node => node.type === 'nav' && node.props['aria-label'] === 'Review list').length, 0);
@@ -201,7 +204,7 @@ test('creation shows eligible employees beside editable defaults and preserves e
   assert.equal(h.button(label(first)).props.disabled, true);
   oldSelect(); h.render();
   assert.equal(h.button(label(second)).props['aria-pressed'], true);
-  pending.resolve(failure('invalid')); await h.settle(); h.click('Cancel'); h.render();
+  pending.resolve(failure('invalid')); await h.settle(); h.click(label(first)); h.render(); h.change('start-cycle', '2026'); h.render();
   assert.ok(h.text.includes('Manager assessment'));
   h.unmount();
 });
@@ -209,22 +212,23 @@ test('creation shows eligible employees beside editable defaults and preserves e
 test('yearly creation selects only startable people, validates date/cycle and submits once', async () => {
   const data = workspace('manager'); data.startablePeople = [data.reviews[0].employee];
   const pending = deferred(); const h = mount(data, { startPerformanceReview: () => pending.promise }); await h.settle();
-  h.click('New yearly review'); h.render();
+  newCycle(h); h.render();
   const employeeLabel = `${data.startablePeople[0].name} — ${data.startablePeople[0].company}`;
   assert.equal(h.button(employeeLabel).props['aria-pressed'], true);
   h.ports.loadPerformanceReviews = async () => ({ ok: true, data: { ...data, startablePeople: [] } });
-  h.click('Reload'); await h.settle(); h.submit('New yearly review'); await h.settle();
+  refresh(h); await h.settle();
+  assert.ok(!h.all.some(node => node.type === 'form' && node.props['aria-label'] === 'New yearly review'));
   assert.equal(h.calls.filter(c => c.name === 'startPerformanceReview').length, 0);
-  h.ports.loadPerformanceReviews = async () => ({ ok: true, data }); h.click('Reload'); await h.settle();
+  h.ports.loadPerformanceReviews = async () => ({ ok: true, data }); refresh(h); await h.settle();
   h.click(employeeLabel); h.render(); h.change('start-cycle', '26'); h.submit('New yearly review'); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'startPerformanceReview').length, 0);
-  h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-02-30'); h.submit('New yearly review'); await h.settle();
+  h.change('start-cycle', '2027'); h.change('start-dueDate', '2026-02-30'); h.submit('New yearly review'); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'startPerformanceReview').length, 0);
   h.change('start-dueDate', '2026-11-30'); const form = h.all.find(n => n.type === 'form' && n.props['aria-label'] === 'New yearly review');
   form.props.onSubmit({ preventDefault() {} }); form.props.onSubmit({ preventDefault() {} }); h.render();
   const writes = h.calls.filter(c => c.name === 'startPerformanceReview'); assert.equal(writes.length, 1);
-  const sent = writes[0].args[0]; assert.deepEqual(sent, { operationId: sent.operationId, employeePersonId: data.startablePeople[0].id, cycle: '2026', dueDate: '2026-11-30' });
-  pending.resolve({ ok: true, committed: true, operationId: sent.operationId, existing: true, review: data.reviews[0] }); await h.settle();
+  const sent = writes[0].args[0]; assert.deepEqual(sent, { operationId: sent.operationId, employeePersonId: data.startablePeople[0].id, cycle: '2027', dueDate: '2026-11-30' });
+  pending.resolve({ ok: true, committed: true, operationId: sent.operationId, existing: true, review: { ...data.reviews[0], cycle: '2027' } }); await h.settle();
   assert.ok(h.text.includes('Review opened.'));
   assert.equal(h.all.filter(n => n.type === 'form' && n.props['aria-label'] === 'New yearly review').length, 0);
   h.unmount();
@@ -252,17 +256,17 @@ test('Word download calls the frozen adapter for both companies and all audience
   h.unmount();
 });
 
-test('manual reload fences retired callbacks and does not overwrite dirty drafts or rebase their CAS revision', async () => {
+test('native refresh fences retired selection callbacks and does not overwrite dirty drafts or rebase their CAS revision', async () => {
   const pending = deferred(); let write;
   const h = mount(workspace(), { mutatePerformanceReview: async input => { write = input; return failure('conflict'); } }); await h.settle();
-  const oldReload = h.button('Reload').props.onClick;
+  const oldCycle = h.field('start-cycle').props.onChange; const oldSelection = () => oldCycle({ target: { value: '2027' } });
   h.ports.loadPerformanceReviews = () => pending.promise;
-  h.click('Reload'); h.render(); h.change('self-0', 'Dirty draft written after read started');
+  refresh(h); h.render(); h.change('self-0', 'Dirty draft written after read started');
   pending.resolve({ ok: true, data: workspace('employee', 'MAM', { reviews: [review('employee', 'MAM', { selfRevision: 'self:9', selfAnswers: Array(12).fill('Late authoritative answer') })] }) }); await h.settle();
   assert.equal(h.field('self-0').props.value, 'Dirty draft written after read started');
   h.click('Save self draft'); await h.settle(); assert.equal(write.expectedRevision, 'self:0');
   assert.equal(h.field('self-0').props.value, 'Dirty draft written after read started'); assert.ok(h.text.includes('Synthetic conflict.'));
-  const calls = h.calls.length; oldReload(); await h.settle(); assert.equal(h.calls.length, calls, 'Retired reload must not dispatch');
+  const calls = h.calls.length; oldSelection(); await h.settle(); assert.equal(h.calls.length, calls, 'Retired selection must not dispatch');
   h.unmount();
 });
 
@@ -270,9 +274,9 @@ test('selection epoch handles A to B to A and rejects late workspace reads', asy
   const a = review('manager'), b = review('manager', 'Equipsy', { id: ids.other, code: 'PR-2026-0002', employee: { ...review('manager').employee, id: '22000000-0000-4000-8000-000000000003', name: 'Synthetic Second', company: 'Equipsy' } });
   const initial = workspace('manager', 'MAM', { reviews: [a, b] }), pending = deferred();
   const h = mount(initial); await h.settle(); h.ports.loadPerformanceReviews = () => pending.promise;
-  h.click('Reload'); h.render();
-  h.click(`${b.code} — ${b.employee.name} — ${b.cycle}`); h.render();
-  h.click(`${a.code} — ${a.employee.name} — ${a.cycle}`); h.render();
+  refresh(h); h.render();
+  h.click(`${b.employee.name} — ${b.employee.company}`); h.render();
+  h.click(`${a.employee.name} — ${a.employee.company}`); h.render();
   h.change('managerNote', 'New A draft after A B A');
   pending.resolve({ ok: true, data: workspace('manager', 'MAM', { reviews: [{ ...a, managerNote: 'LATE-PRIVATE-RESPONSE' }, b] }) }); await h.settle();
   assert.equal(h.field('managerNote').props.value, 'New A draft after A B A');
@@ -294,7 +298,7 @@ test('uncertain writes retain drafts, never replay and require explicit committe
     assert.ok(!h.text.includes('SYNTHETIC-PROVIDER-SECRET'));
     h.submit('Self assessment'); saved(); await h.settle();
     assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1);
-    h.click('Reload'); await h.settle();
+    refresh(h); await h.settle();
     assert.equal(h.button('Save self draft').props.disabled, true);
     h.click('Reconcile update'); await h.settle();
     const mutation = h.calls.find(c => c.name === 'mutatePerformanceReview').args[0];
@@ -313,9 +317,9 @@ test('uncertain writes retain drafts, never replay and require explicit committe
 });
 
 test('uncertain yearly creation reconciles with null review id and does not create twice', async () => {
-  const data = workspace('manager'); data.startablePeople = [data.reviews[0].employee];
-  const h = mount(data, { startPerformanceReview: async () => failure('uncertain', true), reconcilePerformanceReviewOperation: async () => ({ ok: true, data: { status: 'committed', review: data.reviews[0] } }) }); await h.settle();
-  h.click('New yearly review'); h.render(); h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30');
+  const data = workspace('manager', 'MAM', { reviews: [], startablePeople: [review().employee] });
+  const h = mount(data, { startPerformanceReview: async () => failure('uncertain', true), reconcilePerformanceReviewOperation: async () => ({ ok: true, data: { status: 'committed', review: review('manager') } }) }); await h.settle();
+  newCycle(h); h.render(); h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30');
   h.submit('New yearly review'); await h.settle(); h.submit('New yearly review'); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'startPerformanceReview').length, 1);
   assert.equal(h.field('start-cycle').props.value, '2026');
@@ -329,7 +333,7 @@ test('known commit followed by reload failure never retries the original write',
   const h = mount(workspace(), { mutatePerformanceReview: async input => ({ ok: true, committed: true, operationId: input.operationId, review: review('employee', 'MAM', { selfRevision: 'self:1', selfAnswers: input.input.answers }) }) }); await h.settle();
   h.change('self-0', 'Committed synthetic value'); const original = h.button('Save self draft').props.onClick;
   original(); await h.settle(); h.ports.loadPerformanceReviews = async () => failure('unavailable');
-  h.click('Reload'); await h.settle(); original(); await h.settle();
+  refresh(h); await h.settle(); original(); await h.settle();
   assert.equal(h.field('self-0').props.value, 'Committed synthetic value');
   assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1);
   h.unmount();
@@ -341,15 +345,15 @@ test('native logout clears private DTOs, drafts, creation form and Blob URLs bef
   h.auth('INITIAL_SESSION', ids.actor);
   await h.click('Download Word'); await h.settle();
   h.change('managerNote', 'PRIVATE-UNSAVED-AUTH-DRAFT');
-  const oldSave = h.button('Save manager draft').props.onClick, oldDownload = h.button('Download Word').props.onClick, oldCreate = h.button('New yearly review').props.onClick;
-  h.click('New yearly review'); h.render(); h.change('start-cycle', '2026');
-  const pending = deferred(); h.ports.loadPerformanceReviews = () => pending.promise; h.click('Reload'); h.render();
+  const oldSave = h.button('Save manager draft').props.onClick, oldDownload = h.button('Download Word').props.onClick, oldCreate = h.field('start-cycle').props.onChange;
+  newCycle(h); h.render(); h.change('start-cycle', '2026');
+  const pending = deferred(); h.ports.loadPerformanceReviews = () => pending.promise; refresh(h); h.render();
   h.auth('SIGNED_OUT');
   assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-'));
   assert.ok(!h.text.includes('Synthetic Colleague'));
   assert.equal(h.all.filter(n => n.type === 'form').length, 0);
   assert.deepEqual(h.revoked, [h.downloads[0].href]);
-  const count = h.calls.length; oldSave(); oldDownload(); oldCreate(); await h.settle(); assert.equal(h.calls.length, count);
+  const count = h.calls.length; oldSave(); oldDownload(); oldCreate({ target: { value: '2027' } }); await h.settle(); assert.equal(h.calls.length, count);
   pending.resolve({ ok: true, data }); await h.settle();
   assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-'));
   h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace() });
@@ -363,11 +367,11 @@ test('definitive action permission loss clears private state while transient fai
     const data = workspace('manager'); data.startablePeople = [data.reviews[0].employee];
     const h = mount(data, { mutatePerformanceReview: async () => route === 'reconcile' ? failure('uncertain', true) : failure('forbidden'), getPerformanceReviewDocument: async () => failure('unauthenticated'), reconcilePerformanceReviewOperation: async () => failure('forbidden'), startPerformanceReview: async () => failure('forbidden') }); await h.settle();
     h.change('managerNote', 'PRIVATE-DRAFT-TO-ERASE');
-    if (route === 'load') { h.ports.loadPerformanceReviews = async () => failure('forbidden'); h.click('Reload'); }
+    if (route === 'load') { h.ports.loadPerformanceReviews = async () => failure('forbidden'); refresh(h); }
     if (route === 'mutation' || route === 'reconcile') { h.click('Save manager draft'); await h.settle(); }
     if (route === 'document') h.click('Download Word');
     if (route === 'reconcile') h.click('Reconcile update');
-    if (route === 'start') { h.click('New yearly review'); h.render(); h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30'); h.submit('New yearly review'); }
+    if (route === 'start') { newCycle(h); h.render(); h.change('start-dueDate', '2026-11-30'); h.submit('New yearly review'); }
     await h.settle(); assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-'), route+' clears private state'); assert.equal(h.all.filter(n => n.type === 'form').length, 0); h.unmount();
   }
   for (const code of ['conflict', 'unavailable']) {
@@ -381,7 +385,7 @@ test('role downgrade and vanished selection erase manager caches and retire pend
   const pending = deferred(); const h = mount(workspace('manager'), { mutatePerformanceReview: () => pending.promise }); await h.settle();
   h.change('managerNote', 'PRIVATE-INFLIGHT-DRAFT'); h.click('Save manager draft'); h.render();
   const input = h.calls.at(-1).args[0];
-  h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('employee', 'MAM', { reviews: [] }) }); h.click('Reload'); await h.settle();
+  h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('employee', 'MAM', { reviews: [] }) }); refresh(h); await h.settle();
   assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-'));
   pending.resolve({ ok: true, committed: true, operationId: input.operationId, review: review('manager', 'MAM', { managerNote: 'PRIVATE-LATE-RESURRECTION' }) }); await h.settle();
   assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-'));
@@ -408,7 +412,7 @@ test('unsaved manager edits invalidate completion locally and sibling saves pres
 
 test('Admin and P0 never acquire employee writes from an incorrectly self-shaped DTO', async () => {
   for (const role of ['admin', 'system_admin']) {
-    const data = workspace(); data.viewerContext.role = role; data.startablePeople = [data.reviews[0].employee];
+    const data = workspace(); data.viewerContext.role = role; data.viewerContext.personId = null;
     const h = mount(data); await h.settle();
     assert.equal(h.all.filter(n => n.type === 'form').length, 0);
     assert.ok(!h.text.includes('New yearly review'));
@@ -464,8 +468,8 @@ test('retired manager document responses never invoke the adapter or create a Bl
 test('initial and overlapping manual reads are latest-epoch only', async () => {
   const initial = deferred(), first = deferred(), second = deferred();
   const h = mount(workspace(), { loadPerformanceReviews: () => initial.promise });
-  h.ports.loadPerformanceReviews = () => first.promise; h.click('Reload'); h.render();
-  h.ports.loadPerformanceReviews = () => second.promise; h.click('Reload'); h.render();
+  h.ports.loadPerformanceReviews = () => first.promise; refresh(h); h.render();
+  h.ports.loadPerformanceReviews = () => second.promise; refresh(h); h.render();
   second.resolve({ ok: true, data: workspace('employee', 'MAM', { reviews: [review('employee', 'MAM', { selfAnswers: Array(12).fill('Newest read'), selfRevision: 'self:2' })] }) }); await h.settle();
   initial.resolve({ ok: true, data: workspace() }); first.resolve({ ok: true, data: workspace() }); await h.settle();
   assert.equal(h.field('self-0').props.value, 'Newest read'); h.unmount();
@@ -504,7 +508,7 @@ test('effect replay with a transient initial failure leaves a working explicit R
     const h = mount(workspace(), { loadPerformanceReviews: async () => { if (mode === 'throw') throw new Error('Synthetic unavailable'); return failure('unavailable'); } }); h.replayEffects(); await h.settle();
     assert.ok(h.text.includes(mode === 'typed' ? 'Synthetic unavailable.' : 'Reviews could not be loaded.'));
     const before = h.calls.length; h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace() });
-    h.click('Reload'); await h.settle();
+    refresh(h); await h.settle();
     assert.equal(h.calls.length, before + 1); assert.equal(h.field('self-0').props.value, review().selfAnswers[0]); h.unmount();
   }
 });
@@ -513,25 +517,28 @@ test('unknown write retains its original unchanged draft even when reload return
   const h = mount(workspace(), { mutatePerformanceReview: async () => failure('uncertain', true) }); await h.settle();
   const before = h.field('self-0').props.value; h.click('Save self draft'); await h.settle();
   h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('employee', 'MAM', { reviews: [review('employee', 'MAM', { selfRevision: 'self:9', selfAnswers: Array(12).fill('Different authoritative values') })] }) });
-  h.click('Reload'); await h.settle(); assert.equal(h.field('self-0').props.value, before);
+  refresh(h); await h.settle(); assert.equal(h.field('self-0').props.value, before);
   assert.equal(h.button('Save self draft').props.disabled, true); assert.ok(!h.text.includes('Update confirmed.')); h.unmount();
 });
 
-test('review ordering uses visible cycle, due date and code and remains stable after a receipt', async () => {
-  const older = review('employee', 'MAM', { id: ids.other, code: 'PR-2025-0001', cycle: '2025', dueDate: '2025-11-30' }), newer = review();
+test('employee navigation keeps historical cycles reachable and stable after a receipt', async () => {
+  const older = review('employee', 'MAM', { id: ids.other, code: 'PR-2023-0001', cycle: '2023', dueDate: '2023-11-30' }), newer = review();
   const h = mount(workspace('employee', 'MAM', { reviews: [older, newer] }), { mutatePerformanceReview: async input => ({ ok: true, committed: true, operationId: input.operationId, review: { ...older, selfRevision: 'self:1', selfAnswers: input.input.answers } }) }); await h.settle();
-  const order = () => h.all.find(n => n.type === 'nav').props.children.map(n => n.props.children[0]);
-  assert.deepEqual(order(), [newer.code, older.code]);
-  h.click(`${older.code} — ${older.employee.name} — ${older.cycle}`); h.render(); h.change('self-0', 'Older visible cycle update'); h.click('Save self draft'); await h.settle();
-  assert.deepEqual(order(), [newer.code, older.code]); h.unmount();
+  assert.equal(h.all.find(n => n.type === 'nav').props.children.length, 1);
+  assert.equal(h.field('start-cycle').props.value, '2026');
+  const years = () => h.field('start-cycle').props.children.map(node => node.props.value);
+  assert.ok(years().includes('2023'));
+  h.change('start-cycle', '2023'); h.change('self-0', 'Older visible cycle update'); h.click('Save self draft'); await h.settle();
+  assert.equal(h.field('start-cycle').props.value, '2023');
+  assert.ok(years().includes('2026')); assert.ok(h.text.includes('Saved.')); h.unmount();
 });
 
 test('same-role selected-record permission loss immediately clears forms, drafts and active Blob URLs', async () => {
   const data = workspace('manager'); data.startablePeople = [data.reviews[0].employee];
   const h = mount(data, { getPerformanceReviewDocument: async () => ({ ok: true, document: documentFor(data.reviews[0]) }) }); await h.settle();
   await h.click('Download Word'); await h.settle(); h.change('managerNote', 'PRIVATE-REVOKED-ASSIGNMENT');
-  h.click('New yearly review'); h.render(); h.change('start-cycle', '2026');
-  h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('manager', 'MAM', { reviews: [], startablePeople: [] }) }); h.click('Reload'); await h.settle();
+  newCycle(h); h.render(); h.change('start-cycle', '2026');
+  h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('manager', 'MAM', { reviews: [], startablePeople: [] }) }); refresh(h); await h.settle();
   assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-'));
   assert.equal(h.all.filter(n => n.type === 'form').length, 0);
   assert.deepEqual(h.revoked, [h.downloads[0].href]); h.unmount();
@@ -540,7 +547,7 @@ test('same-role selected-record permission loss immediately clears forms, drafts
 test('an unresolved write prevents record reselection from discarding the held draft', async () => {
   const h = mount(workspace(), { mutatePerformanceReview: async () => failure('uncertain', true) }); await h.settle();
   h.change('self-0', 'Held draft must not be discarded by navigation'); h.click('Save self draft'); await h.settle();
-  const row = review(), label = `${row.code} — ${row.employee.name} — ${row.cycle}`;
+  const row = review(), label = `${row.employee.name} — ${row.employee.company}`;
   assert.equal(h.button(label).props.disabled, true);
   h.click(label); h.render(); assert.equal(h.field('self-0').props.value, 'Held draft must not be discarded by navigation'); h.unmount();
 });
@@ -555,7 +562,7 @@ test('nonmanager target preview remains read-only through direct input, submit a
     try {
       await h.settle();
       assert.deepEqual(h.calls[0], { name: 'loadPerformanceReviews', args: [previewPersonId] });
-      for (const field of h.all.filter(node => ['input', 'select', 'textarea'].includes(node.type))) {
+      for (const field of h.all.filter(node => ['input', 'select', 'textarea'].includes(node.type) && node.props.name !== 'start-cycle')) {
         assert.equal(field.props.disabled, true, field.props.name);
         field.props.onChange?.({ target: { value: 'Attempted preview write', checked: true } });
       }
@@ -586,7 +593,7 @@ test('preview rejects another person projection before reading its private field
 
 test('P0 manager delegation writes only assigned manager rows and passes the canonical target on every command', async () => {
   let row = review('manager', 'MAM', { meeting: { date: '2026-10-01', time: '10:30', duration: 30, mode: 'in_person', location: 'Synthetic room', notes: '' } });
-  const own = review('employee', 'MAM', { id: ids.other, code: 'PR-2026-0002', employee: { ...review().employee, id: ids.manager }, manager: { id: ids.person, name: 'Synthetic other manager' } });
+  const own = review('employee', 'MAM', { id: ids.other, code: 'PR-2026-0002', employee: { ...review().employee, id: ids.manager, name: 'Synthetic Own Manager' }, manager: { id: ids.person, name: 'Synthetic other manager' } });
   const h = mount(workspace('manager', 'MAM', { reviews: [row, own], startablePeople: [row.employee] }), { mutatePerformanceReview: async (input, target) => {
     assert.equal(target, ids.manager);
     row = { ...row, managerRevision: `manager:0:${Number(row.managerRevision.split(':').at(-1)) + 1}`,
@@ -596,7 +603,7 @@ test('P0 manager delegation writes only assigned manager rows and passes the can
   } }, { previewPersonId: ids.manager });
   try {
     await h.settle();
-    assert.equal(h.button('New yearly review').props.disabled, false);
+    assert.equal(h.field('start-cycle').props.disabled, false);
     assert.equal(h.field('self-0').props.disabled, true);
     assert.equal(h.field('managerNote').props.disabled, false);
     h.change('managerNote', 'Delegated manager evidence'); h.click('Save manager draft'); await h.settle();
@@ -607,7 +614,7 @@ test('P0 manager delegation writes only assigned manager rows and passes the can
     assert.deepEqual(writes.map(call => call.args[0].command), ['save_manager', 'complete_manager', 'save_meeting', 'submit_review']);
     assert.ok(writes.every(call => call.args[1] === ids.manager));
     assert.equal(h.field('managerNote').props.disabled, true);
-    h.click(`${own.code} — ${own.employee.name} — ${own.cycle}`); h.render();
+    h.click(`${own.employee.name} — ${own.employee.company}`); h.render();
     assert.equal(h.field('self-0').props.disabled, true);
     h.change('self-0', 'Attempted delegated self write'); h.submit('Self assessment'); await h.settle();
     assert.equal(h.calls.filter(call => call.name === 'mutatePerformanceReview').length, 4);
@@ -620,7 +627,7 @@ test('uncertain delegated create stays held until its target-bound receipt is re
   const data = workspace('manager', 'MAM', { reviews: [], startablePeople: [review().employee] });
   const h = mount(data, { startPerformanceReview: async () => failure('uncertain', true), reconcilePerformanceReviewOperation: async () => ({ ok: true, data: { status: 'committed', review: review('manager') } }) }, { previewPersonId: ids.manager });
   try {
-    await h.settle(); h.click('New yearly review'); h.render();
+    await h.settle(); newCycle(h); h.render();
     h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30');
     h.submit('New yearly review'); await h.settle();
     const started = h.calls.at(-1);
@@ -628,7 +635,7 @@ test('uncertain delegated create stays held until its target-bound receipt is re
     assert.equal(h.button('Start review').props.disabled, true);
     h.submit('New yearly review'); await h.settle();
     assert.equal(h.calls.filter(call => call.name === 'startPerformanceReview').length, 1);
-    h.click('Reload'); await h.settle();
+    refresh(h); await h.settle();
     assert.equal(h.button('Start review').props.disabled, true);
     h.click('Reconcile update'); await h.settle();
     assert.deepEqual(h.calls.at(-1), { name: 'reconcilePerformanceReviewOperation', args: [{ operationId: started.args[0].operationId, reviewId: null }, ids.manager] });
@@ -642,7 +649,7 @@ test('manager delegation respects each assigned row capability and does not enab
   const h = mount(workspace('manager', 'MAM', { reviews: [row] }), {}, { previewPersonId: ids.manager });
   try {
     await h.settle();
-    for (const field of h.all.filter(node => ['input', 'select', 'textarea'].includes(node.type))) {
+    for (const field of h.all.filter(node => ['input', 'select', 'textarea'].includes(node.type) && node.props.name !== 'start-cycle')) {
       assert.equal(field.props.disabled, true, field.props.name);
       field.props.onChange?.({ target: { value: 'Attempted locked delegated edit', checked: true } });
     }
@@ -661,7 +668,7 @@ test('delegated create passes its target and rejects an employee-shaped success 
   const data = workspace('manager', 'MAM', { reviews: [], startablePeople: [review().employee] });
   const h = mount(data, { startPerformanceReview: async input => ({ ok: true, committed: true, operationId: input.operationId, review: review('employee', 'MAM', { employee: { ...review().employee, id: ids.manager } }) }) }, { previewPersonId: ids.manager });
   try {
-    await h.settle(); h.click('New yearly review'); h.render();
+    await h.settle(); newCycle(h); h.render();
     h.change('start-cycle', '2026'); h.change('start-dueDate', '2026-11-30');
     h.submit('New yearly review'); await h.settle();
     assert.equal(h.calls.at(-1).args[1], ids.manager);
@@ -718,4 +725,87 @@ test('preview Word download is bound to the target and late responses retire on 
     assert.equal(h.downloads.length, 1);
     assert.equal(h.built.length, 1);
   } finally { h.unmount(); }
+});
+
+test('native Admin and P0 start reviews for visible managers and edit only manager-side capabilities', async () => {
+  for (const role of ['admin', 'system_admin']) {
+    const employee = { ...review().employee, name: 'Synthetic Manager', jobTitle: 'Manager' };
+    let row = review('admin', 'MAM', { employee, capabilities: { ...review('manager').capabilities }, readRevision: 'read:0:0' });
+    const data = workspace('admin', 'MAM', { viewerContext: { ...workspace('admin').viewerContext, role }, reviews: [], startablePeople: [employee] });
+    const h = mount(data, {
+      startPerformanceReview: async input => ({ ok: true, committed: true, operationId: input.operationId, existing: false, review: { ...row, cycle: input.cycle } }),
+      mutatePerformanceReview: async input => {
+        if (input.command === 'save_manager' || input.command === 'complete_manager') row = { ...row, readRevision: 'read:0:1', ...{ managerAnswers: input.input.answers, managerNote: input.input.managerNote }, managerCompletedAt: input.command === 'complete_manager' ? '2026-10-01T02:00:00Z' : null };
+        else row = { ...row, readRevision: 'read:0:2', meeting: input.input, ...(input.command === 'submit_review' ? { finalisedAt: '2026-10-01T03:00:00Z' } : {}) };
+        return { ok: true, committed: true, operationId: input.operationId, review: row };
+      },
+    });
+    await h.settle();
+    assert.equal(h.button('Synthetic Manager — MAM').props['aria-pressed'], true);
+    h.submit('New yearly review'); await h.settle();
+    assert.equal(h.calls.filter(call => call.name === 'startPerformanceReview').length, 1);
+    assert.equal(h.field('self-0').props.disabled, true);
+    assert.equal(h.field('managerNote').props.disabled, false);
+    h.change('managerNote', 'Admin manager evidence'); h.click('Save manager draft'); await h.settle();
+    assert.equal(h.calls.at(-1).args[0].expectedRevision, 'read:0:0');
+    h.submit('Manager assessment'); await h.settle();
+    h.change('meeting-date', '2026-10-01'); h.change('meeting-time', '10:30'); h.click('Save meeting'); await h.settle();
+    h.change('held', true); h.submit('Review meeting'); await h.settle();
+    assert.deepEqual(h.calls.filter(call => call.name === 'mutatePerformanceReview').map(call => call.args[0].command), ['save_manager', 'complete_manager', 'save_meeting', 'submit_review']);
+    assert.equal(h.field('managerNote').props.disabled, true);
+    h.unmount();
+  }
+});
+
+test('linked native Admin owns only its self answers and rejects its own manager-shaped projection', async () => {
+  const data = workspace('employee'); data.viewerContext.role = 'admin';
+  const h = mount(data, { mutatePerformanceReview: async input => ({ ok: true, committed: true, operationId: input.operationId, review: { ...data.reviews[0], selfRevision: 'self:1', selfAnswers: input.input.answers } }) });
+  await h.settle(); h.change('self-0', 'Admin own self evidence'); h.click('Save self draft'); await h.settle();
+  assert.equal(h.calls.at(-1).args[0].command, 'save_self'); assert.ok(!h.text.includes('Manager assessment')); h.unmount();
+  const denied = workspace('admin'); denied.viewerContext.personId = denied.reviews[0].employee.id;
+  Object.defineProperty(denied.reviews[0], 'managerNote', { get() { throw new Error('Own manager note must not be inspected'); } });
+  const own = mount(denied); await own.settle(); assert.equal(own.all.filter(node => node.type === 'form').length, 0); own.unmount();
+});
+
+
+test('selecting an eligible replacement after record permission loss restores safe creation defaults', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-20T00:00:00Z') });
+  const data = workspace('manager'), replacement = { ...review().employee, id: ids.other, name: 'Synthetic Replacement' };
+  const h = mount(data); await h.settle(); h.change('managerNote', 'PRIVATE-REVOKED-DRAFT');
+  h.ports.loadPerformanceReviews = async () => ({ ok: true, data: { ...data, reviews: [], startablePeople: [replacement] } });
+  refresh(h); await h.settle();
+  assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-REVOKED-DRAFT'));
+  h.click('Synthetic Replacement — MAM'); h.render();
+  assert.equal(h.field('start-cycle').props.value, '2026');
+  assert.equal(h.field('start-dueDate').props.value, '2026-10-27');
+  h.unmount();
+});
+
+
+test('Admin target preview shows all candidate details and defaults without permitting a start', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-20T00:00:00Z') });
+  const candidate = { ...review().employee, id: ids.other, name: 'Synthetic Preview Manager', jobTitle: 'Manager' };
+  const data = workspace('admin', 'MAM', { reviews: [], startablePeople: [candidate], viewerContext: { ...workspace('admin').viewerContext, personId: ids.person } });
+  const h = mount(data, {}, { previewPersonId: ids.person }); await h.settle();
+  assert.equal(h.button('Synthetic Preview Manager — MAM').props['aria-pressed'], true);
+  assert.equal(h.field('start-cycle').props.value, '2026');
+  assert.equal(h.field('start-dueDate').props.value, '2026-10-27');
+  assert.equal(h.field('start-dueDate').props.disabled, true);
+  assert.equal(h.button('Start review').props.disabled, true);
+  h.change('start-dueDate', '2027-01-01'); h.submit('New yearly review'); await h.settle();
+  assert.equal(h.field('start-dueDate').props.value, '2026-10-27');
+  assert.equal(h.calls.filter(call => call.name === 'startPerformanceReview').length, 0); h.unmount();
+});
+
+test('Admin conflict recovery retains the manager draft and explicitly adopts the fresh read revision', async () => {
+  const row = review('admin', 'MAM', { capabilities: { ...review('manager').capabilities } });
+  let attempt = 0;
+  const h = mount(workspace('admin', 'MAM', { reviews: [row] }), { mutatePerformanceReview: async input => ++attempt === 1 ? failure('conflict') : { ok: true, committed: true, operationId: input.operationId, review: { ...row, readRevision: 'read:0:2', managerNote: input.input.managerNote } } });
+  await h.settle(); h.change('managerNote', 'Admin conflict draft'); h.click('Save manager draft'); await h.settle();
+  h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('admin', 'MAM', { reviews: [{ ...row, readRevision: 'read:0:1', managerNote: 'Different admin draft' }] }) });
+  h.click('Reload'); await h.settle();
+  assert.equal(h.field('managerNote').props.value, 'Admin conflict draft');
+  h.click('Save manager draft'); await h.settle();
+  assert.equal(h.calls.at(-1).args[0].expectedRevision, 'read:0:1');
+  assert.equal(h.field('managerNote').props.value, 'Admin conflict draft'); h.unmount();
 });

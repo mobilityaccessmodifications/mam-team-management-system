@@ -58,31 +58,31 @@ test('native manager yearly review defaults cross daylight saving by calendar da
   await page.clock.setFixedTime(new Date('2026-10-03T14:30:00Z'));
   await open(page, 'manager');
   await page.evaluate(id => { const person = window.performanceReviewFixture.workspace.startablePeople[0]; window.performanceReviewFixture.workspace.startablePeople.push({ ...person, id, name: 'Synthetic Second' }); }, ids.other);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
-  await page.getByRole('button', { name: 'New yearly review', exact: true }).click();
+  await page.evaluate(actor => window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor), ids.actor);
+  await page.getByRole('navigation', { name: 'Review employees' }).getByRole('button', { name: 'Synthetic Second — MAM', exact: true }).click();
   const form = page.getByRole('form', { name: 'New yearly review', exact: true });
-  await expect(form.getByRole('combobox', { name: 'Cycle', exact: true })).toHaveValue('2026');
+  await expect(page.getByRole('combobox', { name: 'Cycle', exact: true })).toHaveValue('2026');
   await expect(field(page, 'start-dueDate')).toHaveValue('2026-10-11');
   const employees = page.getByRole('navigation', { name: 'Review employees' });
   await expect(employees.getByRole('button')).toHaveCount(2);
-  await expect(employees.getByRole('button').first()).toHaveAttribute('aria-pressed', 'true');
+  await expect(employees.getByRole('button').last()).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('navigation', { name: 'Review list' })).toHaveCount(0);
   const listBox = await employees.boundingBox(), formBox = await form.boundingBox();
   expect(formBox.x).toBeGreaterThanOrEqual(listBox.x + listBox.width);
   const startButton = form.getByRole('button', { name: 'Start review', exact: true }), startBox = await startButton.boundingBox();
-  expect(Math.abs(startBox.x + startBox.width - formBox.x - formBox.width + 24)).toBeLessThan(2);
-  expect(Math.abs(startBox.y + startBox.height - formBox.y - formBox.height + 24)).toBeLessThan(2);
+  expect(Math.abs(startBox.x + startBox.width - formBox.x - formBox.width)).toBeLessThan(2);
+  expect(Math.abs(startBox.y + startBox.height - formBox.y - formBox.height)).toBeLessThan(2);
   await expect(startButton).toHaveCSS('background-color', 'rgb(195, 77, 20)');
   await employees.getByRole('button', { name: 'Synthetic Second — MAM', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(employees.getByRole('button').last()).toHaveAttribute('aria-pressed', 'true');
-  await expect(form.getByRole('heading', { name: 'Synthetic Second — MAM', exact: true })).toBeVisible();
-  await form.getByRole('combobox', { name: 'Cycle', exact: true }).selectOption('2027');
+  await expect(page.getByRole('heading', { name: 'Synthetic Second — MAM', exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Cycle', exact: true }).selectOption('2027');
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileList = await employees.boundingBox(), mobileForm = await form.boundingBox();
   expect(mobileForm.y).toBeGreaterThanOrEqual(mobileList.y + mobileList.height);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await expect(form.getByRole('combobox', { name: 'Cycle', exact: true })).toHaveValue('2027');
+  await expect(page.getByRole('combobox', { name: 'Cycle', exact: true })).toHaveValue('2027');
   await expect(field(page, 'start-dueDate')).toHaveValue('2026-10-11');
   await hold(page, 'startPerformanceReview');
   await form.getByRole('button', { name: 'Start review', exact: true }).click();
@@ -90,7 +90,8 @@ test('native manager yearly review defaults cross daylight saving by calendar da
   const writes = await calls(page, 'startPerformanceReview');
   expect(writes).toHaveLength(1);
   expect(writes[0].args[0]).toMatchObject({ employeePersonId: ids.other, cycle: '2027', dueDate: '2026-10-11' });
-  await expect(page.getByRole('button', { name: 'New yearly review', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'New yearly review', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reload', exact: true })).toHaveCount(0);
   await expect(employees.getByRole('button').first()).toBeDisabled();
 });
 
@@ -139,10 +140,41 @@ test('manager meeting is not held by registration and final needs explicit held 
 
 test('native auth event clears manager DOM and ignores late manager load after same-user sign-in', async ({ page }) => {
   await open(page, 'manager'); await field(page, 'managerNote').fill('PRIVATE-BROWSER-DRAFT');
-  await hold(page, 'loadPerformanceReviews'); await page.getByRole('button', { name: 'Reload', exact: true }).click(); await waitPending(page, 'loadPerformanceReviews');
+  await hold(page, 'loadPerformanceReviews'); await page.evaluate(actor => window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor), ids.actor); await waitPending(page, 'loadPerformanceReviews');
   await page.evaluate(data => { window.performanceReviewFixture.emitAuth('SIGNED_OUT'); window.performanceReviewFixture.workspace = data; }, workspace());
   await expect(field(page, 'managerNote')).toHaveCount(0); await expect(page.getByText('Synthetic Colleague — MAM', { exact: true })).toHaveCount(0);
   await page.evaluate(actor => window.performanceReviewFixture.emitAuth('SIGNED_IN', actor), ids.actor);
   await expect(field(page, 'self-0')).toBeVisible(); await release(page, 'loadPerformanceReviews', { ok: true, data: workspace('manager') });
   await expect(field(page, 'managerNote')).toHaveCount(0); await expect(page.getByRole('heading', { name: 'Manager assessment', exact: true })).toHaveCount(0);
+});
+
+test('native Admin Performance starts a manager review and saves with its admin revision', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-20T00:00:00Z'));
+  await open(page, 'admin');
+  const manager = { ...review().employee, id: ids.other, name: 'Synthetic Manager', jobTitle: 'Manager' };
+  await page.evaluate(({ manager, actor }) => {
+    window.performanceReviewFixture.workspace.startablePeople = [manager];
+    window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor);
+  }, { manager, actor: ids.actor });
+  await page.getByRole('navigation', { name: 'Review employees' }).getByRole('button', { name: 'Synthetic Manager — MAM', exact: true }).click();
+  await expect(field(page, 'start-cycle')).toHaveValue('2026');
+  await expect(field(page, 'start-dueDate')).toHaveValue('2026-10-27');
+  await hold(page, 'startPerformanceReview');
+  await page.getByRole('button', { name: 'Start review', exact: true }).click();
+  await waitPending(page, 'startPerformanceReview');
+  const start = (await calls(page, 'startPerformanceReview'))[0].args[0];
+  expect(start).toMatchObject({ employeePersonId: manager.id, cycle: '2026', dueDate: '2026-10-27' });
+  const row = review('admin', 'MAM', { employee: manager, readRevision: 'read:0:0', capabilities: { ...review('manager').capabilities } });
+  await release(page, 'startPerformanceReview', { ok: true, committed: true, operationId: start.operationId, review: row, existing: false });
+  await expect(field(page, 'self-0')).toBeDisabled();
+  await expect(field(page, 'managerNote')).toBeEnabled();
+  await field(page, 'managerNote').fill('Synthetic Admin reviewer note');
+  await hold(page, 'mutatePerformanceReview');
+  await page.getByRole('button', { name: 'Save manager draft', exact: true }).click();
+  await waitPending(page, 'mutatePerformanceReview');
+  const write = (await calls(page, 'mutatePerformanceReview'))[0].args[0];
+  expect(write.command).toBe('save_manager'); expect(write.expectedRevision).toBe('read:0:0');
+  await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: write.operationId, review: { ...row, readRevision: 'read:0:1', managerNote: write.input.managerNote } });
+  await expect(page.getByRole('status')).toHaveText('Saved.');
+  await expect(field(page, 'managerNote')).toHaveValue('Synthetic Admin reviewer note');
 });

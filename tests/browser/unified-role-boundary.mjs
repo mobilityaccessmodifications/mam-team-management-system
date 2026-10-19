@@ -383,11 +383,15 @@ export async function invokeServerAction(module, name, args) {
   return result;
 }
 
+const authListeners = new Set();
+window.unifiedRoleFixture.emitAuth = (event, id = actorAuthId) => { for (const listener of authListeners) listener(event, id ? { user: { id } } : null); };
+
 const client = {
   auth: { onAuthStateChange(callback) {
     let active = true;
+    authListeners.add(callback);
     queueMicrotask(() => { if (active) callback('INITIAL_SESSION', { user: { id: actorAuthId } }); });
-    return { data: { subscription: { unsubscribe() { active = false; } } } };
+    return { data: { subscription: { unsubscribe() { active = false; authListeners.delete(callback); } } } };
   } },
   from(table) {
     if (table !== 'internal_org_people') throw new Error(`Unexpected synthetic table ${table}`);

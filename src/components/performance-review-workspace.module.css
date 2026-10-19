@@ -24,7 +24,7 @@
 .columns > nav > button { justify-content: flex-start; text-align: left; }
 .columns > nav > button[aria-pressed="true"] { background: var(--surface-warm); box-shadow: inset 3px 0 var(--mam-orange); color: var(--mam-orange-dark); }
 .startLayout { display: grid; grid-template-columns: minmax(240px, 32%) minmax(0, 1fr); min-height: 400px; overflow: hidden; border: 1px solid var(--surface-border); border-radius: var(--radius-md); }
-.employeeList { min-width: 0; background: var(--surface-muted); border-right: 1px solid var(--surface-border); }
+.employeeList { min-width: 0; max-height: min(640px, 70vh); overflow-y: auto; background: var(--surface-muted); border-right: 1px solid var(--surface-border); }
 .workspace .employeeList > button { display: flex; width: 100%; min-height: 80px; justify-content: flex-start; gap: 10px; padding: 14px; border: 0; border-bottom: 1px solid var(--surface-border); border-radius: 0; text-align: left; }
 .workspace .employeeList > button:focus-visible { outline-offset: -3px; }
 .workspace .employeeList > button[aria-pressed="true"] { background: var(--surface-warm); box-shadow: inset 3px 0 var(--mam-orange); }
@@ -33,8 +33,12 @@
 .employeeDetails strong { overflow: hidden; color: var(--text-primary); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .employeeDetails > span { overflow: hidden; color: var(--text-secondary); font-size: 12px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .company { flex-shrink: 0; padding: 2px 5px; border-radius: 20px; background: var(--surface-warm); color: var(--mam-orange-dark); font-size: 10px; }
-.workspace .startForm { display: flex; flex-direction: column; gap: 20px; padding: 24px; }
-.startForm > header { display: grid; gap: 6px; }
-.startForm > header p { color: var(--text-secondary); }
+.reviewPanel { display: flex; flex-direction: column; min-width: 0; padding: 24px; gap: 20px; }
+.reviewPanel > .card { padding: 0; border: 0; border-radius: 0; }
+.workspace .startForm { display: flex; flex: 1; flex-direction: column; gap: 20px; }
+.cycle { flex-shrink: 0; }
+.workspace .recovery { justify-self: start; }
+.reviewPanel > header { display: grid; gap: 6px; }
+.reviewPanel > header p { color: var(--text-secondary); }
 .startActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: auto; padding-top: 24px; }
-@media (max-width: 760px) { .workspace { padding: 16px; } .columns { grid-template-columns: minmax(0, 1fr); } .card { padding: 16px; } .startLayout { grid-template-columns: minmax(0, 1fr); } .employeeList { border-right: 0; border-bottom: 1px solid var(--surface-border); } .workspace .startForm { min-height: 340px; padding: 16px; } }
+@media (max-width: 760px) { .workspace { padding: 16px; } .columns { grid-template-columns: minmax(0, 1fr); } .card { padding: 16px; } .startLayout { grid-template-columns: minmax(0, 1fr); } .employeeList { max-height: 320px; border-right: 0; border-bottom: 1px solid var(--surface-border); } .reviewPanel { min-height: 340px; padding: 16px; } }

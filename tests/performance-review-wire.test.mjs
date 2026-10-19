@@ -120,7 +120,7 @@ test('a definitive native Auth loss clears the mounted private workspace through
     native.client.auth.getUser = async () => ({ data: { user: null }, error: new AuthSessionMissingError() });
     const response = await native.actions.loadPerformanceReviews();
     assert.equal(response.code, 'unauthenticated');
-    await ui.click('Reload');
+    ui.auth('TOKEN_REFRESHED', actorId);
     await ui.settle();
     assert.ok(!ui.all.some(node => node.type === 'textarea' && node.props.name === 'managerNote'));
     assert.ok(!ui.all.some(node => node.type === 'button' && text(node) === 'Download Word'));
@@ -148,7 +148,7 @@ test('canonical role denial clears private state while a transient role failure 
         const result = await native.actions.loadPerformanceReviews();
         assert.equal(result.code, expected);
         assert.doesNotMatch(JSON.stringify(result), /SYNTHETIC PRIVATE/);
-        await ui.click('Reload');
+        ui.auth('TOKEN_REFRESHED', actorId);
         await ui.settle();
         assert.equal(ui.all.some(node => node.type === 'textarea' && node.props.name === 'managerNote'), retainsPrivate);
         assert.equal(native.rpcCalls.filter(call => call.name === 'mutate_performance_review').length, 0);
@@ -174,7 +174,7 @@ test('canonical RPC JWT rejection retires private data even when the preceding A
           ? { data: null, error: { code: 'PGRST301', message: 'SYNTHETIC JWT FAILURE' }, status }
           : originalRpc(name, args);
         assert.equal((await native.actions.loadPerformanceReviews()).code, expected);
-        await ui.click('Reload');
+        ui.auth('TOKEN_REFRESHED', actorId);
         await ui.settle();
         assert.equal(ui.all.some(node => node.type === 'textarea' && node.props.name === 'managerNote'), retainsPrivate);
         assert.equal(native.rpcCalls.filter(call => call.name === 'mutate_performance_review').length, 0);
@@ -199,7 +199,7 @@ test('native Auth HTTP denials retire private state but outages and rate limits 
         const result = await native.actions.loadPerformanceReviews();
         assert.equal(result.code, expected);
         assert.doesNotMatch(JSON.stringify(result), /SYNTHETIC AUTH/);
-        await ui.click('Reload');
+        ui.auth('TOKEN_REFRESHED', actorId);
         await ui.settle();
         assert.equal(ui.all.some(node => node.type === 'textarea' && node.props.name === 'managerNote'), retainsPrivate);
       } finally { ui.unmount(); }

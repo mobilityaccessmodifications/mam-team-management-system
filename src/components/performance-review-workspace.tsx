@@ -6,7 +6,7 @@ import { loadPerformanceReviews, mutatePerformanceReview, startPerformanceReview
 import { buildPerformanceReviewDownload } from "@/lib/performance-review-document";
 import { createClient } from "@/lib/supabase/client";
 import { QUESTIONS } from "@/lib/performance-review-questions.mjs";
-import type { PerformanceFailure, PerformanceReview, PerformanceSelfReview, PerformanceManagerInput, PerformanceMeeting, PerformanceMutationInput, PerformanceWorkspace } from "@/lib/performance-review-types";
+import type { PerformanceFailure, PerformanceReview, PerformanceSelfReview, PerformanceManagerInput, PerformanceIdentity, PerformanceMeeting, PerformanceMutationInput, PerformanceWorkspace } from "@/lib/performance-review-types";
 import styles from "./performance-review-workspace.module.css";
 
 const REQUIRED = [0, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -35,9 +35,9 @@ function selfRow(row: PerformanceReview): PerformanceSelfReview {
 }
 
 function ownedRow(row: PerformanceReview, viewer: PerformanceWorkspace["viewerContext"]): PerformanceReview | null {
-  if (row.audience === "employee") return ["employee", "account", "manager"].includes(viewer.role) && row.employee.id === viewer.personId ? selfRow(row) : null;
+  if (row.audience === "employee") return ["employee", "account", "manager", "admin", "system_admin"].includes(viewer.role) && row.employee.id === viewer.personId ? selfRow(row) : null;
   if (row.audience === "manager" && (viewer.role !== "manager" || row.manager.id !== viewer.personId || row.employee.id === viewer.personId)) return null;
-  if (row.audience === "admin" && viewer.role !== "admin" && viewer.role !== "system_admin") return null;
+  if (row.audience === "admin" && (viewer.role !== "admin" && viewer.role !== "system_admin" || row.employee.id === viewer.personId)) return null;
   const fields = {
     ...selfRow(row), managerAnswers: [...row.managerAnswers], ratings: [...row.ratings],
     summary: row.summary, overallRating: row.overallRating, managerNote: row.managerNote,
@@ -53,7 +53,11 @@ function orderedReviews(rows: PerformanceReview[]) {
 }
 
 function ownedWorkspace(data: PerformanceWorkspace): PerformanceWorkspace {
-  return { viewerContext: { ...data.viewerContext }, reviews: orderedReviews(data.reviews.map(row => ownedRow(row, data.viewerContext)).filter((row): row is PerformanceReview => row !== null)), startablePeople: data.viewerContext.role === "manager" ? data.startablePeople.map(person => ({ ...person })) : [] };
+  return { viewerContext: { ...data.viewerContext }, reviews: orderedReviews(data.reviews.map(row => ownedRow(row, data.viewerContext)).filter((row): row is PerformanceReview => row !== null)), startablePeople: ["manager", "admin", "system_admin"].includes(data.viewerContext.role) ? data.startablePeople.filter(person => person.id !== data.viewerContext.personId).map(person => ({ ...person })) : [] };
+}
+
+function reviewPeople(data: PerformanceWorkspace | null): PerformanceIdentity[] {
+  return data ? [...new Map([...data.startablePeople, ...data.reviews.map(row => row.employee)].map(person => [person.id, person])).values()] : [];
 }
 
 function managerInput(row: PerformanceReview): PerformanceManagerInput | null {
@@ -69,10 +73,11 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const [assessment, setAssessment] = useState<PerformanceManagerInput | null>(null);
   const [meeting, setMeeting] = useState<PerformanceMeeting>({ ...EMPTY_MEETING });
   const [held, setHeld] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [startDraft, setStartDraft] = useState({ employeePersonId: "", cycle: "", dueDate: "" });
   const [startYear, setStartYear] = useState(0);
+  const reviewChoice = useRef<{ employeePersonId: string; cycle: string } | null>(null);
   const [message, setMessage] = useState("");
+  const [recoveryVisible, setRecoveryVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [generation, setGeneration] = useState(0);
@@ -92,7 +97,10 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const urls = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const retire = useCallback(() => { epoch.current += 1; }, []);
   const selected = workspace?.reviews.find(row => row.id === selectedId);
-  const startPerson = workspace?.startablePeople.find(person => person.id === startDraft.employeePersonId);
+  const people = reviewPeople(workspace);
+  const startPerson = people.find(person => person.id === startDraft.employeePersonId);
+  const creating = !selected && !!startPerson && !!workspace?.startablePeople.some(person => person.id === startPerson.id);
+  const cycles = [...new Set([...(workspace?.startablePeople.some(person => person.id === startDraft.employeePersonId) ? [String(startYear - 1), String(startYear), String(startYear + 1)] : []), ...(workspace?.reviews.filter(row => row.employee.id === startDraft.employeePersonId).map(row => row.cycle) ?? [])])].sort((a, b) => b.localeCompare(a));
   const track = useCallback((next: PendingOperation | null) => { if (next) conflict.current = null; operationRef.current = next; setOperation(next); }, []);
   const advance = useCallback(() => {
     if (operationRef.current?.phase === "pending") track({ ...operationRef.current, phase: "uncertain" });
@@ -103,9 +111,9 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   }, [track]);
   function claimBusy() { const owner = Symbol(); busyOwner.current = owner; busyRef.current = true; setBusy(true); setMessage(""); return owner; }
   function releaseBusy(owner: symbol) { if (busyOwner.current === owner) { busyOwner.current = null; busyRef.current = false; setBusy(false); } }
-  const unknown = useCallback(() => { if (operationRef.current) track({ ...operationRef.current, phase: "uncertain" }); setMessage("The update could not be confirmed. Reconcile before submitting again."); }, [track]);
+  const unknown = useCallback(() => { setRecoveryVisible(true); if (operationRef.current) track({ ...operationRef.current, phase: "uncertain" }); setMessage("The update could not be confirmed. Reconcile before submitting again."); }, [track]);
   const choose = useCallback((row: PerformanceReview | null) => {
-    advance(); conflict.current = null; dirty.current = false; dirtyParts.current = { assessment: false, meeting: false }; setAssessmentDirty(false);
+    advance(); conflict.current = null; setRecoveryVisible(false); dirty.current = false; dirtyParts.current = { assessment: false, meeting: false }; setAssessmentDirty(false);
     selection.current = row ? { id: row.id, audience: row.audience } : null;
     setRevision(row ? row.audience === "employee" ? row.selfRevision : row.audience === "manager" ? row.managerRevision : row.readRevision : "");
     setSelectedId(row?.id ?? null); setAnswers(row ? [...row.selfAnswers] : []);
@@ -115,12 +123,13 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   }, [advance]);
   const clearPrivate = useCallback((notice: string) => {
     track(null); choose(null); viewer.current = null;
-    setWorkspace(null); setCreating(false); setStartDraft({ employeePersonId: "", cycle: "", dueDate: "" });
+    setWorkspace(null); reviewChoice.current = null; setStartDraft({ employeePersonId: "", cycle: "", dueDate: "" });
     for (const [url, timer] of urls.current) { clearTimeout(timer); URL.revokeObjectURL(url); }
     urls.current.clear(); setMessage(notice);
   }, [track, choose]);
   const handleFailure = useCallback((result: PerformanceFailure, writing = false) => {
     if (result.code === "unauthenticated" || result.code === "forbidden") { clearPrivate(result.message); return; }
+    setRecoveryVisible(true);
     if (writing && (result.uncertain || result.code === "uncertain")) { unknown(); return; }
     if (writing) track(null);
     setMessage(result.message);
@@ -133,20 +142,28 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     if (changed) clearPrivate("");
     nativeActor.current = data.viewerContext.actorUserId;
     viewer.current = data.viewerContext; setWorkspace(data);
-    const row = preferredId ? data.reviews.find(item => item.id === preferredId) : data.reviews[0];
-    if (!row) {
-      if (preferredId !== null) { clearPrivate(""); viewer.current = data.viewerContext; setWorkspace(data); }
-      else choose(null);
-      return;
-    }
+    const draft = newReviewDraft();
+    setStartYear(Number(draft.cycle));
+    const preferred = preferredId ? data.reviews.find(item => item.id === preferredId) : null;
+    if (preferredId && !preferred) { clearPrivate(""); viewer.current = data.viewerContext; setWorkspace(data); return; }
+    const currentChoice = changed ? null : reviewChoice.current;
+    const person = preferred?.employee ?? reviewPeople(data).find(item => item.id === currentChoice?.employeePersonId) ?? data.reviews.find(row => row.audience !== "employee" && row.cycle === draft.cycle)?.employee ?? data.startablePeople[0] ?? data.reviews[0]?.employee;
+    let cycle = preferred?.cycle ?? currentChoice?.cycle ?? draft.cycle;
+    let row = person ? data.reviews.find(item => item.employee.id === person.id && item.cycle === cycle) : undefined;
+    if (!row && person && !data.startablePeople.some(item => item.id === person.id)) { row = data.reviews.find(item => item.employee.id === person.id); cycle = row?.cycle ?? cycle; }
+    reviewChoice.current = person ? { employeePersonId: person.id, cycle } : null;
+    setStartDraft(current => ({ employeePersonId: person?.id ?? "", cycle, dueDate: currentChoice && !changed ? current.dueDate : draft.dueDate }));
+    if (operationRef.current?.reviewId === null && currentChoice?.employeePersonId === person?.id) return;
+    if (!row) { if (!operationRef.current) choose(null); return; }
     if (changed || selection.current?.id !== row.id || selection.current.audience !== row.audience) { choose(row); return; }
     if (recovery && recovery === conflict.current && recovery.generation === epoch.current && !operationRef.current && recovery.actorUserId === data.viewerContext.actorUserId && recovery.personId === data.viewerContext.personId && recovery.role === data.viewerContext.role && recovery.reviewId === row.id && recovery.employeePersonId === row.employee.id && recovery.audience === row.audience) {
-      conflict.current = null;
+      conflict.current = null; setRecoveryVisible(false);
       const editable = row.audience === "employee" ? !row.selfSubmittedAt && (recovery.command === "save_self" ? row.capabilities.saveSelf : recovery.command === "submit_self" && row.capabilities.submitSelf)
-        : row.audience === "manager" && !row.finalisedAt && (recovery.command === "save_manager" ? row.capabilities.saveManager : recovery.command === "complete_manager" ? row.capabilities.completeManager : recovery.command === "save_meeting" ? row.capabilities.saveMeeting : recovery.command === "submit_review" && row.capabilities.submitReview);
+        : !row.finalisedAt && (recovery.command === "save_manager" ? row.capabilities.saveManager : recovery.command === "complete_manager" ? row.capabilities.completeManager : recovery.command === "save_meeting" ? row.capabilities.saveMeeting : recovery.command === "submit_review" && row.capabilities.submitReview);
       if (editable) setRevision(row.audience === "employee" ? row.selfRevision : row.audience === "manager" ? row.managerRevision : row.readRevision);
       return;
     }
+    if (!operationRef.current && !conflict.current) setRecoveryVisible(false);
     if (!dirty.current && !operationRef.current && !conflict.current) choose(row);
   }, [clearPrivate, choose, previewPersonId]);
   function accept(row: PerformanceReview, notice: string, channel: PerformanceMutationInput["command"] | null = null) {
@@ -157,7 +174,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     choose(row);
     if (keepAssessment) { setAssessment(assessment); setAssessmentDirty(true); dirtyParts.current.assessment = true; dirty.current = true; }
     if (keepMeeting) { setMeeting(meeting); setHeld(held); dirtyParts.current.meeting = true; dirty.current = true; }
-    setCreating(false); setStartDraft({ employeePersonId: "", cycle: "", dueDate: "" }); setMessage(notice);
+    reviewChoice.current = { employeePersonId: row.employee.id, cycle: row.cycle }; setStartDraft(current => ({ ...current, employeePersonId: row.employee.id, cycle: row.cycle })); setMessage(notice);
   }
   async function reconcile() {
     const pending = operationRef.current;
@@ -193,7 +210,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     finally { releaseBusy(owner); }
   }
   async function start() {
-    if (readOnly || epoch.current !== generation || busyRef.current || operationRef.current || !creating || !workspace || workspace.viewerContext.role !== "manager") return;
+    if (readOnly || epoch.current !== generation || busyRef.current || operationRef.current || !creating || !workspace || !["manager", "admin", "system_admin"].includes(workspace.viewerContext.role)) return;
     const ticket = generation;
     const parsed = new Date(startDraft.dueDate + "T00:00:00Z");
     if (!workspace.startablePeople.some(person => person.id === startDraft.employeePersonId) || !/^\d{4}$/.test(startDraft.cycle) || !/^\d{4}-\d{2}-\d{2}$/.test(startDraft.dueDate) || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== startDraft.dueDate) { setMessage("Select an eligible employee, four-digit cycle and valid due date."); return; }
@@ -221,7 +238,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       if (epoch.current !== ticket) return;
       if (!result.ok) { handleFailure(result); return; }
       applyLoaded(result.data, selectedId, recovery);
-    } catch { if (epoch.current === ticket) setMessage("Reviews could not be loaded."); }
+    } catch { if (epoch.current === ticket) { setMessage("Reviews could not be loaded."); setRecoveryVisible(true); } }
     finally { if (epoch.current === ticket) setLoading(false); }
   }
   async function run(command: PerformanceMutationInput["command"]) {
@@ -235,12 +252,12 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       if (command === "submit_self" && REQUIRED.some(index => !answers[index]?.trim())) { setMessage("Complete the required answers."); return; }
       mutation = { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { answers: [...answers] } };
     } else if (command === "save_manager" || command === "complete_manager") {
-      if (selected.audience !== "manager" || !assessment || selected.finalisedAt || !(command === "save_manager" ? selected.capabilities.saveManager : selected.capabilities.completeManager)) return;
+      if (selected.audience === "employee" || !assessment || selected.finalisedAt || !(command === "save_manager" ? selected.capabilities.saveManager : selected.capabilities.completeManager)) return;
       if ([...assessment.answers, assessment.summary, assessment.managerNote].some(value => value.length > 8000)) { setMessage("Use at most 8000 characters per answer."); return; }
       if (command === "complete_manager" && (REQUIRED.some(index => !assessment.answers[index]?.trim()) || RATED.some(index => !RATINGS.some(([value]) => value === assessment.ratings[index])) || !assessment.summary.trim() || !assessment.managerNote.trim() || !RATINGS.some(([value]) => value === assessment.overallRating))) { setMessage("Complete the required manager answers, ratings and notes."); return; }
       mutation = { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...assessment, answers: [...assessment.answers], ratings: [...assessment.ratings] } };
     } else {
-      if (selected.audience !== "manager" || selected.finalisedAt || !(command === "save_meeting" ? selected.capabilities.saveMeeting : selected.capabilities.submitReview)) return;
+      if (selected.audience === "employee" || selected.finalisedAt || !(command === "save_meeting" ? selected.capabilities.saveMeeting : selected.capabilities.submitReview)) return;
       if (command === "submit_review" && (!held || !selected.managerCompletedAt || dirtyParts.current.assessment)) { setMessage("Complete the assessment and confirm the meeting was held."); return; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(meeting.date) || !/^\d{2}:\d{2}$/.test(meeting.time) || !Number.isInteger(meeting.duration) || meeting.duration < 5 || meeting.duration > 480 || meeting.notes.length > 8000 || meeting.location.length > 8000) { setMessage("Check the meeting details."); return; }
       mutation = command === "save_meeting" ? { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...meeting } } : { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...meeting, held: true } };
@@ -284,7 +301,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
             if (!active || epoch.current !== ticket) return;
             if (!result.ok) { handleFailure(result); return; }
             applyLoaded(result.data, selection.current?.id ?? null);
-          } catch { if (active && epoch.current === ticket) setMessage("Reviews could not be loaded."); }
+          } catch { if (active && epoch.current === ticket) { setMessage("Reviews could not be loaded."); setRecoveryVisible(true); } }
           finally { if (active && epoch.current === ticket) setLoading(false); }
         });
       });
@@ -300,7 +317,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       setGeneration(ticket);
       if (!result.ok) { handleFailure(result); return; }
       applyLoaded(result.data, null);
-    }).catch(() => { if (active && epoch.current === ticket) { setGeneration(ticket); setMessage("Reviews could not be loaded."); } }).finally(() => { if (active && epoch.current === ticket) setLoading(false); });
+    }).catch(() => { if (active && epoch.current === ticket) { setGeneration(ticket); setMessage("Reviews could not be loaded."); setRecoveryVisible(true); } }).finally(() => { if (active && epoch.current === ticket) setLoading(false); });
     return () => {
       active = false; retire(); unsubscribe(); busyOwner.current = null; busyRef.current = false; operationRef.current = null;
       for (const [url, timer] of downloads) { clearTimeout(timer); URL.revokeObjectURL(url); } downloads.clear();
@@ -308,29 +325,43 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   }, [advance, applyLoaded, clearPrivate, handleFailure, retire, previewPersonId]);
   const blocked = readOnly || busy || operation !== null;
   const selfDisabled = preview || blocked || selected?.audience !== "employee" || !selected.capabilities.saveSelf || Boolean(selected.selfSubmittedAt);
-  const managerDisabled = blocked || selected?.audience !== "manager" || !selected.capabilities.saveManager || Boolean(selected.finalisedAt);
-  const meetingDisabled = blocked || selected?.audience !== "manager" || !selected.capabilities.saveMeeting || Boolean(selected.finalisedAt);
-  const heldDisabled = blocked || selected?.audience !== "manager" || !selected.capabilities.submitReview || Boolean(selected.finalisedAt);
+  const managerDisabled = blocked || !selected || selected.audience === "employee" || !selected.capabilities.saveManager || Boolean(selected.finalisedAt);
+  const meetingDisabled = blocked || !selected || selected.audience === "employee" || !selected.capabilities.saveMeeting || Boolean(selected.finalisedAt);
+  const heldDisabled = blocked || !selected || selected.audience === "employee" || !selected.capabilities.submitReview || Boolean(selected.finalisedAt);
+  const managerActions = selected?.audience === "manager" || selected?.audience === "admin" && (selected.capabilities.saveManager || selected.capabilities.completeManager || selected.capabilities.saveMeeting || selected.capabilities.submitReview);
   return <section className={styles.workspace} aria-label="Performance reviews" aria-busy={busy || loading}>
-    <header className={styles.toolbar}><h1>Performance reviews</h1><button type="button" onClick={() => reload()} disabled={busy}>Reload</button>{workspace?.startablePeople.length ? <button type="button" className={styles.primaryButton} disabled={blocked} onClick={() => { if (epoch.current !== generation || blocked) return; if (!creating) { const draft = newReviewDraft(); setStartDraft({ ...draft, employeePersonId: workspace.startablePeople[0].id }); setStartYear(Number(draft.cycle)); } setCreating(true); }}>New yearly review</button> : null}</header>
+    <header className={styles.toolbar}><h1>Performance reviews</h1></header>
     {message ? <p role={["Saved.", "Submitted.", "Review opened.", "Review created.", "Update confirmed."].includes(message) ? "status" : "alert"}>{message}</p> : null}
-    {loading ? <p role="status">Loading performance reviews…</p> : !creating && !message && workspace?.reviews.length === 0 ? <p role="status">No performance reviews yet.</p> : null}
+    {recoveryVisible ? <button type="button" className={styles.recovery} onClick={() => reload()} disabled={busy}>Reload</button> : null}
+    {loading ? <p role="status">Loading performance reviews…</p> : !message && people.length === 0 && workspace ? <p role="status">No performance reviews yet.</p> : null}
     {operation?.phase === "uncertain" ? <button type="button" disabled={busy} onClick={() => reconcile()}>Reconcile update</button> : null}
-    {creating ? <div className={styles.startLayout}>
-      <nav className={styles.employeeList} aria-label="Review employees">{workspace?.startablePeople.map(person => <button type="button" key={person.id} aria-label={`${person.name} — ${person.company}`} aria-pressed={person.id === startDraft.employeePersonId} disabled={blocked} onClick={() => { if (epoch.current === generation && !blocked && !busyRef.current && !operationRef.current) setStartDraft(current => ({ ...current, employeePersonId: person.id })); }}>
+    {workspace && people.length > 0 ? <div className={styles.startLayout}>
+      <nav className={styles.employeeList} aria-label="Review employees">{people.map(person => <button type="button" key={person.id} aria-label={`${person.name} — ${person.company}`} aria-pressed={person.id === startDraft.employeePersonId} disabled={operation !== null} onClick={() => {
+        if (epoch.current !== generation || busyRef.current || operationRef.current) return;
+        const draft = newReviewDraft(), selectedCycle = startDraft.cycle || draft.cycle;
+        const row = workspace.reviews.find(item => item.employee.id === person.id && item.cycle === selectedCycle) ?? (!workspace.startablePeople.some(item => item.id === person.id) ? workspace.reviews.find(item => item.employee.id === person.id) : undefined);
+        const cycle = row?.cycle ?? selectedCycle;
+        reviewChoice.current = { employeePersonId: person.id, cycle };
+        choose(row ?? null); setStartYear(Number(draft.cycle)); setStartDraft(current => ({ employeePersonId: person.id, cycle, dueDate: current.dueDate || draft.dueDate }));
+      }}>
         <span className={styles.avatar} aria-hidden="true">{person.name.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join("")}</span>
         <span className={styles.employeeDetails}><strong>{person.name}</strong><span>{person.jobTitle} · {person.team}</span></span>
         <span className={styles.company}>{person.company}</span>
       </button>)}</nav>
-      <form className={styles.startForm} aria-label="New yearly review" onSubmit={event => { event.preventDefault(); void start(); }}>
+      <div className={styles.reviewPanel}>
         {startPerson ? <header><h2>{startPerson.name} — {startPerson.company}</h2><p>{startPerson.jobTitle} · {startPerson.team}</p></header> : null}
-        <label>Cycle<select name="start-cycle" disabled={blocked} value={startDraft.cycle} onChange={event => { if (epoch.current === generation && !blocked) setStartDraft(current => ({ ...current, cycle: event.target.value })); }}>{[startYear - 1, startYear, startYear + 1].map(year => <option key={year} value={String(year)}>{year}</option>)}</select></label>
-        <label>Due date<input name="start-dueDate" type="date" disabled={blocked} value={startDraft.dueDate} onChange={event => { if (epoch.current === generation && !blocked) setStartDraft(current => ({ ...current, dueDate: event.target.value })); }} /></label>
-        <div className={styles.startActions}><button type="button" disabled={blocked} onClick={() => { if (epoch.current !== generation || blocked) return; advance(); setCreating(false); setStartDraft({ employeePersonId: "", cycle: "", dueDate: "" }); }}>Cancel</button><button type="submit" className={styles.primaryButton} disabled={blocked || !startPerson}>Start review</button></div>
-      </form>
-    </div> : <div className={styles.columns}>
-      <nav aria-label="Review list">{workspace?.reviews.map(row => <button type="button" key={row.id} disabled={operation !== null} aria-pressed={row.id === selectedId} onClick={() => { if (epoch.current === generation && !operationRef.current) choose(row); }}>{row.code} — {row.employee.name} — {row.cycle}</button>)}</nav>
-      {selected ? <article className={styles.card}><h2>{selected.employee.name} — {selected.employee.company}</h2>
+        {startPerson ? <label className={styles.cycle}>Cycle<select name="start-cycle" disabled={busy || operation !== null} value={startDraft.cycle} onChange={event => {
+          if (epoch.current !== generation || busyRef.current || operationRef.current) return;
+          const cycle = event.target.value;
+          reviewChoice.current = { employeePersonId: startPerson.id, cycle };
+          choose(workspace.reviews.find(row => row.employee.id === startPerson.id && row.cycle === cycle) ?? null);
+          setStartDraft(current => ({ ...current, cycle }));
+        }}>{cycles.map(year => <option key={year} value={year}>{year}</option>)}</select></label> : null}
+        {creating ? <form className={styles.startForm} aria-label="New yearly review" onSubmit={event => { event.preventDefault(); void start(); }}>
+          <label>Due date<input name="start-dueDate" type="date" disabled={blocked} value={startDraft.dueDate} onChange={event => { if (epoch.current === generation && !blocked) setStartDraft(current => ({ ...current, dueDate: event.target.value })); }} /></label>
+          <div className={styles.startActions}><button type="submit" className={styles.primaryButton} disabled={blocked || !startPerson}>Start review</button></div>
+        </form> : null}
+      {selected ? <article className={styles.card}>
         {selected.capabilities.downloadDocument ? <button type="button" disabled={busy} onClick={() => download()}>Download Word</button> : null}
         <p>{selected.cycle} · {selected.dueDate} · {selected.selfStatus === "awaiting_employee" ? "Awaiting employee" : "Manager review"}</p>
         <form aria-label="Self assessment" onSubmit={event => { event.preventDefault(); void run("submit_self"); }}><h2>Self assessment</h2>
@@ -345,7 +376,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
           <label>Overall manager assessment<textarea name="summary" maxLength={8000} value={assessment.summary} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessmentDirty(true); setAssessment(current => current ? { ...current, summary: event.target.value } : null); } }} /></label>
           <label>Overall rating<select name="overallRating" value={assessment.overallRating} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessmentDirty(true); setAssessment(current => current ? { ...current, overallRating: event.target.value } : null); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label>Private manager note<textarea name="managerNote" maxLength={8000} value={assessment.managerNote} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessmentDirty(true); setAssessment(current => current ? { ...current, managerNote: event.target.value } : null); } }} /></label>
-          {selected.audience === "manager" ? <div className={styles.toolbar}><button type="button" disabled={managerDisabled} onClick={() => run("save_manager")}>Save manager draft</button><button type="submit" disabled={blocked || !selected.capabilities.completeManager || Boolean(selected.finalisedAt)}>Complete manager assessment</button></div> : null}
+          {managerActions ? <div className={styles.toolbar}><button type="button" disabled={managerDisabled} onClick={() => run("save_manager")}>Save manager draft</button><button type="submit" disabled={blocked || !selected.capabilities.completeManager || Boolean(selected.finalisedAt)}>Complete manager assessment</button></div> : null}
         </form> : null}
         {selected.audience !== "employee" ? <form aria-label="Review meeting" onSubmit={event => { event.preventDefault(); void run("submit_review"); }}><h2>Review meeting</h2>
           <label>Date<input type="date" name="meeting-date" value={meeting.date} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, date: event.target.value })); } }} /></label>
@@ -354,10 +385,11 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
           <label>Mode<select name="meeting-mode" value={meeting.mode} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, mode: event.target.value as PerformanceMeeting["mode"] })); } }}><option value="in_person">In person</option><option value="teams">Teams</option><option value="phone">Phone</option></select></label>
           <label>Location<input name="meeting-location" maxLength={8000} value={meeting.location} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, location: event.target.value })); } }} /></label>
           <label>Meeting notes<textarea name="meeting-notes" maxLength={8000} value={meeting.notes} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, notes: event.target.value })); } }} /></label>
-          {selected.audience === "manager" ? <><label><input type="checkbox" name="held" checked={held} disabled={heldDisabled} onChange={event => { if (epoch.current === generation && !heldDisabled) setHeld(event.target.checked); }} />Meeting was held</label><div className={styles.toolbar}><button type="button" disabled={meetingDisabled} onClick={() => run("save_meeting")}>Save meeting</button><button type="submit" disabled={blocked || assessmentDirty || !held || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Finalise review</button></div></> : null}
+          {managerActions ? <><label><input type="checkbox" name="held" checked={held} disabled={heldDisabled} onChange={event => { if (epoch.current === generation && !heldDisabled) setHeld(event.target.checked); }} />Meeting was held</label><div className={styles.toolbar}><button type="button" disabled={meetingDisabled} onClick={() => run("save_meeting")}>Save meeting</button><button type="submit" disabled={blocked || assessmentDirty || !held || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Finalise review</button></div></> : null}
           {selected.managerCompletedAt ? <p>Assessment completed: {selected.managerCompletedAt}</p> : null}{selected.finalisedAt ? <p>Finalised: {selected.finalisedAt}</p> : null}
         </form> : null}
       </article> : null}
-    </div>}
+      </div>
+    </div> : null}
   </section>;
 }

@@ -33,13 +33,13 @@ export function parseMutationInput(value: unknown): PerformanceMutationInput {
   const manager = v.command === "save_manager" || v.command === "complete_manager";
   const meeting = v.command === "save_meeting" || v.command === "submit_review";
   if (meeting) {
-    if (typeof v.expectedRevision !== "string" || !/^manager:(0|[1-9][0-9]*):(0|[1-9][0-9]*)$/.test(v.expectedRevision)) invalid();
+    if (typeof v.expectedRevision !== "string" || !/^(?:manager|read):(0|[1-9][0-9]*):(0|[1-9][0-9]*)$/.test(v.expectedRevision)) invalid();
     const m = closed(v.input, v.command === "submit_review" ? [...MEETING_KEYS, "held"] : MEETING_KEYS);
     if (v.command === "submit_review" && m.held !== true) invalid();
     validateMeeting(m);
     return structuredClone(v) as PerformanceMutationInput;
   }
-  if ((!self && !manager) || typeof v.expectedRevision !== "string" || !(self ? /^self:(0|[1-9][0-9]*)$/ : /^manager:(0|[1-9][0-9]*):(0|[1-9][0-9]*)$/).test(v.expectedRevision)) invalid();
+  if ((!self && !manager) || typeof v.expectedRevision !== "string" || !(self ? /^self:(0|[1-9][0-9]*)$/ : /^(?:manager|read):(0|[1-9][0-9]*):(0|[1-9][0-9]*)$/).test(v.expectedRevision)) invalid();
   const input = closed(v.input, self ? ["answers"] : ["answers", "ratings", "summary", "overallRating", "managerNote"]);
   const answers = strings(input.answers);
   if (v.command === "submit_self" || v.command === "complete_manager") for (const i of REQUIRED_ANSWERS) if (!answers[i].trim()) invalid();
@@ -129,7 +129,6 @@ export function parseReview(value: unknown, readOnly = false): PerformanceReview
     activity(v.managerActivity);
     const token = v[audience === "manager" ? "managerRevision" : "readRevision"];
     if (typeof token !== "string" || !(audience === "manager" ? /^manager:(0|[1-9][0-9]*):(0|[1-9][0-9]*)$/ : /^read:(0|[1-9][0-9]*):(0|[1-9][0-9]*)$/).test(token) || token.split(":")[1] !== v.selfRevision.split(":")[1] || caps.saveSelf !== false || caps.submitSelf !== false) invalid();
-    if (audience === "admin" && MANAGER_CAPS.filter(k => k !== "downloadDocument").some(k => caps[k] !== false)) invalid();
   }
   return structuredClone(v) as PerformanceReview;
 }
@@ -138,18 +137,23 @@ export function parseWorkspace(value: unknown, actorUserId: string, role: string
   const viewer = closed(v.viewerContext, ["actorUserId", "personId", "role", "displayName"]);
   if (viewer.actorUserId !== actorUserId || viewer.role !== role || viewer.personId !== personId) invalid();
   text(viewer.displayName);
-  if (!Array.isArray(v.reviews) || !Array.isArray(v.startablePeople) || (role !== "manager" && v.startablePeople.length)) invalid();
+  if (!Array.isArray(v.reviews) || !Array.isArray(v.startablePeople) || (!["manager", "admin", "system_admin"].includes(role) && v.startablePeople.length)) invalid();
   if (readOnly === "manager_delegate" && role !== "manager") invalid();
   const ids = new Set();
   for (const raw of v.reviews) {
     const audience = raw && typeof raw === "object" ? Object.getOwnPropertyDescriptor(raw, "audience")?.value : undefined;
     const review = parseReview(raw, readOnly === "manager_delegate" ? audience !== "manager" : readOnly);
     if (ids.has(review.id)) invalid(); ids.add(review.id);
-    if (role === "admin" || role === "system_admin") { if (review.audience !== "admin") invalid(); }
-    else if (review.employee.id === personId) { if (review.audience !== "employee") invalid(); }
+    if (review.employee.id === personId) { if (review.audience !== "employee") invalid(); }
+    else if (role === "admin" || role === "system_admin") { if (review.audience !== "admin") invalid(); }
     else if (role !== "manager" || review.audience !== "manager" || review.manager.id !== personId) invalid();
   }
-  for (const person of v.startablePeople) identity(person);
+  const people = new Set();
+  for (const person of v.startablePeople) {
+    identity(person);
+    if (people.has(person.id) || person.id === personId) invalid();
+    people.add(person.id);
+  }
   return structuredClone(v) as PerformanceWorkspace;
 }
 export function parseDocument(value: unknown): PerformanceDocument {
