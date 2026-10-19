@@ -39,3 +39,17 @@ export async function requirePerformanceReviewViewer(previewPersonId?: string) {
   }
   return { ...actor, capabilities: parsePortalRoleCapabilities(data, previewPersonId) };
 }
+
+export async function requirePerformanceReviewManagerDelegate(personId: string) {
+  const actor = await requirePerformanceReviewActor();
+  if (actor.capabilities.app_role !== "system_admin" || !actor.capabilities.is_super_admin || !actor.capabilities.can_change_employee_view) throw new PerformanceReviewAccessError("forbidden");
+  const { data, error, status } = await actor.supabase.rpc("get_portal_role_capabilities", { p_person_id: personId });
+  if (error || status >= 500) {
+    if (status === 401) throw new PerformanceReviewAccessError("unauthenticated");
+    if (!(status >= 500) && error?.code === "42501") throw new PerformanceReviewAccessError("forbidden");
+    throw new Error(ROLE_CAPABILITY_ERROR);
+  }
+  const capabilities = parsePortalRoleCapabilities(data, personId);
+  if (capabilities.app_role !== "manager") throw new PerformanceReviewAccessError("forbidden");
+  return { supabase: actor.supabase, actorUserId: actor.actorUserId, capabilities };
+}

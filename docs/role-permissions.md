@@ -66,6 +66,8 @@ Change profile is available only to the actual P0. It selects an employee-worksp
 - P0-only configuration controls and non-entitled vault data are never inherited by a selected employee preview.
 - Any authorized mutation in preview records the real P0 actor, not the employee being displayed. Preview testing is not proof of that employee's actual JWT session.
 
+For Performance reviews, P0 may create and complete manager-side reviews while a current active Manager is selected. Database delegation endpoints revalidate the real P0, selected Manager and assigned record scope; operation recovery is bound to that same target. This does not permit self-assessment writes or grant ordinary roles access to the delegation endpoints. The native HR/Admin/P0 overview remains read-only.
+
 ## Database and service invariants
 
 Legacy personal leave-review, calendar, check-in and payroll grant rows must not override the canonical role. Historical rows/events are retained rather than deleting audit to achieve a cleaner permission model. Current pending-request routing and authorization are recalculated without rewriting decided history. No role migration replays notifications, rotates a password or disables credential-delivery/reset fences.

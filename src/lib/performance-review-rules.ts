@@ -133,15 +133,17 @@ export function parseReview(value: unknown, readOnly = false): PerformanceReview
   }
   return structuredClone(v) as PerformanceReview;
 }
-export function parseWorkspace(value: unknown, actorUserId: string, role: string, personId: string | null, readOnly = false): PerformanceWorkspace {
+export function parseWorkspace(value: unknown, actorUserId: string, role: string, personId: string | null, readOnly: boolean | "manager_delegate" = false): PerformanceWorkspace {
   const v = closed(value, ["viewerContext", "reviews", "startablePeople"]);
   const viewer = closed(v.viewerContext, ["actorUserId", "personId", "role", "displayName"]);
   if (viewer.actorUserId !== actorUserId || viewer.role !== role || viewer.personId !== personId) invalid();
   text(viewer.displayName);
   if (!Array.isArray(v.reviews) || !Array.isArray(v.startablePeople) || (role !== "manager" && v.startablePeople.length)) invalid();
+  if (readOnly === "manager_delegate" && role !== "manager") invalid();
   const ids = new Set();
   for (const raw of v.reviews) {
-    const review = parseReview(raw, readOnly);
+    const audience = raw && typeof raw === "object" ? Object.getOwnPropertyDescriptor(raw, "audience")?.value : undefined;
+    const review = parseReview(raw, readOnly === "manager_delegate" ? audience !== "manager" : readOnly);
     if (ids.has(review.id)) invalid(); ids.add(review.id);
     if (role === "admin" || role === "system_admin") { if (review.audience !== "admin") invalid(); }
     else if (review.employee.id === personId) { if (review.audience !== "employee") invalid(); }

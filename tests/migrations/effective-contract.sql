@@ -40,6 +40,23 @@ do $$ declare obj record; signature text; role_name text; begin
       assert not has_function_privilege(role_name,signature,'execute'), 'Direct preview helper access: '||role_name;
     end loop;
   end loop;
+  foreach signature in array array[
+    'public.performance_review_workspace_for_delegate(uuid)',
+    'public.start_performance_review_for_delegate(uuid,uuid,uuid,text,text)',
+    'public.mutate_performance_review_for_delegate(uuid,uuid,uuid,text,text,jsonb)',
+    'public.get_performance_review_operation_for_delegate(uuid,uuid,uuid)'
+  ] loop
+    assert to_regprocedure(signature) is not null, 'Missing Performance delegate RPC: '||signature;
+    assert has_function_privilege('authenticated',signature,'execute');
+    assert not has_function_privilege('anon',signature,'execute');
+    assert not has_function_privilege('service_role',signature,'execute');
+    assert (select prosecdef and proconfig=array['search_path=""'] and provolatile=case
+      when proname in ('performance_review_workspace_for_delegate','get_performance_review_operation_for_delegate') then 's'::"char" else 'v'::"char" end
+      from pg_proc where oid=signature::regprocedure);
+  end loop;
+  foreach role_name in array array['anon','authenticated','service_role'] loop
+    assert not has_function_privilege(role_name,'private.performance_review_delegate_project(private.performance_reviews,uuid,uuid)','execute'), 'Direct delegate helper access: '||role_name;
+  end loop;
   assert has_function_privilege('authenticated','public.patch_subscription_v1(uuid,bigint,jsonb)','execute');
   assert not has_function_privilege('anon','public.patch_subscription_v1(uuid,bigint,jsonb)','execute');
   assert to_regclass('private.portal_account_status_change_claims') is not null;
@@ -85,6 +102,22 @@ do $$ begin
   begin
     perform public.get_performance_review_document_for_preview(gen_random_uuid(),gen_random_uuid());
     raise exception 'missing actor downloaded Performance preview' using errcode='ZX001';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform public.performance_review_workspace_for_delegate(gen_random_uuid());
+    raise exception 'missing actor used Performance delegate' using errcode='ZX001';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform public.start_performance_review_for_delegate(gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),'2031','2031-12-31');
+    raise exception 'missing actor started Performance delegate review' using errcode='ZX001';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform public.mutate_performance_review_for_delegate(gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),'manager:0:0','save_manager','{}');
+    raise exception 'missing actor mutated Performance delegate review' using errcode='ZX001';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform public.get_performance_review_operation_for_delegate(gen_random_uuid(),gen_random_uuid(),null);
+    raise exception 'missing actor read Performance delegate operation' using errcode='ZX001';
   exception when insufficient_privilege then null; end;
   begin
     perform public.patch_subscription_v1(gen_random_uuid(),1,'{"subscription_status":"paused"}');
