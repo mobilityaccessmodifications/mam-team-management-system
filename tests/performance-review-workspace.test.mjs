@@ -7,6 +7,46 @@ import { workspace, review, documentFor, deferred, failure, ids } from './perfor
 import { unzipSync, strFromU8 } from 'fflate';
 import { QUESTIONS } from '../src/lib/performance-review-questions.mjs';
 
+test('review loading and empty states remain visible for the read-only Super Admin', async () => {
+  const pending = deferred();
+  const data = workspace('admin', 'MAM', { reviews: [] });
+  data.viewerContext.role = 'system_admin';
+  const h = mount(data, { loadPerformanceReviews: () => pending.promise });
+  assert.ok(h.text.includes('Loading performance reviews…'));
+  assert.equal(h.tree.props['aria-busy'], true);
+  assert.ok(!h.text.includes('No performance reviews yet.'));
+  pending.resolve({ ok: true, data }); await h.settle();
+  assert.equal(h.tree.props['aria-busy'], false);
+  assert.ok(h.text.includes('No performance reviews yet.'));
+  assert.ok(!h.text.includes('Loading performance reviews…'));
+  assert.equal(h.all.filter(n => n.type === 'form').length, 0);
+  assert.ok(!h.text.includes('New yearly review'));
+  h.ports.loadPerformanceReviews = async () => failure('unavailable');
+  await h.click('Reload'); await h.settle();
+  assert.ok(h.text.includes('Synthetic unavailable.'));
+  assert.ok(!h.text.includes('No performance reviews yet.'));
+  h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('admin', 'MAM', { viewerContext: data.viewerContext }) });
+  await h.click('Reload'); await h.settle();
+  assert.ok(h.text.includes('Manager assessment'));
+  assert.ok(!h.text.includes('Synthetic unavailable.'));
+  for (const node of h.all.filter(n => ['input', 'select', 'textarea'].includes(n.type))) assert.equal(node.props.disabled, true);
+  h.unmount();
+});
+
+test('retired review loads cannot leave a loading state or replace a signed-out session', async () => {
+  const pending = deferred();
+  const h = mount(workspace(), { loadPerformanceReviews: () => pending.promise });
+  assert.equal(h.tree.props['aria-busy'], true);
+  h.auth('SIGNED_OUT');
+  assert.equal(h.tree.props['aria-busy'], false);
+  assert.ok(h.text.includes('Your session has ended.'));
+  pending.resolve({ ok: true, data: workspace() }); await h.settle();
+  assert.equal(h.tree.props['aria-busy'], false);
+  assert.ok(h.text.includes('Your session has ended.'));
+  assert.ok(!h.text.includes('No performance reviews yet.'));
+  h.unmount();
+});
+
 test('native self workspace loads actor-owned records and both company prompts without reading manager fields', async () => {
   for (const company of ['MAM', 'Equipsy']) {
     const data = workspace('employee', company);
