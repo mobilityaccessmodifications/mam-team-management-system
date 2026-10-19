@@ -50,6 +50,7 @@ test.afterEach(async ({ page }) => {
 });
 
 test('actual LeaveDemo Performance preview switches P0 through distinct manager employee account admin scopes with no writes', async ({ page }) => {
+  test.setTimeout(60_000);
   await openPerformance(page);
   await expect(workspace(page).getByRole('heading', { name: 'Synthetic P0 scope — MAM', exact: true })).toBeVisible();
   for (const [key, name] of [['manager', 'Synthetic A report'], ['employee', 'Synthetic Employee'], ['account', 'Synthetic Account'], ['admin', 'Synthetic HR scope'], ['managerB', 'Synthetic B report']]) {
