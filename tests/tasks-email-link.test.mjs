@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadAssetQrModule, loadAssetTestModule } from './asset-qr-test-loader.mjs';
 const qr = loadAssetQrModule();
-const path = '/?view=people&tab=tasks';
-test('Tasks mail links survive login while external and altered destinations are rejected', async () => {
+for (const tab of ['tasks', 'performance']) {
+const path = '/?view=people&tab=' + tab;
+test(tab + ' mail links survive login while external and altered destinations are rejected', async () => {
   assert.equal(qr.assetLoginReturnPath(path), path);
   for (const value of ['https://example.test' + path, '//example.test' + path, path + '&next=https://example.test', path + '#other', '/?view=people&tab=directory', [path], null]) {
     assert.equal(qr.assetLoginReturnPath(value), null);
@@ -19,7 +20,8 @@ test('Tasks mail links survive login while external and altered destinations are
   assert.equal(result.pathname, '/login');
   assert.equal(result.searchParams.get('next'), path);
 });
-test('Home forwards the Tasks tab through the authenticated navigation boundary', async () => {
+}
+test('Home forwards the Tasks and Performance tabs through the authenticated navigation boundary', async () => {
   const { default: Home } = loadAssetTestModule('src/app/page.tsx', {
     '@/components/leave-demo': { LeaveDemo: 'workspace' },
     '@/components/role-permission-recovery': { RolePermissionRecovery: 'recovery' },
@@ -29,9 +31,11 @@ test('Home forwards the Tasks tab through the authenticated navigation boundary'
     '@/lib/supabase/server': { createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: 'synthetic-user' } } }) }, rpc: async () => ({ data: false }) }) },
     'next/navigation': { redirect: () => { throw Error('unexpected redirect'); } },
   });
-  const rendered = await Home({ searchParams: Promise.resolve({ view: 'people', tab: 'tasks' }) });
-  assert.equal(rendered.props.initialNavigation.view, 'people');
-  assert.equal(rendered.props.initialNavigation.peopleSection, 'tasks');
+  for (const tab of ['tasks', 'performance']) {
+    const rendered = await Home({ searchParams: Promise.resolve({ view: 'people', tab }) });
+    assert.equal(rendered.props.initialNavigation.view, 'people');
+    assert.equal(rendered.props.initialNavigation.peopleSection, tab);
+  }
   const invalid = await Home({ searchParams: Promise.resolve({ view: 'people', tab: 'unrecognised' }) });
   assert.equal(invalid.props.initialNavigation.peopleSection, undefined);
 });
