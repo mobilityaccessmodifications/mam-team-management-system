@@ -212,3 +212,21 @@ test('one new five minute scheduler dispatches only the new fixed Hub GET route 
   assert.equal(send.parameters.nodeCredentialType, 'microsoftOutlookOAuth2Api');
   assert.equal(send.parameters.url, 'https://graph.microsoft.com/v1.0/me/sendMail');
 });
+
+
+test('attachment validation works under current task-runner builtin restrictions and preserves SHA-256 checks', () => {
+  const source = build().nodes.find(n => n.name === 'Validate Payload').parameters.jsCode;
+  const validate = new Function('$json', '$input', 'require', source);
+  const unavailable = () => { throw new Error('Module crypto is disallowed by the task runner'); };
+  for (const length of [1, 3, 55, 56, 63, 64, 65, 119, 120, 127, 128, 129, 255, 256, 1024, 65536, 2097152]) {
+    const p = payload();
+    const bytes = Buffer.alloc(length);
+    for (let i = 0; i < length; i++) bytes[i] = (i * 131 + length) & 255;
+    p.attachment.contentBase64 = bytes.toString('base64');
+    p.attachment.sha256 = createHash('sha256').update(bytes).digest('hex');
+    const run = () => validate({body: p}, {all: () => [{json: {body: p}}]}, unavailable)[0].json;
+    assert.equal(run().valid, true, `SHA-256 byte length ${length}`);
+    p.attachment.sha256 = '0'.repeat(64);
+    assert.equal(run().valid, false, `corrupt SHA-256 byte length ${length}`);
+  }
+});
