@@ -304,3 +304,35 @@ test('one five minute schedule dispatches only notifications=1 with cron auth an
   });
   assert.deepEqual(calls, ['Dispatch Performance Notifications']); assert.equal(result.entered.includes('Send Performance Notification'), false);
 });
+
+test('new notifications bind Careers CC through reserve, Graph, confirmation and duplicate receipts', async () => {
+  for (const event of ['started', 'self-submitted']) for (const recipient of ['synthetic@example.invalid', 'careers@mobilityaccess.com.au']) {
+    const p = {...payload(event), recipient, cc: recipient === 'careers@mobilityaccess.com.au' ? '' : 'careers@mobilityaccess.com.au'};
+    const evidence = {...receipt(p), actualCcRecipients: p.cc};
+    const h = harness(build(), p, {confirm: {statusCode: 200, body: evidence}});
+    assert.deepEqual((await h.run()).value, evidence);
+    assert.equal(h.calls[0].body.cc, p.cc);
+    assert.deepEqual(h.calls[1].body.message.ccRecipients, p.cc ? [{emailAddress: {address: p.cc}}] : []);
+    assert.equal(h.calls[2].body.cc, p.cc);
+    assert.deepEqual(h.calls[1].body.message.bccRecipients, []);
+    assert.equal(Object.hasOwn(h.calls[1].body.message, 'attachments'), false);
+    const duplicate = harness(build(), p, {reserve: {statusCode: 200, body: {...evidence, outcome: 'duplicate', sent: false, alreadySent: true}}});
+    assert.deepEqual((await duplicate.run()).value, {...evidence, sent: false, alreadySent: true});
+    assert.equal(duplicate.calls.length, 1);
+    for (const stage of ['reserve','confirm']) {
+      const wrong = {...evidence, actualCcRecipients: ''};
+      if (!p.cc) wrong.actualCcRecipients = 'careers@mobilityaccess.com.au';
+      const options = stage === 'reserve'
+        ? {reserve: {statusCode: 200, body: {...wrong, outcome: 'duplicate', sent: false, alreadySent: true}}}
+        : {confirm: {statusCode: 200, body: wrong}};
+      assert.deepEqual((await harness(build(), p, options).run()).value, held);
+    }
+  }
+});
+
+test('explicit new notification CC cannot be omitted, expanded or redirected', async () => {
+  for (const cc of ['', 'other@example.invalid', null, ['careers@mobilityaccess.com.au'], 'careers@mobilityaccess.com.au,other@example.invalid']) {
+    const h = harness(build(), {...payload(), cc});
+    assert.deepEqual((await h.run()).value, held); assert.equal(h.calls.length, 0);
+  }
+});
