@@ -85,7 +85,7 @@ def paginated(method, resource, body=None):
     assert method == 'GET' and body is None
     index = len(pages)
     cursor = 'opaque%2B%2F%26%3D%3F%20%25%E4%B8%AD%E6%96%87' if index == 1 else 'opaque-' + str(index)
-    assert resource == 'workflows?limit=20' + ('&cursor=' + cursor if index else '')
+    assert resource == 'workflows?limit=20&excludePinnedData=true' + ('&cursor=' + cursor if index else '')
     pages.append(resource)
     chunk = rows[index * 20:(index + 1) * 20]
     return {'data': chunk, 'nextCursor': None if index == 6 else 'opaque+/&=? %中文' if index == 0 else 'opaque-' + str(index + 1)}

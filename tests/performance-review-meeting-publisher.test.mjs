@@ -19,7 +19,7 @@ test('publisher uses prescribed MAM verifier and bounded no-redirect readiness o
   assert.match(source, /state\.get\('targetOrigin'\) != target_origin/);
   assert.match(source, /build_opener\(verifier\.NoRedirect\(\)\)/);
   assert.doesNotMatch(source, /workflows\?limit=100/);
-  assert.ok(source.includes("re.fullmatch(r'workflows\\?limit=20(?:&cursor=(?:[A-Za-z0-9_.~-]|%[0-9A-F]{2})+)?', resource)"));
+  assert.ok(source.includes("re.fullmatch(r'workflows\\?limit=20&excludePinnedData=true(?:&cursor=(?:[A-Za-z0-9_.~-]|%[0-9A-F]{2})+)?', resource)"));
   assert.match(source, /readiness_headers\(os\.environ\.get\('MAM_N8N_LEAVE_WEBHOOK_SECRET', ''\)\)/);
   assert.doesNotMatch(source, /MAM_PERFORMANCE_MEETING_CRON_SECRET|Authorization|Bearer/);
   assert.match(source, /return \{'X-MAM-Notification-Secret': secret\}/);
