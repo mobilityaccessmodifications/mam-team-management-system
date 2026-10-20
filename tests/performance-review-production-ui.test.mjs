@@ -91,9 +91,10 @@ test('production boundary keeps drafts and reads silent while lifecycle notifica
     const request = { ...mutation(), command, expectedRevision: self ? 'self:0' : 'manager:0:0', input: self ? { answers: Array(12).fill('Synthetic self') } : command === 'save_meeting' ? meeting : managerInput };
     assert.equal((await h.actions.mutatePerformanceReview(request)).ok, true, command);
     assert.equal(h.business().length, 1);
-    assert.equal(h.registrations.length, command === 'submit_self' ? 1 : 0);
+    const notifies = command === 'submit_self' || command === 'complete_manager';
+    assert.equal(h.registrations.length, notifies ? 1 : 0);
     for (const callback of h.callbacks) await callback();
-    assert.deepEqual(h.notificationDispatches, command === 'submit_self' ? [[reviewId]] : []);
+    assert.deepEqual(h.notificationDispatches, notifies ? [[reviewId]] : []);
     assert.deepEqual(h.dispatches, []);
   }
   const managerReview = review('manager');

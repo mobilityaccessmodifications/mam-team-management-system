@@ -76,7 +76,10 @@ test('delegate mutations cannot submit self answers and bind Manager writes and 
     assert.equal((await h.actions.mutatePerformanceReview({ ...managerInput, command }, managerId)).ok, true);
     assert.equal(h.business()[0].name, 'mutate_performance_review_for_delegate');
     assert.equal(h.business()[0].args.p_person_id, managerId);
-    assert.equal(h.registrations.length, 0);
+    assert.equal(h.registrations.length, command === 'complete_manager' ? 1 : 0);
+    for (const callback of h.callbacks) await callback();
+    assert.deepEqual(h.notificationDispatches, command === 'complete_manager' ? [[reviewId]] : []);
+    assert.deepEqual(h.dispatches, []);
   }
   const receipt = { committed: true, operationId, review: review('manager') };
   const h = harness({ response: receipt });

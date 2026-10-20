@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { NextRequest } from 'next/server.js';
 import { loadMailHarness, environment, ids, app, cronSecret } from './helpers/performance-review-mail-harness.mjs';
 import { loadMailProxyHarness } from './helpers/performance-review-mail-proxy-harness.mjs';
@@ -70,6 +71,26 @@ test('calendar metadata accepts canonical AI mailbox overlap and current approve
   assert.deepEqual(rules.parseMeetingImportInput(body), body);
   const short = input(); short.event.end = '2026-10-22T00:05:00Z'; short.event.attendees.push('guest@example.test'); short.event.mode = 'teams'; short.event.location = 'https://teams.live.com/meet/synthetic';
   assert.deepEqual(rules.parseMeetingImportInput(short), short);
+});
+
+test('actual calendar validator output crosses the real meeting HTTP boundary without assessment content', async () => {
+  const source = readFileSync(new URL('../deploy/n8n/performance-review-meeting-v1/event.js', import.meta.url), 'utf8');
+  for (const variant of ['normal', 'five-minute-guest', 'ai-employee', 'teams']) {
+    const p = pending();
+    if (variant === 'ai-employee') p.employeeEmail = 'ai@mobilityaccess.com.au';
+    const e = { id: 'synthetic-graph-event', iCalUId: 'synthetic-graph-uid', subject: 'RE: Arrange performance review: ' + p.reviewCode,
+      organizer: { emailAddress: { address: p.managerEmail } }, attendees: [...new Set([p.employeeEmail, 'ai@mobilityaccess.com.au'])].map(address => ({ emailAddress: { address } })),
+      start: { dateTime: '2026-10-22T00:00:00.0000000', timeZone: 'UTC' }, end: { dateTime: variant === 'five-minute-guest' ? '2026-10-22T00:05:00.0000000' : '2026-10-22T00:30:00.0000000', timeZone: 'UTC' },
+      createdDateTime: '2026-10-21T00:01:00Z', lastModifiedDateTime: '2026-10-21T00:02:00Z',
+      location: { displayName: 'Synthetic room' }, type: 'singleInstance', recurrence: null, isOrganizer: false, isDraft: false, isCancelled: false, isAllDay: false, isOnlineMeeting: false, onlineMeeting: null, body: { content: 'PRIVATE ANSWERS MUST NOT CROSS' } };
+    if (variant === 'five-minute-guest') e.attendees.push({ emailAddress: { address: 'guest@example.test' } });
+    if (variant === 'teams') { e.isOnlineMeeting = true; e.onlineMeetingProvider = 'teamsForBusiness'; e.onlineMeeting = { joinUrl: 'https://teams.live.com/meet/synthetic' }; }
+    const parsed = new Function('$json', '$', source)({ statusCode: 200, body: { value: [e] } }, () => ({ item: { json: { request: p } } })).json;
+    assert.equal(parsed.valid, true, variant);
+    const { h, route } = harness({ rpc(name, args) { assert.equal(name, 'import_performance_review_meeting'); assert.deepEqual(args.p_event, parsed.importBody.event); return { data: { status: 'imported' }, error: null }; } });
+    assert.equal((await route.POST(request('POST', parsed.importBody))).status, 200, variant);
+    assert.doesNotMatch(JSON.stringify(h.calls), /PRIVATE|ANSWERS|"body"|"notes"/);
+  }
 });
 
 test('RPC errors, contradictory statuses and expanded receipts never leak event metadata', async () => {
