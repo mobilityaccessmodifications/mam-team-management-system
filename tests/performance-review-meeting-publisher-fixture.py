@@ -78,6 +78,29 @@ def held(fn):
 
 
 count = 0
+rows = [{'id': 'synthetic-workflow-' + str(index)} for index in range(133)]
+pages = []
+
+def paginated(method, resource, body=None):
+    assert method == 'GET' and body is None
+    index = len(pages)
+    cursor = 'opaque%2B%2F%26%3D%3F%20%25%E4%B8%AD%E6%96%87' if index == 1 else 'opaque-' + str(index)
+    assert resource == 'workflows?limit=20' + ('&cursor=' + cursor if index else '')
+    pages.append(resource)
+    chunk = rows[index * 20:(index + 1) * 20]
+    return {'data': chunk, 'nextCursor': None if index == 6 else 'opaque+/&=? %中文' if index == 0 else 'opaque-' + str(index + 1)}
+
+assert p.listed(paginated) == rows
+assert len(pages) == 7
+count += 1
+pages = []
+def incomplete(method, resource, body=None):
+    assert method == 'GET' and body is None
+    pages.append(resource)
+    return {'data': [], 'nextCursor': 'remaining'}
+held(lambda: p.listed(incomplete))
+assert len(pages) == 20
+count += 1
 secret = 'synthetic-notification-readiness-' + '0' * 32
 assert p.readiness_headers(secret) == {'X-MAM-Notification-Secret': secret}
 for invalid in (None, '', 'x' * 31, 'x' * 513, secret + '\r\n', secret + '\x00'):

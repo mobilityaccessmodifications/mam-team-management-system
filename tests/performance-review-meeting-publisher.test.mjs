@@ -5,10 +5,10 @@ import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
-test('workflow publication stages exact candidates and recovers unknown results without duplicate creation or activation', () => {
+test('workflow publication paginates bounded metadata, stages exact candidates and recovers unknown outcomes', () => {
   const result = spawnSync('/usr/bin/python3', ['-B', ROOT + 'tests/performance-review-meeting-publisher-fixture.py'], {cwd: ROOT, encoding: 'utf8', env: {PATH: '/usr/bin:/bin'}});
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), {ok: true, cases: 18, providerCalls: 0, realN8nCalls: 0});
+  assert.deepEqual(JSON.parse(result.stdout), {ok: true, cases: 20, providerCalls: 0, realN8nCalls: 0});
 });
 test('publisher uses prescribed MAM verifier and bounded no-redirect readiness only, without business execution or secret argv', () => {
   const source = readFileSync(ROOT + 'scripts/publish-performance-review-meeting-workflows.py', 'utf8');
@@ -18,6 +18,8 @@ test('publisher uses prescribed MAM verifier and bounded no-redirect readiness o
   assert.match(source, /parser\.add_argument\('--expected-origin', required=True\)/);
   assert.match(source, /state\.get\('targetOrigin'\) != target_origin/);
   assert.match(source, /build_opener\(verifier\.NoRedirect\(\)\)/);
+  assert.doesNotMatch(source, /workflows\?limit=100/);
+  assert.ok(source.includes("re.fullmatch(r'workflows\\?limit=20(?:&cursor=(?:[A-Za-z0-9_.~-]|%[0-9A-F]{2})+)?', resource)"));
   assert.match(source, /readiness_headers\(os\.environ\.get\('MAM_N8N_LEAVE_WEBHOOK_SECRET', ''\)\)/);
   assert.doesNotMatch(source, /MAM_PERFORMANCE_MEETING_CRON_SECRET|Authorization|Bearer/);
   assert.match(source, /return \{'X-MAM-Notification-Secret': secret\}/);

@@ -64,7 +64,7 @@ def save(path, state, new=False):
 def listed(api):
     rows, cursor = [], None
     for _ in range(20):
-        payload = api('GET', 'workflows?limit=100' + ('&cursor=' + quote(cursor, safe='') if cursor else ''))
+        payload = api('GET', 'workflows?limit=20' + ('&cursor=' + quote(cursor, safe='') if cursor else ''))
         if not isinstance(payload, dict) or not isinstance(payload.get('data'), list):
             raise RuntimeError('workflow_list_unavailable')
         rows.extend(payload['data'])
@@ -256,7 +256,7 @@ def main():
             return json.loads(raw)
 
     def api(method, resource, body=None):
-        allowed = (method == 'GET' and (resource.startswith('workflows?limit=100')
+        allowed = (method == 'GET' and (re.fullmatch(r'workflows\?limit=20(?:&cursor=(?:[A-Za-z0-9_.~-]|%[0-9A-F]{2})+)?', resource)
                    or re.fullmatch(r'workflows/[A-Za-z0-9_-]{1,64}', resource)
                    or re.fullmatch(r'executions\?workflowId=4Ahuz2qzddNKo7LB&status=(running|waiting)&limit=1', resource))) \
             or (method == 'POST' and (resource == 'workflows' or re.fullmatch(r'workflows/[A-Za-z0-9_-]{1,64}/(activate|deactivate)', resource))) \
