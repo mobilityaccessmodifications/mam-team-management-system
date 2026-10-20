@@ -14,12 +14,19 @@ async function home({ flag, actor = capabilities('employee', personId), user = {
   const { default: Home } = loadModule('src/app/page.tsx', {
     '@/components/leave-demo': { LeaveDemo: 'LeaveDemo' },
     '@/components/role-permission-recovery': { RolePermissionRecovery: 'RolePermissionRecovery' },
-    '@/app/roles/actions': { getPortalRoleCapabilities: async () => { calls.push('canonical'); return roleOk ? { ok: true, capabilities: actor } : { ok: false }; } },
     '@/lib/check-in-register': { getCheckInResourceLinks: () => ({}) },
     '@/lib/supabase/config': { isSupabaseConfigured: () => true },
     '@/lib/supabase/server': { createClient: async () => ({
       auth: { getUser: async () => ({ data: { user }, error: null }) },
-      rpc: async (name) => { calls.push(name); assert.equal(name, 'can_view_subscription_review_calendar'); return { data: false, error: null }; },
+      rpc: async (name, args) => {
+        calls.push(name);
+        if (name === 'get_portal_role_capabilities') {
+          assert.deepEqual(args,{p_person_id:null});
+          return roleOk ? {data:[actor],error:null} : {data:null,error:{code:'42501'}};
+        }
+        assert.equal(name,'can_view_subscription_review_calendar');
+        return {data:false,error:null};
+      },
     }) },
     'next/navigation': { redirect: (path) => { throw new Error('redirect:' + path); } },
   });
@@ -36,7 +43,7 @@ test('SSR accepts the performance section and passes only a server-derived enabl
   assert.equal(tree.props.performanceReviewEnabled, true);
   assert.equal(tree.props.authActorId, actorId);
   assert.notEqual(tree.props.authActorId, tree.props.currentPersonId);
-  assert.deepEqual(calls, ['canonical', 'can_view_subscription_review_calendar']);
+  assert.deepEqual(calls, ['get_portal_role_capabilities', 'can_view_subscription_review_calendar']);
 });
 
 test('an actual Employee can open native Performance reviews without HR directory or organisation rights', async () => {
@@ -161,7 +168,7 @@ test('actual scope keys retire across Change profile A to B to A and return to t
 for (const flag of [undefined, 'false', 'TRUE', '1', ' true ', '']) test(`SSR feature flag ${JSON.stringify(flag)} stays off without new RPCs`, async () => {
   const { tree, calls } = await home({ flag });
   assert.equal(tree.props.performanceReviewEnabled, false);
-  assert.deepEqual(calls, ['canonical', 'can_view_subscription_review_calendar']);
+  assert.deepEqual(calls, ['get_portal_role_capabilities', 'can_view_subscription_review_calendar']);
 });
 
 test('disabled reviews expose neither a tab nor a mounted panel and do not add Auth or Action calls', async () => {
@@ -248,7 +255,7 @@ test('missing canonical role or actual Auth identity cannot mount reviews', asyn
 test('SSR authentication and canonical role failure never return the shell', async () => {
   const failed = await home({ flag: 'true', roleOk: false });
   assert.equal(failed.tree.type, 'RolePermissionRecovery');
-  assert.deepEqual(failed.calls, ['canonical']);
+  assert.deepEqual(failed.calls, ['get_portal_role_capabilities', 'can_view_subscription_review_calendar']);
   await assert.rejects(home({ flag: 'true', user: null }), /redirect:\/login/);
 });
 

@@ -69,7 +69,8 @@ export async function proxy(request: NextRequest) {
   // This route performs its own constant-time CRON_SECRET check before any
   // database action. It must reach the route handler unauthenticated because
   // the MAM scheduler does not have a browser session.
-  const isPublicRoute = isLoginRoute || isConfirmationRoute || isCronRoute || isAnalyticsRoute;
+  const isPublicRoute = isLoginRoute || isConfirmationRoute || isCronRoute || isAnalyticsRoute
+    || pathname === "/api/performance-reviews/workspace";
 
   if (!claims && !isPublicRoute) {
     const url = request.nextUrl.clone();

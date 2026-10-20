@@ -12,8 +12,9 @@ const migrationSource = readFileSync(
 );
 
 test("Organisation and the company subscription register are selected from server capabilities", () => {
-  assert.match(pageSource, /getPortalRoleCapabilities\(\)/);
-  assert.match(pageSource, /if \(!result.ok\) return <RolePermissionRecovery/);
+  assert.match(pageSource, /supabase\.rpc\("get_portal_role_capabilities", \{ p_person_id: null \}\)/);
+  assert.match(pageSource, /parsePortalRoleCapabilities\(roleResult\.data\)/);
+  assert.match(pageSource, /catch \{\s+return <RolePermissionRecovery/);
   assert.match(pageSource, /actorCapabilities=\{actor\}/);
   assert.match(leaveSource, /showOrganisation=\{showOrganisationChart\}/);
   assert.match(peopleSource, /\.\.\.\(showOrganisation \? \["organisation" as const\] : \[\]\)/);

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadAssetQrModule, loadAssetTestModule } from './asset-qr-test-loader.mjs';
+import { capabilities, loadModule } from './helpers/unified-role-harness.mjs';
 const qr = loadAssetQrModule();
 for (const tab of ['tasks', 'performance']) {
 const path = '/?view=people&tab=' + tab;
@@ -22,13 +23,13 @@ test(tab + ' mail links survive login while external and altered destinations ar
 });
 }
 test('Home forwards the Tasks and Performance tabs through the authenticated navigation boundary', async () => {
-  const { default: Home } = loadAssetTestModule('src/app/page.tsx', {
+  const actor = capabilities('employee');
+  const { default: Home } = loadModule('src/app/page.tsx', {
     '@/components/leave-demo': { LeaveDemo: 'workspace' },
     '@/components/role-permission-recovery': { RolePermissionRecovery: 'recovery' },
-    '@/app/roles/actions': { getPortalRoleCapabilities: async () => ({ ok: true, capabilities: { person_id: 'synthetic-person' } }) },
     '@/lib/check-in-register': { getCheckInResourceLinks: () => ({}) },
     '@/lib/supabase/config': { isSupabaseConfigured: () => true },
-    '@/lib/supabase/server': { createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: 'synthetic-user' } } }) }, rpc: async () => ({ data: false }) }) },
+    '@/lib/supabase/server': { createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: 'synthetic-user' } } }) }, rpc: async name => ({ data: name === 'get_portal_role_capabilities' ? [actor] : false, error: null }) }) },
     'next/navigation': { redirect: () => { throw Error('unexpected redirect'); } },
   });
   for (const tab of ['tasks', 'performance']) {

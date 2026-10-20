@@ -69,6 +69,7 @@ export async function buildUnifiedRoleFixture(sourceRoot, scratch) {
         return { contents: result.css, loader: 'css', resolveDir: path.dirname(filename) };
       });
     } }, { name: 'unified-role-action-boundaries', setup(builder) {
+      builder.onResolve({ filter: /^@\/lib\/performance-review-load$/ }, () => ({ path: '@/app/performance-reviews/actions', namespace: 'unified-role-action' }));
       builder.onResolve({ filter: /^@\/app\/.*actions$/ }, ({ path: id }) => ({ path: id, namespace: 'unified-role-action' }));
       builder.onLoad({ filter: /.*/, namespace: 'unified-role-action' }, ({ path: id }) => {
         const filename = path.join(sourceRoot, 'src', `${id.slice(2)}.ts`);

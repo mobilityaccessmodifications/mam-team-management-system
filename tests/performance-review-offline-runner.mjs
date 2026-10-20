@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const source = 'src/components/performance-review-workspace.tsx';
 const actionModule = '@/app/performance-reviews/actions';
+const loadModule = '@/lib/performance-review-load';
 const boundary = 'tests/browser/performance-review-boundary.mjs';
 const virtualFile = join(ROOT, 'tests/performance-review-virtual-actions.d.ts');
 const contracts = [
@@ -35,7 +36,7 @@ function typecheck() {
   const options = { ...parsed.options, incremental: false, noEmit: true };
   const host = ts.createCompilerHost(options), original = host.getSourceFile.bind(host);
   host.getSourceFile = (file, language, onError, createNew) => file === virtualFile ? ts.createSourceFile(file, declared, language) : file === virtualCss ? ts.createSourceFile(file, css, language) : original(file, language, onError, createNew);
-  host.resolveModuleNames = (names, containingFile) => names.map(name => name === actionModule
+  host.resolveModuleNames = (names, containingFile) => names.map(name => (name === actionModule || name === loadModule)
     ? { resolvedFileName: virtualFile, extension: ts.Extension.Dts }
     : ts.resolveModuleName(name, containingFile, options, host).resolvedModule);
   const program = ts.createProgram([join(ROOT, source), virtualFile, virtualCss], options, host);
@@ -49,14 +50,14 @@ export async function buildPerformanceFixture() {
   assert.deepEqual(typeErrors, [], 'Frozen action-signature component typecheck');
   const raw = await readFile(join(ROOT, source), 'utf8');
   const ast = ts.createSourceFile(source, raw, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const imports = ast.statements.filter(node => ts.isImportDeclaration(node) && node.moduleSpecifier.text === actionModule);
+  const imports = ast.statements.filter(node => ts.isImportDeclaration(node) && [actionModule, loadModule].includes(node.moduleSpecifier.text));
   const actionExports = imports.flatMap(node => node.importClause.namedBindings.elements.map(item => item.propertyName?.text ?? item.name.text));
   assert.deepEqual([...actionExports].sort(), contracts.map(([name]) => name).sort());
   const declaredBoundary = await readFile(join(ROOT, boundary), 'utf8');
   for (const name of actionExports) assert.ok(declaredBoundary.includes(`export const ${name} =`), 'Missing explicit offline Action '+name);
   const directory = await mkdtemp(join(scratch, 'performance-review-fixture-'));
   try {
-    const output = await build({ absWorkingDir: ROOT, entryPoints: ['tests/browser/performance-review-fixture.jsx'], bundle: true, platform: 'browser', format: 'esm', target: 'es2022', jsx: 'automatic', outfile: join(directory, 'performance-review.js'), metafile: true, logLevel: 'silent', alias: { [actionModule]: resolve(ROOT, boundary), '@/lib/supabase/client': resolve(ROOT, boundary) }, plugins: [{ name: 'native-hub-global-styles', setup(builder) {
+    const output = await build({ absWorkingDir: ROOT, entryPoints: ['tests/browser/performance-review-fixture.jsx'], bundle: true, platform: 'browser', format: 'esm', target: 'es2022', jsx: 'automatic', outfile: join(directory, 'performance-review.js'), metafile: true, logLevel: 'silent', alias: { [actionModule]: resolve(ROOT, boundary), [loadModule]: resolve(ROOT, boundary), '@/lib/supabase/client': resolve(ROOT, boundary) }, plugins: [{ name: 'native-hub-global-styles', setup(builder) {
       builder.onLoad({ filter: /[/\\]src[/\\]app[/\\]globals\.css$/ }, async ({ path: file }) => {
         const result = await postcss([tailwindcss({ ...postcssConfig.plugins['@tailwindcss/postcss'], base: ROOT })]).process(await readFile(file, 'utf8'), { from: file, map: false });
         return { contents: result.css, loader: 'css', resolveDir: resolve(file, '..') };

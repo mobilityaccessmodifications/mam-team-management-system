@@ -35,7 +35,7 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
     const code = ts.transpileModule(raw, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
     new Function('require', 'module', 'exports', 'URL', 'document', 'setTimeout', 'clearTimeout', code)(id => {
       if (id === 'react') return react;
-      if (id === '@/app/performance-reviews/actions') return actions;
+      if (id === '@/app/performance-reviews/actions' || id === '@/lib/performance-review-load') return actions;
       if (id === '@/lib/supabase/client') return { createClient: () => ({ auth: { onAuthStateChange(callback) { authListener = callback; return { data: { subscription: { unsubscribe() { authListener = null; } } } }; } } }) };
       if (id === '@/lib/performance-review-document') { const adapter = load('src/lib/performance-review-document.ts'); return { buildPerformanceReviewDownload(doc) { built.push(doc); return adapter.buildPerformanceReviewDownload(doc); } }; }
       if (id.endsWith('.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => key }) };
