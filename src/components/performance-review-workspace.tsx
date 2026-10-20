@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { loadPerformanceReviews, mutatePerformanceReview, startPerformanceReview, getPerformanceReviewDocument, reconcilePerformanceReviewOperation } from "@/app/performance-reviews/actions";
 import { buildPerformanceReviewDownload } from "@/lib/performance-review-document";
 import { createClient } from "@/lib/supabase/client";
 import { QUESTIONS } from "@/lib/performance-review-questions.mjs";
 import type { PerformanceFailure, PerformanceReview, PerformanceSelfReview, PerformanceManagerInput, PerformanceIdentity, PerformanceMeeting, PerformanceMutationInput, PerformanceWorkspace } from "@/lib/performance-review-types";
+import toolbar from "./people-toolbar.module.css";
 import styles from "./performance-review-workspace.module.css";
 
 const REQUIRED = [0, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -68,6 +70,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const [workspace, setWorkspace] = useState<PerformanceWorkspace | null>(null);
   const preview = previewPersonId !== undefined;
   const readOnly = preview && (workspace?.viewerContext.role !== "manager" || workspace.viewerContext.personId !== previewPersonId);
+  const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<string[]>([]);
   const [assessment, setAssessment] = useState<PerformanceManagerInput | null>(null);
@@ -98,6 +101,8 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const retire = useCallback(() => { epoch.current += 1; }, []);
   const selected = workspace?.reviews.find(row => row.id === selectedId);
   const people = reviewPeople(workspace);
+  const search = query.trim().toLocaleLowerCase();
+  const filteredPeople = people.filter(person => [person.name, person.jobTitle, person.team, person.company].join(" ").toLocaleLowerCase().includes(search));
   const startPerson = people.find(person => person.id === startDraft.employeePersonId);
   const creating = !selected && !!startPerson && !!workspace?.startablePeople.some(person => person.id === startPerson.id);
   const cycles = [...new Set([...(workspace?.startablePeople.some(person => person.id === startDraft.employeePersonId) ? [String(startYear - 1), String(startYear), String(startYear + 1)] : []), ...(workspace?.reviews.filter(row => row.employee.id === startDraft.employeePersonId).map(row => row.cycle) ?? [])])].sort((a, b) => b.localeCompare(a));
@@ -123,7 +128,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   }, [advance]);
   const clearPrivate = useCallback((notice: string) => {
     track(null); choose(null); viewer.current = null;
-    setWorkspace(null); reviewChoice.current = null; setStartDraft({ employeePersonId: "", cycle: "", dueDate: "" });
+    setWorkspace(null); setQuery(""); reviewChoice.current = null; setStartDraft({ employeePersonId: "", cycle: "", dueDate: "" });
     for (const [url, timer] of urls.current) { clearTimeout(timer); URL.revokeObjectURL(url); }
     urls.current.clear(); setMessage(notice);
   }, [track, choose]);
@@ -336,7 +341,9 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     {loading ? <p role="status">Loading performance reviews…</p> : !message && people.length === 0 && workspace ? <p role="status">No performance reviews yet.</p> : null}
     {operation?.phase === "uncertain" ? <button type="button" disabled={busy} onClick={() => reconcile()}>Reconcile update</button> : null}
     {workspace && people.length > 0 ? <div className={styles.startLayout}>
-      <nav className={styles.employeeList} aria-label="Review employees">{people.map(person => <button type="button" key={person.id} aria-label={`${person.name} — ${person.company}`} aria-pressed={person.id === startDraft.employeePersonId} disabled={operation !== null} onClick={() => {
+      <aside className={styles.employeeSidebar}>
+        <div className={styles.searchTools}><label className={`${toolbar.search} ${styles.searchField}`}><Search size={17} aria-hidden="true" /><input aria-label="Search employees" type="search" placeholder="Search your team" value={query} onChange={event => setQuery(event.target.value)} /></label></div>
+      <nav className={styles.employeeList} aria-label="Review employees">{filteredPeople.map(person => <button type="button" key={person.id} aria-label={`${person.name} — ${person.company}`} aria-pressed={person.id === startDraft.employeePersonId} disabled={operation !== null} onClick={() => {
         if (epoch.current !== generation || busyRef.current || operationRef.current) return;
         const draft = newReviewDraft(), selectedCycle = startDraft.cycle || draft.cycle;
         const row = workspace.reviews.find(item => item.employee.id === person.id && item.cycle === selectedCycle) ?? (!workspace.startablePeople.some(item => item.id === person.id) ? workspace.reviews.find(item => item.employee.id === person.id) : undefined);
@@ -348,6 +355,8 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
         <span className={styles.employeeDetails}><strong>{person.name}</strong><span>{person.jobTitle} · {person.team}</span></span>
         <span className={styles.company}>{person.company}</span>
       </button>)}</nav>
+      {filteredPeople.length === 0 ? <p className={styles.listState} role="status">No employees match that search.</p> : null}
+      </aside>
       <div className={styles.reviewPanel}>
         {startPerson ? <header><h2>{startPerson.name} — {startPerson.company}</h2><p>{startPerson.jobTitle} · {startPerson.team}</p></header> : null}
         {startPerson ? <label className={styles.cycle}>Cycle<select name="start-cycle" disabled={busy || operation !== null} value={startDraft.cycle} onChange={event => {
@@ -364,13 +373,14 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       {selected ? <article className={styles.card}>
         {selected.capabilities.downloadDocument ? <button type="button" disabled={busy} onClick={() => download()}>Download Word</button> : null}
         <p>{selected.cycle} · {selected.dueDate} · {selected.selfStatus === "awaiting_employee" ? "Awaiting employee" : "Manager review"}</p>
-        <form aria-label="Self assessment" onSubmit={event => { event.preventDefault(); void run("submit_self"); }}><h2>Self assessment</h2>
+        {selected.audience === "employee" ? <form aria-label="Self assessment" onSubmit={event => { event.preventDefault(); void run("submit_self"); }}><h2>Self assessment</h2>
           {QUESTIONS[selected.employee.company].map((prompt: string, index: number) => <label key={prompt}>{prompt}<textarea name={`self-${index}`} maxLength={8000} value={answers[index] ?? ""} disabled={selfDisabled} onChange={event => { if (!selfDisabled && epoch.current === generation) { dirty.current = true; setAnswers(current => current.map((value, i) => i === index ? event.target.value : value)); } }} /></label>)}
           {selected.audience === "employee" ? <div className={styles.toolbar}><button type="button" disabled={selfDisabled} onClick={() => run("save_self")}>Save self draft</button><button type="submit" disabled={blocked || !selected.capabilities.submitSelf || Boolean(selected.selfSubmittedAt)}>Submit self assessment</button></div> : null}
-        </form>
+        </form> : null}
         {selected.audience !== "employee" && assessment ? <form aria-label="Manager assessment" onSubmit={event => { event.preventDefault(); void run("complete_manager"); }}><h2>Manager assessment</h2>
-          {QUESTIONS[selected.employee.company].map((prompt: string, index: number) => <div key={prompt}>
-            <label>{prompt}<textarea name={`manager-${index}`} maxLength={8000} value={assessment.answers[index] ?? ""} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessmentDirty(true); setAssessment(current => current ? { ...current, answers: current.answers.map((value, i) => i === index ? event.target.value : value) } : null); } }} /></label>
+          {QUESTIONS[selected.employee.company].map((prompt: string, index: number) => <div className={styles.question} key={prompt}>
+            <label>{prompt}<span className={styles.answerLabel}>Employee answer</span><textarea name={`self-${index}`} value={answers[index] ?? ""} disabled /></label>
+            <label>Manager answer<textarea name={`manager-${index}`} maxLength={8000} value={assessment.answers[index] ?? ""} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessmentDirty(true); setAssessment(current => current ? { ...current, answers: current.answers.map((value, i) => i === index ? event.target.value : value) } : null); } }} /></label>
             {RATED.includes(index) ? <label>Manager rating<select name={`rating-${index}`} disabled={managerDisabled} value={assessment.ratings[index] ?? ""} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessmentDirty(true); setAssessment(current => current ? { ...current, ratings: current.ratings.map((value, i) => i === index ? event.target.value : value) } : null); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label> : null}
           </div>)}
           <label>Overall manager assessment<textarea name="summary" maxLength={8000} value={assessment.summary} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessmentDirty(true); setAssessment(current => current ? { ...current, summary: event.target.value } : null); } }} /></label>

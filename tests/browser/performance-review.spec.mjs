@@ -39,9 +39,21 @@ for (const company of ['MAM', 'Equipsy']) for (const audience of ['employee', 'm
   for (let i = 0; i < 12; i++) await expect(field(page, 'self-'+i)).toHaveValue(`Synthetic answer ${i + 1}`);
   const prompt = field(page, 'self-6').locator('..'); await expect(prompt).toBeVisible(); expect(await prompt.evaluate(label => Array.from(label.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join(''))).toBe(QUESTIONS[company][6]);
   if (audience === 'employee') await expect(field(page, 'managerNote')).toHaveCount(0);
+  else {
+    await expect(page.getByRole('form', { name: 'Self assessment', exact: true })).toHaveCount(0);
+    for (let i = 0; i < 12; i++) {
+      const pair = field(page, 'manager-'+i).locator('../..');
+      await expect(pair.locator(`[name="self-${i}"]`)).toBeDisabled();
+      expect(await pair.locator('textarea').evaluateAll(fields => fields.map(field => field.name))).toEqual(['self-'+i, 'manager-'+i]);
+      const selfBox = await field(page, 'self-'+i).boundingBox(), managerBox = await field(page, 'manager-'+i).boundingBox();
+      expect(managerBox.y).toBeGreaterThanOrEqual(selfBox.y + selfBox.height);
+      expect(managerBox.y - selfBox.y - selfBox.height).toBeLessThan(50);
+    }
+  }
   if (audience === 'admin') {
     await expect(field(page, 'managerNote')).toBeDisabled();
-    await submit(page, 'Self assessment'); await submit(page, 'Manager assessment'); await submit(page, 'Review meeting');
+    await expect(page.getByRole('form', { name: 'Self assessment', exact: true })).toHaveCount(0);
+    await submit(page, 'Manager assessment'); await submit(page, 'Review meeting');
     expect(await calls(page, 'mutatePerformanceReview')).toHaveLength(0);
     await expect(page.getByRole('button', { name: /Save|Complete|Finalise|Create|Start review/ })).toHaveCount(0);
   }
@@ -93,6 +105,41 @@ test('native manager yearly review defaults cross daylight saving by calendar da
   await expect(page.getByRole('button', { name: 'New yearly review', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toHaveCount(0);
   await expect(employees.getByRole('button').first()).toBeDisabled();
+});
+
+test('employee search filters the scoped roster without losing a manager draft and clears on auth changes', async ({ page }) => {
+  await open(page, 'manager');
+  await page.evaluate(({ other, actor }) => {
+    const person = window.performanceReviewFixture.workspace.startablePeople[0];
+    window.performanceReviewFixture.workspace.startablePeople.push({ ...person, id: other, name: 'Synthetic Second', team: 'Warehouse', jobTitle: 'Team leader', company: 'Equipsy' });
+    window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor);
+  }, { other: ids.other, actor: ids.actor });
+  const employees = page.getByRole('navigation', { name: 'Review employees' });
+  await expect(employees.getByRole('button')).toHaveCount(2);
+  await field(page, 'manager-0').fill('Keep this manager draft');
+  const search = page.getByRole('searchbox', { name: 'Search employees' });
+  await search.fill(' WAREHOUSE ');
+  await expect(employees.getByRole('button')).toHaveCount(1);
+  await expect(employees.getByRole('button')).toHaveAccessibleName('Synthetic Second — Equipsy');
+  await expect(field(page, 'manager-0')).toHaveValue('Keep this manager draft');
+  await search.fill('no such employee');
+  await expect(employees.getByRole('button')).toHaveCount(0);
+  await expect(page.getByRole('status')).toHaveText('No employees match that search.');
+  await search.fill('equipsy');
+  await expect(employees.getByRole('button')).toHaveCount(1);
+  await search.fill('');
+  await expect(employees.getByRole('button')).toHaveCount(2);
+  await expect(field(page, 'manager-0')).toHaveValue('Keep this manager draft');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await search.fill('Synthetic Second');
+  await employees.getByRole('button').focus(); await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Synthetic Second — Equipsy', exact: true })).toBeVisible();
+  await expect(field(page, 'start-dueDate')).toBeVisible();
+  expect(await calls(page, 'mutatePerformanceReview')).toHaveLength(0);
+  expect(await calls(page, 'startPerformanceReview')).toHaveLength(0);
+  await page.evaluate(actor => { window.performanceReviewFixture.emitAuth('SIGNED_OUT'); window.performanceReviewFixture.emitAuth('SIGNED_IN', actor); }, ids.actor);
+  await expect(search).toHaveValue('');
 });
 
 test('self immediate duplicate guard, committed submit lock and exact payload', async ({ page }) => {
