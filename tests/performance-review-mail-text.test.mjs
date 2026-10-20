@@ -75,7 +75,7 @@ test('AM-05 saved n8n note domain matches the nonempty 8000 UTF16 mail consumer'
   }
 });
 
-test('AM-05 canonical 120-codepoint supplementary names survive worker to saved n8n validation', async () => {
+test('AM-05 canonical 120-codepoint names validate without entering the brief Careers email', async () => {
   const directory = readFileSync(new URL('../supabase/migrations/20260812223349_internal_org_directory.sql', import.meta.url), 'utf8');
   assert.match(directory, /char_length\(full_name\) between 1 and 120/);
   const fullName = '𠮷'.repeat(60) + ' ' + '𠮷'.repeat(59);
@@ -87,7 +87,9 @@ test('AM-05 canonical 120-codepoint supplementary names survive worker to saved 
     const h = loadMailHarness({ rpc: name => ({ data: name === 'claim_performance_review_mail' ? [row] : true, error: null }), fetch: (_, init) => {
       const wire = JSON.parse(init.body); validated = savedValidator(wire);
       assert.equal(validated.valid, true);
-      assert.ok(validated.graphBody.message.body.content.includes(fullName));
+      assert.equal(wire.employeeName, fullName); assert.equal(wire.managerName, fullName);
+      assert.equal(validated.graphBody.message.body.content.includes(fullName), false);
+      assert.equal(validated.graphBody.message.subject.includes(fullName), false);
       return ack(wire);
     } });
     const result = await h.mail.dispatchPerformanceReviewMailOutbox();
