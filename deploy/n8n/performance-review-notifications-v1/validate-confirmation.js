@@ -7,7 +7,7 @@ const provider = value => closed(value, ['accepted','messageId','requestId','sta
   && value.accepted === true && value.messageId === null && value.requestId === null && value.statusCode === 202;
 const valid = $json.statusCode === 200 && closed(b, ['ok','sent','alreadySent','eventKey','actualRecipient','actualCcRecipients','providerReceipt'])
   && b.ok === true && b.sent === true && b.alreadySent === false && b.eventKey === prior.eventKey
-  && b.actualRecipient === prior.recipient && b.actualCcRecipients === '' && provider(b.providerReceipt);
+  && b.actualRecipient === prior.recipient && b.actualCcRecipients === prior.cc && provider(b.providerReceipt);
 return [{json: valid ? {ok: true, sent: true, alreadySent: false, eventKey: prior.eventKey,
-  actualRecipient: prior.recipient, actualCcRecipients: '', providerReceipt: {accepted: true, messageId: null, requestId: null, statusCode: 202}}
+  actualRecipient: prior.recipient, actualCcRecipients: prior.cc, providerReceipt: {accepted: true, messageId: null, requestId: null, statusCode: 202}}
   : {ok: false, sent: false, alreadySent: false}}];

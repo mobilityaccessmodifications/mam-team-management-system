@@ -93,3 +93,30 @@ test('only validated new review and self-submission receipts schedule future lif
   const bad = productionActionHarness({ response: { data: { committed: true, operationId: ids.claim, review: review('manager'), existing: false }, error: null, status: 200 } });
   assert.equal((await bad.actions.startPerformanceReview(start())).ok, false); assert.equal(bad.callbacks.length, 0);
 }));
+
+test('new notification claims bind Careers CC and do not duplicate Careers as primary recipient', async () => {
+  for (const recipient of ['synthetic@example.com', 'careers@mobilityaccess.com.au']) {
+    for (const badReceipt of [false, true]) {
+      const row = fixture(); row.payload.recipient = recipient;
+      row.payload.cc = recipient === 'careers@mobilityaccess.com.au' ? '' : 'careers@mobilityaccess.com.au';
+      const h = loadMailHarness({ env: env(), rpc(name, args) {
+        if (name === 'claim_performance_review_notifications') return { data: [row], error: null };
+        assert.equal(args.p_delivered, !badReceipt); return { data: true, error: null };
+      }, fetch(_url, init) {
+        const p = JSON.parse(init.body); assert.equal(p.cc, row.payload.cc);
+        return Response.json({ ...receipt(p), actualCcRecipients: badReceipt ? 'other@example.com' : p.cc });
+      } });
+      const result = await h.load('src/lib/performance-review-notifications.ts').dispatchPerformanceReviewNotifications(ids.review);
+      assert.equal(result.sent, badReceipt ? 0 : 1); assert.equal(result.held, badReceipt ? 1 : 0);
+    }
+  }
+});
+
+test('new notification claims reject missing required Careers CC and arbitrary CC before webhook dispatch', async () => {
+  for (const cc of ['', 'other@example.com', null, ['careers@mobilityaccess.com.au']]) {
+    const row = fixture(); row.payload.cc = cc;
+    const h = loadMailHarness({ env: env(), rpc: () => ({ data: [row], error: null }) });
+    assert.equal((await h.load('src/lib/performance-review-notifications.ts').dispatchPerformanceReviewNotifications()).held, 1);
+    assert.equal(h.requests.length, 0);
+  }
+});

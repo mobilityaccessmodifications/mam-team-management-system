@@ -15,7 +15,10 @@ function receiver() {
 
 function claimedPayload(raw: unknown, reviewId: string | null) {
   const row = closed(raw, ["delivery_id", "review_id", "claim_token", "payload"]);
-  const p = closed(row.payload, ["event", "eventKey", "reviewId", "reviewCode", "cycle", "dueDate", "recipient", "employeeName", "managerName"]);
+  const hasCc = row.payload !== null && typeof row.payload === "object" && Object.hasOwn(row.payload, "cc");
+  const p = closed(row.payload, ["event", "eventKey", "reviewId", "reviewCode", "cycle", "dueDate", "recipient", "employeeName", "managerName", ...(hasCc ? ["cc"] : [])]);
+  const cc = hasCc ? p.cc : "";
+  const expectedCc = p.recipient === "careers@mobilityaccess.com.au" ? "" : "careers@mobilityaccess.com.au";
   const name = (v: unknown) => typeof v === "string" && v.trim().length > 0 && v.length <= 8000 && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffe\uffff]/.test(v);
   if (!performanceMailUuid(row.delivery_id) || !performanceMailUuid(row.review_id) || !performanceMailUuid(row.claim_token)
     || (reviewId !== null && row.review_id !== reviewId) || p.reviewId !== row.review_id
@@ -23,9 +26,10 @@ function claimedPayload(raw: unknown, reviewId: string | null) {
     || typeof p.reviewCode !== "string" || !/^PR-[0-9]{4}-[1-9][0-9]*$/.test(p.reviewCode)
     || typeof p.cycle !== "string" || !/^[0-9]{4}$/.test(p.cycle)
     || typeof p.dueDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(p.dueDate)
+    || (hasCc && cc !== expectedCc)
     || !name(p.employeeName) || !name(p.managerName) || typeof p.recipient !== "string"
     || p.recipient !== p.recipient.trim().toLowerCase() || p.recipient.length > 254 || /[\u0000-\u001f\u007f\ufffe\uffff]/.test(p.recipient) || !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(p.recipient)) throw Error("invalid_claim");
-  return { deliveryId: row.delivery_id, claimToken: row.claim_token, payload: { version: 1, ...p, claimToken: row.claim_token }, recipient: p.recipient, eventKey: p.eventKey };
+  return { deliveryId: row.delivery_id, claimToken: row.claim_token, payload: { version: 1, ...p, claimToken: row.claim_token }, recipient: p.recipient, cc, eventKey: p.eventKey };
 }
 
 export async function dispatchPerformanceReviewNotifications(reviewId: string | null = null, expiresAt = Date.now() + 25_000) {
@@ -58,7 +62,7 @@ export async function dispatchPerformanceReviewNotifications(reviewId: string | 
         const evidence = closed(r.providerReceipt, ["accepted", "messageId", "requestId", "statusCode"]);
         const identifier = (v: unknown) => v === null || (typeof v === "string" && v.length > 0 && v.length <= 1024 && !/[\u0000-\u001f\u007f]/.test(v));
         return r.ok === true && ((r.sent === true && r.alreadySent === false) || (r.sent === false && r.alreadySent === true))
-          && r.eventKey === claim.eventKey && r.actualRecipient === claim.recipient && r.actualCcRecipients === ""
+          && r.eventKey === claim.eventKey && r.actualRecipient === claim.recipient && r.actualCcRecipients === claim.cc
           && evidence.accepted === true && evidence.statusCode === 202 && identifier(evidence.messageId) && identifier(evidence.requestId);
       }, Math.min(15_000, budget.remaining() - 2_000));
     } catch { delivered = false; }
