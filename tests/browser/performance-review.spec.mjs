@@ -43,6 +43,7 @@ for (const company of ['MAM', 'Equipsy']) for (const audience of ['employee', 'm
     await expect(page.getByRole('form', { name: 'Self assessment', exact: true })).toHaveCount(0);
     for (let i = 0; i < 12; i++) {
       const pair = field(page, 'manager-'+i).locator('../..');
+      await expect(field(page, 'manager-'+i)).toHaveAccessibleName(QUESTIONS[company][i] + ' — Manager answer');
       await expect(pair.locator(`[name="self-${i}"]`)).toBeDisabled();
       expect(await pair.locator('textarea').evaluateAll(fields => fields.map(field => field.name))).toEqual(['self-'+i, 'manager-'+i]);
       const selfBox = await field(page, 'self-'+i).boundingBox(), managerBox = await field(page, 'manager-'+i).boundingBox();
