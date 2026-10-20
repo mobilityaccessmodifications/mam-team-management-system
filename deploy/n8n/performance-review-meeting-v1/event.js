@@ -1,10 +1,32 @@
+function safeNext(href, initial) {
+  const base = 'https://graph.microsoft.com/v1.0/me/events?';
+  const params = value => {
+    if (typeof value !== 'string' || value.length > 16384 || !value.startsWith(base) || /[\s\u0000-\u001f\u007f#]/.test(value)) return null;
+    const result = {};
+    try {
+      for (const part of value.slice(base.length).split('&')) {
+        const equal = part.indexOf('=');
+        if (equal < 1) return null;
+        const decode = v => decodeURIComponent(v.replace(/\+/g, ' '));
+        const key = decode(part.slice(0, equal)), entry = decode(part.slice(equal + 1));
+        if (!['$filter','$select','$top','$skip','$skiptoken'].includes(key) || Object.hasOwn(result, key)
+          || !entry || /[\u0000-\u001f\u007f]/.test(entry)) return null;
+        result[key] = entry;
+      }
+    } catch {return null;}
+    return result;
+  };
+  const expected = params(initial), actual = params(href);
+  if (!expected || !actual || Object.keys(expected).length !== 3 || Object.keys(actual).length !== 4
+    || !['$filter','$select','$top'].every(key => expected[key] && actual[key] === expected[key])) return false;
+  return Object.hasOwn(actual, '$skip') ? /^[0-9]{1,12}$/.test(actual.$skip)
+    : typeof actual.$skiptoken === 'string' && actual.$skiptoken.length <= 12000;
+}
+
 const reject = () => ({json: {valid: false}});
-const pending = $('Prepare Calendar Queries').item.json.request;
-const b = $json.body;
-if ($json.statusCode !== 200 || b === null || typeof b !== 'object' || !Array.isArray(b.value)
-  || Object.hasOwn(b, '@odata.nextLink') || b.value.length > 25) return reject();
+const parse = (pending, rows) => {
 const tokens = value => typeof value === 'string' ? [...value.matchAll(/(?:^|[^A-Za-z0-9_-])(PR-[0-9]{4}-[1-9][0-9]*)(?=$|[^A-Za-z0-9_-])/g)].map(match => match[1]) : [];
-const candidates = b.value.filter(event => tokens(event?.subject).includes(pending.reviewCode));
+const candidates = rows.filter(event => tokens(event?.subject).includes(pending.reviewCode));
 if (candidates.length !== 1) return reject();
 const e = candidates[0], found = tokens(e.subject);
 const bounded = (value, max) => typeof value === 'string' && value.length > 0 && value.length <= max
@@ -44,3 +66,34 @@ return {json: {valid: true, importBody: {requestToken: pending.requestToken, exp
   createdAt: created.toISOString(), modifiedAt: modified.toISOString(), mode, location,
   isCancelled: false, isAllDay: false, type: 'singleInstance',
 }}}};
+};
+const inputs = $input.all(), queries = $('Prepare Calendar Queries').all();
+if (!Array.isArray(inputs) || inputs.length > 50 || !Array.isArray(queries) || queries.length > 10) return [];
+const groups = new Map();
+for (let index = 0; index < inputs.length; index++) {
+  const item = inputs[index], pair = item.pairedItem;
+  if (!pair || Array.isArray(pair) || !Number.isInteger(pair.item) || pair.item < 0 || pair.item >= queries.length) return [];
+  if (!groups.has(pair.item)) groups.set(pair.item, []);
+  groups.get(pair.item).push({item, index});
+}
+return [...groups].map(([queryIndex, pages]) => {
+  const query = queries[queryIndex].json, rows = [], nextLinks = new Set(), ids = new Set();
+  const result = value => ({...value, pairedItem: {item: pages[0].index}});
+  if (!query || !query.request || pages.length > 5) return result(reject());
+  for (let index = 0; index < pages.length; index++) {
+    const page = pages[index].item.json, b = page.body;
+    if (page.statusCode !== 200 || b === null || typeof b !== 'object' || !Array.isArray(b.value) || b.value.length > 50) return result(reject());
+    if (index === pages.length - 1) {
+      if (Object.hasOwn(b, '@odata.nextLink')) return result(reject());
+    } else {
+      const next = b['@odata.nextLink'];
+      if (!safeNext(next, query.queryUrl) || nextLinks.has(next)) return result(reject());
+      nextLinks.add(next);
+    }
+    for (const event of b.value) {
+      if (!event || typeof event !== 'object' || typeof event.id !== 'string' || ids.has(event.id)) return result(reject());
+      ids.add(event.id); rows.push(event);
+    }
+  }
+  return result(parse(query.request, rows));
+});

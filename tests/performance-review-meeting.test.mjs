@@ -85,7 +85,12 @@ test('actual calendar validator output crosses the real meeting HTTP boundary wi
       location: { displayName: 'Synthetic room' }, type: 'singleInstance', recurrence: null, isOrganizer: false, isDraft: false, isCancelled: false, isAllDay: false, isOnlineMeeting: false, onlineMeeting: null, body: { content: 'PRIVATE ANSWERS MUST NOT CROSS' } };
     if (variant === 'five-minute-guest') e.attendees.push({ emailAddress: { address: 'guest@example.test' } });
     if (variant === 'teams') { e.isOnlineMeeting = true; e.onlineMeetingProvider = 'teamsForBusiness'; e.onlineMeeting = { joinUrl: 'https://teams.live.com/meet/synthetic' }; }
-    const parsed = new Function('$json', '$', source)({ statusCode: 200, body: { value: [e] } }, () => ({ item: { json: { request: p } } })).json;
+    const querySource = readFileSync(new URL('../deploy/n8n/performance-review-meeting-v1/queries.js', import.meta.url), 'utf8');
+    const queryItems = new Function('$json', querySource)({ statusCode: 200, body: { ok: true, requests: [p] } });
+    const page = { json: { statusCode: 200, body: { value: [e] } }, pairedItem: { item: 0 } };
+    const parsed = new Function('$input', '$', source)({ all: () => [page] }, name => {
+      assert.equal(name, 'Prepare Calendar Queries'); return { all: () => queryItems };
+    })[0].json;
     assert.equal(parsed.valid, true, variant);
     const { h, route } = harness({ rpc(name, args) { assert.equal(name, 'import_performance_review_meeting'); assert.deepEqual(args.p_event, parsed.importBody.event); return { data: { status: 'imported' }, error: null }; } });
     assert.equal((await route.POST(request('POST', parsed.importBody))).status, 200, variant);
