@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { HR_EMAIL_SIGNATURE_HTML } from '../scripts/hr-email-signature.mjs';
 import { payload } from './performance-review-n8n-fixtures.mjs';
 import { executeGraph } from './performance-review-n8n-runner.mjs';
 const require = createRequire(import.meta.url);
@@ -41,7 +42,7 @@ test('dedicated inactive create definition uses authenticated exact business pat
   assert.ok(workflow.nodes.every(n => n.retryOnFail === false));
 });
 
-test('canonical manager Word is unchanged while names and private note are escaped only into email body', () => {
+test('brief signed Careers HTML preserves canonical Word bytes and escapes the private manager note', () => {
   const p = payload();
   const value = code(build(), 'Validate Payload', {body: p});
   assert.equal(value.valid, true);
@@ -51,8 +52,13 @@ test('canonical manager Word is unchanged while names and private note are escap
   assert.deepEqual(mail.message.ccRecipients, []);
   assert.deepEqual(mail.message.bccRecipients, []);
   assert.equal(mail.message.body.contentType, 'HTML');
-  assert.ok(mail.message.body.content.includes('Synthetic &lt;Employee&gt;'));
-  assert.ok(mail.message.body.content.includes('Synthetic &amp; Manager'));
+  assert.equal(mail.message.subject, 'Performance review completed');
+  assert.ok(mail.message.body.content.includes('A performance review is complete. The completed document is attached.'));
+  assert.equal(mail.message.body.content.split(HR_EMAIL_SIGNATURE_HTML).length, 2);
+  for (const privateValue of [p.employeeName, p.managerName, 'Synthetic &lt;Employee&gt;', 'Synthetic &amp; Manager', p.reviewCode, p.finalisedAt]) {
+    assert.equal(mail.message.body.content.includes(privateValue), false);
+    assert.equal(mail.message.subject.includes(privateValue), false);
+  }
   assert.ok(mail.message.body.content.includes('&lt;script&gt;&quot;&amp;&#39;<br>'));
   const attachment = mail.message.attachments[0];
   assert.equal(attachment['@odata.type'], '#microsoft.graph.fileAttachment');

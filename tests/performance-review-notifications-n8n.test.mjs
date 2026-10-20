@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { HR_EMAIL_SIGNATURE_HTML } from '../scripts/hr-email-signature.mjs';
 import { executeGraph } from './performance-review-n8n-runner.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -89,7 +90,7 @@ test('notification graph binds exact credential references, closed paths and pri
   }
 });
 
-test('both future events execute reserve, one fixed text email, confirm and exact closed response', async () => {
+test('both future events execute reserve, one brief signed HTML email, confirm and exact closed response', async () => {
   for (const event of ['started', 'self-submitted']) {
     const workflow = build(), p = payload(event), h = harness(workflow, p);
     const result = await h.run();
@@ -102,11 +103,17 @@ test('both future events execute reserve, one fixed text email, confirm and exac
     assert.deepEqual(Object.keys(mail.message).sort(), ['bccRecipients', 'body', 'ccRecipients', 'subject', 'toRecipients']);
     assert.deepEqual(mail.message.toRecipients, [{emailAddress: {address: p.recipient}}]);
     assert.deepEqual(mail.message.ccRecipients, []); assert.deepEqual(mail.message.bccRecipients, []);
-    assert.equal(mail.message.body.contentType, 'Text');
+    assert.equal(mail.message.subject, event === 'started' ? 'Your performance review is ready' : 'Self-assessment submitted');
+    assert.equal(mail.message.body.contentType, 'HTML');
     assert.ok(mail.message.body.content.includes(HUB + '/?view=people&tab=performance'));
-    assert.ok(mail.message.body.content.includes(p.reviewCode));
-    assert.ok(mail.message.body.content.includes(p.employeeName));
-    assert.ok(mail.message.body.content.includes(event === 'started' ? p.dueDate : 'arrange the review meeting'));
+    assert.ok(mail.message.body.content.includes(event === 'started'
+      ? 'Your performance review is ready. Please complete your self-assessment in People Hub.'
+      : 'A self-assessment has been submitted. Please open People Hub to complete the next step.'));
+    assert.equal(mail.message.body.content.split(HR_EMAIL_SIGNATURE_HTML).length, 2);
+    for (const privateValue of [p.reviewCode, p.employeeName, p.managerName, p.dueDate]) {
+      assert.equal(mail.message.body.content.includes(privateValue), false);
+      assert.equal(mail.message.subject.includes(privateValue), false);
+    }
     assert.deepEqual(h.calls[2].body, {action: 'confirm', eventKey: p.eventKey, recipient: p.recipient,
       cc: '', deliveryToken: TOKEN, providerReceipt: PROVIDER});
     assert.deepEqual(result.value, returned(p));
@@ -143,13 +150,20 @@ test('closed payload rejects private fields, malformed identifiers, recipient li
   assert.equal(run({body: payload()}, {all: () => [{json: {}}]}, () => {throw Error('Builtin disabled');})[0].json.valid, true);
 });
 
-test('canonical names stay in text body and cannot alter Graph recipients', async () => {
-  const p = payload(); p.employeeName = 'x'.repeat(8000); p.managerName = 'Synthetic\tManager\r\nBcc: other@example.invalid';
-  const h = harness(build(), p); assert.deepEqual((await h.run()).value, returned(p));
-  const mail = h.calls.find(c => c.name === 'Send Performance Notification').body.message;
-  assert.deepEqual(mail.toRecipients, [{emailAddress: {address: p.recipient}}]);
-  assert.deepEqual(mail.ccRecipients, []); assert.deepEqual(mail.bccRecipients, []);
-  assert.ok(mail.body.content.includes(p.employeeName)); assert.ok(mail.body.content.includes(p.managerName));
+test('untrusted names cannot change the generic HTML or Graph recipients', async () => {
+  for (const event of ['started', 'self-submitted']) {
+    const baseline = harness(build(), payload(event)); await baseline.run();
+    const expected = baseline.calls.find(c => c.name === 'Send Performance Notification').body.message;
+    for (const names of [
+      ['x'.repeat(8000), 'Synthetic\tManager\r\nBcc: other@example.invalid'],
+      ['<img src=x onerror="alert(1)">', '<script>PRIVATE-SYNTHETIC</script>'],
+    ]) {
+      const p = payload(event); [p.employeeName, p.managerName] = names;
+      const h = harness(build(), p); assert.deepEqual((await h.run()).value, returned(p));
+      const mail = h.calls.find(c => c.name === 'Send Performance Notification').body.message;
+      assert.deepEqual(mail, expected);
+    }
+  }
 });
 
 test('only the exact source-bound grant authorizes sending; wrong business recipient and uncertain reserve stop', async () => {
