@@ -396,7 +396,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
         }
       } catch {} finally {
         inFlight = false;
-        if (active && !confirmed && epoch.current === ticket && attempts <= INVITATION_STATUS_DELAYS.length) timer = setTimeout(refresh, INVITATION_STATUS_DELAYS[attempts - 1]);
+        if (active && !confirmed && epoch.current === ticket) timer = setTimeout(refresh, INVITATION_STATUS_DELAYS[attempts - 1] ?? 60_000);
       }
     };
     const onFocus = () => { if (!inFlight) { attempts = 0; void refresh(); } };

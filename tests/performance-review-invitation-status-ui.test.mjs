@@ -74,16 +74,33 @@ test('confirmed button and form submit save draft without inviting again and pre
   h.unmount();
 });
 
-test('pending invitation checks are bounded, focus restarts them, and unmount removes them', async () => {
+test('pending invitation checks continue after the initial burst, coalesce focus and stop on unmount', async () => {
   const h = mount(workspace('manager', 'MAM', { reviews: [invited()] }));
   await h.settle();
   for (let i = 0; i < 9; i++) { h.timers(); await h.settle(); }
-  assert.equal(h.invitationStatusCalls.length, 6);
+  assert.equal(h.invitationStatusCalls.length, 10);
   h.focus(); h.focus(); await h.settle();
-  assert.equal(h.invitationStatusCalls.length, 7);
+  assert.equal(h.invitationStatusCalls.length, 11);
   h.unmount();
   h.timers(); h.focus(); await h.settle();
-  assert.equal(h.invitationStatusCalls.length, 7);
+  assert.equal(h.invitationStatusCalls.length, 11);
+});
+
+test('fallback delivery confirmation after the initial burst updates automatically and stops all checks', async () => {
+  let checks = 0;
+  const h = mount(workspace('manager', 'MAM', { reviews: [invited()] }), {
+    loadPerformanceReviewMeetingInvitationStatus: async reviewId => ({ ok: true, reviewId, sent: ++checks === 9 }),
+  });
+  await h.settle();
+  for (let i = 0; i < 7; i++) { h.timers(); await h.settle(); }
+  assert.equal(h.invitationStatusCalls.length, 8);
+  assert.ok(h.button('Save draft and invite meeting'));
+  h.timers(); await h.settle();
+  assert.ok(h.button('Save draft')); assert.ok(h.text.includes(hint));
+  h.timers(); h.focus(); await h.settle();
+  assert.equal(h.invitationStatusCalls.length, 9);
+  assert.equal(h.calls.filter(call => call.name === 'loadPerformanceReviews').length, 1);
+  h.unmount();
 });
 
 test('status errors remain unconfirmed and are rechecked on focus without reloading workspace', async () => {
