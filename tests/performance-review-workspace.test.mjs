@@ -419,14 +419,14 @@ test('Admin and P0 never acquire employee writes from an incorrectly self-shaped
   }
 });
 
-test('offline browser fixture compiles the real React component and all five typed action boundaries without launching a browser', async () => {
+test('offline browser fixture compiles the real React component and the typed action and status boundaries without launching a browser', async () => {
   assert.ok(existsSync('tests/browser/performance-review-fixture.jsx'), 'Real-component browser fixture must exist');
   assert.ok(existsSync('tests/browser/performance-review.spec.mjs'), 'Browser interaction specification must exist');
   const { buildPerformanceFixture } = await import('./performance-review-offline-runner.mjs');
   const result = await buildPerformanceFixture();
   try {
     assert.deepEqual(result.typeErrors, []);
-    assert.deepEqual(result.actionExports.sort(), ['getPerformanceReviewDocument','loadPerformanceReviews','mutatePerformanceReview','reconcilePerformanceReviewOperation','startPerformanceReview']);
+    assert.deepEqual(result.actionExports.sort(), ['getPerformanceReviewDocument','loadPerformanceReviewMeetingInvitationStatus','loadPerformanceReviews','mutatePerformanceReview','reconcilePerformanceReviewOperation','startPerformanceReview']);
     assert.ok(result.inputs.includes('src/components/performance-review-workspace.tsx'));
     assert.ok(result.inputs.includes('src/lib/performance-review-document.ts'));
     assert.ok(!result.inputs.includes('src/lib/supabase/client.ts'));

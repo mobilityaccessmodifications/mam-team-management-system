@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { mutatePerformanceReview, startPerformanceReview, getPerformanceReviewDocument, reconcilePerformanceReviewOperation } from "@/app/performance-reviews/actions";
-import { loadPerformanceReviews } from "@/lib/performance-review-load";
+import { loadPerformanceReviews, loadPerformanceReviewMeetingInvitationStatus } from "@/lib/performance-review-load";
 import { buildPerformanceReviewDownload } from "@/lib/performance-review-document";
 import { createClient } from "@/lib/supabase/client";
 import { meetingEndMillis } from "@/lib/performance-review-rules";
@@ -18,6 +18,7 @@ const RATED = [0, 1, 2, 6, 7, 8, 9];
 const RATINGS = [["1 Needs improvement", "1 Needs improvement"], ["2 Meets expectations", "2 Meets expectations"], ["3 Exceeds expectations", "3 Exceeds expectations"], ["N Not enough evidence", "N Not enough evidence"]];
 type PendingOperation = { operationId: string; reviewId: string | null; phase: "pending" | "uncertain" };
 type ConflictScope = { generation: number; actorUserId: string; personId: string | null; role: PerformanceWorkspace["viewerContext"]["role"]; reviewId: string; employeePersonId: string; audience: PerformanceReview["audience"]; command: PerformanceMutationInput["command"] };
+const INVITATION_STATUS_DELAYS = [2000, 4000, 8000, 16000, 30000];
 const EMPTY_MEETING: PerformanceMeeting = { date: "", time: "", duration: 30, mode: "in_person", location: "", notes: "" };
 
 function newReviewDraft() {
@@ -91,6 +92,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const dirty = useRef(false);
   const dirtyParts = useRef({ assessment: false, meeting: false });
   const [clock, setClock] = useState(Date.now);
+  const [confirmedInvitation, setConfirmedInvitation] = useState<string | null>(null);
   const nativeActor = useRef<string | null | undefined>(undefined);
   const viewer = useRef<PerformanceWorkspace["viewerContext"] | null>(null);
   const selection = useRef<{ id: string; audience: PerformanceReview["audience"] } | null>(null);
@@ -102,6 +104,10 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const urls = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const retire = useCallback(() => { epoch.current += 1; }, []);
   const selected = workspace?.reviews.find(row => row.id === selectedId);
+  const invitationScope = workspace && selected && selected.audience !== "employee" && !readOnly && !selected.finalisedAt && (selected.capabilities.saveManager || selected.capabilities.completeManager)
+    ? JSON.stringify([workspace.viewerContext.actorUserId, workspace.viewerContext.personId, workspace.viewerContext.role, previewPersonId, selected.id, selected.audience]) : null;
+  const invitationSent = invitationScope !== null && confirmedInvitation === invitationScope;
+  const invitationRequested = !!selected && selected.audience !== "employee" && Boolean(selected.managerCompletedAt);
   const people = reviewPeople(workspace);
   const search = query.trim().toLocaleLowerCase();
   const filteredPeople = people.filter(person => [person.name, person.jobTitle, person.team, person.company].join(" ").toLocaleLowerCase().includes(search));
@@ -130,7 +136,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   }, [advance]);
   const clearPrivate = useCallback((notice: string) => {
     track(null); choose(null); viewer.current = null;
-    setWorkspace(null); setQuery(""); reviewChoice.current = null; setStartDraft({ employeePersonId: "", cycle: "", dueDate: "" });
+    setWorkspace(null); setConfirmedInvitation(null); setQuery(""); reviewChoice.current = null; setStartDraft({ employeePersonId: "", cycle: "", dueDate: "" });
     for (const [url, timer] of urls.current) { clearTimeout(timer); URL.revokeObjectURL(url); }
     urls.current.clear(); setMessage(notice);
   }, [track, choose]);
@@ -371,6 +377,33 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       for (const [url, timer] of downloads) { clearTimeout(timer); URL.revokeObjectURL(url); } downloads.clear();
     };
   }, [advance, applyLoaded, clearPrivate, handleFailure, retire, previewPersonId]);
+  useEffect(() => {
+    if (!invitationScope || invitationSent || !invitationRequested || !selectedId || epoch.current !== generation) return;
+    const ticket = generation, reviewId = selectedId;
+    let active = true, inFlight = false, confirmed = false, attempts = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = async () => {
+      if (!active || inFlight || confirmed || epoch.current !== ticket) return;
+      clearTimeout(timer);
+      inFlight = true;
+      attempts += 1;
+      try {
+        const result = await loadPerformanceReviewMeetingInvitationStatus(reviewId, previewPersonId);
+        if (!active || epoch.current !== ticket) return;
+        if (result.ok === true && result.reviewId === reviewId && result.sent === true) {
+          confirmed = true;
+          setConfirmedInvitation(invitationScope);
+        }
+      } catch {} finally {
+        inFlight = false;
+        if (active && !confirmed && epoch.current === ticket) timer = setTimeout(refresh, INVITATION_STATUS_DELAYS[attempts - 1] ?? 60_000);
+      }
+    };
+    const onFocus = () => { if (!inFlight) { attempts = 0; void refresh(); } };
+    if (typeof window !== "undefined") window.addEventListener("focus", onFocus);
+    void refresh();
+    return () => { active = false; clearTimeout(timer); if (typeof window !== "undefined") window.removeEventListener("focus", onFocus); };
+  }, [generation, invitationRequested, invitationScope, invitationSent, previewPersonId, selectedId]);
   const blocked = readOnly || busy || operation !== null;
   const selfDisabled = preview || blocked || selected?.audience !== "employee" || !selected.capabilities.saveSelf || Boolean(selected.selfSubmittedAt);
   const managerDisabled = blocked || !selected || selected.audience === "employee" || !selected.capabilities.saveManager || Boolean(selected.finalisedAt);
@@ -420,7 +453,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
           {QUESTIONS[selected.employee.company].map((prompt: string, index: number) => <label key={prompt}>{prompt}<textarea name={`self-${index}`} maxLength={8000} value={answers[index] ?? ""} disabled={selfDisabled} onChange={event => { if (!selfDisabled && epoch.current === generation) { dirty.current = true; setAnswers(current => current.map((value, i) => i === index ? event.target.value : value)); } }} /></label>)}
           {selected.audience === "employee" ? <div className={styles.toolbar}><button type="button" disabled={selfDisabled} onClick={() => run("save_self")}>Save self draft</button><button type="submit" disabled={blocked || !selected.capabilities.submitSelf || Boolean(selected.selfSubmittedAt)}>Submit self assessment</button></div> : null}
         </form> : null}
-        {selected.audience !== "employee" && assessment ? <form aria-label="Manager assessment" onSubmit={event => { event.preventDefault(); void run("complete_manager"); }}><h2>Manager assessment</h2>
+        {selected.audience !== "employee" && assessment ? <form aria-label="Manager assessment" onSubmit={event => { event.preventDefault(); void run(invitationSent ? "save_manager" : "complete_manager"); }}><h2>Manager assessment</h2>
           {QUESTIONS[selected.employee.company].map((prompt: string, index: number) => <div className={styles.question} key={prompt}>
             <label>{prompt}<span className={styles.answerLabel}>Employee answer</span><textarea name={`self-${index}`} value={answers[index] ?? ""} disabled /></label>
             <label>Manager answer<textarea aria-label={`${prompt} — Manager answer`} name={`manager-${index}`} maxLength={8000} value={assessment.answers[index] ?? ""} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, answers: current.answers.map((value, i) => i === index ? event.target.value : value) } : null); } }} /></label>
@@ -429,7 +462,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
           <label>Overall manager assessment<textarea name="summary" maxLength={8000} value={assessment.summary} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, summary: event.target.value } : null); } }} /></label>
           <label>Overall rating<select name="overallRating" value={assessment.overallRating} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, overallRating: event.target.value } : null); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label>Private manager note<textarea name="managerNote" maxLength={8000} value={assessment.managerNote} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, managerNote: event.target.value } : null); } }} /></label>
-          {managerActions ? <div className={styles.toolbar}><button type="button" className={styles.primaryButton} onClick={() => run("complete_manager")} disabled={blocked || !selected.capabilities.completeManager || Boolean(selected.finalisedAt)}>Save draft and invite meeting</button></div> : null}
+          {managerActions ? <div className={styles.toolbar}><button type="button" className={styles.primaryButton} onClick={() => run(invitationSent ? "save_manager" : "complete_manager")} disabled={blocked || !(invitationSent ? selected.capabilities.saveManager : selected.capabilities.completeManager) || Boolean(selected.finalisedAt)}>{invitationSent ? "Save draft" : "Save draft and invite meeting"}</button>{invitationSent ? <span className={styles.invitationHint}>Reply with Meeting in Outlook to schedule the review. Include ai@mobilityaccess.com.au and the employee, and keep the review code.</span> : null}</div> : null}
         </form> : null}
         {selected.audience !== "employee" ? <form aria-label="Review meeting" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget) && selected.managerCompletedAt && dirtyParts.current.meeting && validMeeting()) void run("save_meeting"); }} onSubmit={event => { event.preventDefault(); void run("submit_review"); }}><h2>Review meeting</h2>
           <label>Date<input type="date" name="meeting-date" value={meeting.date} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, date: event.target.value })); } }} /></label>
