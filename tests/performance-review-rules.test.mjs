@@ -22,10 +22,11 @@ test('submission enforces original required answers and exact manager ratings',(
   for(const i of [1,2,11]) { const b=structuredClone(s);b.input.answers[i]='';assert.deepEqual(r.parseMutationInput(b),b); }
   const m={...s,expectedRevision:'manager:1:0',command:'complete_manager',input:{answers:Array(12).fill('Evidence'),ratings:Array(12).fill('2 Meets expectations'),summary:'Summary',overallRating:'N Not enough evidence',managerNote:'Private'}};
   assert.deepEqual(r.parseMutationInput(m),m);
-  for(const key of ['summary','overallRating','managerNote']) {const b=structuredClone(m);b.input[key]='';assert.throws(()=>r.parseMutationInput(b));}
-  for(const i of [0,1,2,6,7,8,9]) {const b=structuredClone(m);b.input.ratings[i]='';assert.throws(()=>r.parseMutationInput(b));}
+  for(const key of ['summary','overallRating','managerNote']) {const b=structuredClone(m);b.input[key]='';assert.deepEqual(r.parseMutationInput(b),b);}
+  for(const i of [0,1,2,6,7,8,9]) {const b=structuredClone(m);b.input.ratings[i]='';assert.deepEqual(r.parseMutationInput(b),b);}
   const b=structuredClone(m);b.input.ratings[11]='unknown';assert.throws(()=>r.parseMutationInput(b));
   const draft={...m,command:'save_manager',input:{answers:Array(12).fill(''),ratings:Array(12).fill(''),summary:'',overallRating:'',managerNote:''}};assert.deepEqual(r.parseMutationInput(draft),draft);
+  assert.deepEqual(r.parseMutationInput({...draft,command:'complete_manager'}),{...draft,command:'complete_manager'});
 });
 test('Melbourne meeting validation rejects DST gaps and folds and requires Boolean held',()=>{
   const r=rules();const meeting={date:'2026-10-16',time:'23:55',duration:10,mode:'in_person',location:'Room',notes:''};

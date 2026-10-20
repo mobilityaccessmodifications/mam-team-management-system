@@ -485,8 +485,13 @@ production requests or test mail during acceptance.
 
 ### Performance reviews
 
-Employees complete their self assessment, then the assigned manager completes
-the manager assessment and records the review meeting. Final submission requires
+Employees complete their self assessment, then the assigned reviewer uses
+Save draft and invite meeting to save their assessment draft and send one short
+email from AI to the reviewer and employee, with Careers copied. The reviewer
+uses Outlook Reply with Meeting and includes AI as an attendee. The calendar
+worker imports the matching invitation's meeting metadata once; later manual
+edits are preserved. Valid manual meeting edits save when focus leaves the form.
+Final submission requires a complete manager assessment,
 the meeting to have ended and the manager to confirm it was held. It queues the
 completed Word document to careers@mobilityaccess.com.au; the private manager
 note stays in the email body. HR/Admin/P0 retain the read-only overview.
@@ -497,6 +502,6 @@ Excel/SharePoint master totals and synchronization are not part of this workflow
 
 Production activation uses `MAM_PERFORMANCE_REVIEW_ENABLED=true` and
 `PERFORMANCE_REVIEW_EMAIL_MODE=live` after the reviewed database and existing
-n8n receiver are verified. Publish application changes through a reviewed merge
+n8n receivers and calendar worker are verified. Publish application changes through a reviewed merge
 to `main`, then verify the fixed production URL. Do not send test mail or replay
 historical deliveries during release verification.

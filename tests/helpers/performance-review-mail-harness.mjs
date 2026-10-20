@@ -11,6 +11,8 @@ const sourcePaths = [
   'src/lib/performance-review-notifications.ts',
   'src/lib/performance-review-mail-policy.ts',
   'src/app/api/performance-reviews/mail/route.ts',
+  'src/lib/performance-review-meeting.ts',
+  'src/app/api/performance-reviews/meeting/route.ts',
   'src/lib/performance-review-rules.ts',
   'src/lib/performance-review-types.ts',
   'src/lib/performance-review-document.ts',

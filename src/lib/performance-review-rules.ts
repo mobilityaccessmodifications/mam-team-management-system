@@ -42,12 +42,11 @@ export function parseMutationInput(value: unknown): PerformanceMutationInput {
   if ((!self && !manager) || typeof v.expectedRevision !== "string" || !(self ? /^self:(0|[1-9][0-9]*)$/ : /^(?:manager|read):(0|[1-9][0-9]*):(0|[1-9][0-9]*)$/).test(v.expectedRevision)) invalid();
   const input = closed(v.input, self ? ["answers"] : ["answers", "ratings", "summary", "overallRating", "managerNote"]);
   const answers = strings(input.answers);
-  if (v.command === "submit_self" || v.command === "complete_manager") for (const i of REQUIRED_ANSWERS) if (!answers[i].trim()) invalid();
+  if (v.command === "submit_self") for (const i of REQUIRED_ANSWERS) if (!answers[i].trim()) invalid();
   if (manager) {
     const ratings = strings(input.ratings);
     if (ratings.some(r => r !== "" && !RATINGS.includes(r)) || (text(input.overallRating) !== "" && !RATINGS.includes(input.overallRating as string))) invalid();
     text(input.summary); text(input.managerNote);
-    if (v.command === "complete_manager" && (RATING_INDICES.some(i => !ratings[i]) || !input.overallRating || !(input.summary as string).trim() || !(input.managerNote as string).trim())) invalid();
   }
   return structuredClone(v) as PerformanceMutationInput;
 }

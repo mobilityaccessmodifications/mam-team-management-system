@@ -7,6 +7,7 @@ import { mutatePerformanceReview, startPerformanceReview, getPerformanceReviewDo
 import { loadPerformanceReviews } from "@/lib/performance-review-load";
 import { buildPerformanceReviewDownload } from "@/lib/performance-review-document";
 import { createClient } from "@/lib/supabase/client";
+import { meetingEndMillis } from "@/lib/performance-review-rules";
 import { QUESTIONS } from "@/lib/performance-review-questions.mjs";
 import type { PerformanceFailure, PerformanceReview, PerformanceSelfReview, PerformanceManagerInput, PerformanceIdentity, PerformanceMeeting, PerformanceMutationInput, PerformanceWorkspace } from "@/lib/performance-review-types";
 import toolbar from "./people-toolbar.module.css";
@@ -89,7 +90,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const epoch = useRef(0);
   const dirty = useRef(false);
   const dirtyParts = useRef({ assessment: false, meeting: false });
-  const [assessmentDirty, setAssessmentDirty] = useState(false);
+  const [clock, setClock] = useState(Date.now);
   const nativeActor = useRef<string | null | undefined>(undefined);
   const viewer = useRef<PerformanceWorkspace["viewerContext"] | null>(null);
   const selection = useRef<{ id: string; audience: PerformanceReview["audience"] } | null>(null);
@@ -119,7 +120,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   function releaseBusy(owner: symbol) { if (busyOwner.current === owner) { busyOwner.current = null; busyRef.current = false; setBusy(false); } }
   const unknown = useCallback(() => { setRecoveryVisible(true); if (operationRef.current) track({ ...operationRef.current, phase: "uncertain" }); setMessage("The update could not be confirmed. Reconcile before submitting again."); }, [track]);
   const choose = useCallback((row: PerformanceReview | null) => {
-    advance(); conflict.current = null; setRecoveryVisible(false); dirty.current = false; dirtyParts.current = { assessment: false, meeting: false }; setAssessmentDirty(false);
+    advance(); conflict.current = null; setRecoveryVisible(false); dirty.current = false; dirtyParts.current = { assessment: false, meeting: false };
     selection.current = row ? { id: row.id, audience: row.audience } : null;
     setRevision(row ? row.audience === "employee" ? row.selfRevision : row.audience === "manager" ? row.managerRevision : row.readRevision : "");
     setSelectedId(row?.id ?? null); setAnswers(row ? [...row.selfAnswers] : []);
@@ -178,7 +179,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     track(null);
     setWorkspace(current => current ? { ...current, reviews: orderedReviews([row, ...current.reviews.filter(old => old.id !== row.id)]) } : null);
     choose(row);
-    if (keepAssessment) { setAssessment(assessment); setAssessmentDirty(true); dirtyParts.current.assessment = true; dirty.current = true; }
+    if (keepAssessment) { setAssessment(assessment); dirtyParts.current.assessment = true; dirty.current = true; }
     if (keepMeeting) { setMeeting(meeting); setHeld(held); dirtyParts.current.meeting = true; dirty.current = true; }
     reviewChoice.current = { employeePersonId: row.employee.id, cycle: row.cycle }; setStartDraft(current => ({ ...current, employeePersonId: row.employee.id, cycle: row.cycle })); setMessage(notice);
   }
@@ -247,6 +248,30 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     } catch { if (epoch.current === ticket) { setMessage("Reviews could not be loaded."); setRecoveryVisible(true); } }
     finally { if (epoch.current === ticket) setLoading(false); }
   }
+  function validMeeting() {
+    try {
+      return Number.isFinite(meetingEndMillis(meeting)) && Number.isInteger(meeting.duration) && meeting.duration >= 5 && meeting.duration <= 480 && meeting.notes.length <= 8000 && meeting.location.length <= 8000 && !!meeting.location.trim();
+    } catch { return false; }
+  }
+  function completeAssessment() {
+    return !!assessment && ![...assessment.answers, assessment.summary, assessment.managerNote].some(value => value.length > 8000) && !REQUIRED.some(index => !assessment.answers[index]?.trim()) && !RATED.some(index => !RATINGS.some(([value]) => value === assessment.ratings[index])) && !!assessment.summary.trim() && !!assessment.managerNote.trim() && RATINGS.some(([value]) => value === assessment.overallRating);
+  }
+  let meetingFinished = false;
+  try { meetingFinished = validMeeting() && meetingEndMillis(meeting) <= clock; } catch {}
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    let active = true;
+    const update = () => {
+      if (!active) return;
+      setClock(Date.now());
+      try {
+        const remaining = meetingEndMillis(meeting) - Date.now();
+        if (remaining > 0) timer = setTimeout(update, Math.min(remaining, 2147483647));
+      } catch {}
+    };
+    update();
+    return () => { active = false; clearTimeout(timer); };
+  }, [meeting]);
   async function run(command: PerformanceMutationInput["command"]) {
     if (readOnly || epoch.current !== generation || busyRef.current || operationRef.current || !selected || !workspace) return;
     const ticket = generation;
@@ -260,28 +285,45 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     } else if (command === "save_manager" || command === "complete_manager") {
       if (selected.audience === "employee" || !assessment || selected.finalisedAt || !(command === "save_manager" ? selected.capabilities.saveManager : selected.capabilities.completeManager)) return;
       if ([...assessment.answers, assessment.summary, assessment.managerNote].some(value => value.length > 8000)) { setMessage("Use at most 8000 characters per answer."); return; }
-      if (command === "complete_manager" && (REQUIRED.some(index => !assessment.answers[index]?.trim()) || RATED.some(index => !RATINGS.some(([value]) => value === assessment.ratings[index])) || !assessment.summary.trim() || !assessment.managerNote.trim() || !RATINGS.some(([value]) => value === assessment.overallRating))) { setMessage("Complete the required manager answers, ratings and notes."); return; }
       mutation = { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...assessment, answers: [...assessment.answers], ratings: [...assessment.ratings] } };
     } else {
       if (selected.audience === "employee" || selected.finalisedAt || !(command === "save_meeting" ? selected.capabilities.saveMeeting : selected.capabilities.submitReview)) return;
-      if (command === "submit_review" && (!held || !selected.managerCompletedAt || dirtyParts.current.assessment)) { setMessage("Complete the assessment and confirm the meeting was held."); return; }
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(meeting.date) || !/^\d{2}:\d{2}$/.test(meeting.time) || !Number.isInteger(meeting.duration) || meeting.duration < 5 || meeting.duration > 480 || meeting.notes.length > 8000 || meeting.location.length > 8000) { setMessage("Check the meeting details."); return; }
+      if (command === "submit_review" && dirtyParts.current.assessment && !selected.capabilities.saveManager) return;
+      if (command === "submit_review" && (!held || !selected.managerCompletedAt || !completeAssessment())) { setMessage("Complete the assessment and confirm the meeting was held."); return; }
+      if (command === "submit_review" && (!validMeeting() || meetingEndMillis(meeting) > Date.now())) { setMessage("The review meeting must finish before sending to HR."); return; }
+      if (!validMeeting()) { setMessage("Check the meeting details."); return; }
       mutation = command === "save_meeting" ? { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...meeting } } : { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...meeting, held: true } };
     }
     const owner = claimBusy();
-    track({ operationId, reviewId: selected.id, phase: "pending" });
+    const mutations: PerformanceMutationInput[] = command === "submit_review" && dirtyParts.current.assessment && assessment
+      ? [{ operationId: crypto.randomUUID(), reviewId: selected.id, expectedRevision: revision, command: "save_manager", input: { ...assessment, answers: [...assessment.answers], ratings: [...assessment.ratings] } }, mutation]
+      : [mutation];
+    let expectedRevision = revision;
     try {
-      const result = previewPersonId === undefined ? await mutatePerformanceReview(mutation) : await mutatePerformanceReview(mutation, previewPersonId);
-      if (epoch.current !== ticket) return;
-      if (!result.ok) {
-        handleFailure(result, true);
-        if (result.code === "conflict" && !result.uncertain) conflict.current = { generation: ticket, actorUserId: workspace.viewerContext.actorUserId, personId: workspace.viewerContext.personId, role: workspace.viewerContext.role, reviewId: selected.id, employeePersonId: selected.employee.id, audience: selected.audience, command };
-        return;
+      for (const [index, item] of mutations.entries()) {
+        const next = { ...item, expectedRevision };
+        track({ operationId: next.operationId, reviewId: selected.id, phase: "pending" });
+        const result = previewPersonId === undefined ? await mutatePerformanceReview(next) : await mutatePerformanceReview(next, previewPersonId);
+        if (epoch.current !== ticket) return;
+        if (!result.ok) {
+          handleFailure(result, true);
+          if (result.code === "conflict" && !result.uncertain) conflict.current = { generation: ticket, actorUserId: workspace.viewerContext.actorUserId, personId: workspace.viewerContext.personId, role: workspace.viewerContext.role, reviewId: selected.id, employeePersonId: selected.employee.id, audience: selected.audience, command: next.command };
+          return;
+        }
+        if (result.committed !== true || result.operationId !== next.operationId || result.review.id !== selected.id || result.review.audience !== selected.audience) { unknown(); return; }
+        const row = ownedRow(result.review, workspace.viewerContext);
+        if (!row) { unknown(); return; }
+        if (index === mutations.length - 1) {
+          accept(row, (command.startsWith("save_") || command === "complete_manager") ? "Saved." : "Submitted.", command);
+        } else {
+          if (row.audience === "employee") { unknown(); return; }
+          expectedRevision = row.audience === "manager" ? row.managerRevision : row.readRevision;
+          setRevision(expectedRevision);
+          dirtyParts.current.assessment = false;
+          dirty.current = dirtyParts.current.meeting;
+          setWorkspace(current => current ? { ...current, reviews: orderedReviews([row, ...current.reviews.filter(old => old.id !== row.id)]) } : null);
+        }
       }
-      if (result.committed !== true || result.operationId !== operationId || result.review.id !== selected.id || result.review.audience !== selected.audience) { unknown(); return; }
-      const row = ownedRow(result.review, workspace.viewerContext);
-      if (!row) { unknown(); return; }
-      accept(row, command.startsWith("save_") ? "Saved." : "Submitted.", command);
     } catch { if (epoch.current === ticket) unknown(); }
     finally { releaseBusy(owner); }
   }
@@ -381,23 +423,23 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
         {selected.audience !== "employee" && assessment ? <form aria-label="Manager assessment" onSubmit={event => { event.preventDefault(); void run("complete_manager"); }}><h2>Manager assessment</h2>
           {QUESTIONS[selected.employee.company].map((prompt: string, index: number) => <div className={styles.question} key={prompt}>
             <label>{prompt}<span className={styles.answerLabel}>Employee answer</span><textarea name={`self-${index}`} value={answers[index] ?? ""} disabled /></label>
-            <label>Manager answer<textarea aria-label={`${prompt} — Manager answer`} name={`manager-${index}`} maxLength={8000} value={assessment.answers[index] ?? ""} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessmentDirty(true); setAssessment(current => current ? { ...current, answers: current.answers.map((value, i) => i === index ? event.target.value : value) } : null); } }} /></label>
-            {RATED.includes(index) ? <label>Manager rating<select name={`rating-${index}`} disabled={managerDisabled} value={assessment.ratings[index] ?? ""} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessmentDirty(true); setAssessment(current => current ? { ...current, ratings: current.ratings.map((value, i) => i === index ? event.target.value : value) } : null); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label> : null}
+            <label>Manager answer<textarea aria-label={`${prompt} — Manager answer`} name={`manager-${index}`} maxLength={8000} value={assessment.answers[index] ?? ""} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, answers: current.answers.map((value, i) => i === index ? event.target.value : value) } : null); } }} /></label>
+            {RATED.includes(index) ? <label>Manager rating<select name={`rating-${index}`} disabled={managerDisabled} value={assessment.ratings[index] ?? ""} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, ratings: current.ratings.map((value, i) => i === index ? event.target.value : value) } : null); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label> : null}
           </div>)}
-          <label>Overall manager assessment<textarea name="summary" maxLength={8000} value={assessment.summary} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessmentDirty(true); setAssessment(current => current ? { ...current, summary: event.target.value } : null); } }} /></label>
-          <label>Overall rating<select name="overallRating" value={assessment.overallRating} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessmentDirty(true); setAssessment(current => current ? { ...current, overallRating: event.target.value } : null); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label>Private manager note<textarea name="managerNote" maxLength={8000} value={assessment.managerNote} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessmentDirty(true); setAssessment(current => current ? { ...current, managerNote: event.target.value } : null); } }} /></label>
-          {managerActions ? <div className={styles.toolbar}><button type="button" disabled={managerDisabled} onClick={() => run("save_manager")}>Save manager draft</button><button type="submit" disabled={blocked || !selected.capabilities.completeManager || Boolean(selected.finalisedAt)}>Complete manager assessment</button></div> : null}
+          <label>Overall manager assessment<textarea name="summary" maxLength={8000} value={assessment.summary} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, summary: event.target.value } : null); } }} /></label>
+          <label>Overall rating<select name="overallRating" value={assessment.overallRating} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, overallRating: event.target.value } : null); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label>Private manager note<textarea name="managerNote" maxLength={8000} value={assessment.managerNote} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, managerNote: event.target.value } : null); } }} /></label>
+          {managerActions ? <div className={styles.toolbar}><button type="button" className={styles.primaryButton} onClick={() => run("complete_manager")} disabled={blocked || !selected.capabilities.completeManager || Boolean(selected.finalisedAt)}>Save draft and invite meeting</button></div> : null}
         </form> : null}
-        {selected.audience !== "employee" ? <form aria-label="Review meeting" onSubmit={event => { event.preventDefault(); void run("submit_review"); }}><h2>Review meeting</h2>
+        {selected.audience !== "employee" ? <form aria-label="Review meeting" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget) && selected.managerCompletedAt && dirtyParts.current.meeting && validMeeting()) void run("save_meeting"); }} onSubmit={event => { event.preventDefault(); void run("submit_review"); }}><h2>Review meeting</h2>
           <label>Date<input type="date" name="meeting-date" value={meeting.date} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, date: event.target.value })); } }} /></label>
           <label>Time (Melbourne)<input type="time" name="meeting-time" value={meeting.time} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, time: event.target.value })); } }} /></label>
           <label>Duration (minutes)<input type="number" min={5} max={480} name="meeting-duration" value={meeting.duration} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, duration: Number(event.target.value) })); } }} /></label>
           <label>Mode<select name="meeting-mode" value={meeting.mode} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, mode: event.target.value as PerformanceMeeting["mode"] })); } }}><option value="in_person">In person</option><option value="teams">Teams</option><option value="phone">Phone</option></select></label>
           <label>Location<input name="meeting-location" maxLength={8000} value={meeting.location} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, location: event.target.value })); } }} /></label>
           <label>Meeting notes<textarea name="meeting-notes" maxLength={8000} value={meeting.notes} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, notes: event.target.value })); } }} /></label>
-          {managerActions ? <><label><input type="checkbox" name="held" checked={held} disabled={heldDisabled} onChange={event => { if (epoch.current === generation && !heldDisabled) setHeld(event.target.checked); }} />Meeting was held</label><div className={styles.toolbar}><button type="button" disabled={meetingDisabled} onClick={() => run("save_meeting")}>Save meeting</button><button type="submit" disabled={blocked || assessmentDirty || !held || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Finalise review</button></div></> : null}
-          {selected.managerCompletedAt ? <p>Assessment completed: {selected.managerCompletedAt}</p> : null}{selected.finalisedAt ? <p>Finalised: {selected.finalisedAt}</p> : null}
+          {managerActions ? <><label><input type="checkbox" name="held" checked={held} disabled={heldDisabled} onChange={event => { if (epoch.current === generation && !heldDisabled) setHeld(event.target.checked); }} />Meeting was held</label><div className={styles.toolbar}><button type="submit" disabled={blocked || !held || !meetingFinished || !completeAssessment() || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Save and send to HR</button></div></> : null}
+          {selected.managerCompletedAt ? <p>Assessment saved: {selected.managerCompletedAt}</p> : null}{selected.finalisedAt ? <p>Finalised: {selected.finalisedAt}</p> : null}
         </form> : null}
       </article> : null}
       </div>

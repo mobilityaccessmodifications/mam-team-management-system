@@ -37,6 +37,7 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
       if (id === 'react') return react;
       if (id === '@/app/performance-reviews/actions' || id === '@/lib/performance-review-load') return actions;
       if (id === '@/lib/supabase/client') return { createClient: () => ({ auth: { onAuthStateChange(callback) { authListener = callback; return { data: { subscription: { unsubscribe() { authListener = null; } } } }; } } }) };
+      if (id === '@/lib/performance-review-rules') return load('src/lib/performance-review-rules.ts');
       if (id === '@/lib/performance-review-document') { const adapter = load('src/lib/performance-review-document.ts'); return { buildPerformanceReviewDownload(doc) { built.push(doc); return adapter.buildPerformanceReviewDownload(doc); } }; }
       if (id.endsWith('.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => key }) };
       if (id.startsWith('@/')) return require('../src/'+id.slice(2));
@@ -64,6 +65,7 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
     field(name) { const node = nodes(tree).find(n => ['textarea','input','select'].includes(n.type) && (n.props.name === name || n.props['aria-label'] === name)); assert.ok(node, 'Field exists: '+name); return node; },
     click(label) { return api.button(label).props.onClick?.(); },
     change(name, value) { const node = api.field(name); node.props.onChange({ target: { value, checked: value } }); render(); },
+    blur(label = 'Review meeting', inside = false) { const node = nodes(tree).find(n => n.type === 'form' && n.props['aria-label'] === label); assert.ok(node, 'Form exists: '+label); return node.props.onBlur?.({ currentTarget: { contains: () => inside }, relatedTarget: null }); },
     submit(label) { const node = nodes(tree).find(n => n.type === 'form' && n.props['aria-label'] === label); assert.ok(node, 'Form exists: '+label); return node.props.onSubmit({ preventDefault() {} }); },
     auth(event, userId = null) { assert.ok(authListener, 'Uses native Auth lifecycle'); authListener(event, userId ? { user: { id: userId } } : null); render(); },
     timers() { const pending = [...timers.values()]; timers.clear(); pending.forEach(fn => fn()); render(); },
