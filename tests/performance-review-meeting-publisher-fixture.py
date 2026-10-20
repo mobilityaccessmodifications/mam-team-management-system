@@ -27,6 +27,7 @@ class Fake:
     def api(self, method, path, body=None):
         self.calls.append((method, path, copy.deepcopy(body)))
         if method == 'GET' and path.startswith('workflows?'):
+            assert path.startswith(p.discovery_resource())
             return {'data': copy.deepcopy(list(self.rows.values())), 'nextCursor': None}
         if method == 'GET' and path.startswith('executions?'):
             if self.fault == 'busy':
@@ -78,14 +79,16 @@ def held(fn):
 
 
 count = 0
-rows = [{'id': 'synthetic-workflow-' + str(index)} for index in range(133)]
+listing = 'workflows?limit=20&excludePinnedData=true&name=MAM%20People%20Hub%20-%20Performance%20Review%20Meeting%20Import%20%28Live%29'
+assert p.discovery_resource() == listing
+rows = [{'id': 'synthetic-workflow-' + str(index), 'name': p.load_builder('calendar')['name']} for index in range(133)]
 pages = []
 
 def paginated(method, resource, body=None):
     assert method == 'GET' and body is None
     index = len(pages)
     cursor = 'opaque%2B%2F%26%3D%3F%20%25%E4%B8%AD%E6%96%87' if index == 1 else 'opaque-' + str(index)
-    assert resource == 'workflows?limit=20&excludePinnedData=true' + ('&cursor=' + cursor if index else '')
+    assert resource == listing + ('&cursor=' + cursor if index else '')
     pages.append(resource)
     chunk = rows[index * 20:(index + 1) * 20]
     return {'data': chunk, 'nextCursor': None if index == 6 else 'opaque+/&=? %中文' if index == 0 else 'opaque-' + str(index + 1)}
@@ -96,6 +99,7 @@ count += 1
 pages = []
 def incomplete(method, resource, body=None):
     assert method == 'GET' and body is None
+    assert resource.startswith(listing)
     pages.append(resource)
     return {'data': [], 'nextCursor': 'remaining'}
 held(lambda: p.listed(incomplete))

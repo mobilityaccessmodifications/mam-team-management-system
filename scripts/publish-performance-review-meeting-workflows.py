@@ -61,10 +61,15 @@ def save(path, state, new=False):
         os.replace(target, path)
 
 
+def discovery_resource():
+    return 'workflows?limit=20&excludePinnedData=true&name=' + quote(load_builder('calendar')['name'], safe='')
+
+
 def listed(api):
     rows, cursor = [], None
+    resource = discovery_resource()
     for _ in range(20):
-        payload = api('GET', 'workflows?limit=20&excludePinnedData=true' + ('&cursor=' + quote(cursor, safe='') if cursor else ''))
+        payload = api('GET', resource + ('&cursor=' + quote(cursor, safe='') if cursor else ''))
         if not isinstance(payload, dict) or not isinstance(payload.get('data'), list):
             raise RuntimeError('workflow_list_unavailable')
         rows.extend(payload['data'])
@@ -255,8 +260,10 @@ def main():
                 raise RuntimeError('response_limit')
             return json.loads(raw)
 
+    listing = discovery_resource()
+
     def api(method, resource, body=None):
-        allowed = (method == 'GET' and (re.fullmatch(r'workflows\?limit=20&excludePinnedData=true(?:&cursor=(?:[A-Za-z0-9_.~-]|%[0-9A-F]{2})+)?', resource)
+        allowed = (method == 'GET' and ((resource == listing or re.fullmatch(re.escape(listing) + r'&cursor=(?:[A-Za-z0-9_.~-]|%[0-9A-F]{2})+', resource))
                    or re.fullmatch(r'workflows/[A-Za-z0-9_-]{1,64}', resource)
                    or re.fullmatch(r'executions\?workflowId=4Ahuz2qzddNKo7LB&status=(running|waiting)&limit=1', resource))) \
             or (method == 'POST' and (resource == 'workflows' or re.fullmatch(r'workflows/[A-Za-z0-9_-]{1,64}/(activate|deactivate)', resource))) \
