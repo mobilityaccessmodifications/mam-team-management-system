@@ -8,7 +8,7 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));
 test('workflow publication paginates bounded metadata, stages exact candidates and recovers unknown outcomes', () => {
   const result = spawnSync('/usr/bin/python3', ['-B', ROOT + 'tests/performance-review-meeting-publisher-fixture.py'], {cwd: ROOT, encoding: 'utf8', env: {PATH: '/usr/bin:/bin'}});
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), {ok: true, cases: 20, providerCalls: 0, realN8nCalls: 0});
+  assert.deepEqual(JSON.parse(result.stdout), {ok: true, cases: 21, providerCalls: 0, realN8nCalls: 0});
 });
 test('publisher uses prescribed MAM verifier and bounded no-redirect readiness only, without business execution or secret argv', () => {
   const source = readFileSync(ROOT + 'scripts/publish-performance-review-meeting-workflows.py', 'utf8');
@@ -27,6 +27,6 @@ test('publisher uses prescribed MAM verifier and bounded no-redirect readiness o
   assert.doesNotMatch(source, /add_argument\([^\n]*(?:secret|key|token)/);
   assert.doesNotMatch(source, /executeWorkflow|\/execute|\/run|POST.*webhook|sendMail/);
   assert.match(source, /return http\('GET', origin \+ READY_PATHS\[kind\], header\)/);
-  assert.match(source, /e21bd3ab-4f90-494d-92aa-dd6c5a355574/);
-  assert.match(source, /da0043257a71fb4332ecf719adc975bfebb19ea95c66fc88844e4e5d8390c92d/);
+  assert.match(source, /e16479bf-d2c1-4b26-8457-3aa5b34a06e0/);
+  assert.match(source, /d2668f6d7741ad80ff7f912ac16f2f96884babc254b3d2de6c990a3086a2c93f/);
 });

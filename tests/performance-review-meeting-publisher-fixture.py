@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('meeting_publisher', ROOT / 'scripts/publish-performance-review-meeting-workflows.py')
 p = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(p)
+assert p.PREDECESSOR == {'id': '4Ahuz2qzddNKo7LB', 'versionId': 'e16479bf-d2c1-4b26-8457-3aa5b34a06e0',
+                         'sha256': 'd2668f6d7741ad80ff7f912ac16f2f96884babc254b3d2de6c990a3086a2c93f'}
 V1 = '720f0200-0000-4000-8000-000000000001'
 V2 = '720f0200-0000-4000-8000-000000000002'
 
@@ -112,6 +114,13 @@ for invalid in (None, '', 'x' * 31, 'x' * 513, secret + '\r\n', secret + '\x00')
 count += 1
 with tempfile.TemporaryDirectory(prefix='mam-meeting-publisher-') as directory:
     base = Path(directory)
+    f = Fake('notifications')
+    journal = base / 'consumed-notifications-predecessor.json'
+    held(lambda: p.operate('stage', 'notifications', journal, p.PREDECESSOR['id'],
+                          'e21bd3ab-4f90-494d-92aa-dd6c5a355574', f.api))
+    assert not f.calls and not journal.exists()
+    count += 1
+
     f = Fake()
     journal = base / 'calendar.json'
     staged = p.operate('stage', 'calendar', journal, None, None, f.api)

@@ -19,7 +19,7 @@ test('both future review notifications use DB recipients, isolated webhook, dura
     const row = fixture(event); let wire;
     row.payload.employeeName = 'x'.repeat(8000); row.payload.managerName = 'Synthetic\tManager\r\nName';
     const h = loadMailHarness({ env: env(), rpc(name, args) {
-      if (name === 'claim_performance_review_notifications') { assert.deepEqual(args, { p_review_id: ids.review, p_limit: 1 }); return { data: [row], error: null }; }
+      if (name === 'claim_performance_review_notifications') { assert.deepEqual(args, { p_review_id: ids.review, p_limit: 1, p_policy_version: 2 }); return { data: [row], error: null }; }
       assert.equal(name, 'finish_performance_review_notification'); assert.equal(args.p_delivered, true); assert.equal(args.p_claim_token, ids.claim); return { data: true, error: null };
     }, fetch(url, init) {
       assert.equal(String(url), origin + '/webhook/mam-people-hub-performance-review-notifications-v1');
@@ -31,6 +31,19 @@ test('both future review notifications use DB recipients, isolated webhook, dura
     assert.equal(h.requests.length, 1); assert.deepEqual(h.rpcRetries, [false, false]); assert.deepEqual(h.logs, []);
     assert.doesNotMatch(JSON.stringify(wire), /managerNote|selfAnswers|managerAnswers|ratings|attachment/);
   }
+});
+
+test('notification policy cutover cannot claim or send through an unavailable old RPC contract', async () => {
+  const h = loadMailHarness({env: env(), rpc(name, args) {
+    assert.equal(name, 'claim_performance_review_notifications');
+    assert.deepEqual(args, {p_review_id: ids.review, p_limit: 1, p_policy_version: 2});
+    return {data: null, error: {code: 'PGRST202', message: 'Synthetic policy RPC not installed'}, status: 404};
+  }});
+  assert.deepEqual(await h.load('src/lib/performance-review-notifications.ts').dispatchPerformanceReviewNotifications(ids.review),
+    {ok: false, code: 'claim_failed', claimed: 0, sent: 0, held: 0});
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.requests.length, 0);
+  assert.deepEqual(h.rpcRetries, [false]);
 });
 
 test('notification worker holds unknown provider results without replay or success claims', async () => {
@@ -95,9 +108,9 @@ test('only validated new review and self-submission receipts schedule future lif
 }));
 
 test('new notification claims bind Careers CC and do not duplicate Careers as primary recipient', async () => {
-  for (const recipient of ['synthetic@example.com', 'careers@mobilityaccess.com.au']) {
+  for (const event of ['started', 'self-submitted']) for (const recipient of ['synthetic@example.com', 'careers@mobilityaccess.com.au']) {
     for (const badReceipt of [false, true]) {
-      const row = fixture(); row.payload.recipient = recipient;
+      const row = fixture(event); row.payload.recipient = recipient;
       row.payload.cc = recipient === 'careers@mobilityaccess.com.au' ? '' : 'careers@mobilityaccess.com.au';
       const h = loadMailHarness({ env: env(), rpc(name, args) {
         if (name === 'claim_performance_review_notifications') return { data: [row], error: null };
@@ -121,10 +134,10 @@ test('new notification claims reject missing required Careers CC and arbitrary C
   }
 });
 
-test('manager meeting invitation binds the canonical manager and employee To set with Careers CC', async () => {
-  for (const recipient of ['employee@example.invalid,manager@example.invalid', 'careers@mobilityaccess.com.au,employee@example.invalid']) {
+test('manager meeting invitation binds the canonical manager and employee To set with no Careers recipient', async () => {
+  for (const recipient of ['employee@example.invalid,manager@example.invalid', 'ai@mobilityaccess.com.au,employee@example.invalid']) {
     const row = fixture('manager-invited'); row.payload.recipient = recipient;
-    row.payload.cc = recipient.includes('careers@mobilityaccess.com.au') ? '' : 'careers@mobilityaccess.com.au';
+    row.payload.cc = '';
     const h = loadMailHarness({ env: env(), rpc(name, args) {
       if (name === 'claim_performance_review_notifications') return { data: [row], error: null };
       assert.equal(args.p_delivered, true); return { data: true, error: null };
@@ -135,11 +148,34 @@ test('manager meeting invitation binds the canonical manager and employee To set
     } });
     assert.equal((await h.load('src/lib/performance-review-notifications.ts').dispatchPerformanceReviewNotifications(ids.review)).sent, 1);
   }
-  for (const recipient of ['manager@example.invalid', 'manager@example.invalid,employee@example.invalid', 'employee@example.invalid,manager@example.invalid,other@example.invalid', 'employee@example.invalid,employee@example.invalid']) {
-    const row = fixture('manager-invited'); Object.assign(row.payload, {recipient, cc: 'careers@mobilityaccess.com.au'});
+  for (const recipient of ['manager@example.invalid', 'manager@example.invalid,employee@example.invalid', 'employee@example.invalid,manager@example.invalid,other@example.invalid', 'employee@example.invalid,employee@example.invalid', 'careers@mobilityaccess.com.au,employee@example.invalid']) {
+    const row = fixture('manager-invited'); Object.assign(row.payload, {recipient, cc: ''});
     const h = loadMailHarness({env: env(), rpc: () => ({data: [row], error: null})});
     assert.equal((await h.load('src/lib/performance-review-notifications.ts').dispatchPerformanceReviewNotifications()).held, 1);
     assert.equal(h.requests.length, 0);
+  }
+});
+
+test('manager invitations reject Careers or arbitrary CC and incomplete recipient contracts before dispatch', async () => {
+  for (const cc of [undefined, 'careers@mobilityaccess.com.au', 'other@example.invalid', null, []]) {
+    const row = fixture('manager-invited'); row.payload.recipient = 'employee@example.invalid,manager@example.invalid';
+    if (cc !== undefined) row.payload.cc = cc;
+    const h = loadMailHarness({env: env(), rpc: () => ({data: [row], error: null})});
+    assert.equal((await h.load('src/lib/performance-review-notifications.ts').dispatchPerformanceReviewNotifications()).held, 1);
+    assert.equal(h.requests.length, 0);
+  }
+});
+
+test('manager invitation delivery requires matching manager employee recipients and empty CC acknowledgement', async () => {
+  for (const wrong of [{actualRecipient: 'careers@mobilityaccess.com.au,employee@example.invalid'}, {actualCcRecipients: 'careers@mobilityaccess.com.au'}]) {
+    const row = fixture('manager-invited'); Object.assign(row.payload, {recipient: 'employee@example.invalid,manager@example.invalid', cc: ''});
+    const h = loadMailHarness({env: env(), rpc(name, args) {
+      if (name === 'claim_performance_review_notifications') return {data: [row], error: null};
+      assert.equal(args.p_delivered, false); return {data: true, error: null};
+    }, fetch(_url, init) {return Response.json({...receipt(JSON.parse(init.body)), ...wrong});}});
+    assert.equal((await h.load('src/lib/performance-review-notifications.ts').dispatchPerformanceReviewNotifications()).held, 1);
+    assert.equal(h.requests.length, 1);
+    assert.equal(h.calls.at(-1).name, 'finish_performance_review_notification');
   }
 });
 
