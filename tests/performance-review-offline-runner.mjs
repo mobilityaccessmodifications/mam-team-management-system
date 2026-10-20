@@ -18,6 +18,7 @@ const boundary = 'tests/browser/performance-review-boundary.mjs';
 const virtualFile = join(ROOT, 'tests/performance-review-virtual-actions.d.ts');
 const contracts = [
   ['loadPerformanceReviews', 'previewPersonId?: string', 'PerformanceLoadResult'],
+  ['loadPerformanceReviewMeetingInvitationStatus', 'reviewId: string, previewPersonId?: string', 'PerformanceFailure | { ok: true; reviewId: string; sent: boolean }'],
   ['startPerformanceReview', 'input: PerformanceStartInput, previewPersonId?: string', 'PerformanceStartResult'],
   ['mutatePerformanceReview', 'input: PerformanceMutationInput, previewPersonId?: string', 'PerformanceMutationResult'],
   ['reconcilePerformanceReviewOperation', 'input: PerformanceReconcileInput, previewPersonId?: string', 'PerformanceReconcileResult'],
@@ -28,7 +29,7 @@ function typecheck() {
   assert.equal(config.error, undefined);
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, ROOT);
   assert.deepEqual(parsed.errors, []);
-  const names = [...new Set(contracts.flatMap(([, input, output]) => [output, ...Array.from(input.matchAll(/:\s*(Performance\w+)/g), match => match[1])]))];
+  const names = [...new Set(contracts.flatMap(([, input, output]) => Array.from(`${input} ${output}`.matchAll(/\bPerformance\w+/g), match => match[0])))];
   const typesPath = join(ROOT, 'src/lib/performance-review-types').replaceAll('\\', '/');
   const declared = `${names.map(name => `export type ${name} = import('${typesPath}').${name};`).join('\n')} ${contracts.map(([name, input, output]) => `export declare function ${name}(${input}): Promise<${output}>;`).join('\n')}`;
   const virtualCss = join(ROOT, 'tests/performance-review-virtual-styles.d.ts');

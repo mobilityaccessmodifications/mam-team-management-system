@@ -26,6 +26,7 @@ const fixture = {
     if (holds.delete(name)) return new Promise((resolve, reject) => pending.push({ name, args: structuredClone(args), resolve, reject }));
     const queue = queues.get(name);
     if (queue?.length) return structuredClone(queue.shift());
+    if (name === 'loadPerformanceReviewMeetingInvitationStatus') return { ok: true, reviewId: args[0], sent: false };
     if (name === 'loadPerformanceReviews') return { ok: true, data: structuredClone(fixture.workspace) };
     if (name === 'getPerformanceReviewDocument') {
       const row = fixture.workspace.reviews.find(item => item.id === args[0]);
