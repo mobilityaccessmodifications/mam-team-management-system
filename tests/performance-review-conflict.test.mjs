@@ -7,7 +7,7 @@ const refresh = h => { const button = h.all.find(node => node.type === 'button' 
 const writes = h => h.calls.filter(call => call.name === 'mutatePerformanceReview');
 const settings = audience => audience === 'employee'
   ? { field: 'self-0', save: 'Save self draft', command: 'save_self', token: 'self:1' }
-  : { field: 'manager-0', save: 'Save manager draft', command: 'save_manager', token: 'manager:0:1' };
+  : { field: 'manager-0', save: 'Save draft and invite meeting', command: 'complete_manager', token: 'manager:0:1' };
 const updated = audience => review(audience, 'MAM', audience === 'employee'
   ? { selfRevision: 'self:1', selfAnswers: Array(12).fill('Authoritative other-tab answer') }
   : { managerRevision: 'manager:0:1', managerAnswers: Array(12).fill('Authoritative other-tab feedback') });
@@ -43,7 +43,7 @@ for (const audience of ['employee', 'manager']) test(`AM-04 ${audience} conflict
       assert.equal(h.field('managerNote').props.value, 'PRIVATE-LOCAL-NOTE');
       assert.equal(h.field('meeting-notes').props.value, 'Local meeting draft');
       assert.equal(h.field('held').props.checked, true);
-      assert.equal(h.button('Finalise review').props.disabled, true);
+      assert.equal(h.button('Save and send to HR').props.disabled, true);
     }
     h.click(config.save); await h.settle();
     assert.equal(writes(h).length, 2);
@@ -77,7 +77,7 @@ for (const audience of ['employee', 'manager']) test(`AM-04 ${audience} terminal
       assert.equal(h.field(config.field).props.value, 'Retained read-only conflict draft');
       assert.equal(h.field(config.field).props.disabled, true);
       retired(); h.click(config.save); h.submit(audience === 'employee' ? 'Self assessment' : 'Manager assessment');
-      if (audience === 'manager') { h.click('Save meeting'); h.submit('Review meeting'); }
+      if (audience === 'manager') { h.blur(); h.submit('Review meeting'); }
       await h.settle(); assert.equal(writes(h).length, 1);
       h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace(audience, 'MAM', { reviews: [updated(audience)] }) });
       refresh(h); await h.settle(); h.click(config.save); await h.settle();
@@ -182,8 +182,8 @@ for (const audience of ['employee', 'manager']) test(`AM-04 ${audience} unchange
 for (const scope of ['role', 'person', 'actor', 'audience', 'missing-review']) test(`AM-04 conflict Reload clears private drafts when ${scope} scope changes`, async () => {
   const h = mount(workspace('manager'), { mutatePerformanceReview: async () => failure('conflict') });
   try {
-    await h.settle(); h.change('managerNote', 'PRIVATE-RETIRED-CONFLICT'); h.click('Save manager draft'); await h.settle();
-    const retired = h.button('Save manager draft').props.onClick;
+    await h.settle(); h.change('managerNote', 'PRIVATE-RETIRED-CONFLICT'); h.click('Save draft and invite meeting'); await h.settle();
+    const retired = h.button('Save draft and invite meeting').props.onClick;
     let data = workspace('manager');
     if (scope === 'role') data = workspace('admin');
     if (scope === 'person') data = workspace('manager', 'MAM', { viewerContext: { ...data.viewerContext, personId: ids.person }, reviews: [] });
@@ -202,14 +202,14 @@ test('AM-04 conflict recovery is retired by review selection A to B to A', async
   const a = review('manager'), b = review('manager', 'MAM', { id: ids.other, code: 'PR-2026-0002', employee: { ...a.employee, id: '22000000-0000-4000-8000-000000000099', name: 'Synthetic B colleague' } });
   const h = mount(workspace('manager', 'MAM', { reviews: [a, b] }), { mutatePerformanceReview: async () => failure('conflict') });
   try {
-    await h.settle(); h.change('managerNote', 'PRIVATE-OLD-A-CONFLICT'); h.click('Save manager draft'); await h.settle();
+    await h.settle(); h.change('managerNote', 'PRIVATE-OLD-A-CONFLICT'); h.click('Save draft and invite meeting'); await h.settle();
     const pending = deferred(); h.ports.loadPerformanceReviews = () => pending.promise; refresh(h); h.render();
     for (const row of [b, a]) { h.click(`${row.employee.name} — ${row.employee.company}`); h.render(); }
     h.change('managerNote', 'PRIVATE-NEW-A-DRAFT');
     pending.resolve({ ok: true, data: workspace('manager', 'MAM', { reviews: [updated('manager'), b] }) }); await h.settle();
     assert.equal(h.field('managerNote').props.value, 'PRIVATE-NEW-A-DRAFT');
     h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('manager', 'MAM', { reviews: [updated('manager'), b] }) });
-    refresh(h); await h.settle(); h.click('Save manager draft'); await h.settle();
+    refresh(h); await h.settle(); h.click('Save draft and invite meeting'); await h.settle();
     assert.equal(writes(h)[1].args[0].expectedRevision, 'manager:0:0');
     assert.equal(writes(h)[1].args[0].input.managerNote, 'PRIVATE-NEW-A-DRAFT');
   } finally { h.unmount(); }
@@ -231,9 +231,9 @@ test('AM-04 same-actor token refresh never automatically rebases but retains exp
 test('AM-04 logout and actor A to B to A retire conflict reloads and all private state', async () => {
   const h = mount(workspace('manager'), { mutatePerformanceReview: async () => failure('conflict') });
   try {
-    await h.settle(); h.change('managerNote', 'PRIVATE-OLD-SESSION-CONFLICT'); h.click('Save manager draft'); await h.settle();
+    await h.settle(); h.change('managerNote', 'PRIVATE-OLD-SESSION-CONFLICT'); h.click('Save draft and invite meeting'); await h.settle();
     const pending = deferred(); h.ports.loadPerformanceReviews = () => pending.promise; refresh(h); h.render();
-    const retired = h.button('Save manager draft').props.onClick;
+    const retired = h.button('Save draft and invite meeting').props.onClick;
     h.auth('SIGNED_OUT'); assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-'));
     const actorB = '11000000-0000-4000-8000-000000000099';
     h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('employee', 'MAM', { viewerContext: { ...workspace().viewerContext, actorUserId: actorB } }) });
@@ -242,7 +242,7 @@ test('AM-04 logout and actor A to B to A retire conflict reloads and all private
     h.auth('SIGNED_IN', ids.actor); await h.settle(); h.change('managerNote', 'New synthetic session draft');
     pending.resolve({ ok: true, data: workspace('manager', 'MAM', { reviews: [updated('manager')] }) }); await h.settle();
     retired(); await h.settle(); assert.equal(writes(h).length, 1);
-    refresh(h); await h.settle(); h.click('Save manager draft'); await h.settle();
+    refresh(h); await h.settle(); h.click('Save draft and invite meeting'); await h.settle();
     assert.equal(writes(h)[1].args[0].expectedRevision, 'manager:0:0');
     assert.equal(writes(h)[1].args[0].input.managerNote, 'New synthetic session draft');
   } finally { h.unmount(); }
@@ -270,7 +270,7 @@ for (const command of ['submit_self', 'complete_manager', 'submit_review']) test
     if (command === 'submit_self') h.change('self-0', 'Self submitted conflict draft');
     if (command === 'complete_manager') h.change('managerNote', 'PRIVATE-COMPLETE-CONFLICT');
     if (command === 'submit_review') {
-      h.change('meeting-date', '2026-10-16'); h.change('meeting-time', '10:00');
+      h.change('meeting-date', '2026-10-16'); h.change('meeting-time', '10:00'); h.change('meeting-location', 'Synthetic room');
       h.change('meeting-notes', 'Final meeting conflict draft'); h.change('held', true);
     }
     h.submit(form); await h.settle();
@@ -281,28 +281,28 @@ for (const command of ['submit_self', 'complete_manager', 'submit_review']) test
     assert.equal(writes(h).length, 2); assert.equal(writes(h)[1].args[0].command, command);
     assert.equal(writes(h)[1].args[0].expectedRevision, settings(audience).token);
     assert.deepEqual(writes(h)[1].args[0].input, writes(h)[0].args[0].input);
-    assert.ok(h.text.includes('Submitted.'));
+    assert.ok(h.text.includes(command === 'complete_manager' ? 'Saved.' : 'Submitted.'));
   } finally { h.unmount(); }
 });
 
 test('AM-04 manager meeting conflict keeps assessment draft and held confirmation while saving with refreshed revision', async () => {
   let attempt = 0;
-  const h = mount(workspace('manager'), { mutatePerformanceReview: async input => {
+  const h = mount(workspace('manager', 'MAM', { reviews: [review('manager', 'MAM', { managerCompletedAt: '2026-10-01T00:00:00Z' })] }), { mutatePerformanceReview: async input => {
     if (++attempt === 1) return failure('conflict');
     return { ok: true, committed: true, operationId: input.operationId, review: { ...updated('manager'), meeting: input.input, managerRevision: 'manager:0:2' } };
   } });
   try {
     await h.settle(); h.change('managerNote', 'PRIVATE-UNSAVED-ASSESSMENT'); h.change('meeting-date', '2026-10-16');
-    h.change('meeting-time', '10:00'); h.change('meeting-notes', 'Meeting conflict draft'); h.change('held', true);
-    h.click('Save meeting'); await h.settle();
-    h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('manager', 'MAM', { reviews: [updated('manager')] }) });
+    h.change('meeting-time', '10:00'); h.change('meeting-location', 'Synthetic room'); h.change('meeting-notes', 'Meeting conflict draft'); h.change('held', true);
+    h.blur(); await h.settle();
+    h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('manager', 'MAM', { reviews: [{ ...updated('manager'), managerCompletedAt: '2026-10-01T00:00:00Z' }] }) });
     refresh(h); await h.settle();
     assert.equal(h.field('managerNote').props.value, 'PRIVATE-UNSAVED-ASSESSMENT');
     assert.equal(h.field('held').props.checked, true);
-    h.click('Save meeting'); await h.settle();
+    h.blur(); await h.settle();
     assert.equal(writes(h)[1].args[0].expectedRevision, 'manager:0:1');
     assert.deepEqual(writes(h)[1].args[0].input, writes(h)[0].args[0].input);
     assert.equal(h.field('managerNote').props.value, 'PRIVATE-UNSAVED-ASSESSMENT');
-    assert.equal(h.button('Finalise review').props.disabled, true);
+    assert.equal(h.button('Save and send to HR').props.disabled, true);
   } finally { h.unmount(); }
 });

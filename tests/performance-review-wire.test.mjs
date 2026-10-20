@@ -31,7 +31,7 @@ function composedManager({ meetingEnabled = false } = {}) {
           assert.equal(meetingEnabled, true);
           row = { ...row, meeting: structuredClone(input), managerRevision: 'manager:1:' + mutationVersion };
         } else {
-          assert.equal(args.p_command, 'save_manager');
+          assert.equal(args.p_command, 'complete_manager');
           row = { ...row, managerAnswers: input.answers, ratings: input.ratings, summary: input.summary, overallRating: input.overallRating, managerNote: input.managerNote, managerRevision: 'manager:1:' + mutationVersion };
         }
         return { data: { committed: true, operationId: args.p_operation_id, review: structuredClone(row) }, error: null, status: 200 };
@@ -48,7 +48,7 @@ test('actual manager controls submit canonical rating labels through the actual 
   process.env.MAM_PERFORMANCE_REVIEW_ENABLED = 'true';
   let ui;
   try {
-    const native = composedManager();
+    const native = composedManager({ meetingEnabled: true });
     const initial = await native.actions.loadPerformanceReviews();
     assert.equal(initial.ok, true);
     ui = mount(initial.data, native.actions);
@@ -59,7 +59,7 @@ test('actual manager controls submit canonical rating labels through the actual 
       assert.ok(option, 'The real select exposes the original rating label');
       ui.change(name, option.props.value);
     }
-    await ui.click('Save manager draft');
+    await ui.click('Save draft and invite meeting');
     await ui.settle();
     const writes = native.rpcCalls.filter(call => call.name === 'mutate_performance_review');
     assert.equal(writes.length, 1, 'A permitted real UI save must reach the real Action RPC after closed validation');
@@ -89,13 +89,13 @@ test('actual meeting controls enforce canonical whole-minute bounds before Actio
     ui.change('meeting-location', 'Synthetic room');
     for (const duration of [4, 481, 5.5]) {
       ui.change('meeting-duration', duration);
-      await ui.click('Save meeting');
+      await ui.blur();
       await ui.settle();
       assert.equal(ui.calls.filter(call => call.name === 'mutatePerformanceReview').length, 0);
     }
     for (const duration of [5, 480]) {
       ui.change('meeting-duration', duration);
-      await ui.click('Save meeting');
+      await ui.blur();
       await ui.settle();
       assert.equal(native.rpcCalls.filter(call => call.name === 'mutate_performance_review').at(-1).args.p_input.duration, duration);
       assert.match(ui.text, /Saved\./);

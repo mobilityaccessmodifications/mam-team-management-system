@@ -174,12 +174,15 @@ test('unknown write and not_found never unlock replay; explicit receipt confirms
 });
 
 test('manager meeting is not held by registration and final needs explicit held plus completed assessment', async ({ page }) => {
-  await open(page, 'manager'); await field(page, 'meeting-date').fill('2026-10-01'); await field(page, 'meeting-time').fill('10:30');
-  await hold(page, 'mutatePerformanceReview'); await page.getByRole('button', { name: 'Save meeting', exact: true }).click(); await waitPending(page, 'mutatePerformanceReview');
+  await open(page, 'manager');
+  await page.evaluate(actor => { window.performanceReviewFixture.workspace.reviews[0].managerCompletedAt = '2026-10-01T00:00:00Z'; window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor); }, ids.actor);
+  await expect(field(page, 'managerNote')).toBeEnabled();
+  await field(page, 'meeting-date').fill('2026-10-01'); await field(page, 'meeting-time').fill('10:30'); await field(page, 'meeting-location').fill('Synthetic room');
+  await hold(page, 'mutatePerformanceReview'); await page.getByRole('form', { name: 'Review meeting', exact: true }).evaluate(form => form.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }))); await waitPending(page, 'mutatePerformanceReview');
   const input = (await calls(page, 'mutatePerformanceReview'))[0].args[0]; expect(input.command).toBe('save_meeting'); expect(input.input).not.toHaveProperty('held');
   const row = review('manager', 'MAM', { managerRevision: 'manager:0:1', meeting: input.input, managerCompletedAt: '2026-10-01T02:00:00Z' });
   await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: input.operationId, review: row });
-  await expect(field(page, 'held')).not.toBeChecked(); await expect(page.getByRole('button', { name: 'Finalise review', exact: true })).toBeDisabled();
+  await expect(field(page, 'held')).not.toBeChecked(); await expect(page.getByRole('button', { name: 'Save and send to HR', exact: true })).toBeDisabled();
   await field(page, 'held').check(); await hold(page, 'mutatePerformanceReview'); await submit(page, 'Review meeting'); await waitPending(page, 'mutatePerformanceReview');
   const final = (await calls(page, 'mutatePerformanceReview'))[1].args[0]; expect(final.command).toBe('submit_review'); expect(final.input.held).toBe(true);
   await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: final.operationId, review: { ...row, managerRevision: 'manager:0:2', finalisedAt: '2026-10-01T03:00:00Z' } });
@@ -218,10 +221,10 @@ test('native Admin Performance starts a manager review and saves with its admin 
   await expect(field(page, 'managerNote')).toBeEnabled();
   await field(page, 'managerNote').fill('Synthetic Admin reviewer note');
   await hold(page, 'mutatePerformanceReview');
-  await page.getByRole('button', { name: 'Save manager draft', exact: true }).click();
+  await page.getByRole('button', { name: 'Save draft and invite meeting', exact: true }).click();
   await waitPending(page, 'mutatePerformanceReview');
   const write = (await calls(page, 'mutatePerformanceReview'))[0].args[0];
-  expect(write.command).toBe('save_manager'); expect(write.expectedRevision).toBe('read:0:0');
+  expect(write.command).toBe('complete_manager'); expect(write.expectedRevision).toBe('read:0:0');
   await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: write.operationId, review: { ...row, readRevision: 'read:0:1', managerNote: write.input.managerNote } });
   await expect(page.getByRole('status')).toHaveText('Saved.');
   await expect(field(page, 'managerNote')).toHaveValue('Synthetic Admin reviewer note');

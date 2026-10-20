@@ -113,13 +113,14 @@ test('assigned manager assesses with original ratings while HR is read-only and 
       assert.ok(!h.all.some(n => n.type === 'button' && /Save|Complete|Submit/.test(n.props.children)));
     } else {
       h.change('manager-0', 'Revised manager evidence');
-      h.click('Save manager draft'); await h.settle();
+      h.click('Save draft and invite meeting'); await h.settle();
       const sent = h.calls.at(-1).args[0];
-      assert.equal(sent.command, 'save_manager'); assert.equal(sent.expectedRevision, 'manager:0:0');
+      assert.equal(sent.command, 'complete_manager'); assert.equal(sent.expectedRevision, 'manager:0:0');
       assert.deepEqual(Object.keys(sent.input).sort(), ['answers','managerNote','overallRating','ratings','summary']);
       assert.equal(sent.input.answers[0], 'Revised manager evidence');
       h.change('managerNote', ''); h.submit('Manager assessment'); await h.settle();
-      assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1);
+      assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 2);
+      assert.equal(h.calls.at(-1).args[0].input.managerNote, '');
       h.change('managerNote', 'Required private note'); h.submit('Manager assessment'); await h.settle();
       assert.equal(h.calls.at(-1).args[0].command, 'complete_manager');
       assert.equal(h.calls.at(-1).args[0].expectedRevision, 'manager:0:1');
@@ -132,32 +133,29 @@ test('assigned manager assesses with original ratings while HR is read-only and 
   h.unmount();
 });
 
-test('meeting registration is not held and finalisation requires explicit held plus completed assessment', async () => {
-  let authoritative = review('manager');
-  const h = mount(workspace('manager'), { mutatePerformanceReview: async input => {
-    if (input.command === 'submit_review' && input.input.date === '2099-01-01') return failure('invalid');
-    authoritative = { ...authoritative, managerRevision: 'manager:0:1', meeting: { ...input.input }, ...(input.command === 'submit_review' ? { finalisedAt: '2026-10-02T03:00:00Z' } : {}) };
+test('meeting edits persist on leaving the form and HR submission waits for the actual end and held confirmation', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-01T00:00:00Z') });
+  let authoritative = review('manager', 'MAM', { managerCompletedAt: '2026-10-01T00:00:00Z' });
+  const h = mount(workspace('manager', 'MAM', { reviews: [authoritative] }), { mutatePerformanceReview: async input => {
+    authoritative = { ...authoritative, managerRevision: `manager:0:${Number(authoritative.managerRevision.split(':').at(-1)) + 1}`, meeting: { ...input.input }, ...(input.command === 'submit_review' ? { finalisedAt: '2026-10-01T00:01:00Z' } : {}) };
     return { ok: true, committed: true, operationId: input.operationId, review: authoritative };
   } }); await h.settle();
-  h.change('meeting-date', '2099-01-01'); h.change('meeting-time', '10:30'); h.change('meeting-duration', '45'); h.change('meeting-mode', 'teams'); h.change('meeting-location', 'Synthetic meeting room'); h.change('meeting-notes', 'Synthetic notes');
-  h.click('Save meeting'); await h.settle();
+  h.change('meeting-date', '2026-10-01'); h.change('meeting-time', '10:30'); h.change('meeting-duration', '45'); h.change('meeting-location', 'Synthetic room'); h.change('meeting-notes', 'Synthetic notes');
+  h.blur('Review meeting', true); await h.settle();
+  assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 0);
+  h.blur(); await h.settle();
   const sent = h.calls.at(-1).args[0];
-  assert.equal(sent.command, 'save_meeting');
-  assert.deepEqual(sent.input, { date: '2099-01-01', time: '10:30', duration: 45, mode: 'teams', location: 'Synthetic meeting room', notes: 'Synthetic notes' });
+  assert.equal(sent.command, 'save_meeting'); assert.equal(sent.input.held, undefined);
   assert.equal(h.field('held').props.checked, false);
+  h.change('held', true); assert.equal(h.button('Save and send to HR').props.disabled, true);
   h.submit('Review meeting'); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1);
-  authoritative = { ...authoritative, managerCompletedAt: '2026-10-01T02:00:00Z' };
-  h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('manager', 'MAM', { reviews: [authoritative] }) });
-  refresh(h); await h.settle();
-  h.change('held', true); h.submit('Review meeting'); await h.settle();
-  assert.equal(h.calls.at(-1).args[0].command, 'submit_review');
-  assert.equal(h.calls.at(-1).args[0].input.held, true);
-  assert.ok(h.text.includes('Synthetic invalid.'));
-  assert.equal(h.field('meeting-date').props.value, '2099-01-01');
-  h.change('meeting-date', '2026-10-01'); h.submit('Review meeting'); await h.settle();
-  assert.equal(h.field('meeting-date').props.disabled, true);
-  const count = h.calls.length; h.submit('Review meeting'); await h.settle(); assert.equal(h.calls.length, count);
+  t.mock.timers.setTime(new Date('2026-10-01T01:15:00Z').getTime()); h.timers(); await h.settle();
+  assert.equal(h.button('Save and send to HR').props.disabled, false);
+  h.submit('Review meeting'); await h.settle();
+  assert.equal(h.calls.at(-1).args[0].command, 'submit_review'); assert.equal(h.calls.at(-1).args[0].expectedRevision, 'manager:0:1');
+  assert.equal(h.calls.at(-1).args[0].input.held, true); assert.equal(h.field('meeting-date').props.disabled, true);
+  assert.ok(!h.all.some(n => n.type === 'button' && ['Save manager draft', 'Complete manager assessment', 'Save meeting', 'Finalise review'].includes(n.props.children)));
   h.unmount();
 });
 
@@ -346,7 +344,7 @@ test('native logout clears private DTOs, drafts, creation form and Blob URLs bef
   h.auth('INITIAL_SESSION', ids.actor);
   await h.click('Download Word'); await h.settle();
   h.change('managerNote', 'PRIVATE-UNSAVED-AUTH-DRAFT');
-  const oldSave = h.button('Save manager draft').props.onClick, oldDownload = h.button('Download Word').props.onClick, oldCreate = h.field('start-cycle').props.onChange;
+  const oldSave = h.button('Save draft and invite meeting').props.onClick, oldDownload = h.button('Download Word').props.onClick, oldCreate = h.field('start-cycle').props.onChange;
   newCycle(h); h.render(); h.change('start-cycle', '2026');
   const pending = deferred(); h.ports.loadPerformanceReviews = () => pending.promise; refresh(h); h.render();
   h.auth('SIGNED_OUT');
@@ -369,7 +367,7 @@ test('definitive action permission loss clears private state while transient fai
     const h = mount(data, { mutatePerformanceReview: async () => route === 'reconcile' ? failure('uncertain', true) : failure('forbidden'), getPerformanceReviewDocument: async () => failure('unauthenticated'), reconcilePerformanceReviewOperation: async () => failure('forbidden'), startPerformanceReview: async () => failure('forbidden') }); await h.settle();
     h.change('managerNote', 'PRIVATE-DRAFT-TO-ERASE');
     if (route === 'load') { h.ports.loadPerformanceReviews = async () => failure('forbidden'); refresh(h); }
-    if (route === 'mutation' || route === 'reconcile') { h.click('Save manager draft'); await h.settle(); }
+    if (route === 'mutation' || route === 'reconcile') { h.click('Save draft and invite meeting'); await h.settle(); }
     if (route === 'document') h.click('Download Word');
     if (route === 'reconcile') h.click('Reconcile update');
     if (route === 'start') { newCycle(h); h.render(); h.change('start-dueDate', '2026-11-30'); h.submit('New yearly review'); }
@@ -377,14 +375,14 @@ test('definitive action permission loss clears private state while transient fai
   }
   for (const code of ['conflict', 'unavailable']) {
     const h = mount(workspace('manager'), { mutatePerformanceReview: async () => failure(code) }); await h.settle();
-    h.change('managerNote', 'Retained transient draft'); h.click('Save manager draft'); await h.settle();
-    assert.equal(h.field('managerNote').props.value, 'Retained transient draft'); assert.equal(h.button('Save manager draft').props.disabled, false); h.unmount();
+    h.change('managerNote', 'Retained transient draft'); h.click('Save draft and invite meeting'); await h.settle();
+    assert.equal(h.field('managerNote').props.value, 'Retained transient draft'); assert.equal(h.button('Save draft and invite meeting').props.disabled, false); h.unmount();
   }
 });
 
 test('role downgrade and vanished selection erase manager caches and retire pending mutation continuations', async () => {
   const pending = deferred(); const h = mount(workspace('manager'), { mutatePerformanceReview: () => pending.promise }); await h.settle();
-  h.change('managerNote', 'PRIVATE-INFLIGHT-DRAFT'); h.click('Save manager draft'); h.render();
+  h.change('managerNote', 'PRIVATE-INFLIGHT-DRAFT'); h.click('Save draft and invite meeting'); h.render();
   const input = h.calls.at(-1).args[0];
   h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('employee', 'MAM', { reviews: [] }) }); refresh(h); await h.settle();
   assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-'));
@@ -393,22 +391,22 @@ test('role downgrade and vanished selection erase manager caches and retire pend
   assert.equal(h.all.filter(n => n.type === 'form').length, 0); h.unmount();
 });
 
-test('unsaved manager edits invalidate completion locally and sibling saves preserve unsaved drafts', async () => {
+test('HR submission saves the latest complete assessment with its receipt revision before finalising', async () => {
   let row = review('manager', 'MAM', { managerCompletedAt: '2026-10-01T02:00:00Z', meeting: { date: '2026-10-01', time: '11:00', duration: 30, mode: 'in_person', location: 'Synthetic room', notes: '' } });
   const h = mount(workspace('manager', 'MAM', { reviews: [row] }), { mutatePerformanceReview: async input => {
-    row = { ...row, managerRevision: 'manager:0:1', ...(input.command === 'save_meeting' ? { meeting: input.input } : { managerAnswers: input.input.answers, managerNote: input.input.managerNote, summary: input.input.summary, overallRating: input.input.overallRating, ratings: input.input.ratings, managerCompletedAt: null }) };
+    row = { ...row, managerRevision: `manager:0:${Number(row.managerRevision.split(':').at(-1)) + 1}`, ...(input.command === 'save_manager' ? { managerAnswers: input.input.answers, managerNote: input.input.managerNote, summary: input.input.summary, overallRating: input.input.overallRating, ratings: input.input.ratings } : { meeting: input.input, finalisedAt: '2026-10-01T03:00:00Z' }) };
     return { ok: true, committed: true, operationId: input.operationId, review: row };
   } }); await h.settle();
-  h.change('managerNote', 'Unsaved manager evidence'); h.change('held', true);
-  assert.equal(h.button('Finalise review').props.disabled, true);
-  h.submit('Review meeting'); await h.settle(); assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 0);
-  h.click('Save meeting'); await h.settle();
-  assert.equal(h.field('managerNote').props.value, 'Unsaved manager evidence');
-  assert.equal(h.button('Finalise review').props.disabled, true);
-  h.change('meeting-notes', 'Unsaved meeting evidence'); h.click('Save manager draft'); await h.settle();
-  assert.equal(h.field('meeting-notes').props.value, 'Unsaved meeting evidence');
-  assert.equal(h.calls.at(-1).args[0].input.managerNote, 'Unsaved manager evidence');
-  h.unmount();
+  h.change('managerNote', 'Latest manager evidence'); h.change('meeting-notes', 'Latest meeting evidence'); h.change('held', true);
+  assert.equal(h.button('Save and send to HR').props.disabled, false);
+  h.submit('Review meeting'); await h.settle();
+  const writes = h.calls.filter(c => c.name === 'mutatePerformanceReview');
+  assert.deepEqual(writes.map(c => c.args[0].command), ['save_manager', 'submit_review']);
+  assert.equal(writes[0].args[0].input.managerNote, 'Latest manager evidence');
+  assert.equal(writes[1].args[0].expectedRevision, 'manager:0:1');
+  assert.equal(writes[1].args[0].input.notes, 'Latest meeting evidence');
+  assert.notEqual(writes[0].args[0].operationId, writes[1].args[0].operationId);
+  assert.equal(h.field('managerNote').props.disabled, true); h.unmount();
 });
 
 test('Admin and P0 never acquire employee writes from an incorrectly self-shaped DTO', async () => {
@@ -441,7 +439,7 @@ test('offline browser fixture compiles the real React component and all five typ
 test('late manager mutation cannot revive private state or release a newer employee write after reauthentication', async () => {
   const oldPending = deferred(), newer = deferred();
   const h = mount(workspace('manager'), { mutatePerformanceReview: () => oldPending.promise }); await h.settle();
-  h.change('managerNote', 'PRIVATE-OLD-REQUEST'); h.click('Save manager draft'); h.render();
+  h.change('managerNote', 'PRIVATE-OLD-REQUEST'); h.click('Save draft and invite meeting'); h.render();
   const old = h.calls.at(-1).args[0]; h.auth('SIGNED_OUT');
   h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace() }); h.auth('SIGNED_IN', ids.actor); await h.settle();
   h.ports.mutatePerformanceReview = () => newer.promise;
@@ -607,12 +605,12 @@ test('P0 manager delegation writes only assigned manager rows and passes the can
     assert.equal(h.field('start-cycle').props.disabled, false);
     assert.equal(h.field('self-0').props.disabled, true);
     assert.equal(h.field('managerNote').props.disabled, false);
-    h.change('managerNote', 'Delegated manager evidence'); h.click('Save manager draft'); await h.settle();
+    h.change('managerNote', 'Delegated manager evidence'); h.click('Save draft and invite meeting'); await h.settle();
     h.submit('Manager assessment'); await h.settle();
-    h.change('meeting-notes', 'Delegated meeting'); h.click('Save meeting'); await h.settle();
+    h.change('meeting-notes', 'Delegated meeting'); h.blur(); await h.settle();
     h.change('held', true); h.submit('Review meeting'); await h.settle();
     const writes = h.calls.filter(call => call.name === 'mutatePerformanceReview');
-    assert.deepEqual(writes.map(call => call.args[0].command), ['save_manager', 'complete_manager', 'save_meeting', 'submit_review']);
+    assert.deepEqual(writes.map(call => call.args[0].command), ['complete_manager', 'complete_manager', 'save_meeting', 'submit_review']);
     assert.ok(writes.every(call => call.args[1] === ids.manager));
     assert.equal(h.field('managerNote').props.disabled, true);
     h.click(`${own.employee.name} — ${own.employee.company}`); h.render();
@@ -655,7 +653,7 @@ test('manager delegation respects each assigned row capability and does not enab
       field.props.onChange?.({ target: { value: 'Attempted locked delegated edit', checked: true } });
     }
     for (const form of h.all.filter(node => node.type === 'form')) form.props.onSubmit({ preventDefault() {} });
-    for (const name of ['Save manager draft', 'Complete manager assessment', 'Save meeting', 'Finalise review']) {
+    for (const name of ['Save draft and invite meeting', 'Save and send to HR']) {
       assert.equal(h.button(name).props.disabled, true); h.click(name);
     }
     await h.settle();
@@ -682,7 +680,7 @@ test('changing a delegated target retires pending writes and never reconciles an
   const pending = deferred(), nextManager = '22000000-0000-4000-8000-000000000003';
   const h = mount(workspace('manager'), { mutatePerformanceReview: () => pending.promise }, { previewPersonId: ids.manager });
   try {
-    await h.settle(); h.change('managerNote', 'PRIVATE-OLD-DELEGATE-DRAFT'); h.click('Save manager draft'); h.render();
+    await h.settle(); h.change('managerNote', 'PRIVATE-OLD-DELEGATE-DRAFT'); h.click('Save draft and invite meeting'); h.render();
     const old = h.calls.at(-1).args[0];
     const fresh = review('manager', 'MAM', { manager: { id: nextManager, name: 'Synthetic next manager' }, managerNote: 'Fresh next target' });
     h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('manager', 'MAM', { viewerContext: { ...workspace('manager').viewerContext, personId: nextManager }, reviews: [fresh] }) });
@@ -692,7 +690,7 @@ test('changing a delegated target retires pending writes and never reconciles an
     assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-OLD-'));
     assert.equal(h.all.filter(node => node.type === 'button' && node.props.children === 'Reconcile update').length, 0);
     h.ports.mutatePerformanceReview = async () => failure('uncertain', true);
-    h.click('Save manager draft'); await h.settle();
+    h.click('Save draft and invite meeting'); await h.settle();
     const current = h.calls.at(-1).args[0];
     h.ports.reconcilePerformanceReviewOperation = async () => ({ ok: true, data: { status: 'committed', review: fresh } });
     h.click('Reconcile update'); await h.settle();
@@ -704,7 +702,7 @@ test('changing a delegated target retires pending writes and never reconciles an
 test('unmounted delegated reconciliation cannot restore the old manager state', async () => {
   const pending = deferred();
   const h = mount(workspace('manager'), { mutatePerformanceReview: async () => failure('uncertain', true), reconcilePerformanceReviewOperation: () => pending.promise }, { previewPersonId: ids.manager });
-  await h.settle(); h.change('managerNote', 'Held delegated draft'); h.click('Save manager draft'); await h.settle();
+  await h.settle(); h.change('managerNote', 'Held delegated draft'); h.click('Save draft and invite meeting'); await h.settle();
   h.click('Reconcile update'); h.render(); h.unmount();
   pending.resolve({ ok: true, data: { status: 'committed', review: review('manager', 'MAM', { managerNote: 'PRIVATE-UNMOUNTED-RECEIPT' }) } }); await h.settle();
   assert.ok(!JSON.stringify(h.hooks).includes('PRIVATE-UNMOUNTED-RECEIPT'));
@@ -747,12 +745,12 @@ test('native Admin and P0 start reviews for visible managers and edit only manag
     assert.equal(h.calls.filter(call => call.name === 'startPerformanceReview').length, 1);
     assert.equal(h.field('self-0').props.disabled, true);
     assert.equal(h.field('managerNote').props.disabled, false);
-    h.change('managerNote', 'Admin manager evidence'); h.click('Save manager draft'); await h.settle();
+    h.change('managerNote', 'Admin manager evidence'); h.click('Save draft and invite meeting'); await h.settle();
     assert.equal(h.calls.at(-1).args[0].expectedRevision, 'read:0:0');
     h.submit('Manager assessment'); await h.settle();
-    h.change('meeting-date', '2026-10-01'); h.change('meeting-time', '10:30'); h.click('Save meeting'); await h.settle();
+    h.change('meeting-date', '2026-10-01'); h.change('meeting-time', '10:30'); h.change('meeting-location', 'Synthetic room'); h.blur(); await h.settle();
     h.change('held', true); h.submit('Review meeting'); await h.settle();
-    assert.deepEqual(h.calls.filter(call => call.name === 'mutatePerformanceReview').map(call => call.args[0].command), ['save_manager', 'complete_manager', 'save_meeting', 'submit_review']);
+    assert.deepEqual(h.calls.filter(call => call.name === 'mutatePerformanceReview').map(call => call.args[0].command), ['complete_manager', 'complete_manager', 'save_meeting', 'submit_review']);
     assert.equal(h.field('managerNote').props.disabled, true);
     h.unmount();
   }
@@ -802,11 +800,58 @@ test('Admin conflict recovery retains the manager draft and explicitly adopts th
   const row = review('admin', 'MAM', { capabilities: { ...review('manager').capabilities } });
   let attempt = 0;
   const h = mount(workspace('admin', 'MAM', { reviews: [row] }), { mutatePerformanceReview: async input => ++attempt === 1 ? failure('conflict') : { ok: true, committed: true, operationId: input.operationId, review: { ...row, readRevision: 'read:0:2', managerNote: input.input.managerNote } } });
-  await h.settle(); h.change('managerNote', 'Admin conflict draft'); h.click('Save manager draft'); await h.settle();
+  await h.settle(); h.change('managerNote', 'Admin conflict draft'); h.click('Save draft and invite meeting'); await h.settle();
   h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('admin', 'MAM', { reviews: [{ ...row, readRevision: 'read:0:1', managerNote: 'Different admin draft' }] }) });
   h.click('Reload'); await h.settle();
   assert.equal(h.field('managerNote').props.value, 'Admin conflict draft');
-  h.click('Save manager draft'); await h.settle();
+  h.click('Save draft and invite meeting'); await h.settle();
   assert.equal(h.calls.at(-1).args[0].expectedRevision, 'read:0:1');
   assert.equal(h.field('managerNote').props.value, 'Admin conflict draft'); h.unmount();
+});
+
+test('the invite control saves an incomplete manager draft without requiring final answers', async () => {
+  const row = review('manager', 'MAM', { managerAnswers: Array(12).fill(''), ratings: Array(12).fill(''), summary: '', overallRating: '', managerNote: '' });
+  const h = mount(workspace('manager', 'MAM', { reviews: [row] }), { mutatePerformanceReview: async input => ({ ok: true, committed: true, operationId: input.operationId, review: { ...row, managerAnswers: input.input.answers, managerRevision: 'manager:0:1', managerCompletedAt: '2026-10-01T00:00:00Z' } }) });
+  await h.settle(); h.change('manager-0', 'Initial manager draft'); h.click('Save draft and invite meeting'); await h.settle();
+  const sent = h.calls.filter(c => c.name === 'mutatePerformanceReview');
+  assert.equal(sent.length, 1); assert.equal(sent[0].args[0].command, 'complete_manager');
+  assert.equal(sent[0].args[0].input.answers[0], 'Initial manager draft');
+  assert.equal(h.button('Save and send to HR').props.disabled, true);
+  h.submit('Review meeting'); await h.settle();
+  assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1); h.unmount();
+});
+
+test('invalid and untouched meeting forms never autosave or mark the meeting held', async () => {
+  const row = review('manager', 'MAM', { managerCompletedAt: '2026-10-01T00:00:00Z' });
+  const h = mount(workspace('manager', 'MAM', { reviews: [row] })); await h.settle();
+  h.blur(); await h.settle();
+  h.change('meeting-date', '2026-02-30'); h.change('meeting-time', '10:00'); h.change('meeting-location', 'Synthetic room');
+  h.blur(); await h.settle();
+  h.change('meeting-date', '2026-10-04'); h.change('meeting-time', '02:30'); h.blur(); await h.settle();
+  h.change('meeting-date', '2027-04-04'); h.change('meeting-time', '02:30'); h.blur(); await h.settle();
+  assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 0);
+  assert.equal(h.field('held').props.checked, false); assert.equal(h.button('Save and send to HR').props.disabled, true);
+  h.unmount();
+});
+
+for (const result of ['uncertain', 'conflict']) test(`final HR submission stops when the latest assessment save is ${result}`, async () => {
+  const row = review('manager', 'MAM', { managerCompletedAt: '2026-10-01T00:00:00Z', meeting: { date: '2026-10-01', time: '10:00', duration: 30, mode: 'in_person', location: 'Synthetic room', notes: '' } });
+  const h = mount(workspace('manager', 'MAM', { reviews: [row] }), { mutatePerformanceReview: async () => failure(result, result === 'uncertain') }); await h.settle();
+  h.change('managerNote', 'Latest retained evidence'); h.change('held', true); h.submit('Review meeting'); await h.settle();
+  const sent = h.calls.filter(c => c.name === 'mutatePerformanceReview');
+  assert.deepEqual(sent.map(c => c.args[0].command), ['save_manager']);
+  assert.equal(h.field('managerNote').props.value, 'Latest retained evidence');
+  if (result === 'uncertain') assert.equal(h.button('Save and send to HR').props.disabled, true);
+  h.unmount();
+});
+
+test('session retirement after assessment save prevents the following HR submission', async () => {
+  const pending = deferred();
+  const row = review('manager', 'MAM', { managerCompletedAt: '2026-10-01T00:00:00Z', meeting: { date: '2026-10-01', time: '10:00', duration: 30, mode: 'in_person', location: 'Synthetic room', notes: '' } });
+  const h = mount(workspace('manager', 'MAM', { reviews: [row] }), { mutatePerformanceReview: () => pending.promise }); await h.settle();
+  h.change('managerNote', 'Private latest evidence'); h.change('held', true); h.submit('Review meeting'); h.render();
+  const sent = h.calls.at(-1).args[0]; h.auth('SIGNED_OUT');
+  pending.resolve({ ok: true, committed: true, operationId: sent.operationId, review: { ...row, managerRevision: 'manager:0:1', managerNote: 'Private late evidence' } }); await h.settle();
+  assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1);
+  assert.ok(!h.text.includes('Private')); assert.ok(!JSON.stringify(h.hooks).includes('Private late evidence')); h.unmount();
 });

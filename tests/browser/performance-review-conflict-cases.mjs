@@ -36,7 +36,7 @@ test.afterEach(async ({ page }, info) => {
 for (const audience of ['employee', 'manager']) test(`AM-04 browser ${audience} conflict Reload retains draft and explicit save completes`, async ({ page }) => {
   await page.goto(`${origin}/?audience=${audience}&company=MAM`);
   const name = audience === 'employee' ? 'self-0' : 'manager-0';
-  const label = audience === 'employee' ? 'Save self draft' : 'Save manager draft';
+  const label = audience === 'employee' ? 'Save self draft' : 'Save draft and invite meeting';
   const revision = audience === 'employee' ? 'self:1' : 'manager:0:1';
   await field(page, name).fill('Browser synthetic conflict draft');
   if (audience === 'manager') {
@@ -84,7 +84,7 @@ for (const audience of ['employee', 'manager']) test(`AM-04 browser ${audience} 
 for (const audience of ['employee', 'manager']) for (const kind of ['terminal', 'capability']) test(`AM-04 browser ${audience} ${kind} conflict Reload retains a read-only draft`, async ({ page }) => {
   await page.goto(`${origin}/?audience=${audience}`);
   const name = audience === 'employee' ? 'self-0' : 'manager-0';
-  const label = audience === 'employee' ? 'Save self draft' : 'Save manager draft';
+  const label = audience === 'employee' ? 'Save self draft' : 'Save draft and invite meeting';
   await field(page, name).fill('Read-only browser conflict draft');
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
   await page.getByRole('button', { name: label, exact: true }).click();
@@ -103,7 +103,7 @@ for (const audience of ['employee', 'manager']) for (const kind of ['terminal', 
 for (const audience of ['employee', 'manager']) test(`AM-04 browser ${audience} out-of-order Reload only adopts the newest revision`, async ({ page }) => {
   await page.goto(`${origin}/?audience=${audience}`);
   const name = audience === 'employee' ? 'self-0' : 'manager-0';
-  const label = audience === 'employee' ? 'Save self draft' : 'Save manager draft';
+  const label = audience === 'employee' ? 'Save self draft' : 'Save draft and invite meeting';
   await field(page, name).fill('Browser draft before overlapping reads');
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
   await page.getByRole('button', { name: label, exact: true }).click();
@@ -139,7 +139,7 @@ for (const audience of ['employee', 'manager']) test(`AM-04 browser ${audience} 
 for (const audience of ['employee', 'manager']) test(`AM-04 browser ${audience} unknown attempt after conflict stays reconciliation-only`, async ({ page }) => {
   await page.goto(`${origin}/?audience=${audience}`);
   const name = audience === 'employee' ? 'self-0' : 'manager-0';
-  const label = audience === 'employee' ? 'Save self draft' : 'Save manager draft';
+  const label = audience === 'employee' ? 'Save self draft' : 'Save draft and invite meeting';
   await field(page, name).fill('Browser held unknown draft');
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
   await page.getByRole('button', { name: label, exact: true }).click();
@@ -165,7 +165,7 @@ test('AM-04 browser removed assignment clears the private conflict draft', async
   await page.goto(`${origin}/?audience=manager`);
   await field(page, 'managerNote').fill('PRIVATE-REVOKED-BROWSER-CONFLICT');
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
-  await page.getByRole('button', { name: 'Save manager draft', exact: true }).click();
+  await page.getByRole('button', { name: 'Save draft and invite meeting', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Synthetic conflict.');
   await enqueue(page, 'loadPerformanceReviews', { ok: true, data: workspace('manager', 'MAM', { reviews: [], startablePeople: [] }) });
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
@@ -185,7 +185,7 @@ test('AM-04 browser review A to B to A retires the old conflict recovery', async
   await expect(page.getByRole('button', { name: `${b.employee.name} — ${b.employee.company}`, exact: true })).toBeVisible();
   await field(page, 'managerNote').fill('PRIVATE-OLD-A-BROWSER-CONFLICT');
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
-  await page.getByRole('button', { name: 'Save manager draft', exact: true }).click();
+  await page.getByRole('button', { name: 'Save draft and invite meeting', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Synthetic conflict.');
   await page.evaluate(() => window.performanceReviewFixture.holdNext('loadPerformanceReviews'));
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
@@ -198,7 +198,7 @@ test('AM-04 browser review A to B to A retires the old conflict recovery', async
   await enqueue(page, 'loadPerformanceReviews', { ok: true, data: newer });
   await page.evaluate(actor => window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor), ids.actor);
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
-  await page.getByRole('button', { name: 'Save manager draft', exact: true }).click();
+  await page.getByRole('button', { name: 'Save draft and invite meeting', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Synthetic conflict.');
   const second = (await calls(page, 'mutatePerformanceReview'))[1].args[0];
   expect(second.expectedRevision).toBe('manager:0:0');
