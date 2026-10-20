@@ -14,7 +14,7 @@ const CHECK_IN_REVIEW = new RegExp(`^checkin-review:${UUID_SOURCE}:hr:[1-9][0-9]
 const ONBOARDING_CREDENTIAL = new RegExp(`^onboarding-credential:${UUID_SOURCE}$`);
 const SUBSCRIPTION_REQUEST = new RegExp(`^subscription-request:${UUID_SOURCE}:[1-9][0-9]*$`);
 const SUBSCRIPTION_REVIEW = new RegExp(`^subscription-review:${UUID_SOURCE}:[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01]):(upcoming|due)$`);
-const PERFORMANCE_REVIEW = new RegExp(`^performance-review:${UUID_SOURCE}:(started|self-submitted)$`);
+const PERFORMANCE_REVIEW = new RegExp(`^performance-review:${UUID_SOURCE}:(started|self-submitted|manager-invited)$`);
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 const headers = { "Cache-Control": "private, no-store, max-age=0", "X-Content-Type-Options": "nosniff" };

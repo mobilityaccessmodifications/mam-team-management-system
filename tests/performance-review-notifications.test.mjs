@@ -120,3 +120,41 @@ test('new notification claims reject missing required Careers CC and arbitrary C
     assert.equal(h.requests.length, 0);
   }
 });
+
+test('manager meeting invitation binds the canonical manager and employee To set with Careers CC', async () => {
+  for (const recipient of ['employee@example.invalid,manager@example.invalid', 'careers@mobilityaccess.com.au,employee@example.invalid']) {
+    const row = fixture('manager-invited'); row.payload.recipient = recipient;
+    row.payload.cc = recipient.includes('careers@mobilityaccess.com.au') ? '' : 'careers@mobilityaccess.com.au';
+    const h = loadMailHarness({ env: env(), rpc(name, args) {
+      if (name === 'claim_performance_review_notifications') return { data: [row], error: null };
+      assert.equal(args.p_delivered, true); return { data: true, error: null };
+    }, fetch(_url, init) {
+      const p = JSON.parse(init.body);
+      assert.deepEqual(p, {version: 1, ...row.payload, claimToken: ids.claim});
+      return Response.json({...receipt(p), actualCcRecipients: p.cc});
+    } });
+    assert.equal((await h.load('src/lib/performance-review-notifications.ts').dispatchPerformanceReviewNotifications(ids.review)).sent, 1);
+  }
+  for (const recipient of ['manager@example.invalid', 'manager@example.invalid,employee@example.invalid', 'employee@example.invalid,manager@example.invalid,other@example.invalid', 'employee@example.invalid,employee@example.invalid']) {
+    const row = fixture('manager-invited'); Object.assign(row.payload, {recipient, cc: 'careers@mobilityaccess.com.au'});
+    const h = loadMailHarness({env: env(), rpc: () => ({data: [row], error: null})});
+    assert.equal((await h.load('src/lib/performance-review-notifications.ts').dispatchPerformanceReviewNotifications()).held, 1);
+    assert.equal(h.requests.length, 0);
+  }
+});
+
+
+test('a validated manager completion schedules the meeting invitation only after committed receipt', async () => enabled(async () => {
+  const manager = review('manager');
+  Object.assign(manager, {selfStatus: 'manager_review', selfAnswers: Array(12).fill('Synthetic self assessment'), selfSubmittedAt: '2026-10-21T00:00:00Z',
+    selfRevision: 'self:1', managerRevision: 'manager:1:1', managerAnswers: Array(12).fill('Synthetic assessment'),
+    ratings: Array.from({length: 12}, (_, i) => [0,1,2,6,7,8,9].includes(i) ? '2 Meets expectations' : ''),
+    summary: 'Synthetic summary', overallRating: '2 Meets expectations', managerNote: '', managerCompletedAt: '2026-10-21T01:00:00Z'});
+  const input = {...mutation(), command: 'complete_manager', expectedRevision: 'manager:1:0', input: {answers: manager.managerAnswers, ratings: manager.ratings,
+    summary: manager.summary, overallRating: manager.overallRating, managerNote: ''}};
+  const h = productionActionHarness({response: {data: {committed: true, operationId, review: manager}, error: null, status: 200}});
+  assert.equal((await h.actions.mutatePerformanceReview(input)).ok, true);
+  assert.equal(h.callbacks.length, 1); await h.callbacks[0](); assert.deepEqual(h.notificationDispatches, [[reviewId]]); assert.deepEqual(h.dispatches, []);
+  const bad = productionActionHarness({response: {data: {committed: true, operationId: ids.claim, review: manager}, error: null, status: 200}});
+  assert.equal((await bad.actions.mutatePerformanceReview(input)).ok, false); assert.equal(bad.callbacks.length, 0);
+}));

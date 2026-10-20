@@ -336,3 +336,32 @@ test('explicit new notification CC cannot be omitted, expanded or redirected', a
     assert.deepEqual((await h.run()).value, held); assert.equal(h.calls.length, 0);
   }
 });
+
+test('manager invitation sends one brief signed scheduling email to manager and employee without answers', async () => {
+  for (const recipient of ['employee@example.invalid,manager@example.invalid', 'careers@mobilityaccess.com.au,employee@example.invalid']) {
+    const p = {...payload('manager-invited'), recipient, cc: recipient.includes('careers@mobilityaccess.com.au') ? '' : 'careers@mobilityaccess.com.au'};
+    const evidence = {...receipt(p), actualCcRecipients: p.cc};
+    const h = harness(build(), p, {confirm: {statusCode: 200, body: evidence}});
+    assert.deepEqual((await h.run()).value, evidence);
+    const mail = h.calls[1].body.message;
+    assert.deepEqual(mail.toRecipients, recipient.split(',').map(address => ({emailAddress: {address}})));
+    assert.deepEqual(mail.ccRecipients, p.cc ? [{emailAddress: {address: p.cc}}] : []);
+    assert.equal(mail.subject, 'Arrange performance review: ' + p.reviewCode);
+    assert.match(mail.body.content, /Reply with Meeting/);
+    assert.match(mail.body.content, /ai@mobilityaccess\.com\.au/);
+    assert.ok(mail.body.content.includes(p.reviewCode));
+    assert.equal(mail.body.content.split(HR_EMAIL_SIGNATURE_HTML).length, 2);
+    assert.equal(Object.hasOwn(mail, 'attachments'), false);
+    for (const sensitive of [p.employeeName, p.managerName, p.dueDate, 'selfAnswers', 'managerAnswers', 'managerNote']) {
+      assert.equal(mail.body.content.includes(sensitive), false);
+    }
+    const duplicate = harness(build(), p, {reserve: {statusCode: 200, body: {...evidence, outcome: 'duplicate', sent: false, alreadySent: true}}});
+    assert.equal((await duplicate.run()).value.alreadySent, true); assert.equal(duplicate.calls.length, 1);
+  }
+  for (const recipient of ['manager@example.invalid', 'manager@example.invalid,employee@example.invalid', 'employee@example.invalid,manager@example.invalid,other@example.invalid', 'employee@example.invalid,employee@example.invalid']) {
+    const h = harness(build(), {...payload('manager-invited'), recipient, cc: 'careers@mobilityaccess.com.au'});
+    assert.deepEqual((await h.run()).value, held); assert.equal(h.calls.length, 0);
+  }
+  const missingCc = harness(build(), {...payload('manager-invited'), recipient: 'employee@example.invalid,manager@example.invalid'});
+  assert.deepEqual((await missingCc.run()).value, held); assert.equal(missingCc.calls.length, 0);
+});

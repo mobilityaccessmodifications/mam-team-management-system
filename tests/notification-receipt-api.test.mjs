@@ -170,13 +170,14 @@ test('route wires bounded admin RPCs and proxy bypass is exact, not an integrati
 
 
 test('performance lifecycle reservations require their own claim token and DB recipient wrapper', async () => {
-  for (const event of ['started', 'self-submitted']) {
+  for (const event of ['started', 'self-submitted', 'manager-invited']) {
+    const recipient = event === 'manager-invited' ? 'employee@example.test,manager@example.test' : input.recipient;
     const eventKey = `performance-review:${id}:${event}`;
-    const value = { ...input, eventKey, claimToken: token };
+    const value = { ...input, eventKey, recipient, claimToken: token };
     const h = harness({ outcome: 'send', eventKey, deliveryToken: token });
     assert.equal((await h.run(request(value))).status, 200);
     assert.deepEqual(h.calls, [{ name: 'reserve_performance_review_notification_mail', args: {
-      p_event_key: eventKey, p_recipient: input.recipient, p_cc: '', p_legacy_event_key: null, p_claim_token: token,
+      p_event_key: eventKey, p_recipient: recipient, p_cc: '', p_legacy_event_key: null, p_claim_token: token,
     } }]);
     for (const claimToken of [undefined, null, 'wrong']) {
       const invalid = harness();
