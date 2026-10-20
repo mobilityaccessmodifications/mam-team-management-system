@@ -8,6 +8,7 @@ SOURCES = ROOT / 'deploy/n8n/performance-review-meeting-v1'
 HUB = 'https://mam-team-management-system-ten.vercel.app/api/performance-reviews/meeting'
 OUTLOOK = {'id': 'Ug5bTBjvF1vCSdhQ', 'name': 'Microsoft Outlook - ai@mobilityaccess.com.au'}
 CRON = {'id': 'Fa0hGUfG9sTqnZXP', 'name': 'MAM People System - Check-In Reminder Cron Bearer v2'}
+READINESS = {'id': 'tGtpwegru8OxtdCt', 'name': 'MAM Team Management - Notification Webhook Header'}
 
 
 def node(name, kind, parameters, version=2, credentials=None):
@@ -66,7 +67,7 @@ def build_workflow():
         code('Validate Manager Meeting', 'event.js', each=True), gate('Manager Meeting Valid?', 'valid'),
         http('Import Meeting Once', HUB, body='={{ $json.importBody }}'), code('Return Meeting Result', 'result.js', each=True),
         node('Meeting Readiness', 'webhook', {'httpMethod': 'GET', 'path': 'mam-people-hub-performance-review-meeting-v1-ready',
-             'authentication': 'headerAuth', 'responseMode': 'lastNode', 'options': {}}, 2.1, {'httpHeaderAuth': CRON.copy()}),
+             'authentication': 'headerAuth', 'responseMode': 'lastNode', 'options': {}}, 2.1, {'httpHeaderAuth': READINESS.copy()}),
         http('Check Meeting API Readiness', HUB + '?readiness=1'),
         http('Read Readiness AI Identity', 'https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName', graph=True),
         code('Verify Readiness AI Identity', 'identity.js'), gate('Readiness AI Identity Valid?', 'valid'),

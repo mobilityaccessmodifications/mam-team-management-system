@@ -7,6 +7,7 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const HUB = 'https://mam-team-management-system-ten.vercel.app/api/performance-reviews/meeting';
 const OUTLOOK = {id: 'Ug5bTBjvF1vCSdhQ', name: 'Microsoft Outlook - ai@mobilityaccess.com.au'};
 const CRON = {id: 'Fa0hGUfG9sTqnZXP', name: 'MAM People System - Check-In Reminder Cron Bearer v2'};
+const READINESS = {id: 'tGtpwegru8OxtdCt', name: 'MAM Team Management - Notification Webhook Header'};
 const build = () => {
   const p = spawnSync('/usr/bin/python3', ['-B', ROOT + 'scripts/build-performance-review-meeting-workflow.py'], {cwd: ROOT, encoding: 'utf8', env: {PATH: '/usr/bin:/bin'}});
   assert.equal(p.status, 0, p.stderr); return JSON.parse(p.stdout);
@@ -194,5 +195,9 @@ test('readiness uses only no-DB readiness, AI identity and impossible subject me
   assert.equal(u.searchParams.get('$select'), 'id'); assert.match(u.searchParams.get('$filter'), /MAM-PEOPLE-HUB-READINESS/);
   assert.match(u.searchParams.get('$filter'), / and not\(contains/);
   assert.equal([...u.searchParams.get('$filter').matchAll(/contains\(/g)].length, 11);
-  assert.equal(node('Meeting Readiness').parameters.httpMethod, 'GET'); assert.deepEqual(node('Meeting Readiness').credentials.httpHeaderAuth, CRON);
+  assert.equal(node('Meeting Readiness').parameters.httpMethod, 'GET'); assert.deepEqual(node('Meeting Readiness').credentials.httpHeaderAuth, READINESS);
+  for (const name of ['Read Pending Meeting Imports', 'Import Meeting Once', 'Check Meeting API Readiness']) {
+    assert.deepEqual(node(name).credentials.httpHeaderAuth, CRON);
+    assert.notDeepEqual(node(name).credentials.httpHeaderAuth, READINESS);
+  }
 });

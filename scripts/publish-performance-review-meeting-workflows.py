@@ -213,6 +213,12 @@ def operate(operation, kind, path, expected_id, expected_version, api, pause=tim
             'phase': state['phase'], 'graphSha256': sha, 'readiness': operation == 'readiness'}
 
 
+def readiness_headers(secret):
+    if not isinstance(secret, str) or not 32 <= len(secret) <= 512 or re.search(r'[\x00-\x1f\x7f]', secret):
+        raise RuntimeError('readiness_secret_not_configured')
+    return {'X-MAM-Notification-Secret': secret}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('operation', choices=['stage', 'continue', 'activate', 'readback', 'readiness'])
@@ -260,11 +266,7 @@ def main():
         return http(method, origin + '/api/v1/' + resource, {'X-N8N-API-KEY': config['N8N_API_KEY'], 'Content-Type': 'application/json'}, body)
 
     def readiness(kind):
-        name = 'MAM_PERFORMANCE_MEETING_CRON_SECRET' if kind == 'calendar' else 'MAM_N8N_LEAVE_WEBHOOK_SECRET'
-        secret = os.environ.get(name, '')
-        if not 32 <= len(secret) <= 512 or re.search(r'[\x00-\x1f\x7f]', secret):
-            raise RuntimeError('readiness_secret_not_configured')
-        header = {'Authorization': 'Bearer ' + secret} if kind == 'calendar' else {'X-MAM-Notification-Secret': secret}
+        header = readiness_headers(os.environ.get('MAM_N8N_LEAVE_WEBHOOK_SECRET', ''))
         return http('GET', origin + READY_PATHS[kind], header)
 
     print(json.dumps(operate(args.operation, args.kind, path, args.expected_id, args.expected_version, api, ready=readiness, target_origin=origin)))

@@ -78,6 +78,11 @@ def held(fn):
 
 
 count = 0
+secret = 'synthetic-notification-readiness-' + '0' * 32
+assert p.readiness_headers(secret) == {'X-MAM-Notification-Secret': secret}
+for invalid in (None, '', 'x' * 31, 'x' * 513, secret + '\r\n', secret + '\x00'):
+    held(lambda: p.readiness_headers(invalid))
+count += 1
 with tempfile.TemporaryDirectory(prefix='mam-meeting-publisher-') as directory:
     base = Path(directory)
     f = Fake()
