@@ -32,7 +32,7 @@ test('review loading and empty states remain visible for the read-only Super Adm
   await refresh(h); await h.settle();
   assert.ok(h.text.includes('Manager assessment'));
   assert.ok(!h.text.includes('Synthetic unavailable.'));
-  for (const node of h.all.filter(n => ['input', 'select', 'textarea'].includes(n.type) && n.props.name !== 'start-cycle')) assert.equal(node.props.disabled, true);
+  for (const node of h.all.filter(n => ['input', 'select', 'textarea'].includes(n.type) && n.props.type !== 'search' && n.props.name !== 'start-cycle')) assert.equal(node.props.disabled, true);
   h.unmount();
 });
 
@@ -106,8 +106,9 @@ test('assigned manager assesses with original ratings while HR is read-only and 
     assert.equal(h.field('managerNote').props.value, 'PRIVATE-SYNTHETIC-MANAGER-NOTE');
     assert.deepEqual(h.field('rating-0').props.children.flat().filter(n => n.type === 'option' && n.props.value).slice(0, 4).map(n => n.props.children), ['1 Needs improvement', '2 Meets expectations', '3 Exceeds expectations', 'N Not enough evidence']);
     if (audience === 'admin') {
-      for (const n of h.all.filter(n => ['input', 'select', 'textarea'].includes(n.type) && n.props.name !== 'start-cycle')) assert.equal(n.props.disabled, true);
-      h.submit('Self assessment'); h.submit('Manager assessment'); await h.settle();
+      for (const n of h.all.filter(n => ['input', 'select', 'textarea'].includes(n.type) && n.props.type !== 'search' && n.props.name !== 'start-cycle')) assert.equal(n.props.disabled, true);
+      assert.ok(!h.all.some(n => n.type === 'form' && n.props['aria-label'] === 'Self assessment'));
+      h.submit('Manager assessment'); await h.settle();
       assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 0);
       assert.ok(!h.all.some(n => n.type === 'button' && /Save|Complete|Submit/.test(n.props.children)));
     } else {
@@ -562,7 +563,7 @@ test('nonmanager target preview remains read-only through direct input, submit a
     try {
       await h.settle();
       assert.deepEqual(h.calls[0], { name: 'loadPerformanceReviews', args: [previewPersonId] });
-      for (const field of h.all.filter(node => ['input', 'select', 'textarea'].includes(node.type) && node.props.name !== 'start-cycle')) {
+      for (const field of h.all.filter(node => ['input', 'select', 'textarea'].includes(node.type) && node.props.type !== 'search' && node.props.name !== 'start-cycle')) {
         assert.equal(field.props.disabled, true, field.props.name);
         field.props.onChange?.({ target: { value: 'Attempted preview write', checked: true } });
       }
@@ -649,7 +650,7 @@ test('manager delegation respects each assigned row capability and does not enab
   const h = mount(workspace('manager', 'MAM', { reviews: [row] }), {}, { previewPersonId: ids.manager });
   try {
     await h.settle();
-    for (const field of h.all.filter(node => ['input', 'select', 'textarea'].includes(node.type) && node.props.name !== 'start-cycle')) {
+    for (const field of h.all.filter(node => ['input', 'select', 'textarea'].includes(node.type) && node.props.type !== 'search' && node.props.name !== 'start-cycle')) {
       assert.equal(field.props.disabled, true, field.props.name);
       field.props.onChange?.({ target: { value: 'Attempted locked delegated edit', checked: true } });
     }
