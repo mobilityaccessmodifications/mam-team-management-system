@@ -439,7 +439,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
           <label>Location<input name="meeting-location" maxLength={8000} value={meeting.location} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, location: event.target.value })); } }} /></label>
           <label>Meeting notes<textarea name="meeting-notes" maxLength={8000} value={meeting.notes} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, notes: event.target.value })); } }} /></label>
           {managerActions ? <><label><input type="checkbox" name="held" checked={held} disabled={heldDisabled} onChange={event => { if (epoch.current === generation && !heldDisabled) setHeld(event.target.checked); }} />Meeting was held</label><div className={styles.toolbar}><button type="submit" disabled={blocked || !held || !meetingFinished || !completeAssessment() || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Save and send to HR</button></div></> : null}
-          {selected.managerCompletedAt ? <p>Meeting invitation requested: {selected.managerCompletedAt}</p> : null}{selected.finalisedAt ? <p>Finalised: {selected.finalisedAt}</p> : null}
+          {selected.managerCompletedAt ? <p>Assessment saved: {selected.managerCompletedAt}</p> : null}{selected.finalisedAt ? <p>Finalised: {selected.finalisedAt}</p> : null}
         </form> : null}
       </article> : null}
       </div>

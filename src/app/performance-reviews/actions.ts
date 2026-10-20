@@ -91,7 +91,7 @@ export async function mutatePerformanceReview(input: PerformanceMutationInput, p
     const receipt = closed(data, ["committed", "operationId", "review"]);
     const review = parseReview(receipt.review);
     if (receipt.committed !== true || receipt.operationId !== request.operationId || review.id !== request.reviewId || (self ? review.audience !== "employee" || review.employee.id !== capabilities.person_id : !reviewScope(review, capabilities.app_role, capabilities.person_id) || review.audience === "employee")) return failure("uncertain");
-    if (request.command === "submit_self") schedulePerformanceReviewNotification(review.id);
+    if (request.command === "submit_self" || request.command === "complete_manager") schedulePerformanceReviewNotification(review.id);
     if (request.command === "submit_review") schedulePerformanceReviewMail(review.id);
     return { ok: true, committed: true, operationId: request.operationId, review };
   } catch (error) { return failure(!dispatched && error instanceof PerformanceReviewAccessError ? error.code : dispatched ? "uncertain" : "unavailable"); }
