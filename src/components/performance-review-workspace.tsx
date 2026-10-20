@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
-import { loadPerformanceReviews, mutatePerformanceReview, startPerformanceReview, getPerformanceReviewDocument, reconcilePerformanceReviewOperation } from "@/app/performance-reviews/actions";
+import { mutatePerformanceReview, startPerformanceReview, getPerformanceReviewDocument, reconcilePerformanceReviewOperation } from "@/app/performance-reviews/actions";
+import { loadPerformanceReviews } from "@/lib/performance-review-load";
 import { buildPerformanceReviewDownload } from "@/lib/performance-review-document";
 import { createClient } from "@/lib/supabase/client";
 import { QUESTIONS } from "@/lib/performance-review-questions.mjs";
