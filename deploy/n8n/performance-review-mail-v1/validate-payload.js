@@ -69,10 +69,11 @@ const sha256 = input => {
 if (sha256(bytes) !== a.sha256) return reject();
 held.deliveryId = p.deliveryId; held.eventKey = p.eventKey; held.attachmentSha256 = a.sha256;
 const escape = value => value.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])).replace(/\r\n?/g, '\n').replace(/\n/g, '<br>');
+const signature = '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;border-top:1px solid #dce4df;padding-top:16px;font-family:Segoe UI,Arial,sans-serif"><tr><td style="vertical-align:middle;padding-right:16px"><a href="https://www.mobilityaccess.com.au/" style="text-decoration:none"><img src="https://mam-team-management-system-ten.vercel.app/email/mam-logo.jpg" alt="MAM – Mobility Access Modifications" width="150" height="69" style="display:block;width:150px;height:auto;border:0"></a></td><td style="vertical-align:middle;color:#50615b;font-size:12px;line-height:1.5"><strong style="color:#22302b;font-size:13px">People &amp; Culture</strong><br>Mobility Access Modifications</td></tr></table>';
 const graphBody = {
   message: {
-    subject: `Performance review finalised — ${p.reviewCode}`,
-    body: {contentType: 'HTML', content: `<p>Performance review ${escape(p.reviewCode)}</p><p>Employee: ${escape(p.employeeName)}<br>Manager: ${escape(p.managerName)}<br>Finalised: ${escape(p.finalisedAt)}</p><p>Manager note:<br>${escape(p.managerNote)}</p>`},
+    subject: 'Performance review completed',
+    body: {contentType: 'HTML', content: `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.6;color:#22302b"><p>Hi team,</p><p>A performance review is complete. The completed document is attached.</p><p>Manager note:<br>${escape(p.managerNote)}</p><p>Thanks,<br>People Hub</p>${signature}</div>`},
     toRecipients: [{emailAddress: {address: 'careers@mobilityaccess.com.au'}}], ccRecipients: [], bccRecipients: [],
     attachments: [{'@odata.type': '#microsoft.graph.fileAttachment', name: p.attachment.fileName, contentType: p.attachment.mimeType, contentBytes: p.attachment.contentBase64}],
   },
