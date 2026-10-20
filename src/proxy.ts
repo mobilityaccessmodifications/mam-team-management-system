@@ -71,7 +71,8 @@ export async function proxy(request: NextRequest) {
   // database action. It must reach the route handler unauthenticated because
   // the MAM scheduler does not have a browser session.
   const isPublicRoute = isLoginRoute || isConfirmationRoute || isCronRoute || isAnalyticsRoute
-    || pathname === "/api/performance-reviews/workspace";
+    || pathname === "/api/performance-reviews/workspace"
+    || pathname === "/api/performance-reviews/meeting-invitation-status";
 
   if (!claims && !isPublicRoute) {
     const url = request.nextUrl.clone();

@@ -112,6 +112,7 @@ export type PerformanceFailure = {
 };
 
 export type PerformanceLoadResult = { ok: true; data: PerformanceWorkspace } | PerformanceFailure;
+export type PerformanceInvitationStatusResult = { ok: true; reviewId: string; sent: boolean } | PerformanceFailure;
 
 export type PerformanceStartInput = {
   operationId: string;
