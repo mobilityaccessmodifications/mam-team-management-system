@@ -9,6 +9,7 @@ HUB = 'https://mam-team-management-system-ten.vercel.app/api/performance-reviews
 OUTLOOK = {'id': 'Ug5bTBjvF1vCSdhQ', 'name': 'Microsoft Outlook - ai@mobilityaccess.com.au'}
 CRON = {'id': 'Fa0hGUfG9sTqnZXP', 'name': 'MAM People System - Check-In Reminder Cron Bearer v2'}
 READINESS = {'id': 'tGtpwegru8OxtdCt', 'name': 'MAM Team Management - Notification Webhook Header'}
+FIELDS = 'id,subject,type,isOrganizer,organizer,attendees,start,end,isCancelled,isAllDay,isDraft,isOnlineMeeting,onlineMeeting,onlineMeetingProvider,location,iCalUId,lastModifiedDateTime,createdDateTime,recurrence'
 
 
 def node(name, kind, parameters, version=2, credentials=None):
@@ -54,24 +55,36 @@ def http(name, url, graph=False, body=None):
     return result
 
 
+def calendar(name, url, initial):
+    result = http(name, url, graph=True)
+    policy = (SOURCES / 'event.js').read_text().split('\nconst reject =', 1)[0]
+    complete = policy + '\nreturn $response.statusCode !== 200 || !$response.body || !Array.isArray($response.body.value) || $response.body.value.length > 50 || !safeNext($response.body["@odata.nextLink"], ' + initial + ');'
+    result['parameters']['options']['pagination'] = {'pagination': {
+        'paginationMode': 'responseContainsNextURL',
+        'nextURL': '={{ $pageCount === 0 ? ' + initial + ' : $response.body["@odata.nextLink"] }}',
+        'paginationCompleteWhen': 'other', 'completeExpression': '={{ (() => {' + complete + '})() }}',
+        'limitPagesFetched': True, 'maxRequests': 5, 'requestInterval': 0}}
+    return result
+
+
 def build_workflow():
     marker = 'MAM-PEOPLE-HUB-READINESS-720f0200-20261021'
-    contains = lambda value: "contains(subject,'" + value + "')"
-    readiness_filter = contains(marker) + ' and not(' + ' or '.join(contains(marker + str(digit)) for digit in range(10)) + ')'
+    readiness_filter = "contains(subject,'" + marker + "')"
+    readiness_url = 'https://graph.microsoft.com/v1.0/me/events?$filter=' + quote(readiness_filter, safe='') + '&$select=' + FIELDS + '&$top=50'
     nodes = [
         node('Every Five Minutes', 'scheduleTrigger', {'rule': {'interval': [{'field': 'minutes', 'minutesInterval': 5}]}}, 1.2),
         http('Read AI Identity', 'https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName', graph=True),
         code('Verify AI Identity', 'identity.js'), gate('AI Identity Valid?', 'valid'),
         http('Read Pending Meeting Imports', HUB), code('Prepare Calendar Queries', 'queries.js'),
-        http('Read AI Calendar', '={{ $json.queryUrl }}', graph=True),
-        code('Validate Manager Meeting', 'event.js', each=True), gate('Manager Meeting Valid?', 'valid'),
+        calendar('Read AI Calendar', '={{ $json.queryUrl }}', '$json.queryUrl'),
+        code('Validate Manager Meeting', 'event.js'), gate('Manager Meeting Valid?', 'valid'),
         http('Import Meeting Once', HUB, body='={{ $json.importBody }}'), code('Return Meeting Result', 'result.js', each=True),
         node('Meeting Readiness', 'webhook', {'httpMethod': 'GET', 'path': 'mam-people-hub-performance-review-meeting-v1-ready',
              'authentication': 'headerAuth', 'responseMode': 'lastNode', 'options': {}}, 2.1, {'httpHeaderAuth': READINESS.copy()}),
         http('Check Meeting API Readiness', HUB + '?readiness=1'),
         http('Read Readiness AI Identity', 'https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName', graph=True),
         code('Verify Readiness AI Identity', 'identity.js'), gate('Readiness AI Identity Valid?', 'valid'),
-        http('Check Calendar Read Access', 'https://graph.microsoft.com/v1.0/me/events?$filter=' + quote(readiness_filter, safe='') + '&$select=id&$top=1', graph=True),
+        calendar('Check Calendar Read Access', readiness_url, json.dumps(readiness_url)),
         code('Return Meeting Readiness', 'readiness.js'),
     ]
     nodes[11]['webhookId'] = '720f0200-0000-4000-8000-000000000021'

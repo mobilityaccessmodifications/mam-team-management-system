@@ -25,9 +25,8 @@ const offset = (Math.floor(Date.now() / 300000) * 10) % requests.length;
 const fields = 'id,subject,type,isOrganizer,organizer,attendees,start,end,isCancelled,isAllDay,isDraft,isOnlineMeeting,onlineMeeting,onlineMeetingProvider,location,iCalUId,lastModifiedDateTime,createdDateTime,recurrence';
 return Array.from({length: Math.min(10, requests.length)}, (_, index) => {
   const request = requests[(offset + index) % requests.length];
-  const contains = code => "contains(subject,'" + code + "')";
-  const filter = contains(request.reviewCode) + ' and not(' + Array.from({length: 10}, (_, digit) => contains(request.reviewCode + digit)).join(' or ') + ')';
+  const filter = "contains(subject,'" + request.reviewCode + "')";
   const queryUrl = 'https://graph.microsoft.com/v1.0/me/events?$filter='
-    + encodeURIComponent(filter) + '&$select=' + fields + '&$top=25';
+    + encodeURIComponent(filter) + '&$select=' + fields + '&$top=50';
   return {json: {request, queryUrl}, pairedItem: {item: 0}};
 });

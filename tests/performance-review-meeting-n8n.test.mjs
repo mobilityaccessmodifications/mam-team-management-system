@@ -14,10 +14,13 @@ const build = () => {
 };
 const workflow = build();
 const node = name => workflow.nodes.find(n => n.name === name);
-function run(name, value, {pending = request(), lookup = {}, now = 0} = {}) {
+function run(name, value, {pending = request(), lookup = {}, now = 0, input, queryItems} = {}) {
   const source = node(name).parameters.jsCode;
-  const get = key => ({first: () => ({json: lookup[key]}), item: {json: {request: pending}}});
-  return new Function('$json', '$input', '$', 'Date', source)(value, {all: () => [{json: value}]}, get, class extends Date {static now() {return now;}});
+  const get = key => ({first: () => ({json: lookup[key]}), item: {json: {request: pending}},
+    all: () => key === 'Prepare Calendar Queries' ? queryItems || queries([pending]) : []});
+  const result = new Function('$json', '$input', '$', 'Date', source)(value,
+    {all: () => input || [{json: value, pairedItem: {item: 0}}]}, get, class extends Date {static now() {return now;}});
+  return name === 'Validate Manager Meeting' && input === undefined ? result[0] : result;
 }
 const request = (i = 1) => ({requestToken: '720f0200-0000-4000-8000-' + String(i).padStart(12, '0'),
   reviewId: '730f0200-0000-4000-8000-' + String(i).padStart(12, '0'), reviewCode: 'PR-2026-' + i,
@@ -32,6 +35,22 @@ const event = (i = 1) => ({id: 'synthetic-event-' + i, iCalUId: 'synthetic-uid-'
 const response = value => ({statusCode: 200, body: {value}});
 const queries = (requests, options) => run('Prepare Calendar Queries', {statusCode: 200, body: {ok: true, requests}}, options);
 const parseEvent = (e, options) => run('Validate Manager Meeting', response([e]), options).json;
+const expression = (value, json, result, count) => new Function('$json', '$response', '$pageCount', 'return (' + value.slice(3, -2) + ');')(json, result, count);
+function paginate(queryItems, provider, name = 'Read AI Calendar') {
+  const config = node(name).parameters.options.pagination.pagination, input = [], requests = [];
+  queryItems.forEach((query, item) => {
+    let result = {}, count = 0;
+    do {
+      const url = expression(config.nextURL, query.json, result, count);
+      requests.push(url); result = provider(url, item, count);
+      input.push({json: result, pairedItem: {item}}); count++;
+      if (config.limitPagesFetched && count >= config.maxRequests) break;
+    } while (!expression(config.completeExpression, query.json, result, count));
+  });
+  return {input, requests};
+}
+const nextUrl = (initial, offset) => initial + '&$skip=' + offset;
+const parsePages = (items, queryItems) => run('Validate Manager Meeting', {}, {input: items, queryItems});
 
 test('calendar graph uses only verified AI Graph GETs and protected pending/import API paths', () => {
   assert.equal(workflow.name, 'MAM People Hub - Performance Review Meeting Import (Live)');
@@ -59,7 +78,7 @@ test('calendar graph uses only verified AI Graph GETs and protected pending/impo
     }
   }
   assert.deepEqual(node('Every Five Minutes').parameters.rule, {interval: [{field: 'minutes', minutesInterval: 5}]});
-  assert.equal(node('Validate Manager Meeting').parameters.mode, 'runOnceForEachItem');
+  assert.equal(node('Validate Manager Meeting').parameters.mode, 'runOnceForAllItems');
   assert.equal(node('Return Meeting Result').parameters.mode, 'runOnceForEachItem');
   assert.equal(node('Import Meeting Once').parameters.jsonBody, '={{ $json.importBody }}');
   const reachable = start => {
@@ -89,25 +108,77 @@ test('bounded fair batches eventually cover more than ten pending reviews withou
       for (const v of batch) {
         seen.add(v.json.request.reviewId); assert.deepEqual(v.pairedItem, {item: 0});
         const u = new URL(v.json.queryUrl); assert.equal(u.origin + u.pathname, 'https://graph.microsoft.com/v1.0/me/events');
-        const contains = code => "contains(subject,'" + code + "')";
-        assert.equal(u.searchParams.get('$filter'), contains(v.json.request.reviewCode) + ' and not(' + Array.from({length: 10}, (_, digit) => contains(v.json.request.reviewCode + digit)).join(' or ') + ')');
-        assert.equal(u.searchParams.get('$top'), '25'); assert.doesNotMatch(u.searchParams.get('$select'), /body|notes|attachments/);
+        assert.equal(u.searchParams.get('$filter'), "contains(subject,'" + v.json.request.reviewCode + "')");
+        assert.equal(u.searchParams.get('$top'), '50'); assert.doesNotMatch(u.searchParams.get('$select'), /body|notes|attachments/);
       }
     }
     assert.equal(seen.size, size);
   }
 });
 
-test('query excludes longer numeric review codes before applying its bounded calendar result limit', () => {
-  const u = new URL(queries([request()])[0].json.queryUrl), filter = u.searchParams.get('$filter');
-  assert.ok(u.href.length < 2048);
-  const contains = [...filter.matchAll(/contains\(subject,'([^']+)'\)/g)].map(match => match[1]);
-  assert.deepEqual(contains, ['PR-2026-1', ...Array.from({length: 10}, (_, digit) => 'PR-2026-1' + digit)]);
-  assert.equal(filter.replace(/contains\(subject,'[^']+'\)/g, 'TERM'), 'TERM and not(TERM or TERM or TERM or TERM or TERM or TERM or TERM or TERM or TERM or TERM)');
+test('native HTTPRequest4.2 page contract finds an exact code after one hundred numeric prefix matches', () => {
+  const queryItems = queries([request()]), initial = queryItems[0].json.queryUrl;
   const rows = [...Array.from({length: 100}, (_, i) => event(100 + i)), event()];
-  const selected = rows.filter(row => row.subject.includes(contains[0]) && !contains.slice(1).some(code => row.subject.includes(code)));
-  assert.equal(selected.length, 1); assert.equal(selected[0].id, event().id);
-  assert.equal(run('Validate Manager Meeting', response(selected)).json.valid, true);
+  const {input, requests} = paginate(queryItems, (url, item, page) => ({statusCode: 200, body: {
+    value: rows.slice(page * 50, (page + 1) * 50), ...(page < 2 ? {'@odata.nextLink': nextUrl(initial, (page + 1) * 50)} : {}),
+  }}));
+  assert.equal(requests.length, 3); assert.equal(requests[0], initial);
+  assert.equal(new URL(initial).searchParams.get('$filter'), "contains(subject,'PR-2026-1')");
+  assert.deepEqual(input.map(item => item.pairedItem), [{item: 0}, {item: 0}, {item: 0}]);
+  const result = parsePages(input, queryItems);
+  assert.equal(result.length, 1); assert.equal(result[0].json.valid, true);
+  assert.equal(result[0].json.importBody.event.id, event().id); assert.deepEqual(result[0].pairedItem, {item: 0});
+});
+
+test('complete page sets preserve per-request pairing and reject ambiguity on a later page', () => {
+  const queryItems = queries([request(), request(2)]);
+  const {input} = paginate(queryItems, (url, item, page) => ({statusCode: 200, body: {
+    value: [event(item === 0 ? page === 0 ? 1 : 11 : 2)],
+    ...(item === 0 && page === 0 ? {'@odata.nextLink': nextUrl(queryItems[item].json.queryUrl, 50)} : {}),
+  }}));
+  const result = parsePages(input, queryItems);
+  assert.deepEqual(result.map(item => item.json.valid), [true, true]);
+  assert.deepEqual(result.map(item => item.pairedItem), [{item: 0}, {item: 2}]);
+  assert.deepEqual(result.map(item => item.json.importBody.requestToken), queryItems.map(item => item.json.request.requestToken));
+  const ambiguous = structuredClone(input); ambiguous[1].json.body.value = [{...event(), id: 'second-exact', iCalUId: 'second-uid'}];
+  assert.deepEqual(parsePages(ambiguous, queryItems).map(item => item.json.valid), [false, true]);
+});
+
+test('page limits, incomplete results, errors, cycles and repeated event IDs fail closed', () => {
+  const queryItems = queries([request()]), initial = queryItems[0].json.queryUrl;
+  const overflow = paginate(queryItems, (url, item, page) => ({statusCode: 200, body: {
+    value: page === 0 ? [event()] : [event(100 + page)], '@odata.nextLink': nextUrl(initial, (page + 1) * 50),
+  }}));
+  assert.equal(overflow.requests.length, 5); assert.equal(parsePages(overflow.input, queryItems)[0].json.valid, false);
+  for (const second of [{statusCode: 500, body: {}}, response([event()]),
+    {statusCode: 200, body: {value: [], '@odata.nextLink': nextUrl(initial, 50)}}]) {
+    const first = {json: {statusCode: 200, body: {value: [event()], '@odata.nextLink': nextUrl(initial, 50)}}, pairedItem: {item: 0}};
+    assert.equal(parsePages([first, {json: second, pairedItem: {item: 0}}], queryItems)[0].json.valid, false);
+  }
+  const tooMany = response(Array.from({length: 51}, (_, i) => event(100 + i)));
+  assert.equal(parsePages([{json: tooMany, pairedItem: {item: 0}}], queryItems)[0].json.valid, false);
+  assert.deepEqual(parsePages([{json: response([event()]), pairedItem: {item: 10}}], queryItems), []);
+  assert.deepEqual(parsePages([{json: response([event()]), pairedItem: [{item: 0}]}], queryItems), []);
+});
+
+test('native next-page expression never requests another origin, route, projection, filter or malformed cursor', () => {
+  const queryItems = queries([request()]), initial = queryItems[0].json.queryUrl;
+  const good = nextUrl(initial, 50), token = initial + '&%24skiptoken=' + encodeURIComponent('opaque+/&=? 中文');
+  const changed = (key, value) => {const u = new URL(good); u.searchParams.set(key, value); return u.href;};
+  for (const next of [good, token]) {
+    const trace = paginate(queryItems, (url, item, page) => ({statusCode: 200, body: {value: [], ...(page === 0 ? {'@odata.nextLink': next} : {})}}));
+    assert.deepEqual(trace.requests, [initial, next]);
+  }
+  const unsafe = [good.replace('https://', 'http://'), good.replace('graph.microsoft.com', 'graph.microsoft.com.evil.invalid'),
+    good.replace('graph.microsoft.com', 'user@graph.microsoft.com'), good.replace('/me/events?', '/me/messages?'), good + '#fragment',
+    good.replace('/me/events?', '/me/../me/events?'), changed('$select', 'id,body'), changed('$filter', "contains(subject,'other')"),
+    changed('$top', '500'), changed('$skip', '-1'), good + '&$skiptoken=both', good + '&$filter=duplicate', good + '&unknown=x',
+    initial + '&$skiptoken=%0D%0ABcc%3Aevil', initial + '&$skiptoken=%ZZ', initial + '&$skiptoken=', null, 10];
+  for (const next of unsafe) {
+    const trace = paginate(queryItems, () => ({statusCode: 200, body: {value: [event()], '@odata.nextLink': next}}));
+    assert.deepEqual(trace.requests, [initial], String(next));
+    assert.equal(parsePages(trace.input, queryItems)[0].json.valid, false, String(next));
+  }
 });
 
 test('closed pending request metadata rejects malformed, private, duplicate and oversized responses', () => {
@@ -169,7 +240,7 @@ test('untrusted calendar metadata cannot import unrelated, recurring, cancelled,
   for (const change of changes) {const e = event(); change(e); assert.deepEqual(parseEvent(e), {valid: false}, change.toString());}
   for (const value of [response([]), response([event(), event()]), {statusCode: 200, body: {value: [event()], '@odata.nextLink': 'https://outside.example.invalid'}},
     {statusCode: 503, body: {value: [event()]}}, {error: 'timeout'}]) assert.deepEqual(run('Validate Manager Meeting', value).json, {valid: false});
-  const near = event(); near.subject = 'PR-2026-10';
+  const near = event(10);
   assert.equal(run('Validate Manager Meeting', response([near, event()])).json.valid, true);
 });
 
@@ -192,9 +263,18 @@ test('readiness uses only no-DB readiness, AI identity and impossible subject me
     assert.deepEqual(run('Return Meeting Readiness', value, {lookup})[0].json, {ok: false, ready: false});
   }
   const u = new URL(node('Check Calendar Read Access').parameters.url);
-  assert.equal(u.searchParams.get('$select'), 'id'); assert.match(u.searchParams.get('$filter'), /MAM-PEOPLE-HUB-READINESS/);
-  assert.match(u.searchParams.get('$filter'), / and not\(contains/);
-  assert.equal([...u.searchParams.get('$filter').matchAll(/contains\(/g)].length, 11);
+  const live = new URL(queries([request()])[0].json.queryUrl);
+  assert.equal(u.searchParams.get('$select'), live.searchParams.get('$select')); assert.equal(u.searchParams.get('$top'), '50');
+  assert.match(u.searchParams.get('$filter'), /^contains\(subject,'MAM-PEOPLE-HUB-READINESS-[A-Za-z0-9-]+'\)$/);
+  for (const name of ['Read AI Calendar','Check Calendar Read Access']) {
+    const config = node(name).parameters.options.pagination.pagination;
+    assert.equal(config.paginationMode, 'responseContainsNextURL'); assert.equal(config.paginationCompleteWhen, 'other');
+    assert.equal(config.limitPagesFetched, true); assert.equal(config.maxRequests, 5); assert.equal(config.requestInterval, 0);
+    assert.doesNotMatch(config.completeExpression, /new URL|fetch|require/);
+  }
+  const proof = paginate([{json: {}}], () => response([]), 'Check Calendar Read Access');
+  assert.deepEqual(proof.requests, [u.href]);
+  assert.deepEqual(run('Return Meeting Readiness', proof.input[0].json, {lookup})[0].json, {ok: true, ready: true});
   assert.equal(node('Meeting Readiness').parameters.httpMethod, 'GET'); assert.deepEqual(node('Meeting Readiness').credentials.httpHeaderAuth, READINESS);
   for (const name of ['Read Pending Meeting Imports', 'Import Meeting Once', 'Check Meeting API Readiness']) {
     assert.deepEqual(node(name).credentials.httpHeaderAuth, CRON);
