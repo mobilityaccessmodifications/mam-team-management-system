@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -31,6 +31,8 @@ function run(scenario) {
   assert.equal(result.setupFailure, undefined, JSON.stringify(result));
   assert.equal(result.missingEntrypoint, undefined, 'same-ID successor entrypoint is missing');
   assert.deepEqual(result.forbidden, { credential: 0, environment: 0, network: 0, subprocess: 0, realMutation: 0 });
+  // A passing scenario leaves nothing to diagnose unless a caller indexed it for later review.
+  if (!process.env.MAM_SUCCESSOR_CASE_INDEX && process.env.MAM_KEEP_TEST_PGDATA !== '1') rmSync(owned, { recursive: true, force: true });
   return result;
 }
 
