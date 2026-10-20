@@ -24,7 +24,8 @@ async function openPerformance(page) {
 async function assertReadOnly(page, managerScope = false) {
   const panel = workspace(page);
   await expect(panel.locator('[name="self-0"]')).toBeVisible();
-  const fields = panel.locator('input, textarea, select:not([name="start-cycle"])');
+  await expect(panel.getByRole('searchbox', { name: 'Search employees', exact: true })).toBeEnabled();
+  const fields = panel.locator('input:not([type="search"]), textarea, select:not([name="start-cycle"])');
   expect(await fields.count()).toBeGreaterThan(0);
   for (const field of await fields.all()) await expect(field).toBeDisabled();
   for (const button of await panel.getByRole('button', { name: /^(?:New yearly review|Save self draft|Submit self assessment|Save manager draft|Complete manager assessment|Save meeting|Finalise review|Reconcile update)$/ }).all()) {
