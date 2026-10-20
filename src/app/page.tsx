@@ -1,6 +1,6 @@
 import { LeaveDemo } from "@/components/leave-demo";
 import { RolePermissionRecovery } from "@/components/role-permission-recovery";
-import { getPortalRoleCapabilities } from "@/app/roles/actions";
+import { parsePortalRoleCapabilities, ROLE_CAPABILITY_ERROR, type PortalRoleCapabilities } from "@/lib/portal-role-capabilities";
 import { getCheckInResourceLinks } from "@/lib/check-in-register";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
@@ -15,10 +15,19 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const supabase = await createClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) redirect("/login");
-  const result = await getPortalRoleCapabilities();
-  if (!result.ok) return <RolePermissionRecovery />;
-  const actor = result.capabilities;
-  const { data: reviewCapability, error: reviewError } = await supabase.rpc("can_view_subscription_review_calendar");
+  let actor: PortalRoleCapabilities;
+  let canViewSubscriptionReviewCalendar = false;
+  try {
+    const [roleResult, reviewResult] = await Promise.all([
+      supabase.rpc("get_portal_role_capabilities", { p_person_id: null }),
+      supabase.rpc("can_view_subscription_review_calendar"),
+    ]);
+    if (roleResult.error || roleResult.status >= 500) throw new Error(ROLE_CAPABILITY_ERROR);
+    actor = parsePortalRoleCapabilities(roleResult.data);
+    canViewSubscriptionReviewCalendar = !reviewResult.error && !(reviewResult.status >= 500) && reviewResult.data === true;
+  } catch {
+    return <RolePermissionRecovery />;
+  }
   const params = await searchParams;
   const view = firstValue(params.view);
   const section = firstValue(params.section);
@@ -35,7 +44,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     canAccessOwnSubscriptions={Boolean(actor.person_id)}
     canViewOwnTasks={Boolean(actor.person_id)}
     canViewTeamCalendar={Boolean(actor.person_id) || actor.is_super_admin}
-    canViewSubscriptionReviewCalendar={!reviewError && reviewCapability === true}
+    canViewSubscriptionReviewCalendar={canViewSubscriptionReviewCalendar}
     checkInResources={actor.can_view_check_in_workspace ? {
       ...getCheckInResourceLinks(),
       canApproveEmploymentDecisions: actor.can_approve_employment_decisions,
