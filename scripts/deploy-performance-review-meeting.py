@@ -19,6 +19,8 @@ PREDECESSOR_NAME = 'performance_review_careers_cc'
 MIGRATION = ROOT / 'supabase/migrations' / (VERSION + '_' + NAME + '.sql')
 PREDECESSOR = MIGRATION.parent / (PREDECESSOR_VERSION + '_' + PREDECESSOR_NAME + '.sql')
 TRANSPORT = ROOT / 'scripts/deploy-staff-leave-calendar.py'
+CATALOG_FIXTURE = ROOT / 'scripts/performance-review-meeting-catalog-20261020212355.pg17.json'
+CATALOG_SHA256 = 'bbfa3ba93fdd96ba9c64626a0ef54e70415844d67a76aa15fbb3f903b50bc083'
 SIGNATURES = (
     'public.mutate_performance_review(uuid,uuid,text,text,jsonb)',
     'public.mutate_performance_review_for_delegate(uuid,uuid,uuid,text,text,jsonb)',
@@ -93,6 +95,28 @@ def local_migrations():
     return result
 
 
+def feature_catalog_expression():
+    return """jsonb_build_object(
+ 'table',(select jsonb_build_object('name',n.nspname||'.'||c.relname,'owner',pg_get_userbyid(c.relowner),'kind',c.relkind,'rls',c.relrowsecurity,'forcedRls',c.relforcerowsecurity,'persistence',c.relpersistence,'options',c.reloptions,'replicaIdentity',c.relreplident,'partition',c.relispartition,
+   'acl',(select coalesce(jsonb_agg(jsonb_build_object('grantee',case when a.grantee=0 then 'PUBLIC' else pg_get_userbyid(a.grantee) end,'grantor',pg_get_userbyid(a.grantor),'privilege',a.privilege_type,'grantable',a.is_grantable) order by a.grantee=0,pg_get_userbyid(a.grantee),a.privilege_type),'[]') from aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a)) from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.oid=to_regclass('private.performance_review_meeting_requests')),
+ 'columns',(select coalesce(jsonb_agg(jsonb_build_object('position',a.attnum,'name',a.attname,'type',format_type(a.atttypid,a.atttypmod),'notNull',a.attnotnull,'identity',a.attidentity,'generated',a.attgenerated,'default',pg_get_expr(d.adbin,d.adrelid),'collation',case when a.attcollation=0 then null else a.attcollation::regcollation::text end,'storage',a.attstorage,'compression',a.attcompression,
+   'acl',(select coalesce(jsonb_agg(jsonb_build_object('grantee',case when x.grantee=0 then 'PUBLIC' else pg_get_userbyid(x.grantee) end,'grantor',pg_get_userbyid(x.grantor),'privilege',x.privilege_type,'grantable',x.is_grantable) order by x.grantee=0,pg_get_userbyid(x.grantee),x.privilege_type),'[]') from aclexplode(a.attacl) x)) order by a.attnum),'[]') from pg_attribute a left join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum where a.attrelid=to_regclass('private.performance_review_meeting_requests') and a.attnum>0 and not a.attisdropped),
+ 'policies',(select coalesce(jsonb_agg(jsonb_build_object('name',p.polname,'permissive',p.polpermissive,'command',p.polcmd,'roles',(select jsonb_agg(case when r=0 then 'PUBLIC' else pg_get_userbyid(r) end order by r=0,pg_get_userbyid(r)) from unnest(p.polroles) r),'using',pg_get_expr(p.polqual,p.polrelid),'check',pg_get_expr(p.polwithcheck,p.polrelid)) order by p.polname),'[]') from pg_policy p where p.polrelid=to_regclass('private.performance_review_meeting_requests')),
+ 'constraints',(select coalesce(jsonb_agg(jsonb_build_object('relation',k.conrelid::regclass::text,'name',k.conname,'type',k.contype,'definition',pg_get_constraintdef(k.oid),'validated',k.convalidated,'deferrable',k.condeferrable,'deferred',k.condeferred,'noInherit',k.connoinherit) order by k.conrelid::regclass::text,k.conname),'[]') from pg_constraint k where k.conrelid=to_regclass('private.performance_review_meeting_requests') or(k.conrelid='private.performance_review_notifications'::regclass and k.conname in('performance_review_notifications_event_check','performance_review_notifications_cc_check'))),
+ 'indexes',(select coalesce(jsonb_agg(jsonb_build_object('name',i.indexrelid::regclass::text,'definition',pg_get_indexdef(i.indexrelid),'unique',i.indisunique,'primary',i.indisprimary,'exclusion',i.indisexclusion,'immediate',i.indimmediate,'valid',i.indisvalid,'ready',i.indisready,'live',i.indislive,'replicaIdentity',i.indisreplident) order by i.indexrelid::regclass::text),'[]') from pg_index i where i.indrelid=to_regclass('private.performance_review_meeting_requests')),
+ 'triggers',(select coalesce(jsonb_agg(item order by item::text),'[]') from(select jsonb_build_object('name',case when t.tgisinternal then null else t.tgname end,'relation',t.tgrelid::regclass::text,'constraint',k.conname,'function',n.nspname||'.'||p.proname||'('||pg_get_function_identity_arguments(p.oid)||')','enabled',t.tgenabled,'internal',t.tgisinternal,'type',t.tgtype,'columns',t.tgattr::text,'args',encode(t.tgargs,'hex'),'hasWhen',t.tgqual is not null,'oldTable',t.tgoldtable,'newTable',t.tgnewtable,'definition',case when t.tgisinternal then null else pg_get_triggerdef(t.oid) end) item from pg_trigger t join pg_proc p on p.oid=t.tgfoid join pg_namespace n on n.oid=p.pronamespace left join pg_constraint k on k.oid=t.tgconstraint where t.tgrelid=to_regclass('private.performance_review_meeting_requests') or k.conrelid=to_regclass('private.performance_review_meeting_requests') or(t.tgrelid='private.performance_review_events'::regclass and t.tgname='performance_review_meeting_requested')) triggers),
+ 'functions',(select coalesce(jsonb_object_agg(s.signature,jsonb_build_object('arguments',pg_get_function_arguments(p.oid),'returns',pg_get_function_result(p.oid),'language',l.lanname,'owner',pg_get_userbyid(p.proowner),'kind',p.prokind,'securityDefiner',p.prosecdef,'strict',p.proisstrict,'leakproof',p.proleakproof,'volatility',p.provolatile,'parallel',p.proparallel,'cost',p.procost,'rows',p.prorows,'support',p.prosupport::regproc::text,'config',p.proconfig,
+   'acl',(select coalesce(jsonb_agg(jsonb_build_object('grantee',case when x.grantee=0 then 'PUBLIC' else pg_get_userbyid(x.grantee) end,'grantor',pg_get_userbyid(x.grantor),'privilege',x.privilege_type,'grantable',x.is_grantable) order by x.grantee=0,pg_get_userbyid(x.grantee),x.privilege_type),'[]') from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) x))),'{}') from unnest(array['private.performance_review_meeting_addresses(private.performance_reviews)','private.queue_performance_review_meeting_request()','public.list_performance_review_meeting_imports(integer)','public.import_performance_review_meeting(uuid,text,jsonb)']) s(signature) join pg_proc p on p.oid=to_regprocedure(s.signature) join pg_language l on l.oid=p.prolang))"""
+
+
+def expected_catalog(source):
+    raw = CATALOG_FIXTURE.read_bytes()
+    require(sha(raw) == CATALOG_SHA256, 'Reviewed meeting catalog fixture differs')
+    fixture = load_json(raw)
+    require(isinstance(fixture,dict) and set(fixture) == {'version','postgresMajor','migrationSha256','catalog'} and fixture['version'] == VERSION and fixture['postgresMajor'] == 17 and fixture['migrationSha256'] == sha(source.encode()) and isinstance(fixture['catalog'],dict), 'Meeting catalog fixture source binding differs')
+    return fixture['catalog']
+
+
 def state_expression(source, predecessor):
     signatures = ','.join(literal(value) for value in SIGNATURES)
     preserved = source.split('$catalog$',2)[1].strip()
@@ -102,7 +126,7 @@ def state_expression(source, predecessor):
 'major',current_setting('server_version_num')::integer/10000,'actor',current_user,'session',session_user,'readOnly',current_setting('transaction_read_only'),
 'catalogHash',private.confirmed_test_purge_schema_hash(),
 'preservedHash',(select encode(extensions.digest(coalesce(string_agg(definition,E'\\n' order by definition),''),'sha256'),'hex') from ({preserved}) catalog(definition)),
-'oldMetadata',(select jsonb_object_agg(s.signature,to_jsonb(p)-'prosrc'-'proargdefaults') from unnest(array[{pins}]) s(signature) join pg_proc p on p.oid=to_regprocedure(s.signature)),
+'oldMetadata',(select jsonb_object_agg(s.signature,jsonb_build_object('metadata',to_jsonb(p)-'prosrc'-'proargdefaults','arguments',pg_get_function_arguments(p.oid))) from unnest(array[{pins}]) s(signature) join pg_proc p on p.oid=to_regprocedure(s.signature)),
 'storedHash',(select schema_hash from private.confirmed_test_purge_schema where singleton),
 'purgeRows',(select count(*) from private.confirmed_test_purge_schema),
 'dataHash',(select encode(extensions.digest(coalesce(string_agg(document,E'\\n' order by document),''),'sha256'),'hex') from(
@@ -111,6 +135,7 @@ def state_expression(source, predecessor):
 'targetPresent',exists(select 1 from supabase_migrations.schema_migrations where version={literal(VERSION)}),
 'targetExact',coalesce((select name={literal(NAME)} and array_dims(statements)='[1:1]' and statements=ARRAY[{literal(source)}]::text[] from supabase_migrations.schema_migrations where version={literal(VERSION)}),false),
 'ledger',(select coalesce(jsonb_agg(jsonb_build_object('version',m.version,'name',m.name,'rowSha256',encode(extensions.digest(to_jsonb(m)::text,'sha256'),'hex'),'sourceArraySha256',encode(extensions.digest(coalesce(m.statements::text,'<NULL>'),'sha256'),'hex')) order by m.version),'[]') from supabase_migrations.schema_migrations m),
+'featureCatalog',({feature_catalog_expression()}),
 'requestTable',to_regclass('private.performance_review_meeting_requests') is not null,\n'bodies',(select jsonb_object_agg(s.signature,encode(extensions.digest(p.prosrc,'sha256'),'hex')) from unnest(array[{signatures}]) s(signature) left join pg_proc p on p.oid=to_regprocedure(s.signature)),
 'ready',coalesce((select relrowsecurity and relforcerowsecurity and pg_get_userbyid(relowner)='postgres' and not exists(select 1 from unnest(array['anon','authenticated','service_role']) r where has_table_privilege(r,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') or has_any_column_privilege(r,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')) from pg_class c where c.oid=to_regclass('private.performance_review_meeting_requests')),false)
  and not exists(select 1 from unnest(array['anon','authenticated']) r cross join unnest(array['public.list_performance_review_meeting_imports(integer)','public.import_performance_review_meeting(uuid,text,jsonb)']) s where coalesce(has_function_privilege(r,to_regprocedure(s),'EXECUTE'),true))
@@ -154,6 +179,7 @@ def validate_before(state, source):
 def validate_target(state, source):
     ledger = validate_common(state)
     require(state['targetPresent'] is True and state['targetExact'] is True and ledger[-1]['version'] == VERSION and ledger[-1]['name'] == NAME, 'Recorded target source differs; HOLD')
+    require(state.get('featureCatalog') == expected_catalog(source), 'Exact meeting catalog definitions differ; HOLD')
     require(state.get('requestTable') is True and state.get('bodies') == expected_bodies(source) and state.get('ready') is True, 'Meeting bodies or service access differs; HOLD')
 
 
@@ -179,8 +205,9 @@ def transaction(source, before, predecessor):
         'insert into supabase_migrations.schema_migrations(version,name,statements) values(' + literal(VERSION) + ',' + literal(NAME) + ',ARRAY[' + literal(source) + ']::text[]);\nset constraints all immediate;\n' + \
         'create temporary table meeting_release_attested on commit drop as select ' + expression + ' state;\n' + \
         'do $meeting_release_after$ declare actual jsonb:=(select state from pg_temp.meeting_release_attested); expected jsonb:=' + expected + '; begin\n' + \
-        "if (actual-array['readOnly','catalogHash','storedHash','requestTable','bodies','ready','targetPresent','targetExact','ledger']) is distinct from (expected-array['readOnly','catalogHash','storedHash','requestTable','bodies','ready','targetPresent','targetExact','ledger'])\n" + \
+        "if (actual-array['readOnly','catalogHash','storedHash','featureCatalog','requestTable','bodies','ready','targetPresent','targetExact','ledger']) is distinct from (expected-array['readOnly','catalogHash','storedHash','featureCatalog','requestTable','bodies','ready','targetPresent','targetExact','ledger'])\n" + \
         "or actual->>'readOnly' is distinct from 'off' or actual->'ready' is distinct from 'true'::jsonb or actual->'targetExact' is distinct from 'true'::jsonb or actual->'bodies' is distinct from " + literal(encoded(expected_bodies(source))) + '::jsonb\n' + \
+        "or actual->'featureCatalog' is distinct from " + literal(encoded(expected_catalog(source))) + '::jsonb\n' + \
         "or jsonb_array_length(actual->'ledger')<>jsonb_array_length(expected->'ledger')+1 or ((actual->'ledger')-jsonb_array_length(expected->'ledger')) is distinct from expected->'ledger'\n" + \
         "or actual->>'storedHash' is distinct from (case when expected->>'storedHash'=expected->>'catalogHash' then actual->>'catalogHash' else expected->>'storedHash' end)\n" + \
         "then raise exception 'Meeting release preservation differs' using errcode='55000'; end if; end $meeting_release_after$;\nnotify pgrst,'reload schema';\nselect state->>'catalogHash' as \"resultingCatalogSha256\" from pg_temp.meeting_release_attested;\ncommit;"
@@ -245,11 +272,15 @@ def main(argv=None):
         raw = path.read_bytes()
         require(sha(raw) == pin, 'Reviewed release hash differs: ' + str(path.relative_to(ROOT)))
         held[path] = raw
+    require(CATALOG_FIXTURE.is_file() and not CATALOG_FIXTURE.is_symlink(), 'Regular reviewed catalog fixture required')
+    held[CATALOG_FIXTURE] = CATALOG_FIXTURE.read_bytes()
+    require(sha(held[CATALOG_FIXTURE]) == CATALOG_SHA256, 'Reviewed catalog fixture hash differs')
     clean_source(args[1], held)
     local = local_migrations()
     source, predecessor = held[MIGRATION].decode(), held[PREDECESSOR].decode()
     transaction_body(source)
     expected_bodies(source)
+    expected_catalog(source)
     require(os.environ.get('CODEX_COMPANY_PROFILE') == 'mam' and bool(os.environ.get('SUPABASE_ACCESS_TOKEN')), 'Use the MAM credential helper exec supabase route')
     transport = types.ModuleType('meeting_release_transport')
     transport.__file__ = str(TRANSPORT)

@@ -143,3 +143,26 @@ test('scoped release accepts routine statistics maintenance and unrelated busine
  let locked;const barrier=new Promise(resolve=>{locked=resolve;});const writing=connection(database,"begin;update public.synthetic_other_business set value='Synthetic updated' where id=1;select 'LOCKED';select pg_sleep(1);commit;",locked);
  await barrier;try{c.sql(database,sql);}finally{await writing;}const after=releaseState(database,prev);assert.equal(after.targetExact,true);assert.equal(after.preservedHash,before.preservedHash);assert.equal(c.sql(database,'select value from public.synthetic_other_business;').trim(),'Synthetic updated');
 });
+
+test('meeting migration preserves default expressions, view definitions and non-constraint indexes',()=>{
+ for(const [name,injection] of [['default','alter table public.synthetic_preserved_catalog alter column value set default 2;'],['view','create or replace view public.synthetic_preserved_view as select 2 as value;'],['index','drop index public.synthetic_preserved_index;create index synthetic_preserved_index on public.synthetic_preserved_catalog((value+2));']]){
+  const database='mam_test_pr_meeting_catalog_'+name;predecessor(database);c.sql(database,'create table public.synthetic_preserved_catalog(value integer default 1);create view public.synthetic_preserved_view as select 1 as value;create index synthetic_preserved_index on public.synthetic_preserved_catalog((value+1));');
+  const result=c.run(database,source.replace('do $meeting_after$',injection+'\ndo $meeting_after$'));assert.notEqual(result.status,0);assert.match(result.stderr,/55000.*Performance meeting unrelated catalog or data delta/s);
+  assert.equal(c.sql(database,"select to_regclass('private.performance_review_meeting_requests') is null;").trim(),'t');
+  assert.equal(c.sql(database,'select value from public.synthetic_preserved_view;').trim(),'1');
+  assert.equal(c.sql(database,"select pg_get_expr(adbin,adrelid) from pg_attrdef where adrelid='public.synthetic_preserved_catalog'::regclass;").trim(),'1');
+ }
+});
+
+test('unknown committed response requires exact trigger definitions under an existing HOLD and can recover after repair',{skip:major!==17},()=>{
+ const database='mam_test_pr_meeting_unknown_proof';predecessor(database);const prev=nativeLedger(database);c.sql(database,'update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash();grant select on public.profiles to authenticated;');
+ const before=releaseState(database,prev),sql=releasePython("print(json.dumps(m['transaction'](v['source'],v['before'],v['predecessor'])))",{source,predecessor:prev,before});c.sql(database,sql);
+ const initial=releaseState(database,prev);assert.notEqual(initial.storedHash,initial.catalogHash);
+ assert.equal(releasePython("m['validate_preserved'](v['after'],v['before'],v['source']);print('true')",{after:initial,before,source}),true);
+ const original=initial.featureCatalog.triggers.find(t=>t.name==='performance_review_meeting_requested').definition;
+ c.sql(database,'drop trigger performance_review_meeting_requested on private.performance_review_events;'+original.replace("WHEN ((new.kind = 'complete_manager'::text))",'WHEN (false)')+';');
+ const tampered=releaseState(database,prev);assert.equal(tampered.ready,true);assert.equal(tampered.preservedHash,before.preservedHash);assert.deepEqual(tampered.bodies,initial.bodies);
+ const rejected=spawnSync('python3',['-B','-c',"import runpy,json,sys;m=runpy.run_path('scripts/deploy-performance-review-meeting.py');v=json.load(sys.stdin);m['validate_preserved'](v['after'],v['before'],v['source'])"],{env,encoding:'utf8',input:JSON.stringify({after:tampered,before,source})});assert.notEqual(rejected.status,0);assert.match(rejected.stderr,/Exact meeting catalog definitions differ; HOLD/);
+ c.sql(database,'drop trigger performance_review_meeting_requested on private.performance_review_events;'+original+';');
+ assert.equal(releasePython("m['validate_preserved'](v['after'],v['before'],v['source']);print('true')",{after:releaseState(database,prev),before,source}),true);
+});

@@ -1,0 +1,579 @@
+{
+  "version": "20261020212355",
+  "postgresMajor": 17,
+  "migrationSha256": "60b3365a522cb7f21f24a78470fb7e2bcbc554ddae6a5b62eeee5df9e170da88",
+  "catalog": {
+    "table": {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "private.performance_review_meeting_requests",
+      "owner": "postgres",
+      "options": null,
+      "forcedRls": true,
+      "partition": false,
+      "persistence": "p",
+      "replicaIdentity": "d"
+    },
+    "columns": [
+      {
+        "acl": [],
+        "name": "review_id",
+        "type": "uuid",
+        "default": null,
+        "notNull": true,
+        "storage": "p",
+        "identity": "",
+        "position": 1,
+        "collation": null,
+        "generated": "",
+        "compression": ""
+      },
+      {
+        "acl": [],
+        "name": "request_token",
+        "type": "uuid",
+        "default": "gen_random_uuid()",
+        "notNull": true,
+        "storage": "p",
+        "identity": "",
+        "position": 2,
+        "collation": null,
+        "generated": "",
+        "compression": ""
+      },
+      {
+        "acl": [],
+        "name": "requested_at",
+        "type": "timestamp with time zone",
+        "default": null,
+        "notNull": true,
+        "storage": "p",
+        "identity": "",
+        "position": 3,
+        "collation": null,
+        "generated": "",
+        "compression": ""
+      },
+      {
+        "acl": [],
+        "name": "requested_by",
+        "type": "uuid",
+        "default": null,
+        "notNull": true,
+        "storage": "p",
+        "identity": "",
+        "position": 4,
+        "collation": null,
+        "generated": "",
+        "compression": ""
+      },
+      {
+        "acl": [],
+        "name": "initial_manager_version",
+        "type": "bigint",
+        "default": null,
+        "notNull": true,
+        "storage": "p",
+        "identity": "",
+        "position": 5,
+        "collation": null,
+        "generated": "",
+        "compression": ""
+      },
+      {
+        "acl": [],
+        "name": "imported_at",
+        "type": "timestamp with time zone",
+        "default": null,
+        "notNull": false,
+        "storage": "p",
+        "identity": "",
+        "position": 6,
+        "collation": null,
+        "generated": "",
+        "compression": ""
+      },
+      {
+        "acl": [],
+        "name": "event_id",
+        "type": "text",
+        "default": null,
+        "notNull": false,
+        "storage": "x",
+        "identity": "",
+        "position": 7,
+        "collation": "\"default\"",
+        "generated": "",
+        "compression": ""
+      },
+      {
+        "acl": [],
+        "name": "event_uid",
+        "type": "text",
+        "default": null,
+        "notNull": false,
+        "storage": "x",
+        "identity": "",
+        "position": 8,
+        "collation": "\"default\"",
+        "generated": "",
+        "compression": ""
+      },
+      {
+        "acl": [],
+        "name": "event_created_at",
+        "type": "timestamp with time zone",
+        "default": null,
+        "notNull": false,
+        "storage": "p",
+        "identity": "",
+        "position": 9,
+        "collation": null,
+        "generated": "",
+        "compression": ""
+      },
+      {
+        "acl": [],
+        "name": "event_modified_at",
+        "type": "timestamp with time zone",
+        "default": null,
+        "notNull": false,
+        "storage": "p",
+        "identity": "",
+        "position": 10,
+        "collation": null,
+        "generated": "",
+        "compression": ""
+      }
+    ],
+    "indexes": [
+      {
+        "live": true,
+        "name": "private.performance_review_meeting_requests_pkey",
+        "ready": true,
+        "valid": true,
+        "unique": true,
+        "primary": true,
+        "exclusion": false,
+        "immediate": true,
+        "definition": "CREATE UNIQUE INDEX performance_review_meeting_requests_pkey ON private.performance_review_meeting_requests USING btree (review_id)",
+        "replicaIdentity": false
+      },
+      {
+        "live": true,
+        "name": "private.performance_review_meeting_requests_request_token_key",
+        "ready": true,
+        "valid": true,
+        "unique": true,
+        "primary": false,
+        "exclusion": false,
+        "immediate": true,
+        "definition": "CREATE UNIQUE INDEX performance_review_meeting_requests_request_token_key ON private.performance_review_meeting_requests USING btree (request_token)",
+        "replicaIdentity": false
+      }
+    ],
+    "policies": [],
+    "triggers": [
+      {
+        "args": "",
+        "name": "performance_review_meeting_requested",
+        "type": 5,
+        "columns": "",
+        "enabled": "O",
+        "hasWhen": true,
+        "function": "private.queue_performance_review_meeting_request()",
+        "internal": false,
+        "newTable": null,
+        "oldTable": null,
+        "relation": "private.performance_review_events",
+        "constraint": null,
+        "definition": "CREATE TRIGGER performance_review_meeting_requested AFTER INSERT ON private.performance_review_events FOR EACH ROW WHEN ((new.kind = 'complete_manager'::text)) EXECUTE FUNCTION private.queue_performance_review_meeting_request()"
+      },
+      {
+        "args": "",
+        "name": "reject_retired_test_identity_reference",
+        "type": 23,
+        "columns": "",
+        "enabled": "O",
+        "hasWhen": false,
+        "function": "private.reject_retired_test_identity_reference()",
+        "internal": false,
+        "newTable": null,
+        "oldTable": null,
+        "relation": "private.performance_review_meeting_requests",
+        "constraint": null,
+        "definition": "CREATE TRIGGER reject_retired_test_identity_reference BEFORE INSERT OR UPDATE ON private.performance_review_meeting_requests FOR EACH ROW EXECUTE FUNCTION private.reject_retired_test_identity_reference()"
+      },
+      {
+        "args": "",
+        "name": null,
+        "type": 17,
+        "columns": "",
+        "enabled": "O",
+        "hasWhen": false,
+        "function": "pg_catalog.RI_FKey_check_upd()",
+        "internal": true,
+        "newTable": null,
+        "oldTable": null,
+        "relation": "private.performance_review_meeting_requests",
+        "constraint": "performance_review_meeting_requests_requested_by_fkey",
+        "definition": null
+      },
+      {
+        "args": "",
+        "name": null,
+        "type": 17,
+        "columns": "",
+        "enabled": "O",
+        "hasWhen": false,
+        "function": "pg_catalog.RI_FKey_check_upd()",
+        "internal": true,
+        "newTable": null,
+        "oldTable": null,
+        "relation": "private.performance_review_meeting_requests",
+        "constraint": "performance_review_meeting_requests_review_id_fkey",
+        "definition": null
+      },
+      {
+        "args": "",
+        "name": null,
+        "type": 17,
+        "columns": "",
+        "enabled": "O",
+        "hasWhen": false,
+        "function": "pg_catalog.RI_FKey_noaction_upd()",
+        "internal": true,
+        "newTable": null,
+        "oldTable": null,
+        "relation": "auth.users",
+        "constraint": "performance_review_meeting_requests_requested_by_fkey",
+        "definition": null
+      },
+      {
+        "args": "",
+        "name": null,
+        "type": 17,
+        "columns": "",
+        "enabled": "O",
+        "hasWhen": false,
+        "function": "pg_catalog.RI_FKey_noaction_upd()",
+        "internal": true,
+        "newTable": null,
+        "oldTable": null,
+        "relation": "private.performance_reviews",
+        "constraint": "performance_review_meeting_requests_review_id_fkey",
+        "definition": null
+      },
+      {
+        "args": "",
+        "name": null,
+        "type": 5,
+        "columns": "",
+        "enabled": "O",
+        "hasWhen": false,
+        "function": "pg_catalog.RI_FKey_check_ins()",
+        "internal": true,
+        "newTable": null,
+        "oldTable": null,
+        "relation": "private.performance_review_meeting_requests",
+        "constraint": "performance_review_meeting_requests_requested_by_fkey",
+        "definition": null
+      },
+      {
+        "args": "",
+        "name": null,
+        "type": 5,
+        "columns": "",
+        "enabled": "O",
+        "hasWhen": false,
+        "function": "pg_catalog.RI_FKey_check_ins()",
+        "internal": true,
+        "newTable": null,
+        "oldTable": null,
+        "relation": "private.performance_review_meeting_requests",
+        "constraint": "performance_review_meeting_requests_review_id_fkey",
+        "definition": null
+      },
+      {
+        "args": "",
+        "name": null,
+        "type": 9,
+        "columns": "",
+        "enabled": "O",
+        "hasWhen": false,
+        "function": "pg_catalog.RI_FKey_restrict_del()",
+        "internal": true,
+        "newTable": null,
+        "oldTable": null,
+        "relation": "auth.users",
+        "constraint": "performance_review_meeting_requests_requested_by_fkey",
+        "definition": null
+      },
+      {
+        "args": "",
+        "name": null,
+        "type": 9,
+        "columns": "",
+        "enabled": "O",
+        "hasWhen": false,
+        "function": "pg_catalog.RI_FKey_restrict_del()",
+        "internal": true,
+        "newTable": null,
+        "oldTable": null,
+        "relation": "private.performance_reviews",
+        "constraint": "performance_review_meeting_requests_review_id_fkey",
+        "definition": null
+      }
+    ],
+    "functions": {
+      "private.queue_performance_review_meeting_request()": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "cost": 100,
+        "kind": "f",
+        "rows": 0,
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "strict": false,
+        "returns": "trigger",
+        "support": "-",
+        "language": "plpgsql",
+        "parallel": "u",
+        "arguments": "",
+        "leakproof": false,
+        "volatility": "v",
+        "securityDefiner": true
+      },
+      "public.list_performance_review_meeting_imports(integer)": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantor": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "cost": 100,
+        "kind": "f",
+        "rows": 0,
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "strict": false,
+        "returns": "jsonb",
+        "support": "-",
+        "language": "plpgsql",
+        "parallel": "u",
+        "arguments": "p_limit integer DEFAULT 1001",
+        "leakproof": false,
+        "volatility": "s",
+        "securityDefiner": true
+      },
+      "public.import_performance_review_meeting(uuid,text,jsonb)": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantor": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "cost": 100,
+        "kind": "f",
+        "rows": 0,
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "strict": false,
+        "returns": "jsonb",
+        "support": "-",
+        "language": "plpgsql",
+        "parallel": "u",
+        "arguments": "p_request_token uuid, p_expected_revision text, p_event jsonb",
+        "leakproof": false,
+        "volatility": "v",
+        "securityDefiner": true
+      },
+      "private.performance_review_meeting_addresses(private.performance_reviews)": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "cost": 100,
+        "kind": "f",
+        "rows": 0,
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "strict": false,
+        "returns": "jsonb",
+        "support": "-",
+        "language": "sql",
+        "parallel": "u",
+        "arguments": "p_review private.performance_reviews",
+        "leakproof": false,
+        "volatility": "s",
+        "securityDefiner": true
+      }
+    },
+    "constraints": [
+      {
+        "name": "performance_review_meeting_reques_initial_manager_version_check",
+        "type": "c",
+        "deferred": false,
+        "relation": "private.performance_review_meeting_requests",
+        "noInherit": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK ((initial_manager_version >= 0))"
+      },
+      {
+        "name": "performance_review_meeting_requests_check",
+        "type": "c",
+        "deferred": false,
+        "relation": "private.performance_review_meeting_requests",
+        "noInherit": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK ((((imported_at IS NULL) AND (event_id IS NULL) AND (event_uid IS NULL) AND (event_created_at IS NULL) AND (event_modified_at IS NULL)) OR ((imported_at IS NOT NULL) AND (event_id IS NOT NULL) AND (event_uid IS NOT NULL) AND (event_modified_at IS NOT NULL) AND ((length(event_id) >= 1) AND (length(event_id) <= 1024)) AND ((length(event_uid) >= 1) AND (length(event_uid) <= 1024)) AND (event_created_at IS NOT NULL) AND (event_modified_at >= event_created_at))))"
+      },
+      {
+        "name": "performance_review_meeting_requests_pkey",
+        "type": "p",
+        "deferred": false,
+        "relation": "private.performance_review_meeting_requests",
+        "noInherit": true,
+        "validated": true,
+        "deferrable": false,
+        "definition": "PRIMARY KEY (review_id)"
+      },
+      {
+        "name": "performance_review_meeting_requests_request_token_key",
+        "type": "u",
+        "deferred": false,
+        "relation": "private.performance_review_meeting_requests",
+        "noInherit": true,
+        "validated": true,
+        "deferrable": false,
+        "definition": "UNIQUE (request_token)"
+      },
+      {
+        "name": "performance_review_meeting_requests_requested_by_fkey",
+        "type": "f",
+        "deferred": false,
+        "relation": "private.performance_review_meeting_requests",
+        "noInherit": true,
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (requested_by) REFERENCES auth.users(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "performance_review_meeting_requests_review_id_fkey",
+        "type": "f",
+        "deferred": false,
+        "relation": "private.performance_review_meeting_requests",
+        "noInherit": true,
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (review_id) REFERENCES private.performance_reviews(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "performance_review_notifications_cc_check",
+        "type": "c",
+        "deferred": false,
+        "relation": "private.performance_review_notifications",
+        "noInherit": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK ((((claim_token IS NULL) AND (cc IS NULL)) OR ((claim_token IS NOT NULL) AND (cc IS NOT NULL) AND (cc = ANY (ARRAY[''::text, 'careers@mobilityaccess.com.au'::text])) AND ((NOT ('careers@mobilityaccess.com.au'::text = ANY (string_to_array(recipient, ','::text)))) OR (cc = ''::text)))))"
+      },
+      {
+        "name": "performance_review_notifications_event_check",
+        "type": "c",
+        "deferred": false,
+        "relation": "private.performance_review_notifications",
+        "noInherit": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK ((event = ANY (ARRAY['started'::text, 'self-submitted'::text, 'manager-invited'::text])))"
+      }
+    ]
+  }
+}

@@ -9,23 +9,25 @@ const helper='scripts/deploy-performance-review-meeting.py';
 const migration='supabase/migrations/20261020212355_performance_review_meeting_invitation.sql';
 const predecessor='supabase/migrations/20261020003343_performance_review_careers_cc.sql';
 const transport='scripts/deploy-staff-leave-calendar.py';
+const catalogFixture='scripts/performance-review-meeting-catalog-20261020212355.pg17.json';
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const cleanEnv={PATH:process.env.PATH,TMPDIR:os.tmpdir(),LANG:'C',LC_ALL:'C',PYTHONDONTWRITEBYTECODE:'1'};
 function python(code,input){const r=spawnSync('python3',['-B','-c',code],{env:cleanEnv,encoding:'utf8',input:JSON.stringify(input)});assert.equal(r.status,0,r.stderr);return JSON.parse(r.stdout);}
 const prior=python("import runpy,json; m=runpy.run_path('scripts/deploy-performance-review-meeting.py');print(json.dumps(m['predecessor_bodies'](m['MIGRATION'].read_text())))");
 const expected=python("import runpy,json; m=runpy.run_path('scripts/deploy-performance-review-meeting.py');print(json.dumps(m['expected_bodies'](m['MIGRATION'].read_text())))");
+const catalogExpected=JSON.parse(readFileSync(catalogFixture,'utf8')).catalog;
 function fixture({hold=false,mode='success',target=null,changeAfter=false}={}){
  const dir=mkdtempSync(path.join(realpathSync(os.tmpdir()),'mam-meeting-helper-'));const root=path.join(dir,'source'),operator=path.join(dir,'operator');mkdirSync(root);mkdirSync(operator,{mode:0o700});
  const stateFile=path.join(operator,'state.json');
  const digest='a'.repeat(64),catalog='b'.repeat(64),newCatalog='c'.repeat(64);
- const before={major:17,actor:'postgres',session:'postgres',readOnly:'on',catalogHash:catalog,storedHash:hold?digest:catalog,purgeRows:1,dataHash:digest,preservedHash:digest,oldMetadata:{},predecessorExact:true,targetPresent:false,targetExact:false,ledger:[{version:'20261020003343',name:'performance_review_careers_cc',rowSha256:digest,sourceArraySha256:digest}],requestTable:false,bodies:prior,ready:false};
- const after={...before,catalogHash:newCatalog,storedHash:hold?digest:newCatalog,targetPresent:true,targetExact:true,requestTable:true,ready:true,bodies:expected,ledger:[...before.ledger,{version:'20261020212355',name:'performance_review_meeting_invitation',rowSha256:catalog,sourceArraySha256:catalog}]};
+ const before={major:17,actor:'postgres',session:'postgres',readOnly:'on',catalogHash:catalog,storedHash:hold?digest:catalog,purgeRows:1,dataHash:digest,preservedHash:digest,oldMetadata:{},predecessorExact:true,targetPresent:false,targetExact:false,ledger:[{version:'20261020003343',name:'performance_review_careers_cc',rowSha256:digest,sourceArraySha256:digest}],requestTable:false,bodies:prior,featureCatalog:null,ready:false};
+ const after={...before,catalogHash:newCatalog,storedHash:hold?digest:newCatalog,targetPresent:true,targetExact:true,requestTable:true,ready:true,bodies:expected,featureCatalog:structuredClone(catalogExpected),ledger:[...before.ledger,{version:'20261020212355',name:'performance_review_meeting_invitation',rowSha256:catalog,sourceArraySha256:catalog}]};
  if(changeAfter)after.dataHash='f'.repeat(64);
  writeFileSync(stateFile,JSON.stringify({before,after,mode,dispatches:0,target:target??{id:'xtwlrjqbusadghavchqm',organization_id:'fwlmbmospuwoaosffvmw'}}));
- for(const name of [helper,migration,predecessor]){const dest=path.join(root,name);mkdirSync(path.dirname(dest),{recursive:true});writeFileSync(dest,readFileSync(name));}
+ for(const name of [helper,migration,predecessor,catalogFixture]){const dest=path.join(root,name);mkdirSync(path.dirname(dest),{recursive:true});writeFileSync(dest,readFileSync(name));}
  writeFileSync(path.join(root,transport),`import json\nfrom pathlib import Path\nSTATE=Path(${JSON.stringify(stateFile)})\ndef api(path):\n return json.loads(STATE.read_text())['target']\ndef query(sql):\n state=json.loads(STATE.read_text())\n if sql.startswith('begin read only;'):\n  return [{'state':state['after'] if state['dispatches'] and state['mode']!='rollback' else state['before']}]\n state['dispatches']+=1\n STATE.write_text(json.dumps(state))\n if state['mode'] in ('unknown','rollback'):raise RuntimeError('Synthetic lost response')\n return [{'resultingCatalogSha256':state['after']['catalogHash']}]\n`);
  const git=args=>{const r=spawnSync('git',args,{cwd:root,env:cleanEnv,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
- git(['init','-q']);git(['config','user.name','mobilityaccessmodifications']);git(['config','user.email','310802599+mobilityaccessmodifications@users.noreply.github.com']);git(['remote','add','origin','https://github.com/mobilityaccessmodifications/mam-team-management-system.git']);git(['add',helper,migration,predecessor,transport]);git(['commit','-qm','Synthetic meeting release helper fixture']);
+ git(['init','-q']);git(['config','user.name','mobilityaccessmodifications']);git(['config','user.email','310802599+mobilityaccessmodifications@users.noreply.github.com']);git(['remote','add','origin','https://github.com/mobilityaccessmodifications/mam-team-management-system.git']);git(['add',helper,migration,predecessor,catalogFixture,transport]);git(['commit','-qm','Synthetic meeting release helper fixture']);
  const head=git(['rev-parse','HEAD']);const pins=[helper,transport,migration,predecessor].map(name=>hash(readFileSync(path.join(root,name))));
  const snapshot=path.join(operator,'before.json');
  const run=(operation,...extra)=>spawnSync('python3',['-B',path.join(root,helper),operation,head,...pins,...extra],{cwd:root,env:{...cleanEnv,CODEX_COMPANY_PROFILE:'mam',SUPABASE_ACCESS_TOKEN:'synthetic-not-a-real-credential'},encoding:'utf8'});
@@ -56,4 +58,17 @@ test('meeting helper refuses target source alias and historical ledger drift',()
 
 test('meeting helper unknown rolled-back outcome stays read-only and never retries',()=>{
  const f=fixture({mode:'rollback'});try{const pin=snapshot(f),first=f.run('apply',f.snapshot,pin);assert.notEqual(first.status,0);const read=f.run('readback',f.snapshot,pin);assert.notEqual(read.status,0);assert.match(read.stderr,/Unrecorded or changed release; HOLD/);const retry=f.run('apply',f.snapshot,pin);assert.notEqual(retry.status,0);assert.equal(JSON.parse(readFileSync(f.stateFile)).dispatches,1);}finally{f.cleanup();}
+});
+
+for(const change of ['trigger','default','column','constraint','index','policy'])test(`meeting helper lost response rejects changed ${change} definitions and recovers read-only after repair`,()=>{
+ const f=fixture({hold:true,mode:'unknown'});try{const pin=snapshot(f),first=f.run('apply',f.snapshot,pin);assert.notEqual(first.status,0);const state=JSON.parse(readFileSync(f.stateFile)),good=structuredClone(state.after.featureCatalog),catalog=state.after.featureCatalog;
+ if(change==='trigger'){const trigger=catalog.triggers.find(t=>t.name==='performance_review_meeting_requested');trigger.definition=trigger.definition.replace("WHEN ((new.kind = 'complete_manager'::text))",'WHEN (false)');}
+ else if(change==='default')catalog.columns.find(c=>c.name==='request_token').default='NULL::uuid';
+ else if(change==='column')catalog.columns.find(c=>c.name==='review_id').notNull=false;
+ else if(change==='constraint')catalog.constraints.find(c=>c.type==='f').definition+=' NOT VALID';
+ else if(change==='index')catalog.indexes[0].definition+=' WHERE false';
+ else catalog.policies.push({name:'unexpected_policy'});
+ writeFileSync(f.stateFile,JSON.stringify(state));const read=f.run('readback',f.snapshot,pin);assert.notEqual(read.status,0);assert.match(read.stderr,/Exact meeting catalog definitions differ; HOLD/);assert.equal(JSON.parse(readFileSync(f.stateFile)).dispatches,1);
+ state.after.featureCatalog=good;writeFileSync(f.stateFile,JSON.stringify(state));const repaired=f.run('readback',f.snapshot,pin);assert.equal(repaired.status,0,repaired.stderr);assert.equal(JSON.parse(repaired.stdout).readbackVerified,true);assert.equal(JSON.parse(readFileSync(f.stateFile)).dispatches,1);
+ }finally{f.cleanup();}
 });
