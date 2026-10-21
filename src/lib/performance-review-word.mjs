@@ -121,9 +121,10 @@ export function buildReviewDocx(review,questions) {
     body.push(paragraph('1 = important requirements not consistently met. 2 = reliable performance at the expected standard.',{size:18,color:'526275'}),
       paragraph('3 = sustained contribution above the expected standard, supported by examples. N = insufficient evidence; arrange follow-up.',{size:18,color:'526275'}),
       paragraph('Assess the whole period fairly. Consider agreed hours, support and factors outside the employee’s control.',{size:18,color:'526275'}),
-      paragraph('Goals and meeting record',{bold:true,size:28,before:240,keep:true}),
-      paragraph('Structured goal details are not captured separately. The goal table is intentionally blank; no goals or dates have been inferred.',{size:18,color:'526275'}));
-    const goals=[['Priority','Measure of success','Support and responsible person','Due date','Progress check'].map(heading),...Array.from({length:3},()=>Array.from({length:5},()=>yellow('')))];
+      paragraph('Goals and meeting record',{bold:true,size:28,before:240,keep:true}));
+    const capturedGoals=review.goals??[];
+    if(!capturedGoals.length)body.push(paragraph('Structured goal details are not captured separately. The goal table is intentionally blank; no goals or dates have been inferred.',{size:18,color:'526275'}));
+    const goals=[['Priority','Measure of success','Support and responsible person','Due date','Progress check'].map(heading),...(capturedGoals.length?capturedGoals.map(goal=>[goal.priority,goal.measureOfSuccess,goal.supportAndResponsiblePerson,goal.dueDate,goal.progressCheck].map(yellow)):Array.from({length:3},()=>Array.from({length:5},()=>yellow(''))))];
     body.push(table([2450,5050,3420,2000,1902],goals,{header:true,minHeight:700}),paragraph(''));
     const details=[
       [label('Meeting date'),yellow(meeting?.date??''),label('Time'),yellow(meeting?.time??'')],

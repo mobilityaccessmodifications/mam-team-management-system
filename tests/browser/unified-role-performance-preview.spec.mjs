@@ -28,7 +28,7 @@ async function assertReadOnly(page, managerScope = false) {
   const fields = panel.locator('input:not([type="search"]), textarea, select:not([name="start-cycle"])');
   expect(await fields.count()).toBeGreaterThan(0);
   for (const field of await fields.all()) await expect(field).toBeDisabled();
-  for (const button of await panel.getByRole('button', { name: /^(?:New yearly review|Save self draft|Submit self assessment|Save draft|Save draft and invite meeting|Save and send to manager|Reconcile update)$/ }).all()) {
+  for (const button of await panel.getByRole('button', { name: /^(?:New yearly review|Save self draft|Submit self assessment|Save draft|Save draft and invite meeting|Save and send final review|Reconcile update)$/ }).all()) {
     if (managerScope && await button.textContent() === 'New yearly review') continue;
     await expect(button).toBeDisabled();
   }
@@ -173,7 +173,7 @@ test('P0 creates reviews and saves invited manager work with the target on every
   await panel.getByRole('form', { name: 'Review meeting', exact: true }).evaluate(form => form.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null })));
   await expect(panel.getByRole('status')).toHaveText('Saved.');
   await panel.locator('[name="held"]').check();
-  await panel.getByRole('button', { name: 'Save and send to manager', exact: true }).click();
+  await panel.getByRole('button', { name: 'Save and send final review', exact: true }).click();
   await expect(panel.getByRole('status')).toHaveText('Submitted.');
   await expect(panel.locator('[name="managerNote"]')).toBeDisabled();
   const mutations = await calls(page, 'mutatePerformanceReview');

@@ -9,6 +9,7 @@ export function payload() {
     manager: {name: 'Synthetic & Manager'},
     selfAnswers: Array(12).fill('Synthetic employee answer'), managerAnswers: Array(12).fill('Synthetic manager answer'),
     ratings: Array(12).fill('2'), summary: 'Synthetic summary', overallRating: '2',
+    goals: [{ priority: 'Synthetic agreed priority', measureOfSuccess: 'Synthetic measurable outcome', supportAndResponsiblePerson: 'Synthetic reviewer support', dueDate: '2026-12-31', progressCheck: 'Monthly synthetic check' }],
     meeting: {date: '2026-10-15', time: '10:00', duration: 30, mode: 'In person', location: 'Synthetic room', notes: 'Synthetic meeting'},
   };
   const bytes = Buffer.from(buildReviewDocx(doc, QUESTIONS.MAM));

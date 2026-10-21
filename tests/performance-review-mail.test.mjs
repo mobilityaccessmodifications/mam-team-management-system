@@ -43,6 +43,7 @@ test('live worker sends canonical closed Careers payload and native Word bytes w
   assert.equal(createHash('sha256').update(bytes).digest('hex'), wire.attachment.sha256);
   const parts = unzipSync(bytes), xml = strFromU8(parts['word/document.xml']);
   assert.match(xml, /MAM Performance review/); assert.match(xml, /Synthetic self answer/); assert.match(xml, /Synthetic manager answer/);
+  for (const value of Object.values(row.payload.document.goals[0])) assert.ok(xml.includes(value), `Attachment must contain agreed goal field: ${value}`);
   assert.match(xml, /2 Meets expectations/); assert.match(xml, /landscape/); assert.doesNotMatch(xml, /unique-not-in-word|Synthetic private note/);
   assert.ok(Object.hasOwn(parts, '[Content_Types].xml')); assert.equal(h.logs.length, 0);
 });

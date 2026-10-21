@@ -1,10 +1,10 @@
 # Production performance notification interface — v1
 
-Engineering contract for the already approved production scope. The user authorized real People Hub publication and Careers notifications, with no test email. Keep all existing performance Action/Review/Document DTOs unchanged. The current flow sends all Performance Review messages from Careers, routes the final Word attachment to the authorized manager for goals, and uses manual meeting entry. This contract is not a technical acceptance receipt.
+Engineering contract for Performance Review publication and Careers notifications, with no test email. Manager/Admin review and document projections include structured goals; employee projections exclude them. The current flow uses manual meeting entry and sends the completed assessment and goals attachment from Careers to the authorized manager, with the configured Penny and Steven reviewers copied. Production changes require the project approval and release gates. This contract is not a technical acceptance receipt.
 
 ## Owner boundaries
 
-- UI owner: native performance modules, real workspace, page/People shell integration, five Server Actions, related frontend/Action tests. Do not import UAT runtime/bootstrap/SDK/global-fetch/effect fences. Preserve the canonical question/Word modules byte-for-byte.
+- UI owner: native performance modules, real workspace, page/People shell integration, five Server Actions, related frontend/Action tests. Do not import UAT runtime/bootstrap/SDK/global-fetch/effect fences. Preserve canonical questions and Word geometry; populated goals replace the blank goal rows. Legacy snapshots without goals retain their original Word bytes.
 - Database owner: one new versioned production migration, bounded guarded release helper and their SQL/helper tests. Preserve historical migrations, existing records and unrelated catalog objects; retain a healthy purge fingerprint or an existing purge HOLD.
 - Mail adapter owner: new server-only dispatcher, dedicated `/api/performance-reviews/mail` route, bounded tests, and only necessary sandbox/mail-variable guards. Do not change existing leave/subscription/check-in mail routes.
 - n8n owner: the Performance Review notification and final attachment workflow builders and offline tests under this repository's `deploy/n8n/` and `scripts/`; retire both meeting-import entry points. Publish only through the verified original MAM n8n project REST configuration.
@@ -26,28 +26,28 @@ Finalization atomically creates exactly one queued row alongside the review/even
 
 Service-only RPC contracts:
 
-1. `claim_performance_review_mail(p_review_id uuid DEFAULT NULL, p_limit integer DEFAULT 10)` returns rows with exactly `delivery_id`, `review_id`, `claim_token`, `payload`. Claim only queued rows under bounded locks. `payload` contains exactly `reviewId`, `reviewCode`, `finalisedAt`, `managerNote`, `document`, `recipient`. `document` is the frozen manager-audience `PerformanceDocument`; the note is separate. No browser input supplies any of this.
-2. `begin_performance_review_manager_mail(p_delivery_id uuid, p_claim_token uuid, p_attachment_sha256 text, p_recipient text)` returns a scalar Boolean. Exactly one claimed-to-sending CAS may return true. Wrong/stale/duplicate claims never authorize another provider send. The current eligible manager address must still equal `p_recipient`; service-role access to the former unbound begin RPC is revoked.
+1. `claim_performance_review_mail(p_review_id uuid DEFAULT NULL, p_limit integer DEFAULT 10)` returns rows with exactly `delivery_id`, `review_id`, `claim_token`, `payload`. Claim only queued rows under bounded locks. `payload` contains exactly `reviewId`, `reviewCode`, `finalisedAt`, `managerNote`, `document`, `recipient`, `ccRecipients`. `document` is the frozen manager-audience `PerformanceDocument`; the note is separate. No browser input supplies any of this.
+2. `begin_performance_review_final_mail(p_delivery_id uuid, p_claim_token uuid, p_attachment_sha256 text, p_recipient text, p_cc_recipients text[])` returns a scalar Boolean. Exactly one claimed-to-sending CAS may return true. Wrong/stale/duplicate claims never authorize another provider send. The current eligible manager address must equal `p_recipient`, and the exact canonical additional recipient set must equal `p_cc_recipients`. Resolve both named reviewer Auth/person pairs from the private configuration and current active authorized directory rows while holding the directory/configuration locks. Exclude the review subject and primary manager, deduplicate and sort; an explicit empty array can be valid after exclusions, while missing or invalid configuration cannot authorize a send. Service-role access to the former manager-only begin RPC is revoked.
 3. `finish_performance_review_mail(p_delivery_id uuid, p_claim_token uuid, p_outcome text, p_attachment_sha256 text)` returns a scalar Boolean. Outcomes are `provider_accepted`, `unknown`, `rejected`; unknown/rejected become sticky `needs_review`. Same acknowledged result may reconcile idempotently. Never downgrade an already provider-accepted delivery or release a claimed/sending unknown row for automatic retry.
 
 A durable claim is not a successful send. There is no automatic expiry/reclaim of uncertain attempts. No account/role/credential/reporting changes, trigger bypass, fabricated Auth claims, or salary data.
 
 ## Canonical attachment and wire payload
 
-The server validates the database-owned document with the real parser and calls the unchanged `buildPerformanceReviewDownload`. Require manager audience, a matching review code and finalized record. Use its `.docx` filename/MIME and exact returned bytes; max 2 MiB decoded attachment. Compute SHA-256 over those bytes. The private reviewer note remains in the authorized portal and is excluded from the manager email body and Word attachment.
+The server validates the database-owned document with the real parser and calls `buildPerformanceReviewDownload`. Require manager audience, a matching review code and finalized record. Use its `.docx` filename/MIME and exact returned bytes; max 2 MiB decoded attachment. Compute SHA-256 over those bytes. The private reviewer note remains in the authorized portal and is excluded from the manager email body and Word attachment.
 
 POST wire keys are exactly:
 
-`version`, `event`, `eventKey`, `deliveryId`, `reviewId`, `reviewCode`, `claimToken`, `employeeName`, `managerName`, `finalisedAt`, `recipient`, `managerNote`, `attachment`.
+`version`, `event`, `eventKey`, `deliveryId`, `reviewId`, `reviewCode`, `claimToken`, `employeeName`, `managerName`, `finalisedAt`, `recipient`, `ccRecipients`, `managerNote`, `attachment`.
 
 - `version = 1`, `event = performance-review-finalised`.
 - `eventKey = performance-review:<canonical review UUID>:finalised`.
 - All UUIDs canonical; review code from the validated snapshot.
-- `recipient` is the canonical eligible manager work address returned by the database. The provider begin step revalidates that address and authorization before granting one send. The sender and Reply-To are `careers@mobilityaccess.com.au`, with no CC/BCC. The manager completes the attached goals and returns the document by replying to Careers.
+- `recipient` is the canonical eligible manager work address returned by the database. The provider begin step revalidates that address and authorization before granting one send. The sender and Reply-To are `careers@mobilityaccess.com.au`. `ccRecipients` is a required dense canonical sorted unique array of zero to two validated named-reviewer work addresses, excluding the manager and review subject; BCC is empty. Both named reviewer pairs must be configured and eligible even when exclusions produce an empty CC array. The email asks recipients to review the completed form, including goals, and, if there are no issues, move to the next step with an internal discussion.
 - `attachment` keys exactly `fileName`, `mimeType`, `contentBase64`, `sha256`. MIME is `application/vnd.openxmlformats-officedocument.wordprocessingml.document`; filename is the canonical manager `.docx`. Validate canonical base64, decoded bound and SHA before provider authorization.
 - Do not persist/log this payload, private notes, answers, attachment bytes or credentials in ordinary logs/n8n execution history.
 
-Webhook response keys: `ok`, `status`, `deliveryId`, `eventKey`, `actualRecipients`, `attachmentSha256`. Status is `provider_accepted` or `held`; `provider_accepted` means sender-side acceptance, never inbox delivery. Require exact delivery/event/recipient/SHA matching. Missing/malformed/timeout/redirect results are unknown/held, never automatic resend.
+Webhook response keys: `ok`, `status`, `deliveryId`, `eventKey`, `actualRecipients`, `attachmentSha256`. Status is `provider_accepted` or `held`; `provider_accepted` means sender-side acceptance, never inbox delivery. Require exact delivery/event/SHA matching and `actualRecipients` equal to `[recipient, ...ccRecipients]`. Missing/malformed/timeout/redirect results are unknown/held, never automatic resend.
 
 ## HTTPS, secret and receipt route
 
@@ -65,10 +65,10 @@ Use `X-MAM-Performance-Secret` on caller and callback. No credentials in argv, c
 `POST` to the same route uses the performance shared secret and a closed body:
 
 - `{phase: readiness}`: no RPC or send, only an authenticated readiness acknowledgement.
-- `{phase: begin, deliveryId, claimToken, attachmentSha256, recipient}`: invoke the strict Boolean begin RPC; expose only the decision.
+- `{phase: begin, deliveryId, claimToken, attachmentSha256, recipient, ccRecipients}`: invoke the strict Boolean begin RPC; expose only the decision.
 - `{phase: finish, deliveryId, claimToken, attachmentSha256, outcome}`: invoke the strict Boolean finish RPC.
 
-Reject extra fields, unsafe types, invalid identifiers, unbounded input, wrong origin/secret and malformed results. Keep the existing actual native admin client and canonical database authorization. The route must not accept arbitrary URLs, recipients, document content or an impersonated staff actor.
+Reject extra fields, unsafe types, invalid identifiers, unbounded input, wrong origin/secret and malformed results. Keep the existing 1 KiB callback bound and actual native admin client and canonical database authorization. The route must not accept arbitrary URLs, recipients, document content or an impersonated staff actor.
 
 ## New n8n workflow
 

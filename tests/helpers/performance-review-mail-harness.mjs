@@ -45,6 +45,7 @@ export function fixture() {
         managerAnswers: Array.from({ length: 12 }, (_, i) => 'Synthetic manager answer ' + i),
         ratings: Array.from({ length: 12 }, (_, i) => [0, 1, 2, 6, 7, 8, 9].includes(i) ? '2 Meets expectations' : ''),
         summary: 'Synthetic summary', overallRating: '2 Meets expectations',
+        goals: [{ priority: 'Synthetic agreed priority', measureOfSuccess: 'Synthetic measurable outcome', supportAndResponsiblePerson: 'Synthetic reviewer support', dueDate: '2026-12-31', progressCheck: 'Monthly synthetic check' }],
         meeting: { date: '2026-10-15', time: '10:00', duration: 30, mode: 'in_person', location: 'Synthetic room', notes: 'Synthetic meeting notes' },
       },
     },

@@ -1,5 +1,5 @@
 import { Temporal } from "temporal-polyfill";
-import type { PerformanceDocument, PerformanceWorkspace, PerformanceReview, PerformanceStartInput, PerformanceReconcileInput, PerformanceMeeting, PerformanceMutationInput } from "@/lib/performance-review-types";
+import type { PerformanceDocument, PerformanceWorkspace, PerformanceReview, PerformanceStartInput, PerformanceReconcileInput, PerformanceMeeting, PerformanceMutationInput, PerformanceGoal } from "@/lib/performance-review-types";
 
 export const REQUIRED_ANSWERS = [0, 3, 4, 5, 6, 7, 8, 9, 10];
 export const RATING_INDICES = [0, 1, 2, 6, 7, 8, 9];
@@ -40,13 +40,15 @@ export function parseMutationInput(value: unknown): PerformanceMutationInput {
     return structuredClone(v) as PerformanceMutationInput;
   }
   if ((!self && !manager) || typeof v.expectedRevision !== "string" || !(self ? /^self:(0|[1-9][0-9]*)$/ : /^(?:manager|read):(0|[1-9][0-9]*):(0|[1-9][0-9]*)$/).test(v.expectedRevision)) invalid();
-  const input = closed(v.input, self ? ["answers"] : ["answers", "ratings", "summary", "overallRating", "managerNote"]);
+  const hasGoals = !self && !!v.input && typeof v.input === "object" && Object.hasOwn(v.input, "goals");
+  const input = closed(v.input, self ? ["answers"] : ["answers", "ratings", "summary", "overallRating", "managerNote", ...(hasGoals ? ["goals"] : [])]);
   const answers = strings(input.answers);
   if (v.command === "submit_self") for (const i of REQUIRED_ANSWERS) if (!answers[i].trim()) invalid();
   if (manager) {
     const ratings = strings(input.ratings);
     if (ratings.some(r => r !== "" && !RATINGS.includes(r)) || (text(input.overallRating) !== "" && !RATINGS.includes(input.overallRating as string))) invalid();
     text(input.summary); text(input.managerNote);
+    if (hasGoals) validateGoals(input.goals);
   }
   return structuredClone(v) as PerformanceMutationInput;
 }
@@ -55,6 +57,20 @@ function date(value: unknown): string {
   if (typeof value !== "string" || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) || value.startsWith("0000")) invalid();
   try { if (Temporal.PlainDate.from(value, { overflow: "reject" }).toString() !== value) invalid(); } catch { invalid(); }
   return value;
+}
+const GOAL_KEYS = ["priority", "measureOfSuccess", "supportAndResponsiblePerson", "dueDate", "progressCheck"];
+function validateGoals(value: unknown, complete = false): PerformanceGoal[] {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype || value.length > 10 || Reflect.ownKeys(value).length !== value.length + 1 || (complete && value.length === 0)) invalid();
+  for (let i = 0; i < value.length; i++) {
+    if (!Object.hasOwn(Object.getOwnPropertyDescriptor(value, String(i)) ?? {}, "value")) invalid();
+    const goal = closed(value[i], GOAL_KEYS);
+    for (const key of GOAL_KEYS) if (text(goal[key]).length > 2000 || (complete && !(goal[key] as string).trim())) invalid();
+    if (goal.dueDate !== "") date(goal.dueDate);
+  }
+  return value as PerformanceGoal[];
+}
+export function completePerformanceGoals(value: unknown): boolean {
+  try { validateGoals(value, true); return true; } catch { return false; }
 }
 function validateMeeting(m: RecordValue) {
   date(m.date);
@@ -87,7 +103,7 @@ export function parseReconcileInput(value: unknown): PerformanceReconcileInput {
   return structuredClone(v) as PerformanceReconcileInput;
 }
 const SELF_KEYS = ["id", "code", "employee", "manager", "cycle", "dueDate", "selfStatus", "selfAnswers", "selfSubmittedAt", "selfRevision", "selfActivity", "audience", "capabilities"];
-const MANAGER_KEYS = ["managerAnswers", "ratings", "summary", "overallRating", "managerNote", "managerCompletedAt", "meeting", "meetingHeldAt", "finalisedAt", "managerActivity"];
+const MANAGER_KEYS = ["managerAnswers", "ratings", "summary", "overallRating", "managerNote", "goals", "managerCompletedAt", "meeting", "meetingHeldAt", "finalisedAt", "managerActivity"];
 const MANAGER_CAPS = ["saveSelf", "submitSelf", "saveManager", "completeManager", "saveMeeting", "submitReview", "downloadDocument"];
 function identity(value: unknown) {
   const v = closed(value, ["id", "name", "jobTitle", "company", "team"]);
@@ -109,7 +125,8 @@ export function parseReview(value: unknown, readOnly = false): PerformanceReview
   if (!value || typeof value !== "object") invalid();
   const audience = Object.getOwnPropertyDescriptor(value, "audience")?.value;
   if (!["employee", "manager", "admin"].includes(audience)) invalid();
-  const v = closed(value, audience === "employee" ? SELF_KEYS : [...SELF_KEYS, ...MANAGER_KEYS, audience === "manager" ? "managerRevision" : "readRevision"]);
+  const hasGoals = audience !== "employee" && Object.hasOwn(value, "goals");
+  const v = closed(value, audience === "employee" ? SELF_KEYS : [...SELF_KEYS, ...MANAGER_KEYS.filter(key => key !== "goals" || hasGoals), audience === "manager" ? "managerRevision" : "readRevision"]);
   uuid(v.id); identity(v.employee); managerIdentity(v.manager);
   if (typeof v.code !== "string" || !/^PR-[0-9]{4}-[1-9][0-9]*$/.test(v.code) || typeof v.cycle !== "string" || !/^[0-9]{4}$/.test(v.cycle)) invalid();
   date(v.dueDate); strings(v.selfAnswers); timestamp(v.selfSubmittedAt); activity(v.selfActivity);
@@ -123,13 +140,14 @@ export function parseReview(value: unknown, readOnly = false): PerformanceReview
     strings(v.managerAnswers); const ratings = strings(v.ratings);
     if (ratings.some(r => r !== "" && !RATINGS.includes(r)) || (text(v.overallRating) !== "" && !RATINGS.includes(v.overallRating as string))) invalid();
     text(v.summary); text(v.managerNote);
+    if (hasGoals) validateGoals(v.goals);
     timestamp(v.managerCompletedAt); timestamp(v.meetingHeldAt); timestamp(v.finalisedAt);
     if (v.meeting !== null) validateMeeting(closed(v.meeting, MEETING_KEYS));
     activity(v.managerActivity);
     const token = v[audience === "manager" ? "managerRevision" : "readRevision"];
     if (typeof token !== "string" || !(audience === "manager" ? /^manager:(0|[1-9][0-9]*):(0|[1-9][0-9]*)$/ : /^read:(0|[1-9][0-9]*):(0|[1-9][0-9]*)$/).test(token) || token.split(":")[1] !== v.selfRevision.split(":")[1] || caps.saveSelf !== false || caps.submitSelf !== false) invalid();
   }
-  return structuredClone(v) as PerformanceReview;
+  return structuredClone(audience === "employee" ? v : { ...v, goals: hasGoals ? v.goals : [] }) as PerformanceReview;
 }
 export function parseWorkspace(value: unknown, actorUserId: string, role: string, personId: string | null, readOnly: boolean | "manager_delegate" = false): PerformanceWorkspace {
   const v = closed(value, ["viewerContext", "reviews", "startablePeople"]);
@@ -160,13 +178,15 @@ export function parseDocument(value: unknown): PerformanceDocument {
   const audience = Object.getOwnPropertyDescriptor(value, "audience")?.value;
   if (!["employee", "manager", "admin"].includes(audience)) invalid();
   const common = ["audience", "code", "cycle", "employee", "manager", "selfAnswers"];
-  const v = closed(value, audience === "employee" ? common : [...common, "managerAnswers", "ratings", "summary", "overallRating", "meeting"]);
+  const hasGoals = audience !== "employee" && Object.hasOwn(value, "goals");
+  const v = closed(value, audience === "employee" ? common : [...common, "managerAnswers", "ratings", "summary", "overallRating", "meeting", ...(hasGoals ? ["goals"] : [])]);
   identity(v.employee); managerIdentity(v.manager); strings(v.selfAnswers);
   if (typeof v.code !== "string" || !/^PR-[0-9]{4}-[1-9][0-9]*$/.test(v.code) || typeof v.cycle !== "string" || !/^[0-9]{4}$/.test(v.cycle)) invalid();
   if (audience !== "employee") {
     strings(v.managerAnswers); const ratings = strings(v.ratings);
     if (ratings.some(r => r !== "" && !RATINGS.includes(r)) || (text(v.overallRating) !== "" && !RATINGS.includes(v.overallRating as string))) invalid();
     text(v.summary); if (v.meeting !== null) validateMeeting(closed(v.meeting, MEETING_KEYS));
+    if (hasGoals) validateGoals(v.goals);
   }
-  return structuredClone(v) as PerformanceDocument;
+  return structuredClone(audience === "employee" ? v : { ...v, goals: hasGoals ? v.goals : [] }) as PerformanceDocument;
 }

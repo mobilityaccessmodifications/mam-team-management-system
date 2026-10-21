@@ -65,7 +65,7 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
     button(label) { const node = nodes(tree).find(n => n.type === 'button' && (n.props['aria-label'] ?? text(n)) === label); assert.ok(node, 'Button exists: '+label); return node; },
     field(name) { const node = nodes(tree).find(n => ['textarea','input','select'].includes(n.type) && (n.props.name === name || n.props['aria-label'] === name)); assert.ok(node, 'Field exists: '+name); return node; },
     click(label) { return api.button(label).props.onClick?.(); },
-    change(name, value) { const node = api.field(name); node.props.onChange({ target: { value, checked: value } }); render(); },
+    change(name, value) { const node = nodes(tree).find(n => n.type === 'input' && n.props.type === 'radio' && n.props.name === name && n.props.value === value) ?? api.field(name); node.props.onChange({ target: { value, checked: value } }); render(); },
     blur(label = 'Review meeting', inside = false) { const node = nodes(tree).find(n => n.type === 'form' && n.props['aria-label'] === label); assert.ok(node, 'Form exists: '+label); return node.props.onBlur?.({ currentTarget: { contains: () => inside }, relatedTarget: null }); },
     submit(label) { const node = nodes(tree).find(n => n.type === 'form' && n.props['aria-label'] === label); assert.ok(node, 'Form exists: '+label); return node.props.onSubmit({ preventDefault() {} }); },
     auth(event, userId = null) { assert.ok(authListener, 'Uses native Auth lifecycle'); authListener(event, userId ? { user: { id: userId } } : null); render(); },

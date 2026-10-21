@@ -487,14 +487,22 @@ production requests or test mail during acceptance.
 
 Employees complete their self assessment, then the assigned reviewer uses
 Save draft and invite meeting to save their assessment draft and send one short
-email from AI to the reviewer and employee, with Careers copied. The reviewer
-uses Outlook Reply with Meeting and includes AI as an attendee. The calendar
-worker imports the matching invitation's meeting metadata once; later manual
-edits are preserved. Valid manual meeting edits save when focus leaves the form.
-Final submission requires a complete manager assessment,
-the meeting to have ended and the manager to confirm it was held. It queues the
-completed Word document to careers@mobilityaccess.com.au; the private manager
-note stays in the email body. HR/Admin/P0 retain the read-only overview.
+email from careers@mobilityaccess.com.au to the reviewer and employee.
+Managers arrange the meeting and enter its details manually in People Hub;
+automatic Outlook meeting imports are retired. In-person meetings default to
+Boardroom, which the manager can edit. Valid meeting edits save on blur.
+Ratings show all four choices for direct selection. After the meeting, the
+reviewer adds the agreed goals in People Hub, including priority, measure of
+success, support and responsible person, due date and progress check. Goal rows
+can be added or removed and save with the assessment draft.
+Final submission requires the complete manager assessment, at least one complete
+goal, the meeting to have ended and confirmation that it was held. Careers sends
+the completed Word attachment to the authorized manager, with the configured
+Penny and Steven reviewers copied after current directory validation and
+recipient deduplication. The email asks them to review the form and, if there
+are no issues, move to the next step with an internal discussion. Private
+manager notes remain in the authorized portal and are excluded from the email
+and attachment. HR/Admin/P0 retain the read-only overview.
 P0 can also use Change profile to act for a selected active Manager on that
 Manager's eligible employees and assigned reviews, with the real P0 actor audited.
 Employee self assessments and other selected-role previews remain read-only.
@@ -502,6 +510,6 @@ Excel/SharePoint master totals and synchronization are not part of this workflow
 
 Production activation uses `MAM_PERFORMANCE_REVIEW_ENABLED=true` and
 `PERFORMANCE_REVIEW_EMAIL_MODE=live` after the reviewed database and existing
-n8n receivers and calendar worker are verified. Publish application changes through a reviewed merge
+n8n receivers are verified and both meeting-import entry points remain disabled. Publish application changes through a reviewed merge
 to `main`, then verify the fixed production URL. Do not send test mail or replay
 historical deliveries during release verification.

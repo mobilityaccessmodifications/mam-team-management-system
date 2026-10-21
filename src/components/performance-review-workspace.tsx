@@ -7,9 +7,9 @@ import { mutatePerformanceReview, startPerformanceReview, getPerformanceReviewDo
 import { loadPerformanceReviews, loadPerformanceReviewMeetingInvitationStatus } from "@/lib/performance-review-load";
 import { buildPerformanceReviewDownload } from "@/lib/performance-review-document";
 import { createClient } from "@/lib/supabase/client";
-import { meetingEndMillis } from "@/lib/performance-review-rules";
+import { completePerformanceGoals, meetingEndMillis } from "@/lib/performance-review-rules";
 import { QUESTIONS } from "@/lib/performance-review-questions.mjs";
-import type { PerformanceFailure, PerformanceReview, PerformanceSelfReview, PerformanceManagerInput, PerformanceIdentity, PerformanceMeeting, PerformanceMutationInput, PerformanceWorkspace } from "@/lib/performance-review-types";
+import type { PerformanceFailure, PerformanceReview, PerformanceSelfReview, PerformanceManagerInput, PerformanceIdentity, PerformanceGoal, PerformanceMeeting, PerformanceMutationInput, PerformanceWorkspace } from "@/lib/performance-review-types";
 import toolbar from "./people-toolbar.module.css";
 import styles from "./performance-review-workspace.module.css";
 
@@ -20,7 +20,9 @@ type DraftChannel = "self" | "assessment" | "meeting";
 type PendingOperation = { operationId: string; reviewId: string | null; phase: "pending" | "uncertain"; draft?: { channel: DraftChannel; version: number } };
 type ConflictScope = { generation: number; actorUserId: string; personId: string | null; role: PerformanceWorkspace["viewerContext"]["role"]; reviewId: string; employeePersonId: string; audience: PerformanceReview["audience"]; command: PerformanceMutationInput["command"] };
 const INVITATION_STATUS_DELAYS = [2000, 4000, 8000, 16000, 30000];
-const EMPTY_MEETING: PerformanceMeeting = { date: "", time: "", duration: 30, mode: "in_person", location: "", notes: "" };
+const EMPTY_MEETING: PerformanceMeeting = { date: "", time: "", duration: 30, mode: "in_person", location: "Boardroom", notes: "" };
+
+const EMPTY_GOAL: PerformanceGoal = { priority: "", measureOfSuccess: "", supportAndResponsiblePerson: "", dueDate: "", progressCheck: "" };
 
 function newReviewDraft() {
   const parts = new Intl.DateTimeFormat("en-AU", { timeZone: "Australia/Melbourne", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -45,7 +47,7 @@ function ownedRow(row: PerformanceReview, viewer: PerformanceWorkspace["viewerCo
   if (row.audience === "manager" && (viewer.role !== "manager" || row.manager.id !== viewer.personId || row.employee.id === viewer.personId)) return null;
   if (row.audience === "admin" && (viewer.role !== "admin" && viewer.role !== "system_admin" || row.employee.id === viewer.personId)) return null;
   const fields = {
-    ...selfRow(row), managerAnswers: [...row.managerAnswers], ratings: [...row.ratings],
+    ...selfRow(row), managerAnswers: [...row.managerAnswers], ratings: [...row.ratings], goals: (row.goals ?? []).map(goal => ({ ...goal })),
     summary: row.summary, overallRating: row.overallRating, managerNote: row.managerNote,
     managerCompletedAt: row.managerCompletedAt, meeting: row.meeting ? { ...row.meeting } : null,
     meetingHeldAt: row.meetingHeldAt, finalisedAt: row.finalisedAt,
@@ -67,7 +69,7 @@ function reviewPeople(data: PerformanceWorkspace | null): PerformanceIdentity[] 
 }
 
 function managerInput(row: PerformanceReview): PerformanceManagerInput | null {
-  return row.audience === "employee" ? null : { answers: [...row.managerAnswers], ratings: [...row.ratings], summary: row.summary, overallRating: row.overallRating, managerNote: row.managerNote };
+  return row.audience === "employee" ? null : { answers: [...row.managerAnswers], ratings: [...row.ratings], summary: row.summary, overallRating: row.overallRating, managerNote: row.managerNote, goals: (row.goals ?? []).map(goal => ({ ...goal })) };
 }
 
 export default function PerformanceReviewWorkspace({ previewPersonId }: { previewPersonId?: string } = {}) {
@@ -230,6 +232,12 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   function editMeeting(update: Partial<PerformanceMeeting>) {
     edited("meeting"); draft.current.meeting = { ...draft.current.meeting, ...update }; setMeeting(draft.current.meeting);
   }
+  function editGoal(index: number, update: Partial<PerformanceGoal>) {
+    editAssessment(current => ({ ...current, goals: (current.goals ?? []).map((goal, i) => i === index ? { ...goal, ...update } : goal) }));
+  }
+  function changeMeetingMode(mode: PerformanceMeeting["mode"]) {
+    editMeeting({ mode, ...(mode === "in_person" ? { location: "Boardroom" } : meeting.location === "Boardroom" ? { location: "" } : {}) });
+  }
   async function reconcile() {
     const pending = operationRef.current;
     if (readOnly || epoch.current !== generation || busyRef.current || !workspace || pending?.phase !== "uncertain") return;
@@ -343,6 +351,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       if (selected.audience === "employee" || selected.finalisedAt || !(command === "save_meeting" ? selected.capabilities.saveMeeting : selected.capabilities.submitReview)) return;
       if (command === "submit_review" && dirtyParts.current.assessment && !selected.capabilities.saveManager) return;
       if (command === "submit_review" && (!held || !selected.managerCompletedAt || !completeAssessment(assessment))) { setMessage("Complete the assessment and confirm the meeting was held."); return; }
+      if (command === "submit_review" && !completePerformanceGoals(assessment?.goals)) { setMessage("Complete at least one goal before sending the final review."); return; }
       if (command === "submit_review" && (!validMeeting(meeting) || meetingEndMillis(meeting) > Date.now())) { setMessage("The review meeting must finish before sending to the manager."); return; }
       if (!validMeeting(meeting)) { setMessage("Check the meeting details."); return; }
       mutation = command === "save_meeting" ? { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...meeting } } : { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...meeting, held: true } };
@@ -547,10 +556,10 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
           {QUESTIONS[selected.employee.company].map((prompt: string, index: number) => <div className={styles.question} key={prompt}>
             <label>{prompt}<span className={styles.answerLabel}>Employee answer</span><textarea name={`self-${index}`} value={answers[index] ?? ""} disabled /></label>
             <label>Manager answer<textarea aria-label={`${prompt} — Manager answer`} name={`manager-${index}`} maxLength={8000} value={assessment.answers[index] ?? ""} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, answers: current.answers.map((value, i) => i === index ? event.target.value : value) })); } }} /></label>
-            {RATED.includes(index) ? <label>Manager rating<select name={`rating-${index}`} disabled={managerDisabled} value={assessment.ratings[index] ?? ""} onChange={event => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, ratings: current.ratings.map((value, i) => i === index ? event.target.value : value) })); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label> : null}
+            {RATED.includes(index) ? <fieldset className={styles.ratingGroup} disabled={managerDisabled}><legend>Manager rating</legend><div className={styles.ratingOptions}>{RATINGS.map(([value, label]) => <label key={value}><input type="radio" disabled={managerDisabled} name={`rating-${index}`} value={value} checked={assessment.ratings[index] === value} onChange={() => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, ratings: current.ratings.map((rating, i) => i === index ? value : rating) })); } }} />{label}</label>)}</div></fieldset> : null}
           </div>)}
           <label>Overall manager assessment<textarea name="summary" maxLength={8000} value={assessment.summary} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, summary: event.target.value })); } }} /></label>
-          <label>Overall rating<select name="overallRating" value={assessment.overallRating} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, overallRating: event.target.value })); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <fieldset className={styles.ratingGroup} disabled={managerDisabled}><legend>Overall rating</legend><div className={styles.ratingOptions}>{RATINGS.map(([value, label]) => <label key={value}><input type="radio" disabled={managerDisabled} name="overallRating" value={value} checked={assessment.overallRating === value} onChange={() => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, overallRating: value })); } }} />{label}</label>)}</div></fieldset>
           <label>Private manager note<textarea name="managerNote" maxLength={8000} value={assessment.managerNote} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, managerNote: event.target.value })); } }} /></label>
           {managerActions ? <div className={styles.toolbar}><button type="button" className={invitationStarted ? styles.draftButton : styles.primaryButton} onClick={() => run(invitationStarted ? "save_manager" : "complete_manager")} disabled={blocked || !(invitationStarted ? selected.capabilities.saveManager : selected.capabilities.completeManager) || Boolean(selected.finalisedAt)}>{invitationStarted ? "Save draft" : "Save draft and invite meeting"}</button>{invitationSent ? <span className={styles.invitationHint}>Arrange the review meeting with the employee, then enter the meeting details in People Hub.</span> : null}</div> : null}
         </form> : null}
@@ -558,10 +567,18 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
           <label>Date<input type="date" name="meeting-date" value={meeting.date} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ date: event.target.value }); } }} /></label>
           <label>Time (Melbourne)<input type="time" name="meeting-time" value={meeting.time} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ time: event.target.value }); } }} /></label>
           <label>Duration (minutes)<input type="number" min={5} max={480} name="meeting-duration" value={meeting.duration} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ duration: Number(event.target.value) }); } }} /></label>
-          <label>Mode<select name="meeting-mode" value={meeting.mode} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ mode: event.target.value as PerformanceMeeting["mode"] }); } }}><option value="in_person">In person</option><option value="teams">Teams</option><option value="phone">Phone</option></select></label>
+          <label>Mode<select name="meeting-mode" value={meeting.mode} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { changeMeetingMode(event.target.value as PerformanceMeeting["mode"]); } }}><option value="in_person">In person</option><option value="teams">Teams</option><option value="phone">Phone</option></select></label>
           <label>Location<input name="meeting-location" maxLength={8000} value={meeting.location} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ location: event.target.value }); } }} /></label>
           <label>Meeting notes<textarea name="meeting-notes" maxLength={8000} value={meeting.notes} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ notes: event.target.value }); } }} /></label>
-          {managerActions ? <><label className={styles.meetingHeld}><input type="checkbox" name="held" checked={held} disabled={heldDisabled} onChange={event => { if (epoch.current === generation && !heldDisabled) { heldDraft.current = event.target.checked; setHeld(event.target.checked); } }} />Meeting was held</label><div className={styles.toolbar}><button type="submit" disabled={blocked || !held || !meetingFinished || !completeAssessment(assessment) || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Save and send to manager</button></div></> : null}
+          {assessment ? <section className={styles.goals} aria-label="Goals"><h2>Goals</h2>{(assessment.goals ?? []).map((goal, index) => <fieldset className={styles.goal} key={index} disabled={managerDisabled}><legend>Goal {index + 1}</legend>
+            <label>Priority<textarea disabled={managerDisabled} name={`goal-${index}-priority`} maxLength={2000} value={goal.priority} onChange={event => { if (!managerDisabled && epoch.current === generation) editGoal(index, { priority: event.target.value }); }} /></label>
+            <label>Measure of success<textarea disabled={managerDisabled} name={`goal-${index}-measure`} maxLength={2000} value={goal.measureOfSuccess} onChange={event => { if (!managerDisabled && epoch.current === generation) editGoal(index, { measureOfSuccess: event.target.value }); }} /></label>
+            <label>Support and responsible person<textarea disabled={managerDisabled} name={`goal-${index}-support`} maxLength={2000} value={goal.supportAndResponsiblePerson} onChange={event => { if (!managerDisabled && epoch.current === generation) editGoal(index, { supportAndResponsiblePerson: event.target.value }); }} /></label>
+            <div className={styles.goalDates}><label>Due date<input type="date" disabled={managerDisabled} name={`goal-${index}-due`} value={goal.dueDate} onChange={event => { if (!managerDisabled && epoch.current === generation) editGoal(index, { dueDate: event.target.value }); }} /></label>
+            <label>Progress check<input disabled={managerDisabled} name={`goal-${index}-check`} maxLength={2000} value={goal.progressCheck} onChange={event => { if (!managerDisabled && epoch.current === generation) editGoal(index, { progressCheck: event.target.value }); }} /></label></div>
+            {managerActions ? <button type="button" className={styles.removeGoal} aria-label={`Remove goal ${index + 1}`} onClick={() => { if (!managerDisabled && epoch.current === generation) editAssessment(current => ({ ...current, goals: (current.goals ?? []).filter((_, i) => i !== index) })); }}>Remove goal</button> : null}
+          </fieldset>)}{managerActions ? <button type="button" className={styles.addGoal} disabled={managerDisabled || (assessment.goals?.length ?? 0) >= 10} onClick={() => { if (!managerDisabled && epoch.current === generation) editAssessment(current => ({ ...current, goals: [...(current.goals ?? []), { ...EMPTY_GOAL }] })); }}>Add goal</button> : null}</section> : null}
+          {managerActions ? <><label className={styles.meetingHeld}><input type="checkbox" name="held" checked={held} disabled={heldDisabled} onChange={event => { if (epoch.current === generation && !heldDisabled) { heldDraft.current = event.target.checked; setHeld(event.target.checked); } }} />Meeting was held</label><div className={styles.toolbar}><button type="submit" disabled={blocked || !held || !meetingFinished || !completeAssessment(assessment) || !completePerformanceGoals(assessment?.goals) || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Save and send final review</button></div></> : null}
           {selected.managerCompletedAt ? <p>Assessment saved: {selected.managerCompletedAt}</p> : null}{selected.finalisedAt ? <p>Finalised: {selected.finalisedAt}</p> : null}
         </form> : null}
       </article> : null}
