@@ -66,7 +66,7 @@ function payloadForClaim(raw: unknown, reviewId: string | null) {
 export async function dispatchPerformanceReviewMailOutbox(reviewId: string | null = null, expiresAt = Date.now() + 25_000) {
   const empty = { claimed: 0, providerAccepted: 0, held: 0 };
   const budget = performanceMailBudget(expiresAt);
-  if (!performanceReviewMailEnabled()) return { ok: true, code: "disabled", ...empty };
+  if (!performanceReviewMailEnabled() || process.env.PERFORMANCE_REVIEW_RELEASE_PAUSED === "true") return { ok: true, code: "disabled", ...empty };
   if (reviewId !== null && !performanceMailUuid(reviewId)) return { ok: false, code: "invalid_review", ...empty };
   let target: ReturnType<typeof performanceReviewMailTarget>;
   try { target = performanceReviewMailTarget(); } catch { return { ok: false, code: "invalid_configuration", ...empty }; }

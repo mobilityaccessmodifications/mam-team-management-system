@@ -37,7 +37,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   return <LeaveDemo
     key={`${userData.user.id}:${JSON.stringify(actor)}`}
     authActorId={userData.user.id}
-    performanceReviewEnabled={process.env.MAM_PERFORMANCE_REVIEW_ENABLED === "true"}
+    performanceReviewEnabled={process.env.MAM_PERFORMANCE_REVIEW_ENABLED === "true" && process.env.PERFORMANCE_REVIEW_RELEASE_PAUSED !== "true"}
     actorCapabilities={actor}
     currentPersonId={actor.person_id ?? undefined}
     isNonRosterSystemAdmin={actor.is_super_admin && !actor.person_id}
