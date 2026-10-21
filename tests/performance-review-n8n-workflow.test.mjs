@@ -42,18 +42,18 @@ test('dedicated inactive create definition uses authenticated exact business pat
   assert.ok(workflow.nodes.every(n => n.retryOnFail === false));
 });
 
-test('brief signed Careers HTML preserves canonical Word bytes and escapes the private manager note', () => {
+test('Careers review email includes bound manager and reviewers while excluding the private manager note', () => {
   const p = payload();
   const value = code(build(), 'Validate Payload', {body: p});
   assert.equal(value.valid, true);
   const mail = value.graphBody;
   assert.equal(mail.saveToSentItems, true);
   assert.deepEqual(mail.message.toRecipients, [{emailAddress: {address: 'manager@mobilityaccess.com.au'}}]);
-  assert.deepEqual(mail.message.ccRecipients, []);
+  assert.deepEqual(mail.message.ccRecipients, p.ccRecipients.map(address => ({emailAddress: {address}})));
   assert.deepEqual(mail.message.bccRecipients, []);
   assert.equal(mail.message.body.contentType, 'HTML');
-  assert.equal(mail.message.subject, 'Performance review: complete goals and return to Careers');
-  assert.ok(mail.message.body.content.includes('Please complete the goals in the Goals and meeting record section'));
+  assert.equal(mail.message.subject, 'Performance review: completed form for review');
+  assert.ok(mail.message.body.content.includes('Please review the attached completed performance review form, including the agreed goals.'));
   assert.equal(mail.message.body.content.split(HR_EMAIL_SIGNATURE_HTML).length, 2);
   for (const privateValue of [p.employeeName, p.managerName, 'Synthetic &lt;Employee&gt;', 'Synthetic &amp; Manager', p.reviewCode, p.finalisedAt]) {
     assert.equal(mail.message.body.content.includes(privateValue), false);
@@ -63,7 +63,8 @@ test('brief signed Careers HTML preserves canonical Word bytes and escapes the p
   assert.equal(mail.message.body.content.includes('Manager note:'), false);
   assert.deepEqual(mail.message.from, {emailAddress: {address: 'careers@mobilityaccess.com.au'}});
   assert.deepEqual(mail.message.replyTo, [{emailAddress: {address: 'careers@mobilityaccess.com.au'}}]);
-  assert.match(mail.message.body.content, /reply to this email with the updated attachment/);
+  assert.match(mail.message.body.content, /If there are no issues, please move on to the next step with an internal discussion\./);
+  assert.doesNotMatch(mail.message.body.content, /complete the goals|reply to this email|updated attachment/);
   const attachment = mail.message.attachments[0];
   assert.equal(attachment['@odata.type'], '#microsoft.graph.fileAttachment');
   assert.equal(attachment.name, p.attachment.fileName);
@@ -72,7 +73,7 @@ test('brief signed Careers HTML preserves canonical Word bytes and escapes the p
   const bytes = Buffer.from(attachment.contentBytes, 'base64');
   assert.equal(createHash('sha256').update(bytes).digest('hex'), p.attachment.sha256);
   assert.equal(bytes.includes(Buffer.from('PRIVATE-SYNTHETIC-NOTE')), false);
-  assert.deepEqual(value.beginBody, {phase: 'begin', recipient: 'manager@mobilityaccess.com.au', deliveryId: p.deliveryId, claimToken: p.claimToken, attachmentSha256: p.attachment.sha256});
+  assert.deepEqual(value.beginBody, {phase: 'begin', recipient: 'manager@mobilityaccess.com.au', ccRecipients: p.ccRecipients, deliveryId: p.deliveryId, claimToken: p.claimToken, attachmentSha256: p.attachment.sha256});
 });
 
 test('closed wire schema rejects unsafe recipients identifiers bytes and unrelated salary or calendar fields', () => {
@@ -128,9 +129,9 @@ test('only a strict literal allowed true from the closed begin acknowledgement r
       if (n.name === 'Finish Delivery') return {statusCode: 200, body: {ok: true, recorded: true}};
       assert.equal(n.name, 'Send Word to Manager'); return {statusCode: 202, body: ''};
     });
-    assert.deepEqual(calls[0], ['Begin Delivery', {phase: 'begin', recipient: 'manager@mobilityaccess.com.au', deliveryId: p.deliveryId, claimToken: p.claimToken, attachmentSha256: p.attachment.sha256}]);
+    assert.deepEqual(calls[0], ['Begin Delivery', {phase: 'begin', recipient: 'manager@mobilityaccess.com.au', ccRecipients: p.ccRecipients, deliveryId: p.deliveryId, claimToken: p.claimToken, attachmentSha256: p.attachment.sha256}]);
     assert.equal(calls.filter(([name]) => name === 'Send Word to Manager').length, index === 0 ? 1 : 0);
-    if (index > 0) assert.deepEqual(result.value, {ok: false, status: 'held', deliveryId: p.deliveryId, eventKey: p.eventKey, actualRecipients: [p.recipient], attachmentSha256: p.attachment.sha256});
+    if (index > 0) assert.deepEqual(result.value, {ok: false, status: 'held', deliveryId: p.deliveryId, eventKey: p.eventKey, actualRecipients: [p.recipient, ...p.ccRecipients], attachmentSha256: p.attachment.sha256});
   }
   const invalid = payload(); invalid.recipient = 'synthetic@example.invalid'; let calls = 0;
   const result = await executeGraph(workflow, 'Receive Finalisation', {body: invalid}, async () => {calls++; throw Error('unexpected');});
@@ -160,7 +161,7 @@ test('empty Graph 202 is accepted only after exact finish acknowledgement and ne
     assert.deepEqual(calls.map(([name]) => name), ['Begin Delivery', 'Send Word to Manager', 'Finish Delivery']);
     assert.deepEqual(calls[2][1], {phase: 'finish', deliveryId: p.deliveryId, claimToken: p.claimToken, attachmentSha256: p.attachment.sha256, outcome});
     const accepted = outcome === 'provider_accepted' && index === 0;
-    assert.deepEqual(result.value, {ok: accepted, status: accepted ? 'provider_accepted' : 'held', deliveryId: p.deliveryId, eventKey: p.eventKey, actualRecipients: [p.recipient], attachmentSha256: p.attachment.sha256});
+    assert.deepEqual(result.value, {ok: accepted, status: accepted ? 'provider_accepted' : 'held', deliveryId: p.deliveryId, eventKey: p.eventKey, actualRecipients: [p.recipient, ...p.ccRecipients], attachmentSha256: p.attachment.sha256});
     assert.equal(Object.hasOwn(result.value, 'messageId'), false);
   }
 });

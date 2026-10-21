@@ -9,6 +9,15 @@ import { performanceReviewMailEnabled, performanceReviewMailTarget, performanceM
 export const performanceManagerEmail = (value: unknown): value is string => typeof value === "string" && value.length <= 254
   && value === value.trim().toLowerCase() && value !== "careers@mobilityaccess.com.au"
   && /^[^\s@,;]+@(mobilityaccess\.com\.au|equipsy\.com\.au)$/.test(value) && !/[\u0000-\u001f\u007f]/.test(value);
+export function performanceMailCcRecipients(value: unknown, recipient: unknown): value is string[] {
+  return Array.isArray(value) && value.length <= 2
+    && Reflect.ownKeys(value).length === value.length + 1
+    && Array.from({ length: value.length }, (_, index) => index).every(index => {
+      const entry = Object.getOwnPropertyDescriptor(value, String(index));
+      return entry && Object.hasOwn(entry, "value") && performanceManagerEmail(entry.value) && entry.value !== recipient
+        && (index === 0 || value[index - 1] < entry.value);
+    });
+}
 const MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 export function performanceMailUuid(value: unknown): value is string {
@@ -16,13 +25,13 @@ export function performanceMailUuid(value: unknown): value is string {
 }
 
 export function validatePerformanceReviewMailPayload(raw: unknown): void {
-  const v = closed(raw, ["version", "event", "eventKey", "deliveryId", "reviewId", "reviewCode", "claimToken", "employeeName", "managerName", "finalisedAt", "recipient", "managerNote", "attachment"]);
+  const v = closed(raw, ["version", "event", "eventKey", "deliveryId", "reviewId", "reviewCode", "claimToken", "employeeName", "managerName", "finalisedAt", "recipient", "ccRecipients", "managerNote", "attachment"]);
   const a = closed(v.attachment, ["fileName", "mimeType", "contentBase64", "sha256"]);
   const text = (value: unknown) => typeof value === "string" && value.length <= 8000 && Boolean(value.trim())
     && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffe\uffff]/.test(value);
   if (v.version !== 1 || v.event !== "performance-review-finalised" || !performanceMailUuid(v.reviewId)
     || !performanceMailUuid(v.deliveryId) || !performanceMailUuid(v.claimToken)
-    || v.eventKey !== `performance-review:${v.reviewId}:finalised` || !performanceManagerEmail(v.recipient)
+    || v.eventKey !== `performance-review:${v.reviewId}:finalised` || !performanceManagerEmail(v.recipient) || !performanceMailCcRecipients(v.ccRecipients, v.recipient)
     || typeof v.reviewCode !== "string" || !/^PR-[0-9]{4}-[1-9][0-9]*$/.test(v.reviewCode)
     || !text(v.employeeName) || !text(v.managerName) || !text(v.managerNote)
     || typeof v.finalisedAt !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(v.finalisedAt)
@@ -40,9 +49,9 @@ function payloadForClaim(raw: unknown, reviewId: string | null) {
   const row = closed(raw, ["delivery_id", "review_id", "claim_token", "payload"]);
   if (!performanceMailUuid(row.delivery_id) || !performanceMailUuid(row.review_id) || !performanceMailUuid(row.claim_token)
     || (reviewId !== null && row.review_id !== reviewId)) throw new Error("invalid_claim");
-  const payload = closed(row.payload, ["reviewId", "reviewCode", "finalisedAt", "managerNote", "document", "recipient"]);
+  const payload = closed(row.payload, ["reviewId", "reviewCode", "finalisedAt", "managerNote", "document", "recipient", "ccRecipients"]);
   const document = parseDocument(payload.document);
-  if (!performanceManagerEmail(payload.recipient) || document.audience !== "manager" || document.code !== payload.reviewCode || payload.reviewId !== row.review_id
+  if (!performanceManagerEmail(payload.recipient) || !performanceMailCcRecipients(payload.ccRecipients, payload.recipient) || document.audience !== "manager" || document.code !== payload.reviewCode || payload.reviewId !== row.review_id
     || !performanceMailUuid(document.employee.id) || !performanceMailUuid(document.manager.id)
     || !document.meeting || !document.summary.trim() || !document.overallRating
     || REQUIRED_ANSWERS.some(i => !document.selfAnswers[i].trim() || !document.managerAnswers[i].trim())
@@ -58,7 +67,7 @@ function payloadForClaim(raw: unknown, reviewId: string | null) {
     version: 1, event: "performance-review-finalised", eventKey: `performance-review:${row.review_id}:finalised`,
     deliveryId: row.delivery_id, reviewId: row.review_id, reviewCode: document.code, claimToken: row.claim_token,
     employeeName: document.employee.name, managerName: document.manager.name, finalisedAt: payload.finalisedAt,
-    recipient: payload.recipient, managerNote: payload.managerNote,
+    recipient: payload.recipient, ccRecipients: payload.ccRecipients, managerNote: payload.managerNote,
     attachment: { fileName: download.fileName, mimeType: MIME, contentBase64: bytes.toString("base64"), sha256: createHash("sha256").update(bytes).digest("hex") },
   };
 }
@@ -103,9 +112,11 @@ export async function dispatchPerformanceReviewMailOutbox(reviewId: string | nul
         });
         if (response.status !== 200 || response.redirected || (response.url && response.url !== target.url)) throw new Error("invalid_response");
         const receipt = closed(await readPerformanceMailJson(response, 16_384, signal), ["ok", "status", "deliveryId", "eventKey", "actualRecipients", "attachmentSha256"]);
+        const actualRecipients = receipt.actualRecipients;
         return receipt.ok === true && receipt.status === "provider_accepted" && receipt.deliveryId === payload.deliveryId
           && receipt.eventKey === payload.eventKey && receipt.attachmentSha256 === payload.attachment.sha256
-          && Array.isArray(receipt.actualRecipients) && receipt.actualRecipients.length === 1 && receipt.actualRecipients[0] === payload.recipient;
+          && Array.isArray(actualRecipients) && actualRecipients.length === payload.ccRecipients.length + 1
+          && [payload.recipient, ...payload.ccRecipients].every((recipient, index) => actualRecipients[index] === recipient);
       }, Math.min(15_000, budget.remaining() - 2_000));
     } catch { accepted = false; }
     try {

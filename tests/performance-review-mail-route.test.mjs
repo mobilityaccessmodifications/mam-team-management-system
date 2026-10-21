@@ -3,9 +3,9 @@ import test from 'node:test';
 import ts from 'typescript';
 import { fixture, loadMailHarness, environment, ids, request, ack, readyHook, app, sharedSecret } from './helpers/performance-review-mail-harness.mjs';
 
-const beginBody = () => ({ phase: 'begin', recipient: 'manager@mobilityaccess.com.au', deliveryId: ids.delivery, claimToken: ids.claim, attachmentSha256: 'a'.repeat(64) });
+const beginBody = () => ({ phase: 'begin', recipient: 'manager@mobilityaccess.com.au', ccRecipients: ['reviewer-one@mobilityaccess.com.au', 'reviewer-two@mobilityaccess.com.au'], deliveryId: ids.delivery, claimToken: ids.claim, attachmentSha256: 'a'.repeat(64) });
 
-const finishBody = () => { const body = beginBody(); delete body.recipient; return { ...body, phase: 'finish' }; };
+const finishBody = () => { const body = beginBody(); delete body.recipient; delete body.ccRecipients; return { ...body, phase: 'finish' }; };
 
 test('actual HTTP exports authenticate before any client, RPC or transport', async () => {
   const h = loadMailHarness(); const route = h.route();
@@ -49,8 +49,8 @@ test('authenticated GET without params drains only the native new outbox with sa
 test('begin and finish map only actual scalar Boolean RPC results to exact HTTP shapes', async () => {
   for (const phase of ['begin','finish']) for (const value of [true, false, null, 'true', 'false', [], [true], {}, { allowed: true }, undefined]) {
     const h = loadMailHarness({ rpc: (name, args) => {
-      assert.equal(name, phase === 'begin' ? 'begin_performance_review_manager_mail' : 'finish_performance_review_mail');
-      assert.deepEqual(args, { p_delivery_id: ids.delivery, p_claim_token: ids.claim, p_attachment_sha256: 'a'.repeat(64), ...(phase === 'finish' ? { p_outcome: 'provider_accepted' } : { p_recipient: 'manager@mobilityaccess.com.au' }) });
+      assert.equal(name, phase === 'begin' ? 'begin_performance_review_final_mail' : 'finish_performance_review_mail');
+      assert.deepEqual(args, { p_delivery_id: ids.delivery, p_claim_token: ids.claim, p_attachment_sha256: 'a'.repeat(64), ...(phase === 'finish' ? { p_outcome: 'provider_accepted' } : { p_recipient: 'manager@mobilityaccess.com.au', p_cc_recipients: ['reviewer-one@mobilityaccess.com.au', 'reviewer-two@mobilityaccess.com.au'] }) });
       return { data: value, error: null };
     } });
     const body = { ...(phase === 'finish' ? finishBody() : beginBody()), phase, ...(phase === 'finish' ? { outcome: 'provider_accepted' } : {}) };

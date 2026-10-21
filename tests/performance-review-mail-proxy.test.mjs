@@ -14,7 +14,7 @@ test('AM-01 exact mail Proxy reaches real GET dispatcher readiness and POST call
       [request(), { ok: true, code: 'processed', claimed: 0, providerAccepted: 0, held: 0 }],
       [request('GET', undefined, { query: '?readiness=1' }), { ok: true, configured: true, ready: true }],
       [request('POST', { phase: 'readiness' }), { ok: true, ready: true }],
-      [request('POST', { phase: 'begin', recipient: 'manager@mobilityaccess.com.au', ...binding }), { ok: true, allowed: true }],
+      [request('POST', { phase: 'begin', recipient: 'manager@mobilityaccess.com.au', ccRecipients: ['reviewer-one@mobilityaccess.com.au', 'reviewer-two@mobilityaccess.com.au'], ...binding }), { ok: true, allowed: true }],
       [request('POST', { phase: 'finish', ...binding, outcome: 'provider_accepted' }), { ok: true, recorded: true }],
     ];
     for (const [req, expected] of cases) {
@@ -30,7 +30,7 @@ test('AM-01 exact mail Proxy reaches real GET dispatcher readiness and POST call
 
 test('AM-01 exact endpoint still rejects missing wrong and swapped secrets before claims', async () => {
   const p = loadMailProxyHarness({ configured: false });
-  for (const req of [request('GET', undefined, { bearer: '' }), request('GET', undefined, { bearer: 'wrong' }), request('GET', undefined, { bearer: sharedSecret }), request('POST', { phase: 'readiness' }, { secret: '' }), request('POST', { phase: 'readiness' }, { secret: cronSecret }), request('POST', { phase: 'begin', recipient: 'manager@mobilityaccess.com.au', ...binding }, { secret: 'wrong' })]) {
+  for (const req of [request('GET', undefined, { bearer: '' }), request('GET', undefined, { bearer: 'wrong' }), request('GET', undefined, { bearer: sharedSecret }), request('POST', { phase: 'readiness' }, { secret: '' }), request('POST', { phase: 'readiness' }, { secret: cronSecret }), request('POST', { phase: 'begin', recipient: 'manager@mobilityaccess.com.au', ccRecipients: ['reviewer-one@mobilityaccess.com.au', 'reviewer-two@mobilityaccess.com.au'], ...binding }, { secret: 'wrong' })]) {
     const response = await p.handle(req);
     assert.equal(response.status, 401);
     assert.deepEqual(await response.json(), { ok: false, code: 'unauthorized' });

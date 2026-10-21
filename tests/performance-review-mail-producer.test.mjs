@@ -22,7 +22,7 @@ test('AM-02 actual installed text fullResponse producer reaches real classifier 
   assert.equal(produced.body, ''); assert.equal(Object.hasOwn(produced, 'data'), false);
   assert.deepEqual(names, ['Begin Delivery','Send Word to Manager','Finish Delivery']);
   assert.equal(result.value.status, 'provider_accepted'); assert.equal(result.value.attachmentSha256, p.attachment.sha256);
-  assert.deepEqual(result.value.actualRecipients, [p.recipient]);
+  assert.deepEqual(result.value.actualRecipients, [p.recipient, ...p.ccRecipients]);
 });
 
 test('AM-02 captured producer default demonstrably returns data instead of body', async () => {
@@ -47,7 +47,7 @@ test('AM-02 installed producer preserves strict 202 empty-body classification an
       if (node.name === 'Send Word to Manager') {
         sends++;
         assert.deepEqual(requestBody.message.toRecipients, [{ emailAddress: { address: 'manager@mobilityaccess.com.au' } }]);
-        assert.deepEqual(requestBody.message.ccRecipients, []); assert.deepEqual(requestBody.message.bccRecipients, []);
+        assert.deepEqual(requestBody.message.ccRecipients, p.ccRecipients.map(address => ({ emailAddress: { address } }))); assert.deepEqual(requestBody.message.bccRecipients, []);
         assert.equal(requestBody.message.attachments[0].contentBytes, p.attachment.contentBase64);
         return execute(node, { statusCode, headers: {}, statusMessage: 'Synthetic', body }, requestBody);
       }
