@@ -15,8 +15,8 @@ from urllib.request import Request, build_opener
 ROOT = Path(__file__).resolve().parents[1]
 NROOT = Path('/Volumes/UG/MAM/opencode/n8n')
 KEYS = ('name', 'nodes', 'connections', 'settings')
-PREDECESSOR = {'id': '4Ahuz2qzddNKo7LB', 'versionId': 'e21bd3ab-4f90-494d-92aa-dd6c5a355574',
-               'sha256': 'da0043257a71fb4332ecf719adc975bfebb19ea95c66fc88844e4e5d8390c92d'}
+PREDECESSOR = {'id': '4Ahuz2qzddNKo7LB', 'versionId': 'e16479bf-d2c1-4b26-8457-3aa5b34a06e0',
+               'sha256': 'd2668f6d7741ad80ff7f912ac16f2f96884babc254b3d2de6c990a3086a2c93f'}
 READY_PATHS = {'calendar': '/webhook/mam-people-hub-performance-review-meeting-v1-ready',
                'notifications': '/webhook/mam-people-hub-performance-review-notifications-v1-ready'}
 

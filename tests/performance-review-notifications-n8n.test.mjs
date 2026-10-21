@@ -337,15 +337,16 @@ test('explicit new notification CC cannot be omitted, expanded or redirected', a
   }
 });
 
-test('manager invitation sends one brief signed scheduling email to manager and employee without answers', async () => {
-  for (const recipient of ['employee@example.invalid,manager@example.invalid', 'careers@mobilityaccess.com.au,employee@example.invalid']) {
-    const p = {...payload('manager-invited'), recipient, cc: recipient.includes('careers@mobilityaccess.com.au') ? '' : 'careers@mobilityaccess.com.au'};
+test('manager invitation sends one brief signed scheduling email only to manager and employee without answers', async () => {
+  for (const recipient of ['employee@example.invalid,manager@example.invalid', 'ai@mobilityaccess.com.au,employee@example.invalid']) {
+    const p = {...payload('manager-invited'), recipient, cc: ''};
     const evidence = {...receipt(p), actualCcRecipients: p.cc};
     const h = harness(build(), p, {confirm: {statusCode: 200, body: evidence}});
     assert.deepEqual((await h.run()).value, evidence);
     const mail = h.calls[1].body.message;
     assert.deepEqual(mail.toRecipients, recipient.split(',').map(address => ({emailAddress: {address}})));
-    assert.deepEqual(mail.ccRecipients, p.cc ? [{emailAddress: {address: p.cc}}] : []);
+    assert.deepEqual(mail.ccRecipients, []);
+    assert.deepEqual(mail.bccRecipients, []);
     assert.equal(mail.subject, 'Arrange performance review: ' + p.reviewCode);
     assert.match(mail.body.content, /Reply with Meeting/);
     assert.match(mail.body.content, /ai@mobilityaccess\.com\.au/);
@@ -358,10 +359,29 @@ test('manager invitation sends one brief signed scheduling email to manager and 
     const duplicate = harness(build(), p, {reserve: {statusCode: 200, body: {...evidence, outcome: 'duplicate', sent: false, alreadySent: true}}});
     assert.equal((await duplicate.run()).value.alreadySent, true); assert.equal(duplicate.calls.length, 1);
   }
-  for (const recipient of ['manager@example.invalid', 'manager@example.invalid,employee@example.invalid', 'employee@example.invalid,manager@example.invalid,other@example.invalid', 'employee@example.invalid,employee@example.invalid']) {
-    const h = harness(build(), {...payload('manager-invited'), recipient, cc: 'careers@mobilityaccess.com.au'});
+  for (const recipient of ['manager@example.invalid', 'manager@example.invalid,employee@example.invalid', 'employee@example.invalid,manager@example.invalid,other@example.invalid', 'employee@example.invalid,employee@example.invalid', 'careers@mobilityaccess.com.au,employee@example.invalid']) {
+    const h = harness(build(), {...payload('manager-invited'), recipient, cc: ''});
     assert.deepEqual((await h.run()).value, held); assert.equal(h.calls.length, 0);
   }
   const missingCc = harness(build(), {...payload('manager-invited'), recipient: 'employee@example.invalid,manager@example.invalid'});
   assert.deepEqual((await missingCc.run()).value, held); assert.equal(missingCc.calls.length, 0);
+});
+
+test('manager invitation rejects Careers and arbitrary CC before reserve or Graph send', async () => {
+  for (const cc of ['careers@mobilityaccess.com.au', 'other@example.invalid', null, [], '']) {
+    const p = {...payload('manager-invited'), recipient: 'employee@example.invalid,manager@example.invalid', cc};
+    if (cc === '') p.recipient = 'careers@mobilityaccess.com.au,employee@example.invalid';
+    const h = harness(build(), p);
+    assert.deepEqual((await h.run()).value, held); assert.equal(h.calls.length, 0);
+  }
+});
+
+test('manager invitation holds mismatched receipt recipients or Careers CC at reserve and confirm', async () => {
+  const p = {...payload('manager-invited'), recipient: 'employee@example.invalid,manager@example.invalid', cc: ''};
+  for (const stage of ['reserve', 'confirm']) for (const wrong of [{actualRecipient: 'careers@mobilityaccess.com.au,employee@example.invalid'}, {actualCcRecipients: 'careers@mobilityaccess.com.au'}]) {
+    const body = {...receipt(p, stage === 'reserve'), ...wrong};
+    const h = harness(build(), p, {[stage]: {statusCode: 200, body}});
+    assert.deepEqual((await h.run()).value, held);
+    assert.equal(h.calls.filter(call => call.name === 'Send Performance Notification').length, stage === 'reserve' ? 0 : 1);
+  }
 });

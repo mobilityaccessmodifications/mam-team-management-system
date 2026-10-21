@@ -19,7 +19,7 @@ function claimedPayload(raw: unknown, reviewId: string | null) {
   const p = closed(row.payload, ["event", "eventKey", "reviewId", "reviewCode", "cycle", "dueDate", "recipient", "employeeName", "managerName", ...(hasCc ? ["cc"] : [])]);
   const cc = hasCc ? p.cc : "";
   const recipients = typeof p.recipient === "string" ? p.recipient.split(",") : [];
-  const expectedCc = recipients.includes("careers@mobilityaccess.com.au") ? "" : "careers@mobilityaccess.com.au";
+  const expectedCc = p.event === "manager-invited" || recipients.includes("careers@mobilityaccess.com.au") ? "" : "careers@mobilityaccess.com.au";
   const name = (v: unknown) => typeof v === "string" && v.trim().length > 0 && v.length <= 8000 && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffe\uffff]/.test(v);
   if (!performanceMailUuid(row.delivery_id) || !performanceMailUuid(row.review_id) || !performanceMailUuid(row.claim_token)
     || (reviewId !== null && row.review_id !== reviewId) || p.reviewId !== row.review_id
@@ -28,6 +28,7 @@ function claimedPayload(raw: unknown, reviewId: string | null) {
     || typeof p.cycle !== "string" || !/^[0-9]{4}$/.test(p.cycle)
     || typeof p.dueDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(p.dueDate)
     || ((hasCc || p.event === "manager-invited") && cc !== expectedCc)
+    || (p.event === "manager-invited" && (!hasCc || recipients.includes("careers@mobilityaccess.com.au")))
     || !name(p.employeeName) || !name(p.managerName) || typeof p.recipient !== "string"
     || recipients.length !== (p.event === "manager-invited" ? 2 : 1)
     || p.recipient !== [...new Set(recipients)].sort().join(",")
@@ -46,7 +47,7 @@ export async function dispatchPerformanceReviewNotifications(reviewId: string | 
   const admin = createAdminClient();
   let rows: unknown[];
   try {
-    const result = await budget.run(signal => admin.rpc("claim_performance_review_notifications", { p_review_id: reviewId, p_limit: 1 }).retry(false).abortSignal(signal));
+    const result = await budget.run(signal => admin.rpc("claim_performance_review_notifications", { p_review_id: reviewId, p_limit: 1, p_policy_version: 2 }).retry(false).abortSignal(signal));
     if (!performanceMailRpcSucceeded(result) || !Array.isArray(result.data) || result.data.length > 1) throw Error("invalid_claim");
     rows = result.data;
   } catch { return { ok: false, code: "claim_failed", ...empty }; }

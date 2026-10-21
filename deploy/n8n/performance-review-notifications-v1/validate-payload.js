@@ -27,7 +27,9 @@ if (p.version !== 1 || !['started','self-submitted','manager-invited'].includes(
   || p.recipient !== [...new Set(recipients)].sort().join(',')
   || recipients.some(value => value.length > 254 || control.test(value) || value !== value.trim().toLowerCase() || !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(value))) return reject();
 const cc = hasCc ? p.cc : '';
-if ((hasCc || p.event === 'manager-invited') && cc !== (recipients.includes('careers@mobilityaccess.com.au') ? '' : 'careers@mobilityaccess.com.au')) return reject();
+const expectedCc = p.event === 'manager-invited' || recipients.includes('careers@mobilityaccess.com.au') ? '' : 'careers@mobilityaccess.com.au';
+if (((hasCc || p.event === 'manager-invited') && cc !== expectedCc)
+  || (p.event === 'manager-invited' && (!hasCc || recipients.includes('careers@mobilityaccess.com.au')))) return reject();
 const link = 'https://mam-team-management-system-ten.vercel.app/?view=people&tab=performance';
 const signature = '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;border-top:1px solid #dce4df;padding-top:16px;font-family:Segoe UI,Arial,sans-serif"><tr><td style="vertical-align:middle;padding-right:16px"><a href="https://www.mobilityaccess.com.au/" style="text-decoration:none"><img src="https://mam-team-management-system-ten.vercel.app/email/mam-logo.jpg" alt="MAM – Mobility Access Modifications" width="150" height="69" style="display:block;width:150px;height:auto;border:0"></a></td><td style="vertical-align:middle;color:#50615b;font-size:12px;line-height:1.5"><strong style="color:#22302b;font-size:13px">People &amp; Culture</strong><br>Mobility Access Modifications</td></tr></table>';
 const message = p.event === 'started'
