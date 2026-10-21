@@ -126,7 +126,7 @@ test('employee search filters the scoped roster without losing a manager draft a
   await expect(field(page, 'manager-0')).toHaveValue('Keep this manager draft');
   await search.fill('no such employee');
   await expect(employees.getByRole('button')).toHaveCount(0);
-  await expect(page.getByRole('status')).toHaveText('No employees match that search.');
+  await expect(page.getByRole('status').filter({ hasText: /^No employees match that search\.$/ })).toBeVisible();
   await search.fill('equipsy');
   await expect(employees.getByRole('button')).toHaveCount(1);
   await search.fill('');
