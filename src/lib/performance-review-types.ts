@@ -12,6 +12,13 @@ export type PerformanceIdentity = {
 
 export type PerformanceManagerIdentity = { id: string; name: string };
 export type PerformanceActivity = { kind: string; at: string };
+export type PerformanceGoal = {
+  priority: string;
+  measureOfSuccess: string;
+  supportAndResponsiblePerson: string;
+  dueDate: string;
+  progressCheck: string;
+};
 export type PerformanceMeeting = {
   date: string;
   time: string;
@@ -59,6 +66,7 @@ export type PerformanceSelfReview = PerformanceSelfFields & {
 };
 
 export type PerformanceManagerFields = {
+  goals: PerformanceGoal[];
   managerAnswers: string[];
   ratings: string[];
   summary: string;
@@ -123,6 +131,7 @@ export type PerformanceStartInput = {
 
 export type PerformanceSelfInput = { answers: string[] };
 export type PerformanceManagerInput = {
+  goals?: PerformanceGoal[];
   answers: string[];
   ratings: string[];
   summary: string;
@@ -164,6 +173,7 @@ export type PerformanceEmployeeDocument = {
 };
 
 export type PerformanceManagerDocument = {
+  goals: PerformanceGoal[];
   audience: "manager" | "admin";
   code: string;
   cycle: string;

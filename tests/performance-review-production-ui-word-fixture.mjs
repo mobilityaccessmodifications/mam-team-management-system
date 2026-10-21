@@ -10,6 +10,7 @@ export const questionsSha256 = '9af2edc812ec465fe14a4d865e68606cee04d4fb122c5dcb
 export const replacements = [
   ['SYNTHETIC TEST ONLY — no real employee information.', 'Confidential — internal performance review.'],
   ['Structured goal details are not captured separately in this test version. The goal table is intentionally blank; no goals or dates have been inferred.', 'Structured goal details are not captured separately. The goal table is intentionally blank; no goals or dates have been inferred.'],
+  ["      paragraph('Goals and meeting record',{bold:true,size:28,before:240,keep:true}),\n      paragraph('Structured goal details are not captured separately in this test version. The goal table is intentionally blank; no goals or dates have been inferred.',{size:18,color:'526275'}));\n    const goals=[['Priority','Measure of success','Support and responsible person','Due date','Progress check'].map(heading),...Array.from({length:3},()=>Array.from({length:5},()=>yellow('')))];\n", "      paragraph('Goals and meeting record',{bold:true,size:28,before:240,keep:true}));\n    const capturedGoals=review.goals??[];\n    if(!capturedGoals.length)body.push(paragraph('Structured goal details are not captured separately in this test version. The goal table is intentionally blank; no goals or dates have been inferred.',{size:18,color:'526275'}));\n    const goals=[['Priority','Measure of success','Support and responsible person','Due date','Progress check'].map(heading),...(capturedGoals.length?capturedGoals.map(goal=>[goal.priority,goal.measureOfSuccess,goal.supportAndResponsiblePerson,goal.dueDate,goal.progressCheck].map(yellow)):Array.from({length:3},()=>Array.from({length:5},()=>yellow(''))))];\n"],
 ];
 
 export function adapter() {
@@ -31,7 +32,7 @@ export function sample(company, audience) {
     ratings: Array(12).fill('2 Meets expectations'), summary: 'Synthetic summary',
     overallRating: '2 Meets expectations', meeting: { ...meeting, notes: 'Synthetic meeting notes' },
   });
-  for (const key of audience === 'employee' ? ['managerAnswers', 'ratings', 'summary', 'overallRating', 'meeting', 'managerNote'] : ['managerNote']) {
+  for (const key of audience === 'employee' ? ['managerAnswers', 'ratings', 'summary', 'overallRating', 'meeting', 'managerNote', 'goals'] : ['managerNote']) {
     Object.defineProperty(row, key, { enumerable: true, get() { throw new Error('Private field read: ' + key); } });
   }
   return row;

@@ -38,7 +38,7 @@ function claimedPayload(raw: unknown, reviewId: string | null) {
 
 export async function dispatchPerformanceReviewNotifications(reviewId: string | null = null, expiresAt = Date.now() + 25_000) {
   const empty = { claimed: 0, sent: 0, held: 0 };
-  if (!performanceReviewMailEnabled() || process.env.PERFORMANCE_REVIEW_RELEASE_PAUSED === "true") return { ok: true, code: "disabled", ...empty };
+  if (!performanceReviewMailEnabled()) return { ok: true, code: "disabled", ...empty };
   if (reviewId !== null && !performanceMailUuid(reviewId)) return { ok: false, code: "invalid_review", ...empty };
   const budget = performanceMailBudget(expiresAt);
   let target: ReturnType<typeof receiver>;

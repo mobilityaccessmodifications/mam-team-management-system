@@ -29,9 +29,10 @@ test('live worker sends canonical closed Careers payload and native Word bytes w
     },
   });
   assert.deepEqual(await h.mail.dispatchPerformanceReviewMailOutbox(), { ok: true, code: 'processed', claimed: 1, providerAccepted: 1, held: 0 });
-  assert.deepEqual(Object.keys(wire).sort(), ['version','event','eventKey','deliveryId','reviewId','reviewCode','claimToken','employeeName','managerName','finalisedAt','recipient','managerNote','attachment'].sort());
+  assert.deepEqual(Object.keys(wire).sort(), ['version','event','eventKey','deliveryId','reviewId','reviewCode','claimToken','employeeName','managerName','finalisedAt','recipient','ccRecipients','managerNote','attachment'].sort());
   assert.equal(wire.version, 1); assert.equal(wire.event, 'performance-review-finalised');
   assert.equal(wire.eventKey, `performance-review:${ids.review}:finalised`); assert.equal(wire.recipient, 'manager@mobilityaccess.com.au');
+  assert.deepEqual(wire.ccRecipients, row.payload.ccRecipients);
   assert.equal(wire.managerNote, row.payload.managerNote);
   assert.deepEqual(Object.keys(wire.attachment).sort(), ['fileName','mimeType','contentBase64','sha256'].sort());
   assert.equal(wire.attachment.fileName, 'PR-2026-1-manager.docx');
@@ -42,6 +43,7 @@ test('live worker sends canonical closed Careers payload and native Word bytes w
   assert.equal(createHash('sha256').update(bytes).digest('hex'), wire.attachment.sha256);
   const parts = unzipSync(bytes), xml = strFromU8(parts['word/document.xml']);
   assert.match(xml, /MAM Performance review/); assert.match(xml, /Synthetic self answer/); assert.match(xml, /Synthetic manager answer/);
+  for (const value of Object.values(row.payload.document.goals[0])) assert.ok(xml.includes(value), `Attachment must contain agreed goal field: ${value}`);
   assert.match(xml, /2 Meets expectations/); assert.match(xml, /landscape/); assert.doesNotMatch(xml, /unique-not-in-word|Synthetic private note/);
   assert.ok(Object.hasOwn(parts, '[Content_Types].xml')); assert.equal(h.logs.length, 0);
 });
@@ -126,6 +128,10 @@ test('actual canonical Word overflow is held before network without replacing th
 test('exact response identity is required and every ambiguous acknowledgement is a sticky unknown', async () => {
   const variants = [
     w => ack(w, { deliveryId: ids.claim }), w => ack(w, { eventKey: 'performance-review:forged:finalised' }),
+    w => ack(w, { actualRecipients: [w.recipient] }), w => ack(w, { actualRecipients: [w.recipient, ...w.ccRecipients].reverse() }),
+    w => ack(w, { actualRecipients: [w.recipient, ...w.ccRecipients, 'foreign@mobilityaccess.com.au'] }),
+    w => ack(w, { actualRecipients: [w.recipient, w.ccRecipients[1], w.ccRecipients[0]] }),
+    w => ack(w, { actualRecipients: [w.recipient, w.ccRecipients[0], w.ccRecipients[0]] }),
     w => ack(w, { actualRecipients: ['foreign@example.test'] }), w => ack(w, { actualRecipients: 'careers@mobilityaccess.com.au' }),
     w => ack(w, { actualRecipients: ['careers@mobilityaccess.com.au', 'foreign@example.test'] }),
     w => ack(w, { attachmentSha256: 'a'.repeat(64) }), w => ack(w, { status: 'held' }), w => ack(w, { ok: false }),

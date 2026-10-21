@@ -229,7 +229,7 @@ const handlers = {
       }
       if (!current || current.audience !== 'manager' || current.managerRevision !== input.expectedRevision || !['save_manager', 'complete_manager', 'save_meeting', 'submit_review'].includes(input.command)) throw new Error('Synthetic performance command is outside the assigned row');
       const row = { ...current, managerRevision: `manager:0:${Number(current.managerRevision.split(':').at(-1)) + 1}` };
-      if (input.command === 'save_manager' || input.command === 'complete_manager') Object.assign(row, { managerAnswers: input.input.answers, ratings: input.input.ratings, summary: input.input.summary, overallRating: input.input.overallRating, managerNote: input.input.managerNote, managerCompletedAt: input.command === 'complete_manager' ? '2026-10-20T00:00:00Z' : current.managerCompletedAt });
+      if (input.command === 'save_manager' || input.command === 'complete_manager') Object.assign(row, { managerAnswers: input.input.answers, ratings: input.input.ratings, summary: input.input.summary, overallRating: input.input.overallRating, managerNote: input.input.managerNote, goals: structuredClone(input.input.goals ?? current.goals), managerCompletedAt: input.command === 'complete_manager' ? '2026-10-20T00:00:00Z' : current.managerCompletedAt });
       else row.meeting = { ...input.input };
       if (input.command === 'submit_review') Object.assign(row, { finalisedAt: '2026-10-20T00:30:00Z', capabilities: { ...row.capabilities, saveManager: false, completeManager: false, saveMeeting: false, submitReview: false } });
       return performanceReceipt(input, id, row);

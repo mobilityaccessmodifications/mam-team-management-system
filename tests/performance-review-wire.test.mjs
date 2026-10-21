@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AuthApiError, AuthSessionMissingError } from '@supabase/supabase-js';
 import { loadModule } from './helpers/contact-lifetime-harness.mjs';
-import { mount, nodes, text } from './performance-review-harness.mjs';
+import { mount, text } from './performance-review-harness.mjs';
 import { actorId, managerId, review } from './performance-review-backend-fixtures.mjs';
 import { productionActionHarness } from './performance-review-production-ui-fixture.mjs';
 
@@ -32,7 +32,7 @@ function composedManager({ meetingEnabled = false } = {}) {
           row = { ...row, meeting: structuredClone(input), managerRevision: 'manager:1:' + mutationVersion };
         } else {
           assert.equal(args.p_command, 'save_manager');
-          row = { ...row, managerAnswers: input.answers, ratings: input.ratings, summary: input.summary, overallRating: input.overallRating, managerNote: input.managerNote, managerRevision: 'manager:1:' + mutationVersion };
+          row = { ...row, managerAnswers: input.answers, ratings: input.ratings, summary: input.summary, overallRating: input.overallRating, managerNote: input.managerNote, goals: structuredClone(input.goals ?? row.goals), managerRevision: 'manager:1:' + mutationVersion };
         }
         return { data: { committed: true, operationId: args.p_operation_id, review: structuredClone(row) }, error: null, status: 200 };
       }
@@ -55,8 +55,10 @@ test('actual manager controls submit canonical rating labels through the actual 
     await ui.settle();
     assert.equal(ui.field('rating-0').props.disabled, false);
     for (const name of ['rating-0', 'overallRating']) {
-      const option = nodes(ui.field(name)).find(node => node.type === 'option' && text(node) === '2 Meets expectations');
-      assert.ok(option, 'The real select exposes the original rating label');
+      const options = ui.all.filter(node => node.type === 'input' && node.props.type === 'radio' && node.props.name === name);
+      assert.equal(options.length, 4, 'Every rating is directly available');
+      const option = options.find(node => node.props.value === '2 Meets expectations');
+      assert.ok(option, 'The radio exposes the original rating label');
       ui.change(name, option.props.value);
     }
     await ui.click('Save draft');
@@ -67,7 +69,7 @@ test('actual manager controls submit canonical rating labels through the actual 
     assert.equal(writes[0].args.p_input.ratings[0], '2 Meets expectations');
     assert.equal(writes[0].args.p_input.overallRating, '2 Meets expectations');
     assert.match(ui.text, /Saved\./);
-    assert.equal(ui.field('rating-0').props.value, '2 Meets expectations');
+    assert.equal(ui.all.find(node => node.type === 'input' && node.props.name === 'rating-0' && node.props.value === '2 Meets expectations').props.checked, true);
   } finally {
     ui?.unmount();
     if (previous === undefined) delete process.env.MAM_PERFORMANCE_REVIEW_ENABLED;

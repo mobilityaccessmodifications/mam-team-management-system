@@ -39,7 +39,7 @@ test('native employee Word preserves both templates and only the approved produc
   assert.equal(createHash('sha256').update(source).digest('hex'), '7b6476d8fd051f5737fce6571ab826ed9535c6a9b5c000832783de71a2b03f40');
   for (const company of ['MAM', 'Equipsy']) {
     const document = employeeDocument(company);
-    for (const key of ['managerAnswers', 'ratings', 'summary', 'overallRating', 'managerNote', 'meeting']) {
+    for (const key of ['managerAnswers', 'ratings', 'summary', 'overallRating', 'managerNote', 'meeting', 'goals']) {
       Object.defineProperty(document, key, { get() { throw new Error('Private manager field was read'); } });
     }
     const result = buildPerformanceReviewDownload(document);

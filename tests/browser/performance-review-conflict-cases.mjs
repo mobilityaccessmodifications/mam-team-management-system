@@ -49,7 +49,7 @@ for (const audience of ['employee', 'manager']) test(`AM-04 browser ${audience} 
   if (audience === 'manager') {
     await field(page, 'managerNote').fill('PRIVATE-BROWSER-CONFLICT-NOTE');
     await field(page, 'summary').fill('Browser conflict summary');
-    await field(page, 'rating-0').selectOption('3 Exceeds expectations');
+    await page.locator('[name="rating-0"][value="3 Exceeds expectations"]').check();
     await field(page, 'meeting-notes').fill('Browser unsaved meeting draft');
   }
   const first = (await calls(page, 'mutatePerformanceReview'))[0].args[0];

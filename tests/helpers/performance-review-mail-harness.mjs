@@ -35,7 +35,7 @@ export function fixture() {
   return {
     delivery_id: ids.delivery, review_id: ids.review, claim_token: ids.claim,
     payload: {
-      recipient: 'manager@mobilityaccess.com.au', reviewId: ids.review, reviewCode: 'PR-2026-1', finalisedAt: '2026-10-15T05:00:00Z',
+      recipient: 'manager@mobilityaccess.com.au', ccRecipients: ['reviewer-one@mobilityaccess.com.au', 'reviewer-two@mobilityaccess.com.au'], reviewId: ids.review, reviewCode: 'PR-2026-1', finalisedAt: '2026-10-15T05:00:00Z',
       managerNote: 'Synthetic private note <script>& unique-not-in-word',
       document: {
         audience: 'manager', code: 'PR-2026-1', cycle: '2026',
@@ -45,6 +45,7 @@ export function fixture() {
         managerAnswers: Array.from({ length: 12 }, (_, i) => 'Synthetic manager answer ' + i),
         ratings: Array.from({ length: 12 }, (_, i) => [0, 1, 2, 6, 7, 8, 9].includes(i) ? '2 Meets expectations' : ''),
         summary: 'Synthetic summary', overallRating: '2 Meets expectations',
+        goals: [{ priority: 'Synthetic agreed priority', measureOfSuccess: 'Synthetic measurable outcome', supportAndResponsiblePerson: 'Synthetic reviewer support', dueDate: '2026-12-31', progressCheck: 'Monthly synthetic check' }],
         meeting: { date: '2026-10-15', time: '10:00', duration: 30, mode: 'in_person', location: 'Synthetic room', notes: 'Synthetic meeting notes' },
       },
     },
@@ -110,6 +111,6 @@ export function request(method = 'GET', body, { query = '', secret = sharedSecre
 }
 export function receipt(wire, patch = {}) {
   return { ok: true, status: 'provider_accepted', deliveryId: wire.deliveryId, eventKey: wire.eventKey,
-    actualRecipients: [wire.recipient], attachmentSha256: wire.attachment.sha256, ...patch };
+    actualRecipients: [wire.recipient, ...wire.ccRecipients], attachmentSha256: wire.attachment.sha256, ...patch };
 }
 export function ack(wire, patch = {}) { return Response.json(receipt(wire, patch)); }

@@ -108,7 +108,7 @@ test('assigned manager assesses with original ratings while HR is read-only and 
     await h.settle();
     assert.ok(h.text.includes('Manager assessment'));
     assert.equal(h.field('managerNote').props.value, 'PRIVATE-SYNTHETIC-MANAGER-NOTE');
-    assert.deepEqual(h.field('rating-0').props.children.flat().filter(n => n.type === 'option' && n.props.value).slice(0, 4).map(n => n.props.children), ['1 Needs improvement', '2 Meets expectations', '3 Exceeds expectations', 'N Not enough evidence']);
+    assert.deepEqual(h.all.filter(n => n.type === 'input' && n.props.name === 'rating-0').map(n => n.props.value), ['1 Needs improvement', '2 Meets expectations', '3 Exceeds expectations', 'N Not enough evidence']);
     if (audience === 'admin') {
       for (const n of h.all.filter(n => ['input', 'select', 'textarea'].includes(n.type) && n.props.type !== 'search' && n.props.name !== 'start-cycle')) assert.equal(n.props.disabled, true);
       assert.ok(!h.all.some(n => n.type === 'form' && n.props['aria-label'] === 'Self assessment'));
@@ -120,7 +120,7 @@ test('assigned manager assesses with original ratings while HR is read-only and 
       h.click('Save draft and invite meeting'); await h.settle();
       const sent = h.calls.at(-1).args[0];
       assert.equal(sent.command, 'complete_manager'); assert.equal(sent.expectedRevision, 'manager:0:0');
-      assert.deepEqual(Object.keys(sent.input).sort(), ['answers','managerNote','overallRating','ratings','summary']);
+      assert.deepEqual(Object.keys(sent.input).sort(), ['answers','goals','managerNote','overallRating','ratings','summary']);
       assert.equal(sent.input.answers[0], 'Revised manager evidence');
       h.change('managerNote', ''); h.submit('Manager assessment'); await h.settle();
       assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 2);
@@ -151,11 +151,11 @@ test('meeting edits persist on leaving the form and HR submission waits for the 
   const sent = h.calls.at(-1).args[0];
   assert.equal(sent.command, 'save_meeting'); assert.equal(sent.input.held, undefined);
   assert.equal(h.field('held').props.checked, false);
-  h.change('held', true); assert.equal(h.button('Save and send to manager').props.disabled, true);
+  h.change('held', true); assert.equal(h.button('Save and send final review').props.disabled, true);
   h.submit('Review meeting'); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1);
   t.mock.timers.setTime(new Date('2026-10-01T01:15:00Z').getTime()); h.timers(); await h.settle();
-  assert.equal(h.button('Save and send to manager').props.disabled, false);
+  assert.equal(h.button('Save and send final review').props.disabled, false);
   h.submit('Review meeting'); await h.settle();
   assert.equal(h.calls.at(-1).args[0].command, 'submit_review'); assert.equal(h.calls.at(-1).args[0].expectedRevision, 'manager:0:1');
   assert.equal(h.calls.at(-1).args[0].input.held, true); assert.equal(h.field('meeting-date').props.disabled, true);
@@ -402,7 +402,7 @@ test('HR submission saves the latest complete assessment with its receipt revisi
     return { ok: true, committed: true, operationId: input.operationId, review: row };
   } }); await h.settle();
   h.change('managerNote', 'Latest manager evidence'); h.change('meeting-notes', 'Latest meeting evidence'); h.change('held', true);
-  assert.equal(h.button('Save and send to manager').props.disabled, false);
+  assert.equal(h.button('Save and send final review').props.disabled, false);
   h.submit('Review meeting'); await h.settle();
   const writes = h.calls.filter(c => c.name === 'mutatePerformanceReview');
   assert.deepEqual(writes.map(c => c.args[0].command), ['save_manager', 'submit_review']);
@@ -481,7 +481,7 @@ test('initial and overlapping manual reads are latest-epoch only', async () => {
 test('unauthorised projections are rejected before reading manager fields, Account and Manager own reviews remain self-only', async () => {
   for (const role of ['employee', 'account']) {
     const data = workspace('manager'); data.viewerContext.role = role;
-    for (const key of ['managerAnswers','ratings','summary','overallRating','managerNote','meeting','managerActivity']) Object.defineProperty(data.reviews[0], key, { get() { throw new Error('Denied audience must not read '+key); } });
+    for (const key of ['managerAnswers','ratings','summary','overallRating','managerNote','meeting','managerActivity','goals']) Object.defineProperty(data.reviews[0], key, { get() { throw new Error('Denied audience must not read '+key); } });
     const h = mount(data); await h.settle(); assert.equal(h.all.filter(n => n.type === 'form').length, 0); h.unmount();
   }
   for (const role of ['account', 'manager']) {
@@ -657,7 +657,7 @@ test('manager delegation respects each assigned row capability and does not enab
       field.props.onChange?.({ target: { value: 'Attempted locked delegated edit', checked: true } });
     }
     for (const form of h.all.filter(node => node.type === 'form')) form.props.onSubmit({ preventDefault() {} });
-    for (const name of ['Save draft and invite meeting', 'Save and send to manager']) {
+    for (const name of ['Save draft and invite meeting', 'Save and send final review']) {
       assert.equal(h.button(name).props.disabled, true); h.click(name);
     }
     await h.settle();
@@ -820,7 +820,7 @@ test('the invite control saves an incomplete manager draft without requiring fin
   const sent = h.calls.filter(c => c.name === 'mutatePerformanceReview');
   assert.equal(sent.length, 1); assert.equal(sent[0].args[0].command, 'complete_manager');
   assert.equal(sent[0].args[0].input.answers[0], 'Initial manager draft');
-  assert.equal(h.button('Save and send to manager').props.disabled, true);
+  assert.equal(h.button('Save and send final review').props.disabled, true);
   h.submit('Review meeting'); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1); h.unmount();
 });
@@ -834,7 +834,7 @@ test('invalid and untouched meeting forms never autosave or mark the meeting hel
   h.change('meeting-date', '2026-10-04'); h.change('meeting-time', '02:30'); h.blur(); await h.settle();
   h.change('meeting-date', '2027-04-04'); h.change('meeting-time', '02:30'); h.blur(); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 0);
-  assert.equal(h.field('held').props.checked, false); assert.equal(h.button('Save and send to manager').props.disabled, true);
+  assert.equal(h.field('held').props.checked, false); assert.equal(h.button('Save and send final review').props.disabled, true);
   h.unmount();
 });
 
@@ -845,7 +845,7 @@ for (const result of ['uncertain', 'conflict']) test(`final HR submission stops 
   const sent = h.calls.filter(c => c.name === 'mutatePerformanceReview');
   assert.deepEqual(sent.map(c => c.args[0].command), ['save_manager']);
   assert.equal(h.field('managerNote').props.value, 'Latest retained evidence');
-  if (result === 'uncertain') assert.equal(h.button('Save and send to manager').props.disabled, true);
+  if (result === 'uncertain') assert.equal(h.button('Save and send final review').props.disabled, true);
   h.unmount();
 });
 

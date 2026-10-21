@@ -4,7 +4,7 @@ import {loadModule} from './helpers/contact-lifetime-harness.mjs';
 import {document, meeting} from './performance-review-backend-fixtures.mjs';
 export const download=loadModule('src/lib/performance-review-document.ts',{'./performance-review-word.mjs':{buildReviewDocx},'./performance-review-questions.mjs':{QUESTIONS}}).buildPerformanceReviewDownload;
 export function ordinary(company='MAM') {
- const d=document('manager');d.employee.company=company;d.selfAnswers.fill('Self evidence');d.managerAnswers.fill('Manager evidence');d.ratings.fill('2 Meets expectations');d.summary='Summary';d.overallRating='2 Meets expectations';d.meeting={...meeting,date:'2026-01-02'};return d;
+ const d=document('manager');delete d.goals;d.employee.company=company;d.selfAnswers.fill('Self evidence');d.managerAnswers.fill('Manager evidence');d.ratings.fill('2 Meets expectations');d.summary='Summary';d.overallRating='2 Meets expectations';d.meeting={...meeting,date:'2026-01-02'};return d;
 }
 export function blank(company) {
  const d=ordinary(company);for(const key of ['name','jobTitle','team'])d.employee[key]='';d.manager.name='';d.code='';d.cycle='';d.selfAnswers.fill('');d.managerAnswers.fill('');d.ratings.fill('');d.summary='';d.overallRating='';d.meeting={date:'',time:'',duration:'',mode:'',location:'',notes:''};return d;

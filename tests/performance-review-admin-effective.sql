@@ -36,7 +36,10 @@ declare workspace jsonb; row jsonb; rid uuid; result jsonb;
   answers jsonb:=jsonb_build_object('answers',array_fill('Synthetic self assessment'::text,array[12]));
   assessment jsonb:=jsonb_build_object('answers',array_fill('Synthetic manager assessment'::text,array[12]),
     'ratings',array_fill('2 Meets expectations'::text,array[12]),'summary','Synthetic summary',
-    'overallRating','2 Meets expectations','managerNote','PRIVATE-SYNTHETIC-NOTE');
+    'overallRating','2 Meets expectations','managerNote','PRIVATE-SYNTHETIC-NOTE',
+    'goals',jsonb_build_array(jsonb_build_object('priority','Synthetic agreed priority',
+      'measureOfSuccess','Complete the synthetic milestone','supportAndResponsiblePerson','Synthetic reviewer provides training',
+      'dueDate','2027-03-31','progressCheck','Monthly synthetic progress check')));
   meeting jsonb:='{"date":"2026-01-02","time":"10:00","duration":30,"mode":"in_person","location":"Synthetic room","notes":"Synthetic notes","held":true}';
 begin
   perform pg_temp.performance_admin_actor(4);

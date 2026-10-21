@@ -196,14 +196,15 @@ test('unknown write and not_found never unlock replay; explicit receipt confirms
 test('manager meeting is not held by registration and final needs explicit held plus completed assessment', async ({ page }) => {
   await open(page, 'manager');
   await page.evaluate(actor => { window.performanceReviewFixture.workspace.reviews[0].managerCompletedAt = '2026-10-01T00:00:00Z'; window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor); }, ids.actor);
+  await expect(page.getByText('Assessment saved: 2026-10-01T00:00:00Z', { exact: true })).toBeVisible();
   await expect(field(page, 'managerNote')).toBeEnabled();
   await hold(page, 'mutatePerformanceReview');
-  await field(page, 'meeting-date').fill('2026-10-01'); await field(page, 'meeting-time').fill('10:30'); await field(page, 'meeting-location').fill('Synthetic room');
+  await field(page, 'meeting-location').fill('Synthetic room'); await field(page, 'meeting-date').fill('2026-10-01'); await field(page, 'meeting-time').fill('10:30');
   await page.getByRole('form', { name: 'Review meeting', exact: true }).evaluate(form => form.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }))); await waitPending(page, 'mutatePerformanceReview');
   const input = (await calls(page, 'mutatePerformanceReview'))[0].args[0]; expect(input.command).toBe('save_meeting'); expect(input.input).not.toHaveProperty('held');
   const row = review('manager', 'MAM', { managerRevision: 'manager:0:1', meeting: input.input, managerCompletedAt: '2026-10-01T02:00:00Z' });
   await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: input.operationId, review: row });
-  await expect(field(page, 'held')).not.toBeChecked(); await expect(page.getByRole('button', { name: 'Save and send to manager', exact: true })).toBeDisabled();
+  await expect(field(page, 'held')).not.toBeChecked(); await expect(page.getByRole('button', { name: 'Save and send final review', exact: true })).toBeDisabled();
   await field(page, 'held').check(); await hold(page, 'mutatePerformanceReview'); await submit(page, 'Review meeting'); await waitPending(page, 'mutatePerformanceReview');
   const final = (await calls(page, 'mutatePerformanceReview'))[1].args[0]; expect(final.command).toBe('submit_review'); expect(final.input.held).toBe(true);
   await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: final.operationId, review: { ...row, managerRevision: 'manager:0:2', finalisedAt: '2026-10-01T03:00:00Z' } });
@@ -272,4 +273,50 @@ test('native Admin Performance invites once and manually saves with its admin re
   await expect(saveDraft).toBeEnabled();
   expect((await calls(page, 'mutatePerformanceReview')).map(call => call.args[0].command)).toEqual(['save_manager', 'complete_manager', 'save_manager']);
   expect((await calls(page, 'mutatePerformanceReview')).every(call => call.args[1] === undefined)).toBe(true);
+});
+
+test('manager ratings need one selection and editable goals survive saving and enter the downloaded form', async ({ page }) => {
+ await open(page, 'manager');
+ await page.evaluate(() => {
+  const fixture = window.performanceReviewFixture, invoke = fixture.invoke.bind(fixture);
+  fixture.invoke = async (name, args) => {
+   if (name !== 'mutatePerformanceReview') return invoke(name, args);
+   fixture.calls.push({ name, args: structuredClone(args) });
+   const input = args[0], row = fixture.workspace.reviews.find(row => row.id === input.reviewId);
+   if (input.command !== 'save_manager') throw new Error('This goal draft test must not invite or submit');
+   Object.assign(row, { managerAnswers: [...input.input.answers], ratings: [...input.input.ratings], summary: input.input.summary, overallRating: input.input.overallRating, managerNote: input.input.managerNote, goals: structuredClone(input.input.goals), managerRevision: input.expectedRevision.replace(/\d+$/, n => String(Number(n) + 1)) });
+   return { ok: true, committed: true, operationId: input.operationId, review: structuredClone(row) };
+  };
+ });
+ const rating = page.locator('[name="rating-0"]');
+ await expect(rating).toHaveCount(4);
+ const positions = await rating.evaluateAll(inputs => inputs.map(input => input.closest('label').getBoundingClientRect().y));
+ expect(Math.max(...positions) - Math.min(...positions)).toBeLessThan(2);
+ await page.locator('[name="rating-0"][value="3 Exceeds expectations"]').check();
+ await expect(page.locator('[name="rating-0"][value="3 Exceeds expectations"]')).toBeChecked();
+ await page.locator('[name="overallRating"][value="1 Needs improvement"]').focus();
+ await page.keyboard.press('ArrowRight');
+ await expect(page.locator('[name="overallRating"][value="2 Meets expectations"]')).toBeChecked();
+ await expect(field(page, 'meeting-location')).toHaveValue('Boardroom');
+ await field(page, 'meeting-location').fill('Alternative boardroom');
+ await expect(field(page, 'meeting-location')).toHaveValue('Alternative boardroom');
+ await page.getByRole('button', { name: 'Add goal', exact: true }).click();
+ await field(page, 'goal-1-priority').fill('Agreed final priority');
+ await field(page, 'goal-1-measure').fill('Complete all agreed milestones');
+ await field(page, 'goal-1-support').fill('Synthetic manager provides training');
+ await field(page, 'goal-1-due').fill('2027-03-31');
+ await field(page, 'goal-1-check').fill('Review progress monthly');
+ await page.getByRole('button', { name: 'Remove goal 1', exact: true }).click();
+ await expect(field(page, 'goal-0-priority')).toHaveValue('Agreed final priority');
+ await expect.poll(() => page.evaluate(() => window.performanceReviewFixture.workspace.reviews[0].goals)).toEqual([{ priority: 'Agreed final priority', measureOfSuccess: 'Complete all agreed milestones', supportAndResponsiblePerson: 'Synthetic manager provides training', dueDate: '2027-03-31', progressCheck: 'Review progress monthly' }]);
+ await page.evaluate(actor => window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor), ids.actor);
+ await expect(field(page, 'goal-0-check')).toHaveValue('Review progress monthly');
+ const downloaded = page.waitForEvent('download'); await page.getByRole('button', { name: 'Download Word', exact: true }).click();
+ const xml = strFromU8(unzipSync(new Uint8Array(await readFile(await (await downloaded).path())))['word/document.xml']);
+ for (const text of ['Agreed final priority', 'Complete all agreed milestones', 'Synthetic manager provides training', '2027-03-31', 'Review progress monthly']) expect(xml).toContain(text);
+ expect(xml).not.toContain('goal table is intentionally blank');
+ expect((await calls(page, 'mutatePerformanceReview')).every(call => call.args[0].command === 'save_manager')).toBe(true);
+ await page.setViewportSize({ width: 390, height: 844 });
+ expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+ await expect(page.locator('[name="rating-0"]').first()).toBeVisible();
 });
