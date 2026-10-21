@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {readFileSync,writeFileSync,mkdtempSync,mkdirSync,existsSync,realpathSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdtempSync,mkdirSync,existsSync,realpathSync,rmSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
@@ -61,6 +61,8 @@ export function ownedCluster(major=17){
   writeFileSync(path.join(evidence,`cleanup-${path.basename(socket)}.json`),JSON.stringify(cleanup,null,2));
   writeFileSync(path.join(evidence,`cluster-${path.basename(socket)}.postgres.log`),readFileSync(path.join(socket,'postgres.log')));
   assert.ok(cleanup.stopped&&cleanup.pidAbsent&&cleanup.socketAbsent);
+  // postgres.log is copied into the evidence folder above, so the stopped data directory is no longer needed.
+  if(process.env.MAM_KEEP_TEST_PGDATA!=='1') rmSync(data,{recursive:true,force:true});
  }};
 }
 export const q=x=>x===null?'null':"'"+String(x).replaceAll("'","''")+"'";

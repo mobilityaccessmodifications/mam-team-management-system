@@ -67,7 +67,8 @@ export function createDatabase(socket, database) {
 export function stopCluster(socket) {
   target(socket, "mam_test_stop");
   command("pg_ctl", ["-D", path.join(socket, "data"), "-m", "fast", "-w", "stop"]);
-  // Keep the small, task-owned log/data directory for diagnosis; cleanup is explicit.
+  // Keep the small task-owned log for diagnosis; the data directory is only removed after a clean stop.
+  if (process.env.MAM_KEEP_TEST_PGDATA !== "1") rmSync(path.join(socket, "data"), { recursive: true, force: true });
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
