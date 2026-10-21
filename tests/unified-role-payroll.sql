@@ -1,5 +1,6 @@
 \set ON_ERROR_STOP on
 begin;
+grant usage on schema storage to supabase_storage_admin;
 \ir unified-role-fixture.sql
 insert into private.employee_directory_details(person_id,first_name,last_name,employment_type)
 select id,'Synthetic','Payroll Subject','full_time' from public.internal_org_people where id='a1000000-0000-4000-8000-000000000001';
