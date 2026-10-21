@@ -5,14 +5,14 @@ import { executeGraph } from './performance-review-n8n-runner.mjs';
 import { buildMailWorkflow, loadHttpProducer } from './helpers/performance-review-http-producer.mjs';
 
 const workflow = buildMailWorkflow();
-const send = workflow.nodes.find(n => n.name === 'Send Word to Careers');
+const send = workflow.nodes.find(n => n.name === 'Send Word to Manager');
 const execute = loadHttpProducer();
 test('AM-02 actual installed text fullResponse producer reaches real classifier and finish acknowledgement', async () => {
   const p = payload(); let produced; const names = [];
   const result = await executeGraph(workflow, 'Receive Finalisation', { body: p }, async (node, body) => {
     names.push(node.name);
     if (node.name === 'Begin Delivery') return { statusCode: 200, body: { ok: true, allowed: true } };
-    if (node.name === 'Send Word to Careers') {
+    if (node.name === 'Send Word to Manager') {
       produced = await execute(node, { statusCode: 202, headers: {}, statusMessage: 'Accepted', body: '' }, body);
       return produced;
     }
@@ -20,9 +20,9 @@ test('AM-02 actual installed text fullResponse producer reaches real classifier 
     return { statusCode: 200, body: { ok: true, recorded: true } };
   });
   assert.equal(produced.body, ''); assert.equal(Object.hasOwn(produced, 'data'), false);
-  assert.deepEqual(names, ['Begin Delivery','Send Word to Careers','Finish Delivery']);
+  assert.deepEqual(names, ['Begin Delivery','Send Word to Manager','Finish Delivery']);
   assert.equal(result.value.status, 'provider_accepted'); assert.equal(result.value.attachmentSha256, p.attachment.sha256);
-  assert.deepEqual(result.value.actualRecipients, ['careers@mobilityaccess.com.au']);
+  assert.deepEqual(result.value.actualRecipients, [p.recipient]);
 });
 
 test('AM-02 captured producer default demonstrably returns data instead of body', async () => {
@@ -44,9 +44,9 @@ test('AM-02 installed producer preserves strict 202 empty-body classification an
     const p = payload(); let sends = 0;
     const result = await executeGraph(workflow, 'Receive Finalisation', { body: p }, async (node, requestBody) => {
       if (node.name === 'Begin Delivery') return { statusCode: 200, body: { ok: true, allowed: true } };
-      if (node.name === 'Send Word to Careers') {
+      if (node.name === 'Send Word to Manager') {
         sends++;
-        assert.deepEqual(requestBody.message.toRecipients, [{ emailAddress: { address: 'careers@mobilityaccess.com.au' } }]);
+        assert.deepEqual(requestBody.message.toRecipients, [{ emailAddress: { address: 'manager@mobilityaccess.com.au' } }]);
         assert.deepEqual(requestBody.message.ccRecipients, []); assert.deepEqual(requestBody.message.bccRecipients, []);
         assert.equal(requestBody.message.attachments[0].contentBytes, p.attachment.contentBase64);
         return execute(node, { statusCode, headers: {}, statusMessage: 'Synthetic', body }, requestBody);

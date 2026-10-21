@@ -4,7 +4,7 @@ import { mount } from './performance-review-harness.mjs';
 import { workspace, review, identity, deferred, failure, ids } from './performance-review-fixtures.mjs';
 
 const invited = overrides => review('manager', 'MAM', { managerCompletedAt: '2026-10-21T01:00:00Z', ...overrides });
-const hint = 'Reply with Meeting in Outlook';
+const hint = 'Arrange the review meeting with the employee, then enter the meeting details in People Hub.';
 const save = row => async input => ({ ok: true, committed: true, operationId: input.operationId, review: {
   ...row, managerAnswers: input.input.answers, ratings: input.input.ratings, summary: input.input.summary,
   overallRating: input.input.overallRating, managerNote: input.input.managerNote,
@@ -47,7 +47,7 @@ test('invitation confirmation updates only the control and hint while preserving
   h.timers(); await h.settle();
   assert.ok(h.button('Save draft'));
   assert.ok(h.text.includes(hint));
-  assert.ok(h.text.includes('ai@mobilityaccess.com.au'));
+  assert.ok(!h.text.includes('ai@mobilityaccess.com.au'));
   assert.equal(h.field('managerNote').props.value, 'Unsaved latest private note');
   assert.equal(h.field('meeting-location').props.value, 'Unsaved room');
   assert.equal(h.calls.filter(call => call.name === 'loadPerformanceReviews').length, 1);

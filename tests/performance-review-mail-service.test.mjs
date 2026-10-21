@@ -13,7 +13,7 @@ function serviceBoundary({ unknownProvider = false, replayClaims = false } = {})
         return { data: claim ? [structuredClone(row)] : [], error: null };
       }
       const same = args.p_delivery_id === ids.delivery && args.p_claim_token === ids.claim;
-      if (name === 'begin_performance_review_mail') {
+      if (name === 'begin_performance_review_manager_mail') {
         const permit = same && state === 'claimed';
         if (permit) { state = 'sending'; sha = args.p_attachment_sha256; }
         return { data: permit, error: null };
@@ -27,7 +27,7 @@ function serviceBoundary({ unknownProvider = false, replayClaims = false } = {})
     },
     async fetch(_, init) {
       wire = JSON.parse(init.body);
-      const permit = await h.route().POST(request('POST', { phase: 'begin', deliveryId: wire.deliveryId, claimToken: wire.claimToken, attachmentSha256: wire.attachment.sha256 }));
+      const permit = await h.route().POST(request('POST', { phase: 'begin', recipient: 'manager@mobilityaccess.com.au', deliveryId: wire.deliveryId, claimToken: wire.claimToken, attachmentSha256: wire.attachment.sha256 }));
       const decision = await permit.json();
       assert.equal(typeof decision.allowed, 'boolean');
       if (!decision.allowed) return ack(wire, { ok: false, status: 'held' });
@@ -46,12 +46,12 @@ test('real worker, real callback routes and inert native service CAS allow one p
   const results = await Promise.all([h.mail.dispatchPerformanceReviewMailOutbox(), h.mail.dispatchPerformanceReviewMailForReview(ids.review)]);
   assert.equal(results[1], undefined); assert.equal(boundary.providers, 1); assert.equal(boundary.state, 'provider_accepted');
   const wire = boundary.wire;
-  const payload = { phase: 'begin', deliveryId: ids.delivery, claimToken: ids.claim, attachmentSha256: wire.attachment.sha256 };
+  const payload = { phase: 'begin', recipient: 'manager@mobilityaccess.com.au', deliveryId: ids.delivery, claimToken: ids.claim, attachmentSha256: wire.attachment.sha256 };
   for (const body of [payload, { ...payload, claimToken: '30000000-0000-4000-8000-000000000099' }]) {
     const response = await h.route().POST(request('POST', body)); assert.deepEqual(await response.json(), { ok: true, allowed: false });
   }
   for (const [patch, recorded] of [[{ outcome: 'unknown' }, false], [{ outcome: 'rejected' }, false], [{ outcome: 'provider_accepted' }, true], [{ outcome: 'provider_accepted', attachmentSha256: 'a'.repeat(64) }, false]]) {
-    const response = await h.route().POST(request('POST', { ...payload, phase: 'finish', ...patch })); assert.deepEqual(await response.json(), { ok: true, recorded });
+    const response = await h.route().POST(request('POST', { phase: 'finish', deliveryId: payload.deliveryId, claimToken: payload.claimToken, attachmentSha256: payload.attachmentSha256, ...patch })); assert.deepEqual(await response.json(), { ok: true, recorded });
   }
   assert.equal(boundary.providers, 1); assert.equal(boundary.state, 'provider_accepted'); assert.equal(h.logs.length, 0);
 });

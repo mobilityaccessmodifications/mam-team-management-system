@@ -203,7 +203,7 @@ test('manager meeting is not held by registration and final needs explicit held 
   const input = (await calls(page, 'mutatePerformanceReview'))[0].args[0]; expect(input.command).toBe('save_meeting'); expect(input.input).not.toHaveProperty('held');
   const row = review('manager', 'MAM', { managerRevision: 'manager:0:1', meeting: input.input, managerCompletedAt: '2026-10-01T02:00:00Z' });
   await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: input.operationId, review: row });
-  await expect(field(page, 'held')).not.toBeChecked(); await expect(page.getByRole('button', { name: 'Save and send to HR', exact: true })).toBeDisabled();
+  await expect(field(page, 'held')).not.toBeChecked(); await expect(page.getByRole('button', { name: 'Save and send to manager', exact: true })).toBeDisabled();
   await field(page, 'held').check(); await hold(page, 'mutatePerformanceReview'); await submit(page, 'Review meeting'); await waitPending(page, 'mutatePerformanceReview');
   const final = (await calls(page, 'mutatePerformanceReview'))[1].args[0]; expect(final.command).toBe('submit_review'); expect(final.input.held).toBe(true);
   await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: final.operationId, review: { ...row, managerRevision: 'manager:0:2', finalisedAt: '2026-10-01T03:00:00Z' } });

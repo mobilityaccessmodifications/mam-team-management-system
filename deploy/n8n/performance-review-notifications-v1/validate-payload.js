@@ -33,14 +33,15 @@ if (((hasCc || p.event === 'manager-invited') && cc !== expectedCc)
 const link = 'https://mam-team-management-system-ten.vercel.app/?view=people&tab=performance';
 const signature = '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;border-top:1px solid #dce4df;padding-top:16px;font-family:Segoe UI,Arial,sans-serif"><tr><td style="vertical-align:middle;padding-right:16px"><a href="https://www.mobilityaccess.com.au/" style="text-decoration:none"><img src="https://mam-team-management-system-ten.vercel.app/email/mam-logo.jpg" alt="MAM – Mobility Access Modifications" width="150" height="69" style="display:block;width:150px;height:auto;border:0"></a></td><td style="vertical-align:middle;color:#50615b;font-size:12px;line-height:1.5"><strong style="color:#22302b;font-size:13px">People &amp; Culture</strong><br>Mobility Access Modifications</td></tr></table>';
 const message = p.event === 'started'
-  ? 'Your performance review is ready. Please complete your self-assessment in People Hub.'
+  ? 'We invite you to complete your performance self-assessment in People Hub.'
   : p.event === 'self-submitted'
-    ? 'A self-assessment has been submitted. Please open People Hub to complete the next step.'
-    : `The manager assessment has been saved. Please use Reply with Meeting in Outlook to arrange the review with the employee. Include ai@mobilityaccess.com.au and the employee as attendees, and keep ${p.reviewCode} in the subject.`;
-const content = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.6;color:#22302b"><p>Hi,</p><p>${message}</p><p><a href="${link}" style="color:#c84d0e">Open People Hub</a></p><p>Thanks,<br>People Hub</p>${signature}</div>`;
+    ? 'The employee’s self-assessment is ready for your review. Please complete your manager assessment in People Hub, then arrange a review meeting.'
+    : 'Please arrange a performance review meeting with the employee. Once agreed, enter the meeting details manually in People Hub.';
+const content = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.6;color:#22302b"><p>Hi,</p><p>${message}</p><p><a href="${link}" style="color:#c84d0e">Open People Hub</a></p><p>Thanks,<br>Careers Team</p>${signature}</div>`;
 return [{json: {valid: true, eventKey: p.eventKey, recipient: p.recipient, cc,
   reserveBody: {action: 'reserve', eventKey: p.eventKey, recipient: p.recipient, cc, legacyEventKey: null, claimToken: p.claimToken},
   graphBody: {message: {
     subject: p.event === 'started' ? 'Your performance review is ready' : p.event === 'self-submitted' ? 'Self-assessment submitted' : `Arrange performance review: ${p.reviewCode}`,
+    from: {emailAddress: {address: 'careers@mobilityaccess.com.au'}}, replyTo: [{emailAddress: {address: 'careers@mobilityaccess.com.au'}}],
     body: {contentType: 'HTML', content}, toRecipients: recipients.map(address => ({emailAddress: {address}})), ccRecipients: cc ? [{emailAddress: {address: cc}}] : [], bccRecipients: [],
   }, saveToSentItems: true}}}];

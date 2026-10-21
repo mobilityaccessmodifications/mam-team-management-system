@@ -55,6 +55,8 @@ const parsePages = (items, queryItems) => run('Validate Manager Meeting', {}, {i
 test('calendar graph uses only verified AI Graph GETs and protected pending/import API paths', () => {
   assert.equal(workflow.name, 'MAM People Hub - Performance Review Meeting Import (Live)');
   assert.equal(Object.hasOwn(workflow, 'active'), false);
+  assert.equal(node('Every Five Minutes').disabled, true);
+  assert.equal(node('Meeting Readiness').disabled, true);
   assert.deepEqual(workflow.settings, {executionOrder: 'v1', timezone: 'Australia/Melbourne', saveDataSuccessExecution: 'none',
     saveDataErrorExecution: 'none', saveManualExecutions: false, saveExecutionProgress: false, executionTimeout: 90});
   assert.equal(new Set(workflow.nodes.map(n => n.id)).size, workflow.nodes.length);

@@ -151,11 +151,11 @@ test('meeting edits persist on leaving the form and HR submission waits for the 
   const sent = h.calls.at(-1).args[0];
   assert.equal(sent.command, 'save_meeting'); assert.equal(sent.input.held, undefined);
   assert.equal(h.field('held').props.checked, false);
-  h.change('held', true); assert.equal(h.button('Save and send to HR').props.disabled, true);
+  h.change('held', true); assert.equal(h.button('Save and send to manager').props.disabled, true);
   h.submit('Review meeting'); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1);
   t.mock.timers.setTime(new Date('2026-10-01T01:15:00Z').getTime()); h.timers(); await h.settle();
-  assert.equal(h.button('Save and send to HR').props.disabled, false);
+  assert.equal(h.button('Save and send to manager').props.disabled, false);
   h.submit('Review meeting'); await h.settle();
   assert.equal(h.calls.at(-1).args[0].command, 'submit_review'); assert.equal(h.calls.at(-1).args[0].expectedRevision, 'manager:0:1');
   assert.equal(h.calls.at(-1).args[0].input.held, true); assert.equal(h.field('meeting-date').props.disabled, true);
@@ -402,7 +402,7 @@ test('HR submission saves the latest complete assessment with its receipt revisi
     return { ok: true, committed: true, operationId: input.operationId, review: row };
   } }); await h.settle();
   h.change('managerNote', 'Latest manager evidence'); h.change('meeting-notes', 'Latest meeting evidence'); h.change('held', true);
-  assert.equal(h.button('Save and send to HR').props.disabled, false);
+  assert.equal(h.button('Save and send to manager').props.disabled, false);
   h.submit('Review meeting'); await h.settle();
   const writes = h.calls.filter(c => c.name === 'mutatePerformanceReview');
   assert.deepEqual(writes.map(c => c.args[0].command), ['save_manager', 'submit_review']);
@@ -657,7 +657,7 @@ test('manager delegation respects each assigned row capability and does not enab
       field.props.onChange?.({ target: { value: 'Attempted locked delegated edit', checked: true } });
     }
     for (const form of h.all.filter(node => node.type === 'form')) form.props.onSubmit({ preventDefault() {} });
-    for (const name of ['Save draft and invite meeting', 'Save and send to HR']) {
+    for (const name of ['Save draft and invite meeting', 'Save and send to manager']) {
       assert.equal(h.button(name).props.disabled, true); h.click(name);
     }
     await h.settle();
@@ -820,7 +820,7 @@ test('the invite control saves an incomplete manager draft without requiring fin
   const sent = h.calls.filter(c => c.name === 'mutatePerformanceReview');
   assert.equal(sent.length, 1); assert.equal(sent[0].args[0].command, 'complete_manager');
   assert.equal(sent[0].args[0].input.answers[0], 'Initial manager draft');
-  assert.equal(h.button('Save and send to HR').props.disabled, true);
+  assert.equal(h.button('Save and send to manager').props.disabled, true);
   h.submit('Review meeting'); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1); h.unmount();
 });
@@ -834,7 +834,7 @@ test('invalid and untouched meeting forms never autosave or mark the meeting hel
   h.change('meeting-date', '2026-10-04'); h.change('meeting-time', '02:30'); h.blur(); await h.settle();
   h.change('meeting-date', '2027-04-04'); h.change('meeting-time', '02:30'); h.blur(); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 0);
-  assert.equal(h.field('held').props.checked, false); assert.equal(h.button('Save and send to HR').props.disabled, true);
+  assert.equal(h.field('held').props.checked, false); assert.equal(h.button('Save and send to manager').props.disabled, true);
   h.unmount();
 });
 
@@ -845,7 +845,7 @@ for (const result of ['uncertain', 'conflict']) test(`final HR submission stops 
   const sent = h.calls.filter(c => c.name === 'mutatePerformanceReview');
   assert.deepEqual(sent.map(c => c.args[0].command), ['save_manager']);
   assert.equal(h.field('managerNote').props.value, 'Latest retained evidence');
-  if (result === 'uncertain') assert.equal(h.button('Save and send to HR').props.disabled, true);
+  if (result === 'uncertain') assert.equal(h.button('Save and send to manager').props.disabled, true);
   h.unmount();
 });
 

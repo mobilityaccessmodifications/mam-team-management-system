@@ -41,7 +41,7 @@ def http(name, url, body, mail=False):
     if mail:
         parameters['options']['response']['response']['outputPropertyName'] = 'body'
         parameters['nodeCredentialType'] = 'microsoftOutlookOAuth2Api'
-        credentials = {'microsoftOutlookOAuth2Api': {'id': '__PARENT_OUTLOOK_ID__', 'name': '__PARENT_OUTLOOK_NAME__'}}
+        credentials = {'microsoftOutlookOAuth2Api': {'id': 'UW7gUbruKT6NzniR', 'name': 'Microsoft Outlook - careers@mobilityaccess.com.au'}}
     else:
         parameters['genericAuthType'] = 'httpHeaderAuth'
         credentials = {'httpHeaderAuth': PLACEHOLDER.copy()}
@@ -64,7 +64,7 @@ def build_workflow():
     nodes.extend([code('Validate Payload', 'validate-payload.js'), gate('Valid Payload?', 'valid'),
         http('Begin Delivery', HUB + '/api/performance-reviews/mail', '={{ $json.beginBody }}'),
         code('Gate Begin', 'gate-begin.js'), gate('Permit Send?', 'allowed'),
-        http('Send Word to Careers', 'https://graph.microsoft.com/v1.0/me/sendMail', "={{ $('Validate Payload').first().json.graphBody }}", mail=True),
+        http('Send Word to Manager', 'https://graph.microsoft.com/v1.0/me/sendMail', "={{ $('Validate Payload').first().json.graphBody }}", mail=True),
         code('Return Held', 'return-held.js'), code('Classify Send', 'classify-send.js'),
         http('Finish Delivery', HUB + '/api/performance-reviews/mail', '={{ $json.finishBody }}'),
         code('Validate Finish', 'validate-finish.js')])
@@ -74,8 +74,8 @@ def build_workflow():
         'Valid Payload?': {'main': [edge('Begin Delivery'), edge('Return Held')]},
         'Begin Delivery': {'main': [edge('Gate Begin')]},
         'Gate Begin': {'main': [edge('Permit Send?')]},
-        'Permit Send?': {'main': [edge('Send Word to Careers'), edge('Return Held')]},
-        'Send Word to Careers': {'main': [edge('Classify Send')]},
+        'Permit Send?': {'main': [edge('Send Word to Manager'), edge('Return Held')]},
+        'Send Word to Manager': {'main': [edge('Classify Send')]},
         'Classify Send': {'main': [edge('Finish Delivery')]},
         'Finish Delivery': {'main': [edge('Validate Finish')]},
     }

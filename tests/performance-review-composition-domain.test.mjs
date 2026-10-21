@@ -40,7 +40,7 @@ for(const company of ['MAM','Equipsy']) for(const [label,value]of [
   const download=h.load('src/lib/performance-review-document.ts').buildPerformanceReviewDownload(d);
   assert.deepEqual(Buffer.from(wire.attachment.contentBase64,'base64'),Buffer.from(download.bytes));
   for(const [part,bytes]of Object.entries(unzipSync(download.bytes)))if(/\.(?:xml|rels)$/.test(part))assert.ok(!strFromU8(bytes).includes('PRIVATE-NOTE-SENTINEL'),part);
-  assert.equal(validated.graphBody.message.toRecipients[0].emailAddress.address,'careers@mobilityaccess.com.au');
+  assert.equal(validated.graphBody.message.toRecipients[0].emailAddress.address,wire.recipient);
   return ack(wire);
  }});
  const rules=h.load('src/lib/performance-review-rules.ts');
