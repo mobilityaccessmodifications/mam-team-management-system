@@ -33,7 +33,7 @@ do $$ declare checked record; role_name text; signature text; begin
     ('public.complete_onboarding_credential_delivery(uuid,uuid)','eeb4faee46c432ed682bf81115cd1784c0e206976542520097c35af9ad001c6f'),
     ('public.fail_onboarding_credential_delivery(uuid,uuid,text)','d775094ef2c6553b23175ca1f2dfe613974c8db13b040f4f3555aa628fb55f3d'),
     ('public.finalise_portal_password_reset(uuid,uuid,uuid)','d541b11711b8256b5bf55f553d9fd1861a993d114c4c11cd00a89f3af7e64b20'),
-    ('public.update_portal_login(uuid,uuid,text,bigint)','8cebb025ecc74b2ae3cfcdd20e3e802a4263e8ff089503477b02e2c9c41f4cd0')
+    ('public.update_portal_login(uuid,uuid,text,bigint)','aa51fd5e81879ee123790ba4c0f37352d31078f8ec43a2f6be30ad31f09fa85c')
   ) expected(signature,definition_sha256) loop
     assert encode(extensions.digest(pg_get_functiondef(checked.signature::regprocedure),'sha256'),'hex')=checked.definition_sha256,
       'Credential reset/delivery guard bytes changed: '||checked.signature;
