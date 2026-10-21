@@ -15,7 +15,11 @@ const terminal = (audience, kind) => {
   return row;
 };
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, info) => {
+  if (info.title.startsWith('AM-04 browser')) await page.addInitScript(() => {
+    const schedule = window.setTimeout.bind(window);
+    window.setTimeout = (handler, delay, ...args) => schedule(handler, delay === 600 ? 2147483647 : delay, ...args);
+  });
   await page.addInitScript(() => {
     window.am04Gestures = [];
     for (const type of ['click', 'input', 'change']) document.addEventListener(type, event => {
@@ -38,17 +42,19 @@ for (const audience of ['employee', 'manager']) test(`AM-04 browser ${audience} 
   const name = audience === 'employee' ? 'self-0' : 'manager-0';
   const label = audience === 'employee' ? 'Save self draft' : 'Save draft and invite meeting';
   const revision = audience === 'employee' ? 'self:1' : 'manager:0:1';
+  await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
   await field(page, name).fill('Browser synthetic conflict draft');
+  await field(page, name).blur();
+  await expect(page.getByRole('alert')).toHaveText('Synthetic conflict.');
   if (audience === 'manager') {
     await field(page, 'managerNote').fill('PRIVATE-BROWSER-CONFLICT-NOTE');
     await field(page, 'summary').fill('Browser conflict summary');
     await field(page, 'rating-0').selectOption('3 Exceeds expectations');
     await field(page, 'meeting-notes').fill('Browser unsaved meeting draft');
   }
-  await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
-  await page.getByRole('button', { name: label, exact: true }).click();
-  await expect(page.getByRole('alert')).toHaveText('Synthetic conflict.');
   const first = (await calls(page, 'mutatePerformanceReview'))[0].args[0];
+  expect(first.command).toBe(audience === 'employee' ? 'save_self' : 'save_manager');
+  expect(first.input.answers[0]).toBe('Browser synthetic conflict draft');
   const fresh = review(audience, 'MAM', audience === 'employee'
     ? { selfRevision: revision, selfAnswers: Array(12).fill('Different authoritative answer') }
     : { managerRevision: revision, managerAnswers: Array(12).fill('Different authoritative feedback') });
@@ -66,7 +72,10 @@ for (const audience of ['employee', 'manager']) test(`AM-04 browser ${audience} 
   const second = (await calls(page, 'mutatePerformanceReview'))[1].args[0];
   expect(second.expectedRevision).toBe(revision);
   expect(second.operationId).not.toBe(first.operationId);
-  expect(second.input).toEqual(first.input);
+  expect(second.command).toBe(audience === 'employee' ? 'save_self' : 'complete_manager');
+  expect(second.input).toEqual(audience === 'employee' ? first.input : { ...first.input,
+    managerNote: 'PRIVATE-BROWSER-CONFLICT-NOTE', summary: 'Browser conflict summary',
+    ratings: first.input.ratings.map((value, index) => index === 0 ? '3 Exceeds expectations' : value) });
   const saved = { ...fresh, ...(audience === 'employee' ? { selfRevision: 'self:2', selfAnswers: second.input.answers }
     : { managerRevision: 'manager:0:2', managerAnswers: second.input.answers, ratings: second.input.ratings,
       summary: second.input.summary, overallRating: second.input.overallRating, managerNote: second.input.managerNote }) };
@@ -76,7 +85,7 @@ for (const audience of ['employee', 'manager']) test(`AM-04 browser ${audience} 
   await expect(field(page, name)).toHaveValue('Browser synthetic conflict draft');
   expect(await calls(page, 'mutatePerformanceReview')).toHaveLength(2);
   const trusted = await page.evaluate(() => window.am04Gestures.filter(event => event.trusted));
-  expect(trusted.filter(event => event.type === 'click' && event.button === label)).toHaveLength(2);
+  expect(trusted.filter(event => event.type === 'click' && event.button === label)).toHaveLength(1);
   expect(trusted.filter(event => event.type === 'click' && event.button === 'Reload')).toHaveLength(1);
   expect(trusted.some(event => event.type === 'input' && event.name === name)).toBe(true);
 });
@@ -85,9 +94,9 @@ for (const audience of ['employee', 'manager']) for (const kind of ['terminal', 
   await page.goto(`${origin}/?audience=${audience}`);
   const name = audience === 'employee' ? 'self-0' : 'manager-0';
   const label = audience === 'employee' ? 'Save self draft' : 'Save draft and invite meeting';
-  await field(page, name).fill('Read-only browser conflict draft');
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
-  await page.getByRole('button', { name: label, exact: true }).click();
+  await field(page, name).fill('Read-only browser conflict draft');
+  await field(page, name).blur();
   await expect(page.getByRole('alert')).toHaveText('Synthetic conflict.');
   await enqueue(page, 'loadPerformanceReviews', { ok: true, data: workspace(audience, 'MAM', { reviews: [terminal(audience, kind)] }) });
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
@@ -104,9 +113,9 @@ for (const audience of ['employee', 'manager']) test(`AM-04 browser ${audience} 
   await page.goto(`${origin}/?audience=${audience}`);
   const name = audience === 'employee' ? 'self-0' : 'manager-0';
   const label = audience === 'employee' ? 'Save self draft' : 'Save draft and invite meeting';
-  await field(page, name).fill('Browser draft before overlapping reads');
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
-  await page.getByRole('button', { name: label, exact: true }).click();
+  await field(page, name).fill('Browser draft before overlapping reads');
+  await field(page, name).blur();
   await expect(page.getByRole('alert')).toHaveText('Synthetic conflict.');
   await page.evaluate(() => {
     const fixture = window.performanceReviewFixture, invoke = fixture.invoke.bind(fixture);
@@ -140,9 +149,9 @@ for (const audience of ['employee', 'manager']) test(`AM-04 browser ${audience} 
   await page.goto(`${origin}/?audience=${audience}`);
   const name = audience === 'employee' ? 'self-0' : 'manager-0';
   const label = audience === 'employee' ? 'Save self draft' : 'Save draft and invite meeting';
-  await field(page, name).fill('Browser held unknown draft');
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
-  await page.getByRole('button', { name: label, exact: true }).click();
+  await field(page, name).fill('Browser held unknown draft');
+  await field(page, name).blur();
   await expect(page.getByRole('alert')).toHaveText('Synthetic conflict.');
   await enqueue(page, 'mutatePerformanceReview', failure('conflict', true));
   await page.getByRole('button', { name: label, exact: true }).click();
@@ -163,9 +172,9 @@ for (const audience of ['employee', 'manager']) test(`AM-04 browser ${audience} 
 
 test('AM-04 browser removed assignment clears the private conflict draft', async ({ page }) => {
   await page.goto(`${origin}/?audience=manager`);
-  await field(page, 'managerNote').fill('PRIVATE-REVOKED-BROWSER-CONFLICT');
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
-  await page.getByRole('button', { name: 'Save draft and invite meeting', exact: true }).click();
+  await field(page, 'managerNote').fill('PRIVATE-REVOKED-BROWSER-CONFLICT');
+  await field(page, 'managerNote').blur();
   await expect(page.getByRole('alert')).toHaveText('Synthetic conflict.');
   await enqueue(page, 'loadPerformanceReviews', { ok: true, data: workspace('manager', 'MAM', { reviews: [], startablePeople: [] }) });
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
@@ -175,7 +184,7 @@ test('AM-04 browser removed assignment clears the private conflict draft', async
   expect(await calls(page, 'mutatePerformanceReview')).toHaveLength(1);
 });
 
-test('AM-04 browser review A to B to A retires the old conflict recovery', async ({ page }) => {
+test('AM-04 browser review navigation cannot discard an unresolved conflict draft', async ({ page }) => {
   await page.goto(`${origin}/?audience=manager`);
   await expect(field(page, 'managerNote')).toBeVisible();
   const a = review('manager'), b = review('manager', 'MAM', { id: '33000000-0000-4000-8000-000000000002', code: 'PR-2026-0002', employee: { ...a.employee, id: '22000000-0000-4000-8000-000000000099', name: 'Synthetic B colleague' } });
@@ -183,24 +192,29 @@ test('AM-04 browser review A to B to A retires the old conflict recovery', async
   await enqueue(page, 'loadPerformanceReviews', { ok: true, data });
   await page.evaluate(actor => window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor), ids.actor);
   await expect(page.getByRole('button', { name: `${b.employee.name} — ${b.employee.company}`, exact: true })).toBeVisible();
-  await field(page, 'managerNote').fill('PRIVATE-OLD-A-BROWSER-CONFLICT');
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
-  await page.getByRole('button', { name: 'Save draft and invite meeting', exact: true }).click();
+  await field(page, 'managerNote').fill('PRIVATE-OLD-A-BROWSER-CONFLICT');
+  await field(page, 'managerNote').blur();
   await expect(page.getByRole('alert')).toHaveText('Synthetic conflict.');
   await page.evaluate(() => window.performanceReviewFixture.holdNext('loadPerformanceReviews'));
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await page.waitForFunction(() => window.performanceReviewFixture.pending().some(item => item.name === 'loadPerformanceReviews'));
   for (const row of [b, a]) await page.getByRole('button', { name: `${row.employee.name} — ${row.employee.company}`, exact: true }).click();
+  await expect(page.getByRole('heading', { name: `${a.employee.name} — ${a.employee.company}`, exact: true })).toBeVisible();
+  await expect(field(page, 'managerNote')).toHaveValue('PRIVATE-OLD-A-BROWSER-CONFLICT');
+  expect(await calls(page, 'mutatePerformanceReview')).toHaveLength(1);
   await field(page, 'managerNote').fill('New browser A draft');
+  await field(page, 'managerNote').blur();
+  expect(await calls(page, 'mutatePerformanceReview')).toHaveLength(1);
   const newer = workspace('manager', 'MAM', { reviews: [{ ...a, managerRevision: 'manager:0:9' }, b] });
   await page.evaluate(result => window.performanceReviewFixture.release('loadPerformanceReviews', result), { ok: true, data: newer });
   await expect(field(page, 'managerNote')).toHaveValue('New browser A draft');
-  await enqueue(page, 'loadPerformanceReviews', { ok: true, data: newer });
-  await page.evaluate(actor => window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor), ids.actor);
   await enqueue(page, 'mutatePerformanceReview', failure('conflict'));
   await page.getByRole('button', { name: 'Save draft and invite meeting', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Synthetic conflict.');
   const second = (await calls(page, 'mutatePerformanceReview'))[1].args[0];
-  expect(second.expectedRevision).toBe('manager:0:0');
+  expect(second.command).toBe('complete_manager');
+  expect(second.operationId).not.toBe((await calls(page, 'mutatePerformanceReview'))[0].args[0].operationId);
+  expect(second.expectedRevision).toBe('manager:0:9');
   expect(second.input.managerNote).toBe('New browser A draft');
 });
