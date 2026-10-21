@@ -11,8 +11,8 @@ export const text = tree => tree == null || typeof tree === 'boolean' ? '' : typ
 export function mount(initial = workspace(), supplied = {}, componentProps = {}) {
   assert.ok(existsSync(sourcePath), 'Native performance workspace component must exist');
   let cursor = 0, changed = false, tree, authListener;
-  const hooks = [], effects = [], calls = [], invitationStatusCalls = [], focusListeners = new Set(), downloads = [], revoked = [], built = [], blobs = new Map(), timers = new Map();
-  let nextTimer = 0;
+  const hooks = [], effects = [], calls = [], invitationStatusCalls = [], listeners = new Map(), documentListeners = new Map(), downloads = [], revoked = [], built = [], blobs = new Map(), timers = new Map();
+  let nextTimer = 0, timerClock = 0;
   const take = initial => { const i = cursor++; return [i, hooks[i] ??= initial]; };
   const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
   const react = { ...React,
@@ -26,8 +26,8 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
   const ports = { loadPerformanceReviews: async () => ({ ok: true, data: initial }), loadPerformanceReviewMeetingInvitationStatus: async reviewId => ({ ok: true, reviewId, sent: false }), ...supplied };
   const actions = Object.fromEntries(methods.map(name => [name, async (...args) => { (name === 'loadPerformanceReviewMeetingInvitationStatus' ? invitationStatusCalls : calls).push({ name, args: structuredClone(args) }); if (!ports[name]) throw new Error('Unexpected action '+name); return ports[name](...args); }]));
   const fakeURL = { createObjectURL(blob) { const url = 'blob:synthetic-'+blobs.size; blobs.set(url, blob); return url; }, revokeObjectURL(url) { revoked.push(url); } };
-  const fakeWindow = { addEventListener(event, listener) { assert.equal(event, 'focus'); focusListeners.add(listener); }, removeEventListener(event, listener) { assert.equal(event, 'focus'); focusListeners.delete(listener); } };
-  const fakeDocument = { createElement(tag) { assert.equal(tag, 'a'); const a = { click() { downloads.push({ href: a.href, fileName: a.download, blob: blobs.get(a.href) }); }, remove() {} }; return a; }, body: { appendChild() {} } };
+  const fakeWindow = { addEventListener(event, listener) { assert.ok(['focus', 'beforeunload'].includes(event)); if (!listeners.has(event)) listeners.set(event, new Set()); listeners.get(event).add(listener); }, removeEventListener(event, listener) { listeners.get(event)?.delete(listener); } };
+  const fakeDocument = { visibilityState: 'visible', addEventListener(event, listener) { assert.equal(event, 'visibilitychange'); if (!documentListeners.has(event)) documentListeners.set(event, new Set()); documentListeners.get(event).add(listener); }, removeEventListener(event, listener) { documentListeners.get(event)?.delete(listener); }, createElement(tag) { assert.equal(tag, 'a'); const a = { click() { downloads.push({ href: a.href, fileName: a.download, blob: blobs.get(a.href) }); }, remove() {} }; return a; }, body: { appendChild() {} } };
   const cache = new Map();
   function load(file) {
     if (cache.has(file)) return cache.get(file).exports;
@@ -44,7 +44,7 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
       if (id.startsWith('@/')) return require('../src/'+id.slice(2));
       if (id.startsWith('./performance-review-')) return require('../src/lib/'+id.slice(2));
       return require(id);
-    }, mod, mod.exports, fakeURL, fakeDocument, fn => { const key = ++nextTimer; timers.set(key, fn); return key; }, key => timers.delete(key), fakeWindow);
+    }, mod, mod.exports, fakeURL, fakeDocument, (fn, delay = 0) => { const key = ++nextTimer; timers.set(key, { fn, at: timerClock + delay }); return key; }, key => timers.delete(key), fakeWindow);
     return mod.exports;
   }
   const Component = load(sourcePath).default;
@@ -69,8 +69,11 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
     blur(label = 'Review meeting', inside = false) { const node = nodes(tree).find(n => n.type === 'form' && n.props['aria-label'] === label); assert.ok(node, 'Form exists: '+label); return node.props.onBlur?.({ currentTarget: { contains: () => inside }, relatedTarget: null }); },
     submit(label) { const node = nodes(tree).find(n => n.type === 'form' && n.props['aria-label'] === label); assert.ok(node, 'Form exists: '+label); return node.props.onSubmit({ preventDefault() {} }); },
     auth(event, userId = null) { assert.ok(authListener, 'Uses native Auth lifecycle'); authListener(event, userId ? { user: { id: userId } } : null); render(); },
-    focus() { [...focusListeners].forEach(listener => listener()); render(); },
-    timers() { const pending = [...timers.values()]; timers.clear(); pending.forEach(fn => fn()); render(); },
+    focus() { [...(listeners.get('focus') ?? [])].forEach(listener => listener()); render(); },
+    timers() { const pending = [...timers.values()]; timers.clear(); pending.forEach(({ fn }) => fn()); render(); },
+    advanceTimers(ms) { timerClock += ms; const due = [...timers].filter(([, timer]) => timer.at <= timerClock); due.forEach(([key]) => timers.delete(key)); due.forEach(([, { fn }]) => fn()); render(); },
+    beforeUnload() { const event = { prevented: false, returnValue: undefined, preventDefault() { this.prevented = true; } }; [...(listeners.get('beforeunload') ?? [])].forEach(listener => listener(event)); return event; },
+    pageHidden() { fakeDocument.visibilityState = 'hidden'; [...(documentListeners.get('visibilitychange') ?? [])].forEach(listener => listener()); render(); },
     replayEffects() { hooks.forEach(s => { if (s.effect) { s.cleanup?.(); s.cleanup = s.effect(); } }); render(); },
     unmount() { hooks.forEach(s => s.cleanup?.()); },
   };

@@ -177,7 +177,8 @@ test('P0 creates and completes assigned manager work with the target on every wr
   await expect(panel.getByRole('status')).toHaveText('Submitted.');
   await expect(panel.locator('[name="managerNote"]')).toBeDisabled();
   const mutations = await calls(page, 'mutatePerformanceReview');
-  expect(mutations.map(call => call.args[0].command)).toEqual(['complete_manager', 'complete_manager', 'save_meeting', 'submit_review']);
+  expect(mutations.map(call => call.args[0].command)).toEqual(['save_manager', 'complete_manager', 'complete_manager', 'save_meeting', 'submit_review']);
+  expect(mutations[0].args[0].input.managerNote).toBe('Synthetic delegated manager evidence');
   expect(mutations.every(call => call.args[1] === people.manager.id)).toBe(true);
   const before = (await writes(page)).length;
   await panel.getByRole('navigation', { name: 'Review employees' }).getByRole('button').filter({ hasText: people.manager.name }).click();
@@ -246,6 +247,12 @@ test('actual manager Performance remains editable outside Change profile preview
   await expect(panel.locator('[name="self-0"]')).toBeEnabled();
   await panel.locator('[name="self-0"]').fill('Synthetic native self draft');
   await expect(panel.locator('[name="self-0"]')).toHaveValue('Synthetic native self draft');
+  await panel.locator('[name="self-0"]').blur();
+  await expect(panel.getByRole('status')).toHaveText('Saved.');
   expect((await calls(page, 'loadPerformanceReviews')).at(-1).args[0]).toBeUndefined();
-  expect(await writes(page)).toEqual([]);
+  const mutations = await writes(page);
+  expect(mutations.map(call => call.args[0].command)).toEqual(['save_manager', 'save_self']);
+  expect(mutations.every(call => call.args[1] === undefined)).toBe(true);
+  expect(mutations[0].args[0].input.managerNote).toBe('Synthetic native manager draft');
+  expect(mutations[1].args[0].input.answers[0]).toBe('Synthetic native self draft');
 });

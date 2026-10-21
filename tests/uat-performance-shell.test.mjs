@@ -62,18 +62,22 @@ test('an actual Employee can open native Performance reviews without HR director
   } finally { ui.cleanup(); }
 });
 
-test('the native review workspace stays lazy until its tab is opened and unmounts outside People', async () => {
+test('the native review workspace stays lazy until first opened and retains drafts across soft navigation', async () => {
   const ui = shell({ initialTab: 'tasks' });
   try {
     await ui.settle();
     assert.equal(ui.mounts.length, 0);
     ui.selectTab('performance');
     assert.equal(ui.mounts.length, 1);
+    ui.selectTab('tasks');
+    assert.equal(ui.unmounts.length, 0);
+    ui.selectTab('performance');
+    assert.equal(ui.mounts.length, 1);
     ui.navigate('home');
-    assert.equal(ui.unmounts.length, 1);
-    assert.equal(nodes(ui.render()).filter(node => node.type === 'performance-spy').length, 0);
+    assert.equal(ui.unmounts.length, 0);
+    assert.equal(nodes(ui.render()).filter(node => node.type === 'performance-spy').length, 1);
     ui.navigate('people');
-    assert.equal(ui.mounts.length, 2);
+    assert.equal(ui.mounts.length, 1);
   } finally { ui.cleanup(); }
 });
 
@@ -280,10 +284,11 @@ test('all pre-existing People tabs keep their order and real tab events still se
     for (const tab of legacy) {
       const tree = ui.selectTab(tab);
       assert.equal(ui.tabs().value, tab);
-      assert.equal(nodes(tree).filter(node => node.type === 'performance-spy').length, 0);
+      assert.equal(nodes(tree).filter(node => node.type === 'performance-spy').length, 1);
+      assert.ok(nodes(tree).some(node => node.props?.hidden === true && nodes(node).some(child => child.type === 'performance-spy')), 'The retained draft is hidden while the original panel is selected');
       assert.equal(nodes(tree).filter(node => node.props?.role === 'tabpanel').length, 1);
     }
-    assert.equal(ui.unmounts.length, 1);
+    assert.equal(ui.unmounts.length, 0);
   } finally { ui.cleanup(); }
 });
 

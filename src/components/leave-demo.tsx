@@ -2132,7 +2132,7 @@ export function LeaveDemo({
               showProfile={false}
               showTasks={Boolean(activeCapabilities)}
               isAccessPreview={isPreviewingEmployeeAccess}
-              renderPerformanceReviews={performanceReviewEnabled && !isSigningOut && activeView === "people" && authActorId && performanceAuthScope.active && performanceAuthScope.actorId === authActorId && activeCapabilities.account_status === "active"
+              renderPerformanceReviews={performanceReviewEnabled && !isSigningOut && authActorId && performanceAuthScope.active && performanceAuthScope.actorId === authActorId && activeCapabilities.account_status === "active"
                 ? <PerformanceReviewWorkspace key={`${authActorId}:${previewPersonId || "self"}:${contactScopeEpoch}:${JSON.stringify(activeCapabilities)}`} previewPersonId={previewPersonId || undefined} />
                 : undefined}
               legacyCheckInFormsUrl={checkInResources?.legacyFormsFolderUrl}

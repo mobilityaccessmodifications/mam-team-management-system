@@ -1,0 +1,65 @@
+{
+  "catalog": {
+    "private.performance_review_notification_payload(private.performance_reviews,text)": {
+      "acl": [
+        {
+          "grantable": false,
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "arguments": "p_review private.performance_reviews, p_event text",
+      "config": [
+        "search_path=\"\""
+      ],
+      "cost": 100,
+      "kind": "f",
+      "language": "sql",
+      "leakproof": false,
+      "owner": "postgres",
+      "parallel": "u",
+      "returns": "jsonb",
+      "rows": 0,
+      "securityDefiner": true,
+      "strict": false,
+      "support": "-",
+      "volatility": "s"
+    },
+    "public.reserve_performance_review_notification_mail(text,text,text,uuid,text)": {
+      "acl": [
+        {
+          "grantable": false,
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantable": false,
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "arguments": "p_event_key text, p_recipient text, p_cc text, p_claim_token uuid, p_legacy_event_key text DEFAULT NULL::text",
+      "config": [
+        "search_path=\"\""
+      ],
+      "cost": 100,
+      "kind": "f",
+      "language": "plpgsql",
+      "leakproof": false,
+      "owner": "postgres",
+      "parallel": "u",
+      "returns": "jsonb",
+      "rows": 0,
+      "securityDefiner": true,
+      "strict": false,
+      "support": "-",
+      "volatility": "v"
+    }
+  },
+  "migrationSha256": "8753b6ba7f78d9d6d8bd798053c827e00cbaf69562235a70e770877deab2a752",
+  "postgresMajor": 17,
+  "version": "20261021010742"
+}
