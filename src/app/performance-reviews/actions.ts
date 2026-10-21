@@ -37,7 +37,7 @@ function schedulePerformanceReviewNotification(reviewId: string): void {
 }
 function disabled(): PerformanceFailure { return { ok: false, code: "unavailable", uncertain: false, message: "Performance reviews are not available." }; }
 export async function loadPerformanceReviews(previewPersonId?: string): Promise<PerformanceLoadResult> {
-  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
+  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true" || process.env.PERFORMANCE_REVIEW_RELEASE_PAUSED === "true") return disabled();
   try { if (previewPersonId !== undefined) uuid(previewPersonId); } catch { return failure("invalid"); }
   try {
     const { supabase, actorUserId, capabilities } = await requirePerformanceReviewViewer(previewPersonId);
@@ -50,7 +50,7 @@ export async function loadPerformanceReviews(previewPersonId?: string): Promise<
   } catch (error) { return error instanceof PerformanceReviewAccessError ? failure(error.code) : disabled(); }
 }
 export async function loadPerformanceReviewMeetingInvitationStatus(reviewId: string, previewPersonId?: string): Promise<PerformanceInvitationStatusResult> {
-  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
+  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true" || process.env.PERFORMANCE_REVIEW_RELEASE_PAUSED === "true") return disabled();
   try { uuid(reviewId); if (previewPersonId !== undefined) uuid(previewPersonId); } catch { return failure("invalid"); }
   try {
     const { supabase, capabilities } = previewPersonId === undefined ? await requirePerformanceReviewActor() : await requirePerformanceReviewManagerDelegate(previewPersonId);
@@ -64,7 +64,7 @@ export async function loadPerformanceReviewMeetingInvitationStatus(reviewId: str
   } catch (error) { return error instanceof PerformanceReviewAccessError ? failure(error.code) : failure("unavailable"); }
 }
 export async function startPerformanceReview(input: PerformanceStartInput, previewPersonId?: string): Promise<PerformanceStartResult> {
-  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
+  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true" || process.env.PERFORMANCE_REVIEW_RELEASE_PAUSED === "true") return disabled();
   let request: PerformanceStartInput;
   try { request = parseStartInput(input); if (previewPersonId !== undefined) uuid(previewPersonId); } catch { return failure("invalid"); }
   let dispatched = false;
@@ -86,7 +86,7 @@ export async function startPerformanceReview(input: PerformanceStartInput, previ
   } catch (error) { return failure(!dispatched && error instanceof PerformanceReviewAccessError ? error.code : dispatched ? "uncertain" : "unavailable"); }
 }
 export async function mutatePerformanceReview(input: PerformanceMutationInput, previewPersonId?: string): Promise<PerformanceMutationResult> {
-  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
+  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true" || process.env.PERFORMANCE_REVIEW_RELEASE_PAUSED === "true") return disabled();
   let request: PerformanceMutationInput;
   try { request = parseMutationInput(input); if (previewPersonId !== undefined) uuid(previewPersonId); } catch { return failure("invalid"); }
   let dispatched = false;
@@ -111,7 +111,7 @@ export async function mutatePerformanceReview(input: PerformanceMutationInput, p
   } catch (error) { return failure(!dispatched && error instanceof PerformanceReviewAccessError ? error.code : dispatched ? "uncertain" : "unavailable"); }
 }
 export async function reconcilePerformanceReviewOperation(input: PerformanceReconcileInput, previewPersonId?: string): Promise<PerformanceReconcileResult> {
-  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
+  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true" || process.env.PERFORMANCE_REVIEW_RELEASE_PAUSED === "true") return disabled();
   let request: PerformanceReconcileInput;
   try { request = parseReconcileInput(input); if (previewPersonId !== undefined) uuid(previewPersonId); } catch { return failure("invalid"); }
   try {
@@ -131,7 +131,7 @@ export async function reconcilePerformanceReviewOperation(input: PerformanceReco
   } catch (error) { return failure(error instanceof PerformanceReviewAccessError ? error.code : "unavailable"); }
 }
 export async function getPerformanceReviewDocument(reviewId: string, previewPersonId?: string): Promise<PerformanceDocumentResult> {
-  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
+  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true" || process.env.PERFORMANCE_REVIEW_RELEASE_PAUSED === "true") return disabled();
   try { uuid(reviewId); if (previewPersonId !== undefined) uuid(previewPersonId); } catch { return failure("invalid"); }
   try {
     const { supabase, capabilities } = await requirePerformanceReviewViewer(previewPersonId);
