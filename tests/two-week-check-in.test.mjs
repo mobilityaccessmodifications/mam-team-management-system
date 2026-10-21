@@ -55,7 +55,7 @@ test('Marketing test workflow hard-routes the 2-Week email and attaches the supp
 
   const send = nodes['Send 2-Week Email from HR'];
   assert.equal(send.parameters.toRecipients, '={{ $json.deliveryTo }}');
-  assert.equal(send.parameters.additionalFields.bccRecipients, '={{ $json.deliveryBcc }}');
+  assert.equal(send.parameters.additionalFields.bccRecipients, "={{ ($json.deliveryBcc || '').split(',').map(email => email.trim()).filter(Boolean) }}");
   assert.equal(send.credentials.microsoftOutlookOAuth2Api.name, 'Microsoft Outlook - ai@mobilityaccess.com.au');
 });
 

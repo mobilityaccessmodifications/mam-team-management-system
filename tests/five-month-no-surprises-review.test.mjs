@@ -98,7 +98,7 @@ test('Live 5-Month workflow sends once to both employee addresses and the direct
 
   const send = nodes['Send 5-Month No-Surprises Review Email from HR'];
   assert.equal(send.parameters.toRecipients, '={{ $json.deliveryTo }}');
-  assert.equal(send.parameters.additionalFields.bccRecipients, '={{ $json.deliveryBcc }}');
+  assert.equal(send.parameters.additionalFields.bccRecipients, "={{ ($json.deliveryBcc || '').split(',').map(email => email.trim()).filter(Boolean) }}");
 });
 
 test('Live Check-In routing hides personal email from visible recipients and preserves punctuation in subjects', () => {
@@ -180,8 +180,8 @@ test('People & Culture escalation is fixed to marketing in test and HR in live',
     }),
   });
   assert.equal(liveResult.json.valid, true);
-  assert.equal(liveResult.json.actualRecipient, 'hr@mobilityaccess.com.au');
-  assert.equal(liveResult.json.deliveryTo, 'hr@mobilityaccess.com.au');
+  assert.equal(liveResult.json.actualRecipient, 'career@mobilityaccess.com.au');
+  assert.equal(liveResult.json.deliveryTo, 'career@mobilityaccess.com.au');
   assert.equal(liveResult.json.deliveryBcc, '');
   assert.equal(Object.hasOwn(liveResult.json, 'recipient'), false);
 });

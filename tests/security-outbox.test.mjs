@@ -89,7 +89,7 @@ test('legacy sick copies have stable receipts and never expose balances to the e
       if(failEmployee)throw new Error('synthetic timeout');
     }
     return Response.json({ok:true,sent:failEmployee,alreadySent:!failEmployee,eventKey:payload.eventKey,
-      actualRecipient:payload.audience==='employee'?'employee@example.test':'hr@mobilityaccess.com.au,manager@example.test'});
+      actualRecipient:payload.audience==='employee'?'employee@example.test':'career@mobilityaccess.com.au,manager@example.test'});
   };
   assert.equal((await dispatchLeaveNotificationOutbox()).failed,1);
   assert.equal(acks.at(-1).p_delivered,false);
@@ -135,4 +135,43 @@ test('balance-free submissions use separate stable copies and retain the legacy 
   assert.notEqual(bodies[0].eventKey,bodies[1].eventKey);
   const legacy=`leave:${id}:leave-submitted:${require('node:crypto').createHash('sha256').update(id).digest('hex').slice(0,24)}`;
   assert(bodies.every(b=>b.legacyEventKey===legacy&&!('leaveBalance' in b)));
+});
+
+test('accepted Careers reviewer receipts finish queued submissions without resending',async(t)=>{
+  const oldFetch=globalThis.fetch;
+  const names=['MAM_N8N_LEAVE_WEBHOOK_URL','MAM_N8N_LEAVE_WEBHOOK_ORIGIN','MAM_N8N_LEAVE_WEBHOOK_SECRET'];
+  const saved=Object.fromEntries(names.map(name=>[name,process.env[name]]));
+  t.after(()=>{
+    globalThis.fetch=oldFetch;
+    for(const name of names)if(saved[name]===undefined)delete process.env[name];else process.env[name]=saved[name];
+  });
+  Object.assign(process.env,{MAM_N8N_LEAVE_WEBHOOK_URL:'https://example.test/hook',MAM_N8N_LEAVE_WEBHOOK_ORIGIN:'https://example.test',MAM_N8N_LEAVE_WEBHOOK_SECRET:'synthetic'});
+  const row={delivery_id:id,claim_token:id,payload:{requestId:id,event:'leave-submitted',employeeEmails:['employee@example.test'],managerEmail:'manager@example.test'}};
+  const acks=[],bodies=[];
+  const {dispatchLeaveNotificationOutbox:run}=load('src/lib/leave-notification-outbox.ts',{
+    'server-only':{},'node:crypto':require('node:crypto'),
+    '@/lib/supabase/admin':{createAdminClient:()=>({rpc:async(name,args)=>{
+      if(name==='claim_leave_notification_outbox')return {data:[row],error:null};
+      assert.equal(name,'finish_leave_notification_outbox');acks.push(args);return {data:true,error:null};
+    }})},
+  });
+  let unexpectedRecipient=false;
+  globalThis.fetch=async(url,options)=>{
+    const body=JSON.parse(options.body);bodies.push(body);
+    const reviewers=row.payload.employeeEmails.includes('career@mobilityaccess.com.au')
+      ? 'manager@example.test':'career@mobilityaccess.com.au,manager@example.test';
+    return Response.json({ok:true,sent:false,alreadySent:true,eventKey:body.eventKey,
+      actualRecipient:unexpectedRecipient?'unexpected@example.test':body.audience==='reviewers'?reviewers:row.payload.employeeEmails.slice().sort().join(',')});
+  };
+  assert.equal((await run()).sent,1);
+  assert.equal(acks.at(-1).p_delivered,true);
+  assert.deepEqual(bodies.map(body=>body.audience),['reviewers','employee']);
+  const keys=bodies.map(body=>body.eventKey);
+  assert.equal((await run()).sent,1);
+  assert.deepEqual(bodies.slice(2).map(body=>body.eventKey),keys);
+  row.payload.employeeEmails.push('career@mobilityaccess.com.au');
+  assert.equal((await run()).sent,1);
+  unexpectedRecipient=true;
+  assert.equal((await run()).failed,1);
+  assert.equal(acks.at(-1).p_delivered,false);
 });

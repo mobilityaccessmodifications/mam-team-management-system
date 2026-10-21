@@ -134,7 +134,7 @@ function outbox({ failFirst = false, claimFails = false } = {}) {
     if (networkFailure) { networkFailure = false; throw new Error('synthetic timeout'); }
     // Execute the exact graph emitted by the deploy helper, with synthetic I/O.
     const receipt = receiver.run(body);
-    const expected = body.audience === 'employee' ? 'employee@example.test' : 'manager@example.test,hr@mobilityaccess.com.au';
+    const expected = body.audience === 'employee' ? 'employee@example.test' : 'manager@example.test,career@mobilityaccess.com.au';
     assert.equal(receipt.actualRecipient, canonical(expected));
     assert.equal(receipt.ok,true);
     if(receipt.sent) {

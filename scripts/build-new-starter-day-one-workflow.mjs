@@ -123,7 +123,7 @@ export function buildNewStarterDayOneWorkflow({
     }),
     node('d1000000-0000-4000-8000-000000000008', 'Send Day 1 Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [660, -180], {
       resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
-      additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true,
+      additionalFields: { bodyContentType: 'html', bccRecipients: "={{ ($json.deliveryBcc || '').split(',').map(email => email.trim()).filter(Boolean) }}", saveToSentItems: true,
         attachments: { attachments: [{ binaryPropertyName: 'checklist' }] } },
     }, { credentials: { microsoftOutlookOAuth2Api: AI_OUTLOOK_CREDENTIAL } }),
     node('d1000000-0000-4000-8000-000000000009', 'Build Durable Day 1 Confirmation', 'n8n-nodes-base.code', 2, [900, -180], {

@@ -59,8 +59,8 @@ export async function dispatchLeaveNotificationOutbox(requestId: string | null =
         const expected = audience === "reviewers" ? managers.filter((email) => !employees.includes(email))
           : audience === "employee" ? employees : managerDelivery ? managers : employees;
         // HR remains a reviewer even if all assigned addresses belong to the applicant.
-        if (audience === "reviewers" && !employees.includes("hr@mobilityaccess.com.au")) {
-          expected.push("hr@mobilityaccess.com.au");
+        if (audience === "reviewers" && !employees.includes("career@mobilityaccess.com.au")) {
+          expected.push("career@mobilityaccess.com.au");
         }
         const recipients = [...new Set(expected)].sort();
         try {
