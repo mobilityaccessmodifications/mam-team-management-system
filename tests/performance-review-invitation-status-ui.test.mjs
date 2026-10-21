@@ -22,9 +22,10 @@ for (const response of [
   const h = mount(workspace('manager', 'MAM', { reviews: [invited()] }), { loadPerformanceReviewMeetingInvitationStatus: async () => response });
   await h.settle();
   assert.equal(h.invitationStatusCalls.length, 1);
-  assert.ok(h.button('Save draft and invite meeting'));
+  assert.equal(h.button('Save draft').props.disabled, false);
   assert.ok(!h.text.includes(hint));
-  assert.ok(!h.all.some(node => node.type === 'button' && node.props.children === 'Save draft'));
+  assert.equal(h.button('Save draft').props.className, 'draftButton');
+  assert.ok(!h.all.some(node => node.type === 'button' && node.props.children === 'Save draft and invite meeting'));
   h.unmount();
 });
 
@@ -39,7 +40,9 @@ test('invitation confirmation updates only the control and hint while preserving
   assert.equal(h.invitationStatusCalls.length, 0);
   h.change('manager-0', 'Initial draft'); h.click('Save draft and invite meeting'); await h.settle();
   assert.equal(h.calls.at(-1).args[0].command, 'complete_manager');
-  assert.ok(h.button('Save draft and invite meeting'));
+  assert.equal(h.button('Save draft').props.disabled, false);
+  assert.equal(h.button('Save draft').props.className, 'draftButton');
+  assert.ok(!h.text.includes(hint));
   h.change('managerNote', 'Unsaved latest private note'); h.change('meeting-location', 'Unsaved room');
   h.timers(); await h.settle();
   assert.ok(h.button('Save draft'));
@@ -55,11 +58,11 @@ test('invitation confirmation updates only the control and hint while preserving
   h.unmount();
 });
 
-test('confirmed button and form submit save draft without inviting again and preserve receipt revisions', async () => {
+for (const sent of [false, true]) test(`requested invitation button and form save draft without inviting again: sent=${sent}`, async () => {
   const row = invited();
   const h = mount(workspace('manager', 'MAM', { reviews: [row] }), {
     mutatePerformanceReview: save(row),
-    loadPerformanceReviewMeetingInvitationStatus: async reviewId => ({ ok: true, reviewId, sent: true }),
+    loadPerformanceReviewMeetingInvitationStatus: async reviewId => ({ ok: true, reviewId, sent }),
   });
   await h.settle();
   h.change('manager-0', 'Changed after invitation'); h.click('Save draft'); await h.settle();
@@ -70,7 +73,7 @@ test('confirmed button and form submit save draft without inviting again and pre
   assert.deepEqual(writes.map(input => input.expectedRevision), ['manager:0:0', 'manager:0:1']);
   assert.equal(writes[0].input.answers[0], 'Changed after invitation');
   assert.equal(writes[1].input.managerNote, 'Latest note');
-  assert.equal(h.invitationStatusCalls.length, 1);
+  assert.equal(h.invitationStatusCalls.length, sent ? 1 : 3);
   h.unmount();
 });
 
@@ -94,7 +97,7 @@ test('fallback delivery confirmation after the initial burst updates automatical
   await h.settle();
   for (let i = 0; i < 7; i++) { h.timers(); await h.settle(); }
   assert.equal(h.invitationStatusCalls.length, 8);
-  assert.ok(h.button('Save draft and invite meeting'));
+  assert.equal(h.button('Save draft').props.disabled, false);
   h.timers(); await h.settle();
   assert.ok(h.button('Save draft')); assert.ok(h.text.includes(hint));
   h.timers(); h.focus(); await h.settle();
@@ -106,7 +109,7 @@ test('fallback delivery confirmation after the initial burst updates automatical
 test('status errors remain unconfirmed and are rechecked on focus without reloading workspace', async () => {
   const h = mount(workspace('manager', 'MAM', { reviews: [invited()] }), { loadPerformanceReviewMeetingInvitationStatus: async () => { throw Error('Synthetic failure'); } });
   await h.settle();
-  assert.ok(h.button('Save draft and invite meeting'));
+  assert.equal(h.button('Save draft').props.disabled, false);
   assert.ok(!h.text.includes(hint));
   h.ports.loadPerformanceReviewMeetingInvitationStatus = async reviewId => ({ ok: true, reviewId, sent: true });
   h.focus(); await h.settle();
@@ -125,7 +128,7 @@ test('a late confirmation for another selected employee cannot change the curren
   await h.settle();
   h.click('Second Colleague — MAM'); await h.settle();
   pending.resolve({ ok: true, reviewId: ids.review, sent: true }); await h.settle();
-  assert.ok(h.button('Save draft and invite meeting'));
+  assert.equal(h.button('Save draft').props.disabled, false);
   assert.ok(!h.text.includes(hint));
   assert.deepEqual(h.invitationStatusCalls.map(call => call.args[0]), [ids.review, ids.other]);
   h.unmount();
@@ -141,9 +144,11 @@ for (const retirement of ['signout', 'role-change', 'unmount']) test(`late invit
     h.auth('TOKEN_REFRESHED', ids.actor); await h.settle();
   }
   if (retirement === 'unmount') h.unmount();
+  const beforeLate = h.text;
   pending.resolve({ ok: true, reviewId: ids.review, sent: true }); await h.settle();
   assert.ok(!h.text.includes(hint));
-  assert.ok(!h.all.some(node => node.type === 'button' && node.props.children === 'Save draft'));
+  if (retirement === 'unmount') assert.equal(h.text, beforeLate);
+  else assert.ok(!h.all.some(node => node.type === 'button' && node.props.children === 'Save draft'));
   h.unmount();
 });
 
@@ -187,7 +192,7 @@ for (const change of ['actor', 'delegate']) test(`late invitation confirmation c
   else h.setProps({ previewPersonId: nextManager });
   await h.settle();
   pending.resolve({ ok: true, reviewId: ids.review, sent: true }); await h.settle();
-  assert.ok(h.button('Save draft and invite meeting'));
+  assert.equal(h.button('Save draft').props.disabled, false);
   assert.ok(!h.text.includes(hint));
   assert.equal(h.invitationStatusCalls.length, 2);
   assert.deepEqual(h.invitationStatusCalls.at(-1).args, [ids.review, change === 'delegate' ? nextManager : undefined]);
