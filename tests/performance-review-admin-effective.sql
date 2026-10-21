@@ -99,9 +99,9 @@ select pg_temp.performance_admin_assert((select count(*)=1 from private.performa
 select pg_temp.performance_admin_assert((select actor_user_id='ad100000-0000-4000-8000-000000000003' from private.performance_review_events e
   join performance_admin_effective_reviews v on v.id=e.review_id where v.kind='p0-manager' and e.kind='submit_review'),
   'effective final audit preserves actual linked Admin operator');
-select pg_temp.performance_admin_assert((select private.performance_review_notification_payload(r,'self-submitted')->>'recipient'='careers@mobilityaccess.com.au'
+select pg_temp.performance_admin_assert((select private.performance_review_notification_payload(r,'self-submitted') is null
   from private.performance_reviews r join performance_admin_effective_reviews v using(id) where v.kind='admin-self'),
-  'effective standalone P0 self-submission notification uses approved Careers mailbox');
+  'effective standalone P0 without eligible Manager has no Careers notification fallback');
 select pg_temp.performance_admin_assert(not has_function_privilege('authenticated','private.performance_review_admin_candidate(uuid,uuid)','EXECUTE')
   and not has_table_privilege('authenticated','private.performance_reviews','SELECT'),'effective Admin feature does not expose private SQL objects');
 rollback;
