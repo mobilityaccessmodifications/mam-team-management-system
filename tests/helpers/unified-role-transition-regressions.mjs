@@ -16,7 +16,19 @@ export function runUnifiedRoleTransitionRegressions(socket) {
   sql(socket,predecessor,readFileSync('tests/migrations/0001-supabase-platform.sql','utf8'));
   const history=readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql') && f<path.basename(file)).sort();
   const historyHashes=history.map(f=>[f,createHash('sha256').update(readFileSync(path.join('supabase/migrations',f))).digest('hex')]);
-  for (const f of history) sql(socket,predecessor,readFileSync(path.join('supabase/migrations',f),'utf8'));
+  for (const f of history) {
+    if (f === '20261003090000_payroll_operator_session_proof.sql') {
+      sql(socket,predecessor,readFileSync('tests/migrations/operator-session-platform.sql','utf8'));
+      sql(socket,predecessor,'update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;');
+    }
+    sql(socket,predecessor,readFileSync(path.join('supabase/migrations',f),'utf8'));
+  }
+  for (const fixture of ['canonical-roles-storage-platform.sql','canonical-roles-hosted-member-predecessor.sql']) {
+    sql(socket,predecessor,readFileSync(path.join('tests/migrations',fixture),'utf8'));
+  }
+  sql(socket,predecessor,'update private.confirmed_test_purge_schema set schema_hash=private.confirmed_test_purge_schema_hash() where singleton;');
+  const plan=readFileSync('tests/migrations/canonical-roles-release-plan.sql','utf8');
+  const readback=readFileSync('tests/migrations/canonical-roles-release-readback.sql','utf8');
   const before=sql(socket,predecessor,`select private.confirmed_test_purge_schema_hash();`).trim();
   assert.equal(before,sql(socket,predecessor,'select schema_hash from private.confirmed_test_purge_schema;').trim());
   const faults=[
@@ -39,7 +51,7 @@ export function runUnifiedRoleTransitionRegressions(socket) {
       try {
         const injected=source.replace(anchor,()=>phase==='pre' ? `${fault}\n${anchor}` : `${anchor}\n${fault}`);
         let result;
-        try { command('psql',[...target(socket,database),'-v','VERBOSITY=verbose','-Atq'],{input:injected,maxBuffer:16*1024*1024}); result='committed'; }
+        try { command('psql',[...target(socket,database),'-v','VERBOSITY=verbose','-Atq'],{input:[plan,injected,readback].join('\n'),maxBuffer:16*1024*1024}); result='committed'; }
         catch (error) { result=error.message; }
         const catalog=sql(socket,database,'select private.confirmed_test_purge_schema_hash();').trim();
         const baseline=sql(socket,database,'select schema_hash from private.confirmed_test_purge_schema;').trim();
@@ -57,7 +69,7 @@ export function runUnifiedRoleTransitionRegressions(socket) {
   const valid='mam_test_unified_role_transition_valid';
   command('createdb',['-h',socket,'-p','55439','-U','postgres',`--template=${predecessor}`,valid]);
   try {
-    sql(socket,valid,source);
+    sql(socket,valid,[plan,source,readback].join('\n'));
     assert.equal(sql(socket,valid,'select private.confirmed_test_purge_schema_hash()=(select schema_hash from private.confirmed_test_purge_schema);').trim(),'t');
     assert.equal(sql(socket,valid,`select to_regprocedure('public.get_portal_role_capabilities(uuid)') is not null;`).trim(),'t');
     ++passed;

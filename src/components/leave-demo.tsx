@@ -1336,6 +1336,7 @@ export function LeaveDemo({
   // authority. Returning to their own profile restores the complete admin
   // workspace. Server Actions and RPCs still re-authorise the real session.
   const showHrWorkspace = activeCapabilities?.can_manage_employee_directory === true;
+  const canEditActiveOrganisation = canEditOrganisation && activeCapabilities?.can_edit_organisation_chart === true;
   const hasManagerPeopleWorkspace = activeCapabilities?.can_view_employee_directory === true;
   const showManagerDirectory = activeProfile.accessRole === "manager"
     && hasManagerPeopleWorkspace;
@@ -1466,6 +1467,7 @@ export function LeaveDemo({
 
   async function createOrganisationPerson(person: OrganisationPersonDraft) {
     if (!scopeIsCurrent()) throw new Error("The active profile changed. Refresh before editing.");
+    if (!canEditActiveOrganisation) throw new Error("You do not have permission to edit the organisation.");
     const epoch = contactScopeEpoch;
     if (!directorySupabase) throw new Error("The directory is not connected.");
     const { error } = await directorySupabase.rpc("create_internal_org_node", {
@@ -1486,6 +1488,7 @@ export function LeaveDemo({
 
   async function updateOrganisationPerson(id: string, person: OrganisationPersonDraft) {
     if (!scopeIsCurrent()) throw new Error("The active profile changed. Refresh before editing.");
+    if (!canEditActiveOrganisation) throw new Error("You do not have permission to edit the organisation.");
     const epoch = contactScopeEpoch;
     if (!directorySupabase) throw new Error("The directory is not connected.");
     const current = organisationRows.find((row) => row.id === id);
@@ -2123,8 +2126,8 @@ export function LeaveDemo({
               key={`${activeProfile.accessRole}:${isPreviewingEmployeeAccess ? activeProfile.id : "signed-in"}`}
               activeProfile={activeProfile}
               organisationProfiles={organisationPeople}
-              canEditOrganisation={canEditOrganisation && showHrWorkspace}
-              canArrangeOrganisation={canEditOrganisation && showHrWorkspace}
+              canEditOrganisation={canEditActiveOrganisation}
+              canArrangeOrganisation={canEditActiveOrganisation}
               showOrganisation={showOrganisationChart}
               showProfile={false}
               showTasks={Boolean(activeCapabilities)}

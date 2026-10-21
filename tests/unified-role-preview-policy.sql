@@ -42,13 +42,11 @@ do $$ declare item record; target uuid; denied boolean; code text; begin
   end loop;
 end $$;
 reset role;
-update public.profiles set credentials_valid_after=clock_timestamp()+interval '1 hour' where id in
-('a1000000-0000-4000-8000-000000000005','a1000000-0000-4000-8000-000000000009');
 set local role authenticated;
 do $$ declare item record; actor uuid; denied boolean; begin
   foreach actor in array array['a1000000-0000-4000-8000-000000000005','a1000000-0000-4000-8000-000000000009']::uuid[] loop
     perform set_config('request.jwt.claim.sub',actor::text,true);
-    perform set_config('request.jwt.claims',jsonb_build_object('sub',actor,'iat',extract(epoch from clock_timestamp())::bigint,'is_anonymous',false)::text,true);
+    perform set_config('request.jwt.claims',jsonb_build_object('sub',actor,'iat',extract(epoch from clock_timestamp()-interval '2 days')::bigint,'is_anonymous',false)::text,true);
     for item in select name from preview_entrypoints order by name loop
       denied:=false;
       begin execute format('select * from public.%I(%L::uuid)',item.name,'a1000000-0000-4000-8000-000000000002');

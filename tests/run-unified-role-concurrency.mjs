@@ -153,14 +153,15 @@ try {
   assert.equal(sql(socket, database, `select count(*) from private.subscription_management_grants where person_id='${id(14)}';`).trim(), '1');
   console.log('PASS: replacement-before-demotion preserves grant history but cannot preserve effective privileges');
 
-  const actorDisable = session(null, `update public.profiles set account_status='disabled',disabled_at=now() where id='${id(9)}'; select 'ACTOR_DISABLE_HELD';`, true, true);
+  const actorDisable = session(id(5), `update public.profiles set account_status='disabled',disabled_at=now() where id='${id(9)}'; select 'ACTOR_DISABLE_HELD';`, true, true);
   await until(() => actorDisable.output().includes('ACTOR_DISABLE_HELD'), 'pending actor disable');
   const pending = session(id(9), `select public.replace_subscription_credential_access_grants(array['${id(16)}']::uuid[]);`);
   await blocked(pending);
   actorDisable.child.stdin.end('commit;\n');
   assert.equal((await actorDisable.done).code, 0);
   await reject(pending, /Only System Admin/);
-  sql(socket, database, `update public.profiles set account_status='active',disabled_at=null where id='${id(9)}';`);
+  const actorRestored = await session(id(5), `update public.profiles set account_status='active',disabled_at=null where id='${id(9)}';`, false, true).done;
+  assert.equal(actorRestored.code, 0, actorRestored.error);
   console.log('PASS: P0 disabled while waiting on actor lock cannot finish subscription configuration');
 
   const batch = sql(socket, database, `select id from private.payroll_balance_import_batches where uploaded_by='${id(6)}' limit 1;`).trim();
