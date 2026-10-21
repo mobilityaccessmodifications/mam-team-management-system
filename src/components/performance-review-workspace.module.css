@@ -21,6 +21,7 @@
 .workspace button[type="submit"], .workspace .primaryButton { border-color: var(--mam-orange-strong); background: var(--mam-orange-strong); color: var(--text-on-inverse); }
 .workspace .primaryButton:hover:not(:disabled) { border-color: var(--mam-orange-dark); background: var(--mam-orange-dark); color: var(--text-on-inverse); }
 .workspace button:disabled { opacity: .55; cursor: not-allowed; }
+.workspace .submittedButton:disabled { border-color: var(--surface-border-strong); background: var(--surface-muted); color: var(--text-secondary); opacity: 1; }
 .workspace :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--mam-orange-strong); outline-offset: 3px; }
 .columns > nav > button { justify-content: flex-start; text-align: left; }
 .columns > nav > button[aria-pressed="true"] { background: var(--surface-warm); box-shadow: inset 3px 0 var(--mam-orange); color: var(--mam-orange-dark); }
