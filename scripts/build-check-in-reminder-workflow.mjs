@@ -15,7 +15,7 @@ export const SIX_MONTH_CASUAL_RECORD_PATH = path.join(ROOT, 'assets/checklists/6
 const RECEIPT_URL = 'https://mam-team-management-system-ten.vercel.app/api/internal/integrations/notifications/receipts';
 const AI_OUTLOOK_CREDENTIAL = { id: 'Ug5bTBjvF1vCSdhQ', name: 'Microsoft Outlook - ai@mobilityaccess.com.au' };
 const RECEIPT_CREDENTIAL = { id: 'tGtpwegru8OxtdCt', name: 'MAM Team Management - Notification Webhook Header' };
-const PEOPLE_CULTURE_RECIPIENT = 'hr@mobilityaccess.com.au';
+const PEOPLE_CULTURE_RECIPIENT = 'career@mobilityaccess.com.au';
 
 const node = (id, name, type, typeVersion, position, parameters, extra = {}) => ({
   id, name, type, typeVersion, position, parameters, ...extra,
@@ -258,7 +258,7 @@ export function buildCheckInReminderWorkflow({
     node('c2000000-0000-4000-8000-000000000028', 'Build People & Culture Review Email', 'n8n-nodes-base.code', 2, [620, -400], { mode: 'runOnceForAllItems', jsCode: reviewEscalationEmailCode }),
     node('c2000000-0000-4000-8000-000000000029', 'Send People & Culture Review Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [860, -400], {
       resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
-      additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true },
+      additionalFields: { bodyContentType: 'html', bccRecipients: "={{ ($json.deliveryBcc || '').split(',').map(email => email.trim()).filter(Boolean) }}", saveToSentItems: true },
     }, { credentials: { microsoftOutlookOAuth2Api: AI_OUTLOOK_CREDENTIAL } }),
     node('c2000000-0000-4000-8000-000000000007', 'Two-Week Check-In?', 'n8n-nodes-base.if', 2.2, [620, -160], {
       conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ id: 'c2000000-0000-4000-8000-000000000107', leftValue: '={{ $json.milestone === "2-week" }}', rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }], combinator: 'and' }, options: {},
@@ -266,12 +266,12 @@ export function buildCheckInReminderWorkflow({
     node('c2000000-0000-4000-8000-000000000008', 'Build 2-Week Email and Attachment', 'n8n-nodes-base.code', 2, [620, -300], { mode: 'runOnceForAllItems', jsCode: twoWeekEmailCode(twoWeekRecordBase64) }),
     node('c2000000-0000-4000-8000-000000000009', 'Send 2-Week Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [860, -260], {
       resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
-      additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
+      additionalFields: { bodyContentType: 'html', bccRecipients: "={{ ($json.deliveryBcc || '').split(',').map(email => email.trim()).filter(Boolean) }}", saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
     }, { credentials: { microsoftOutlookOAuth2Api: AI_OUTLOOK_CREDENTIAL } }),
     node('c2000000-0000-4000-8000-000000000010', 'Build 5-Month No-Surprises Review Email and Attachment', 'n8n-nodes-base.code', 2, [1580, 180], { mode: 'runOnceForAllItems', jsCode: fiveMonthEmailCode(fiveMonthRecordBase64) }),
     node('c2000000-0000-4000-8000-000000000011', 'Send 5-Month No-Surprises Review Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [1820, 180], {
       resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
-      additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
+      additionalFields: { bodyContentType: 'html', bccRecipients: "={{ ($json.deliveryBcc || '').split(',').map(email => email.trim()).filter(Boolean) }}", saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
     }, { credentials: { microsoftOutlookOAuth2Api: AI_OUTLOOK_CREDENTIAL } }),
     node('c2000000-0000-4000-8000-000000000012', 'Build Durable Check-In Confirmation', 'n8n-nodes-base.code', 2, [1100, -160], { mode: 'runOnceForAllItems', jsCode: confirmationCode }),
     node('c2000000-0000-4000-8000-000000000013', 'Confirm Durable Check-In Delivery', 'n8n-nodes-base.httpRequest', 4.2, [1340, -160], {
@@ -290,7 +290,7 @@ export function buildCheckInReminderWorkflow({
     node('c2000000-0000-4000-8000-000000000019', 'Build 1-Month Email and Attachment', 'n8n-nodes-base.code', 2, [860, -140], { mode: 'runOnceForAllItems', jsCode: oneMonthEmailCode(oneMonthRecordBase64) }),
     node('c2000000-0000-4000-8000-000000000020', 'Send 1-Month Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [1100, -140], {
       resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
-      additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
+      additionalFields: { bodyContentType: 'html', bccRecipients: "={{ ($json.deliveryBcc || '').split(',').map(email => email.trim()).filter(Boolean) }}", saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
     }, { credentials: { microsoftOutlookOAuth2Api: AI_OUTLOOK_CREDENTIAL } }),
     node('c2000000-0000-4000-8000-000000000021', 'Two-Month Stay Interview?', 'n8n-nodes-base.if', 2.2, [860, -40], {
       conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ id: 'c2000000-0000-4000-8000-000000000121', leftValue: '={{ $json.milestone === "2-month" }}', rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }], combinator: 'and' }, options: {},
@@ -298,7 +298,7 @@ export function buildCheckInReminderWorkflow({
     node('c2000000-0000-4000-8000-000000000022', 'Build 2-Month Stay Interview Email and Attachment', 'n8n-nodes-base.code', 2, [1100, 0], { mode: 'runOnceForAllItems', jsCode: twoMonthEmailCode(twoMonthRecordBase64) }),
     node('c2000000-0000-4000-8000-000000000023', 'Send 2-Month Stay Interview Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [1340, 0], {
       resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
-      additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
+      additionalFields: { bodyContentType: 'html', bccRecipients: "={{ ($json.deliveryBcc || '').split(',').map(email => email.trim()).filter(Boolean) }}", saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
     }, { credentials: { microsoftOutlookOAuth2Api: AI_OUTLOOK_CREDENTIAL } }),
     node('c2000000-0000-4000-8000-000000000024', 'Three-Month Midpoint Review?', 'n8n-nodes-base.if', 2.2, [1100, 100], {
       conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ id: 'c2000000-0000-4000-8000-000000000124', leftValue: '={{ $json.milestone === "3-month" }}', rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }], combinator: 'and' }, options: {},
@@ -306,7 +306,7 @@ export function buildCheckInReminderWorkflow({
     node('c2000000-0000-4000-8000-000000000025', 'Build 3-Month Midpoint Review Email and Attachment', 'n8n-nodes-base.code', 2, [1340, 100], { mode: 'runOnceForAllItems', jsCode: threeMonthEmailCode(threeMonthRecordBase64) }),
     node('c2000000-0000-4000-8000-000000000026', 'Send 3-Month Midpoint Review Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [1580, 100], {
       resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
-      additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
+      additionalFields: { bodyContentType: 'html', bccRecipients: "={{ ($json.deliveryBcc || '').split(',').map(email => email.trim()).filter(Boolean) }}", saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
     }, { credentials: { microsoftOutlookOAuth2Api: AI_OUTLOOK_CREDENTIAL } }),
     node('c2000000-0000-4000-8000-000000000030', 'Five-Month No-Surprises Review?', 'n8n-nodes-base.if', 2.2, [1340, 260], {
       conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ id: 'c2000000-0000-4000-8000-000000000130', leftValue: '={{ $json.milestone === "5-month" }}', rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }], combinator: 'and' }, options: {},
@@ -317,7 +317,7 @@ export function buildCheckInReminderWorkflow({
     node('c2000000-0000-4000-8000-000000000032', 'Build 6-Month Check-In Email and Attachment', 'n8n-nodes-base.code', 2, [1820, 320], { mode: 'runOnceForAllItems', jsCode: sixMonthEmailCode(sixMonthRecordBase64) }),
     node('c2000000-0000-4000-8000-000000000033', 'Send 6-Month Check-In Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [2060, 320], {
       resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
-      additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
+      additionalFields: { bodyContentType: 'html', bccRecipients: "={{ ($json.deliveryBcc || '').split(',').map(email => email.trim()).filter(Boolean) }}", saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
     }, { credentials: { microsoftOutlookOAuth2Api: AI_OUTLOOK_CREDENTIAL } }),
     node('c2000000-0000-4000-8000-000000000034', 'Six-Month Casual Check-In?', 'n8n-nodes-base.if', 2.2, [1820, 480], {
       conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ id: 'c2000000-0000-4000-8000-000000000134', leftValue: '={{ $json.milestone === "6-month-casual" }}', rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } }], combinator: 'and' }, options: {},
@@ -325,7 +325,7 @@ export function buildCheckInReminderWorkflow({
     node('c2000000-0000-4000-8000-000000000035', 'Build 6-Month Casual Check-In Email and Attachment', 'n8n-nodes-base.code', 2, [2060, 460], { mode: 'runOnceForAllItems', jsCode: sixMonthCasualEmailCode(sixMonthCasualRecordBase64) }),
     node('c2000000-0000-4000-8000-000000000036', 'Send 6-Month Casual Check-In Email from HR', 'n8n-nodes-base.microsoftOutlook', 2, [2300, 460], {
       resource: 'message', operation: 'send', toRecipients: '={{ $json.deliveryTo }}', subject: '={{ $json.subject }}', bodyContent: '={{ $json.bodyContent }}',
-      additionalFields: { bodyContentType: 'html', bccRecipients: '={{ $json.deliveryBcc }}', saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
+      additionalFields: { bodyContentType: 'html', bccRecipients: "={{ ($json.deliveryBcc || '').split(',').map(email => email.trim()).filter(Boolean) }}", saveToSentItems: true, attachments: { attachments: [{ binaryPropertyName: 'record' }] } },
     }, { credentials: { microsoftOutlookOAuth2Api: AI_OUTLOOK_CREDENTIAL } }),
   ];
   const connections = {

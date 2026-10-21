@@ -1,5 +1,5 @@
 // Executed inside the authenticated MAM n8n Code node; tested without network.
-const HR = 'hr@mobilityaccess.com.au';
+const HR = 'career@mobilityaccess.com.au';
 const ACCOUNTS = 'accounts@mobilityaccess.com.au';
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 const APP_URL = 'https://mam-team-management-system-ten.vercel.app';

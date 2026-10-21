@@ -88,7 +88,7 @@ test('live workflow includes both employee addresses once and the direct manager
   assert.equal(both.json.deliveryBcc,'personal@example.test');
   const send = workflow.nodes.find((node) => node.name === 'Send Day 1 Email from HR');
   assert.equal(send.parameters.toRecipients,'={{ $json.deliveryTo }}');
-  assert.equal(send.parameters.additionalFields.bccRecipients,'={{ $json.deliveryBcc }}');
+  assert.equal(send.parameters.additionalFields.bccRecipients,"={{ ($json.deliveryBcc || '').split(',').map(email => email.trim()).filter(Boolean) }}");
 });
 
 test('Day 1 dispatcher stays inert for unsupported or disabled modes', async () => {
