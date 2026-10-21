@@ -4,7 +4,7 @@ import { dispatchPerformanceReviewNotificationsForReview } from "@/lib/performan
 import { after } from "next/server";
 import { dispatchPerformanceReviewMailForReview } from "@/lib/performance-review-mail";
 
-import type { PerformanceFailure, PerformanceLoadResult, PerformanceStartInput, PerformanceStartResult, PerformanceMutationInput, PerformanceMutationResult, PerformanceReconcileInput, PerformanceReconcileResult, PerformanceDocumentResult } from "@/lib/performance-review-types";
+import type { PerformanceFailure, PerformanceLoadResult, PerformanceInvitationStatusResult, PerformanceStartInput, PerformanceStartResult, PerformanceMutationInput, PerformanceMutationResult, PerformanceReconcileInput, PerformanceReconcileResult, PerformanceDocumentResult } from "@/lib/performance-review-types";
 import { PerformanceReviewAccessError, requirePerformanceReviewActor, requirePerformanceReviewViewer, requirePerformanceReviewManagerDelegate } from "@/lib/performance-review-auth";
 import { closed, uuid, parseDocument, parseReconcileInput, parseMutationInput, parseStartInput, parseReview, parseWorkspace } from "@/lib/performance-review-rules";
 function failure(code: PerformanceFailure["code"]): PerformanceFailure {
@@ -48,6 +48,20 @@ export async function loadPerformanceReviews(previewPersonId?: string): Promise<
     if (error) return rpcFailure(error, false, status);
     return { ok: true, data: parseWorkspace(data, actorUserId, capabilities.app_role, capabilities.person_id, previewPersonId === undefined ? false : capabilities.app_role === "manager" ? "manager_delegate" : true) };
   } catch (error) { return error instanceof PerformanceReviewAccessError ? failure(error.code) : disabled(); }
+}
+export async function loadPerformanceReviewMeetingInvitationStatus(reviewId: string, previewPersonId?: string): Promise<PerformanceInvitationStatusResult> {
+  if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();
+  try { uuid(reviewId); if (previewPersonId !== undefined) uuid(previewPersonId); } catch { return failure("invalid"); }
+  try {
+    const { supabase, capabilities } = previewPersonId === undefined ? await requirePerformanceReviewActor() : await requirePerformanceReviewManagerDelegate(previewPersonId);
+    if (!["manager", "admin", "system_admin"].includes(capabilities.app_role)) return failure("forbidden");
+    const { data, error, status } = await supabase.rpc("performance_review_meeting_invitation_status", { p_review_id: reviewId, p_person_id: previewPersonId ?? null });
+    if (status >= 500) return failure("unavailable");
+    if (error) return rpcFailure(error, false, status);
+    const result = closed(data, ["reviewId", "sent"]);
+    if (result.reviewId !== reviewId || typeof result.sent !== "boolean") return failure("unavailable");
+    return { ok: true, reviewId, sent: result.sent };
+  } catch (error) { return error instanceof PerformanceReviewAccessError ? failure(error.code) : failure("unavailable"); }
 }
 export async function startPerformanceReview(input: PerformanceStartInput, previewPersonId?: string): Promise<PerformanceStartResult> {
   if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return disabled();

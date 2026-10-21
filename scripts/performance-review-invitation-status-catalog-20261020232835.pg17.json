@@ -1,0 +1,37 @@
+{
+  "version": "20261020232835",
+  "postgresMajor": 17,
+  "migrationSha256": "0013209072897ad96c9c01787d976eb3dc26ca2e8a6540d3e4b3aeaf08e6043e",
+  "catalog": {
+    "acl": [
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "grantable": false,
+        "privilege": "EXECUTE"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "grantable": false,
+        "privilege": "EXECUTE"
+      }
+    ],
+    "cost": 100,
+    "kind": "f",
+    "rows": 0,
+    "owner": "postgres",
+    "config": [
+      "search_path=\"\""
+    ],
+    "strict": false,
+    "returns": "jsonb",
+    "support": "-",
+    "language": "plpgsql",
+    "parallel": "u",
+    "arguments": "p_review_id uuid, p_person_id uuid DEFAULT NULL::uuid",
+    "leakproof": false,
+    "volatility": "s",
+    "securityDefiner": true
+  }
+}

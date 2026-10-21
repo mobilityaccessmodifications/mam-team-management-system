@@ -208,6 +208,7 @@ function performanceReceipt(input, id, row, extra = {}) {
 
 const handlers = {
   '@/app/performance-reviews/actions': {
+    loadPerformanceReviewMeetingInvitationStatus: reviewId => ({ ok: true, reviewId, sent: false }),
     loadPerformanceReviews: id => ({ ok: true, data: performanceWorkspace(id) }),
     startPerformanceReview: (input, id) => {
       const data = performanceManagerScope(id), employee = data.startablePeople.find(person => person.id === input.employeePersonId);

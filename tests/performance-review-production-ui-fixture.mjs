@@ -48,7 +48,7 @@ export function productionActionHarness({ role = 'manager', signedIn = true, acc
         error: canonicalError, status: canonicalStatus };
       }
       assert.ok(['mutate_performance_review', 'start_performance_review', 'performance_review_workspace',
-        'get_performance_review_operation', 'get_performance_review_document'].includes(name), 'Unexpected offline RPC ' + name);
+        'get_performance_review_operation', 'get_performance_review_document', 'performance_review_meeting_invitation_status'].includes(name), 'Unexpected offline RPC ' + name);
       if (rpcThrows) throw new Error('PRIVATE-SYNTHETIC-RPC');
       return typeof response === 'function' ? response(name, args) : response;
     },
@@ -84,7 +84,7 @@ export function productionActionHarness({ role = 'manager', signedIn = true, acc
     return mod.exports;
   }
   const actions = load('src/app/performance-reviews/actions.ts');
-  assert.deepEqual(Object.keys(actions).sort(), ['getPerformanceReviewDocument', 'loadPerformanceReviews',
+  assert.deepEqual(Object.keys(actions).sort(), ['getPerformanceReviewDocument', 'loadPerformanceReviews', 'loadPerformanceReviewMeetingInvitationStatus',
     'mutatePerformanceReview', 'reconcilePerformanceReviewOperation', 'startPerformanceReview'].sort());
   return { actions, calls, registrations, callbacks, dispatches, notificationDispatches, loaded, authCalls: () => authCalls,
     business: () => calls.filter(call => call.name !== 'get_portal_role_capabilities') };

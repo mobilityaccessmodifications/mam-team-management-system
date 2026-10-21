@@ -11,7 +11,7 @@ export const text = tree => tree == null || typeof tree === 'boolean' ? '' : typ
 export function mount(initial = workspace(), supplied = {}, componentProps = {}) {
   assert.ok(existsSync(sourcePath), 'Native performance workspace component must exist');
   let cursor = 0, changed = false, tree, authListener;
-  const hooks = [], effects = [], calls = [], downloads = [], revoked = [], built = [], blobs = new Map(), timers = new Map();
+  const hooks = [], effects = [], calls = [], invitationStatusCalls = [], focusListeners = new Set(), downloads = [], revoked = [], built = [], blobs = new Map(), timers = new Map();
   let nextTimer = 0;
   const take = initial => { const i = cursor++; return [i, hooks[i] ??= initial]; };
   const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
@@ -22,10 +22,11 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
     useMemo(fn, deps) { const [, s] = take({}); if (!same(s.deps, deps)) { s.value = fn(); s.deps = deps; } return s.value; },
     useCallback(fn, deps) { return react.useMemo(() => fn, deps); },
   };
-  const methods = ['loadPerformanceReviews', 'startPerformanceReview', 'mutatePerformanceReview', 'reconcilePerformanceReviewOperation', 'getPerformanceReviewDocument'];
-  const ports = { loadPerformanceReviews: async () => ({ ok: true, data: initial }), ...supplied };
-  const actions = Object.fromEntries(methods.map(name => [name, async (...args) => { calls.push({ name, args: structuredClone(args) }); if (!ports[name]) throw new Error('Unexpected action '+name); return ports[name](...args); }]));
+  const methods = ['loadPerformanceReviews', 'startPerformanceReview', 'mutatePerformanceReview', 'reconcilePerformanceReviewOperation', 'getPerformanceReviewDocument', 'loadPerformanceReviewMeetingInvitationStatus'];
+  const ports = { loadPerformanceReviews: async () => ({ ok: true, data: initial }), loadPerformanceReviewMeetingInvitationStatus: async reviewId => ({ ok: true, reviewId, sent: false }), ...supplied };
+  const actions = Object.fromEntries(methods.map(name => [name, async (...args) => { (name === 'loadPerformanceReviewMeetingInvitationStatus' ? invitationStatusCalls : calls).push({ name, args: structuredClone(args) }); if (!ports[name]) throw new Error('Unexpected action '+name); return ports[name](...args); }]));
   const fakeURL = { createObjectURL(blob) { const url = 'blob:synthetic-'+blobs.size; blobs.set(url, blob); return url; }, revokeObjectURL(url) { revoked.push(url); } };
+  const fakeWindow = { addEventListener(event, listener) { assert.equal(event, 'focus'); focusListeners.add(listener); }, removeEventListener(event, listener) { assert.equal(event, 'focus'); focusListeners.delete(listener); } };
   const fakeDocument = { createElement(tag) { assert.equal(tag, 'a'); const a = { click() { downloads.push({ href: a.href, fileName: a.download, blob: blobs.get(a.href) }); }, remove() {} }; return a; }, body: { appendChild() {} } };
   const cache = new Map();
   function load(file) {
@@ -33,7 +34,7 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
     const mod = { exports: {} }; cache.set(file, mod);
     const raw = readFileSync(file, 'utf8');
     const code = ts.transpileModule(raw, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-    new Function('require', 'module', 'exports', 'URL', 'document', 'setTimeout', 'clearTimeout', code)(id => {
+    new Function('require', 'module', 'exports', 'URL', 'document', 'setTimeout', 'clearTimeout', 'window', code)(id => {
       if (id === 'react') return react;
       if (id === '@/app/performance-reviews/actions' || id === '@/lib/performance-review-load') return actions;
       if (id === '@/lib/supabase/client') return { createClient: () => ({ auth: { onAuthStateChange(callback) { authListener = callback; return { data: { subscription: { unsubscribe() { authListener = null; } } } }; } } }) };
@@ -43,7 +44,7 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
       if (id.startsWith('@/')) return require('../src/'+id.slice(2));
       if (id.startsWith('./performance-review-')) return require('../src/lib/'+id.slice(2));
       return require(id);
-    }, mod, mod.exports, fakeURL, fakeDocument, fn => { const key = ++nextTimer; timers.set(key, fn); return key; }, key => timers.delete(key));
+    }, mod, mod.exports, fakeURL, fakeDocument, fn => { const key = ++nextTimer; timers.set(key, fn); return key; }, key => timers.delete(key), fakeWindow);
     return mod.exports;
   }
   const Component = load(sourcePath).default;
@@ -56,7 +57,7 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
   }
   function render() { let turns = 0; do { changed = false; cursor = 0; tree = expand(Component(componentProps)); for (const effect of effects.splice(0)) effect(); assert.ok(++turns < 30, 'Hook render must settle'); } while (changed); return tree; }
   async function settle() { for (let i = 0; i < 6; i++) { await new Promise(r => setImmediate(r)); render(); } return tree; }
-  const api = { calls, ports, downloads, revoked, built, blobs, hooks, render, settle,
+  const api = { calls, invitationStatusCalls, ports, downloads, revoked, built, blobs, hooks, render, settle,
     setProps(props) { componentProps = props; render(); },
     get tree() { return tree; },
     get all() { return nodes(tree); },
@@ -68,6 +69,7 @@ export function mount(initial = workspace(), supplied = {}, componentProps = {})
     blur(label = 'Review meeting', inside = false) { const node = nodes(tree).find(n => n.type === 'form' && n.props['aria-label'] === label); assert.ok(node, 'Form exists: '+label); return node.props.onBlur?.({ currentTarget: { contains: () => inside }, relatedTarget: null }); },
     submit(label) { const node = nodes(tree).find(n => n.type === 'form' && n.props['aria-label'] === label); assert.ok(node, 'Form exists: '+label); return node.props.onSubmit({ preventDefault() {} }); },
     auth(event, userId = null) { assert.ok(authListener, 'Uses native Auth lifecycle'); authListener(event, userId ? { user: { id: userId } } : null); render(); },
+    focus() { [...focusListeners].forEach(listener => listener()); render(); },
     timers() { const pending = [...timers.values()]; timers.clear(); pending.forEach(fn => fn()); render(); },
     replayEffects() { hooks.forEach(s => { if (s.effect) { s.cleanup?.(); s.cleanup = s.effect(); } }); render(); },
     unmount() { hooks.forEach(s => s.cleanup?.()); },
