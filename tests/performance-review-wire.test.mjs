@@ -31,7 +31,7 @@ function composedManager({ meetingEnabled = false } = {}) {
           assert.equal(meetingEnabled, true);
           row = { ...row, meeting: structuredClone(input), managerRevision: 'manager:1:' + mutationVersion };
         } else {
-          assert.equal(args.p_command, 'complete_manager');
+          assert.equal(args.p_command, 'save_manager');
           row = { ...row, managerAnswers: input.answers, ratings: input.ratings, summary: input.summary, overallRating: input.overallRating, managerNote: input.managerNote, managerRevision: 'manager:1:' + mutationVersion };
         }
         return { data: { committed: true, operationId: args.p_operation_id, review: structuredClone(row) }, error: null, status: 200 };
@@ -59,10 +59,11 @@ test('actual manager controls submit canonical rating labels through the actual 
       assert.ok(option, 'The real select exposes the original rating label');
       ui.change(name, option.props.value);
     }
-    await ui.click('Save draft and invite meeting');
+    await ui.click('Save draft');
     await ui.settle();
     const writes = native.rpcCalls.filter(call => call.name === 'mutate_performance_review');
     assert.equal(writes.length, 1, 'A permitted real UI save must reach the real Action RPC after closed validation');
+    assert.equal(writes[0].args.p_command, 'save_manager');
     assert.equal(writes[0].args.p_input.ratings[0], '2 Meets expectations');
     assert.equal(writes[0].args.p_input.overallRating, '2 Meets expectations');
     assert.match(ui.text, /Saved\./);
