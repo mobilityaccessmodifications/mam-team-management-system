@@ -3,10 +3,13 @@ import test from 'node:test';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {unzipSync} from 'fflate';
-import {blankBytes,download,parityCases,sourceSize} from './performance-review-completion-word-fixture.mjs';
+import {buildReviewDocx} from '../src/lib/performance-review-word.mjs';
+import {QUESTIONS} from '../src/lib/performance-review-questions.mjs';
+import {loadModule} from './helpers/contact-lifetime-harness.mjs';
+import {blankBytes,download,ordinary,parityCases,sourceSize} from './performance-review-completion-word-fixture.mjs';
 
 test('SQL constants derive from the complete unchanged canonical stored ZIP and template bytes',()=>{
- const pins={'src/lib/performance-review-word.mjs':'b0486a433a1e6abdb40ad0082004d4296aa3d075f870d5ee920397257109b56a','src/lib/performance-review-questions.mjs':'9af2edc812ec465fe14a4d865e68606cee04d4fb122c5dcbf0ba9b94ebcdf561'};
+ const pins={'tests/fixtures/performance-review-completion-v197/word.mjs.txt':'b0486a433a1e6abdb40ad0082004d4296aa3d075f870d5ee920397257109b56a','src/lib/performance-review-questions.mjs':'9af2edc812ec465fe14a4d865e68606cee04d4fb122c5dcbf0ba9b94ebcdf561'};
  for(const [file,pin]of Object.entries(pins))assert.equal(createHash('sha256').update(readFileSync(file)).digest('hex'),pin);
  const sql=readFileSync('supabase/migrations/20261017103000_performance_review_completion_guards.sql','utf8');
  for(const company of ['MAM','Equipsy']) {
@@ -21,4 +24,16 @@ test('SQL constants derive from the complete unchanged canonical stored ZIP and 
 test('complete source-derived byte model equals real canonical renderer for all field placements and limits',()=>{
  const cases=parityCases();assert.ok(cases.length>100);
  for(const {label,document}of cases)assert.equal(sourceSize(document),download(document).bytes.length,label);
+});
+
+test('current renderer preserves frozen legacy bytes with missing and empty goals for both companies',()=>{
+ const legacy=loadModule('tests/fixtures/performance-review-completion-v197/word.mjs.txt').buildReviewDocx;
+ for(const company of ['MAM','Equipsy']) {
+  const document=ordinary(company);
+  assert.equal(Object.hasOwn(document,'goals'),false);
+  const expected=legacy(document,QUESTIONS[company]);
+  assert.deepEqual(buildReviewDocx(document,QUESTIONS[company]),expected,company+':missing goals');
+  document.goals=[];
+  assert.deepEqual(buildReviewDocx(document,QUESTIONS[company]),expected,company+':empty goals');
+ }
 });
