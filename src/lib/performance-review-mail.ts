@@ -6,7 +6,9 @@ import { closed, parseDocument, meetingEndMillis, REQUIRED_ANSWERS, RATING_INDIC
 import { Temporal } from "temporal-polyfill";
 import { performanceReviewMailEnabled, performanceReviewMailTarget, performanceMailBudget, readPerformanceMailJson, performanceMailRpcSucceeded, PERFORMANCE_MAIL_ORIGIN, PERFORMANCE_MAIL_READY_PATH } from "@/lib/performance-review-mail-policy";
 
-const CAREERS = "careers@mobilityaccess.com.au";
+export const performanceManagerEmail = (value: unknown): value is string => typeof value === "string" && value.length <= 254
+  && value === value.trim().toLowerCase() && value !== "careers@mobilityaccess.com.au"
+  && /^[^\s@,;]+@(mobilityaccess\.com\.au|equipsy\.com\.au)$/.test(value) && !/[\u0000-\u001f\u007f]/.test(value);
 const MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 export function performanceMailUuid(value: unknown): value is string {
@@ -20,7 +22,7 @@ export function validatePerformanceReviewMailPayload(raw: unknown): void {
     && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffe\uffff]/.test(value);
   if (v.version !== 1 || v.event !== "performance-review-finalised" || !performanceMailUuid(v.reviewId)
     || !performanceMailUuid(v.deliveryId) || !performanceMailUuid(v.claimToken)
-    || v.eventKey !== `performance-review:${v.reviewId}:finalised` || v.recipient !== CAREERS
+    || v.eventKey !== `performance-review:${v.reviewId}:finalised` || !performanceManagerEmail(v.recipient)
     || typeof v.reviewCode !== "string" || !/^PR-[0-9]{4}-[1-9][0-9]*$/.test(v.reviewCode)
     || !text(v.employeeName) || !text(v.managerName) || !text(v.managerNote)
     || typeof v.finalisedAt !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(v.finalisedAt)
@@ -38,9 +40,9 @@ function payloadForClaim(raw: unknown, reviewId: string | null) {
   const row = closed(raw, ["delivery_id", "review_id", "claim_token", "payload"]);
   if (!performanceMailUuid(row.delivery_id) || !performanceMailUuid(row.review_id) || !performanceMailUuid(row.claim_token)
     || (reviewId !== null && row.review_id !== reviewId)) throw new Error("invalid_claim");
-  const payload = closed(row.payload, ["reviewId", "reviewCode", "finalisedAt", "managerNote", "document"]);
+  const payload = closed(row.payload, ["reviewId", "reviewCode", "finalisedAt", "managerNote", "document", "recipient"]);
   const document = parseDocument(payload.document);
-  if (document.audience !== "manager" || document.code !== payload.reviewCode || payload.reviewId !== row.review_id
+  if (!performanceManagerEmail(payload.recipient) || document.audience !== "manager" || document.code !== payload.reviewCode || payload.reviewId !== row.review_id
     || !performanceMailUuid(document.employee.id) || !performanceMailUuid(document.manager.id)
     || !document.meeting || !document.summary.trim() || !document.overallRating
     || REQUIRED_ANSWERS.some(i => !document.selfAnswers[i].trim() || !document.managerAnswers[i].trim())
@@ -56,7 +58,7 @@ function payloadForClaim(raw: unknown, reviewId: string | null) {
     version: 1, event: "performance-review-finalised", eventKey: `performance-review:${row.review_id}:finalised`,
     deliveryId: row.delivery_id, reviewId: row.review_id, reviewCode: document.code, claimToken: row.claim_token,
     employeeName: document.employee.name, managerName: document.manager.name, finalisedAt: payload.finalisedAt,
-    recipient: CAREERS, managerNote: payload.managerNote,
+    recipient: payload.recipient, managerNote: payload.managerNote,
     attachment: { fileName: download.fileName, mimeType: MIME, contentBase64: bytes.toString("base64"), sha256: createHash("sha256").update(bytes).digest("hex") },
   };
 }
@@ -103,7 +105,7 @@ export async function dispatchPerformanceReviewMailOutbox(reviewId: string | nul
         const receipt = closed(await readPerformanceMailJson(response, 16_384, signal), ["ok", "status", "deliveryId", "eventKey", "actualRecipients", "attachmentSha256"]);
         return receipt.ok === true && receipt.status === "provider_accepted" && receipt.deliveryId === payload.deliveryId
           && receipt.eventKey === payload.eventKey && receipt.attachmentSha256 === payload.attachment.sha256
-          && Array.isArray(receipt.actualRecipients) && receipt.actualRecipients.length === 1 && receipt.actualRecipients[0] === CAREERS;
+          && Array.isArray(receipt.actualRecipients) && receipt.actualRecipients.length === 1 && receipt.actualRecipients[0] === payload.recipient;
       }, Math.min(15_000, budget.remaining() - 2_000));
     } catch { accepted = false; }
     try {

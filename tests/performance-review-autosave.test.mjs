@@ -168,7 +168,7 @@ test('queued HR submission rechecks the current meeting-held confirmation after 
   const h = mounted('manager', { row, ports: { mutatePerformanceReview: () => pending.promise } });
   try {
     await h.settle(); h.change('held', true); h.change('managerNote', 'Queued HR draft'); await tick(h);
-    assert.equal(h.button('Save and send to HR').props.disabled, false);
+    assert.equal(h.button('Save and send to manager').props.disabled, false);
     h.submit('Review meeting'); h.change('held', false);
     pending.resolve(committed(writes(h)[0].args[0], row)); await h.settle();
     assert.deepEqual(writes(h).map(call => call.args[0].command), ['save_manager']);

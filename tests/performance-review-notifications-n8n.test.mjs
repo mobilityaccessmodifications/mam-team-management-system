@@ -9,7 +9,7 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const HUB = 'https://mam-team-management-system-ten.vercel.app';
 const RECEIPTS = HUB + '/api/internal/integrations/notifications/receipts';
 const HEADER = {id: 'tGtpwegru8OxtdCt', name: 'MAM Team Management - Notification Webhook Header'};
-const OUTLOOK = {id: 'Ug5bTBjvF1vCSdhQ', name: 'Microsoft Outlook - ai@mobilityaccess.com.au'};
+const OUTLOOK = {id: 'UW7gUbruKT6NzniR', name: 'Microsoft Outlook - careers@mobilityaccess.com.au'};
 const CRON = {id: 'Fa0hGUfG9sTqnZXP', name: 'MAM People System - Check-In Reminder Cron Bearer v2'};
 const TOKEN = '720f0200-0000-4000-8000-000000000003';
 const PROVIDER = {accepted: true, messageId: null, requestId: null, statusCode: 202};
@@ -100,15 +100,15 @@ test('both future events execute reserve, one brief signed HTML email, confirm a
     const mail = h.calls[1].body;
     assert.deepEqual(Object.keys(mail).sort(), ['message', 'saveToSentItems']);
     assert.equal(mail.saveToSentItems, true);
-    assert.deepEqual(Object.keys(mail.message).sort(), ['bccRecipients', 'body', 'ccRecipients', 'subject', 'toRecipients']);
+    assert.deepEqual(Object.keys(mail.message).sort(), ['bccRecipients', 'body', 'ccRecipients', 'from', 'replyTo', 'subject', 'toRecipients']);
     assert.deepEqual(mail.message.toRecipients, [{emailAddress: {address: p.recipient}}]);
     assert.deepEqual(mail.message.ccRecipients, []); assert.deepEqual(mail.message.bccRecipients, []);
     assert.equal(mail.message.subject, event === 'started' ? 'Your performance review is ready' : 'Self-assessment submitted');
     assert.equal(mail.message.body.contentType, 'HTML');
     assert.ok(mail.message.body.content.includes(HUB + '/?view=people&tab=performance'));
     assert.ok(mail.message.body.content.includes(event === 'started'
-      ? 'Your performance review is ready. Please complete your self-assessment in People Hub.'
-      : 'A self-assessment has been submitted. Please open People Hub to complete the next step.'));
+      ? 'We invite you to complete your performance self-assessment in People Hub.'
+      : 'The employee’s self-assessment is ready for your review. Please complete your manager assessment in People Hub, then arrange a review meeting.'));
     assert.equal(mail.message.body.content.split(HR_EMAIL_SIGNATURE_HTML).length, 2);
     for (const privateValue of [p.reviewCode, p.employeeName, p.managerName, p.dueDate]) {
       assert.equal(mail.message.body.content.includes(privateValue), false);
@@ -348,9 +348,10 @@ test('manager invitation sends one brief signed scheduling email only to manager
     assert.deepEqual(mail.ccRecipients, []);
     assert.deepEqual(mail.bccRecipients, []);
     assert.equal(mail.subject, 'Arrange performance review: ' + p.reviewCode);
-    assert.match(mail.body.content, /Reply with Meeting/);
-    assert.match(mail.body.content, /ai@mobilityaccess\.com\.au/);
-    assert.ok(mail.body.content.includes(p.reviewCode));
+    assert.match(mail.body.content, /enter the meeting details manually in People Hub/);
+    assert.doesNotMatch(mail.body.content, /Reply with Meeting|ai@mobilityaccess/);
+    assert.deepEqual(mail.from, {emailAddress: {address: 'careers@mobilityaccess.com.au'}});
+    assert.deepEqual(mail.replyTo, [{emailAddress: {address: 'careers@mobilityaccess.com.au'}}]);
     assert.equal(mail.body.content.split(HR_EMAIL_SIGNATURE_HTML).length, 2);
     assert.equal(Object.hasOwn(mail, 'attachments'), false);
     for (const sensitive of [p.employeeName, p.managerName, p.dueDate, 'selfAnswers', 'managerAnswers', 'managerNote']) {

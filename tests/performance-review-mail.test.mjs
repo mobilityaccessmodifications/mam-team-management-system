@@ -31,7 +31,7 @@ test('live worker sends canonical closed Careers payload and native Word bytes w
   assert.deepEqual(await h.mail.dispatchPerformanceReviewMailOutbox(), { ok: true, code: 'processed', claimed: 1, providerAccepted: 1, held: 0 });
   assert.deepEqual(Object.keys(wire).sort(), ['version','event','eventKey','deliveryId','reviewId','reviewCode','claimToken','employeeName','managerName','finalisedAt','recipient','managerNote','attachment'].sort());
   assert.equal(wire.version, 1); assert.equal(wire.event, 'performance-review-finalised');
-  assert.equal(wire.eventKey, `performance-review:${ids.review}:finalised`); assert.equal(wire.recipient, 'careers@mobilityaccess.com.au');
+  assert.equal(wire.eventKey, `performance-review:${ids.review}:finalised`); assert.equal(wire.recipient, 'manager@mobilityaccess.com.au');
   assert.equal(wire.managerNote, row.payload.managerNote);
   assert.deepEqual(Object.keys(wire.attachment).sort(), ['fileName','mimeType','contentBase64','sha256'].sort());
   assert.equal(wire.attachment.fileName, 'PR-2026-1-manager.docx');

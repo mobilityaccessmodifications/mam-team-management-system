@@ -3,7 +3,7 @@ import "server-only";
 export const PERFORMANCE_MAIL_ORIGIN = "https://n8n.srv1866578.hstgr.cloud";
 export const PERFORMANCE_MAIL_PATH = "/webhook/mam-people-hub-performance-review-mail-v1";
 export const PERFORMANCE_MAIL_READY_PATH = PERFORMANCE_MAIL_PATH + "-ready";
-export const PERFORMANCE_MAIL_RECIPIENT = "careers@mobilityaccess.com.au";
+export const PERFORMANCE_MAIL_SENDER = "careers@mobilityaccess.com.au";
 export const PERFORMANCE_MAIL_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 export function performanceReviewMailEnabled() {

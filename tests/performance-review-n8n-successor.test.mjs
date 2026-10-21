@@ -64,7 +64,7 @@ test('credential-free prepare cannot execute an unapproved changed publisher top
   assert.equal(result.calls.length, 0);
 });
 
-for (const scenario of ['scope-webhook-path', 'scope-sender-url']) {
+for (const scenario of ['scope-webhook-path', 'scope-sender-url', 'current-runtime-scope']) {
   test(`successor keeps original paths and sender scope for ${scenario}`, () => {
     const result = run(scenario);
     assert.deepEqual(result.exits, [2]);

@@ -26,7 +26,7 @@ function queue(count, latencies = {}) {
       const row = rows.find(r => r.delivery_id === args.p_delivery_id && r.claim_token === args.p_claim_token);
       const s = row && state.get(row.delivery_id);
       if (!s) return { data: false, error: null };
-      if (name === 'begin_performance_review_mail') {
+      if (name === 'begin_performance_review_manager_mail') {
         const allowed = s.state === 'claimed';
         if (allowed) { s.state = 'sending'; s.sending = true; s.sha = args.p_attachment_sha256; }
         return { data: allowed, error: null };
@@ -41,7 +41,7 @@ function queue(count, latencies = {}) {
     },
     async fetch(_, init) {
       const wire = JSON.parse(init.body); posts.push(wire);
-      const response = await h.route().POST(request('POST', { phase: 'begin', deliveryId: wire.deliveryId, claimToken: wire.claimToken, attachmentSha256: wire.attachment.sha256 }));
+      const response = await h.route().POST(request('POST', { phase: 'begin', recipient: 'manager@mobilityaccess.com.au', deliveryId: wire.deliveryId, claimToken: wire.claimToken, attachmentSha256: wire.attachment.sha256 }));
       assert.deepEqual(await response.json(), { ok: true, allowed: true });
       now += latencies.post ?? 0;
       if (latencies.unknown) throw Error('Synthetic acknowledgement lost after begin');
@@ -119,7 +119,7 @@ test('AM-03 unknown and late results stay held until a matching callback finish 
       assert.deepEqual(await response.json(), { ok: true, recorded: outcome === 'provider_accepted' });
     }
     assert.equal(q.state.get(q.rows[0].delivery_id).state, 'provider_accepted');
-    assert.deepEqual(await (await q.h.route().POST(request('POST', { phase: 'begin', deliveryId: wire.deliveryId, claimToken: wire.claimToken, attachmentSha256: wire.attachment.sha256 }))).json(), { ok: true, allowed: false });
+    assert.deepEqual(await (await q.h.route().POST(request('POST', { phase: 'begin', recipient: 'manager@mobilityaccess.com.au', deliveryId: wire.deliveryId, claimToken: wire.claimToken, attachmentSha256: wire.attachment.sha256 }))).json(), { ok: true, allowed: false });
     assert.equal(q.posts.length, 1); assert.equal(q.state.get(q.rows[1].delivery_id).state, 'queued');
   }
 });

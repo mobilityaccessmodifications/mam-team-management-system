@@ -17,7 +17,7 @@ export function payload() {
     version: 1, event: 'performance-review-finalised', eventKey: `performance-review:${reviewId}:finalised`,
     deliveryId: '730f0100-0000-4000-8000-000000000001', reviewId, reviewCode: doc.code,
     claimToken: '730f0100-0000-4000-8000-000000000003', employeeName: doc.employee.name, managerName: doc.manager.name,
-    finalisedAt: '2026-10-16T00:00:00.000Z', recipient: 'careers@mobilityaccess.com.au',
+    finalisedAt: '2026-10-16T00:00:00.000Z', recipient: 'manager@mobilityaccess.com.au',
     managerNote: 'PRIVATE-SYNTHETIC-NOTE <script>"&\'\nsecond line',
     attachment: {fileName: `${doc.code}-manager.docx`, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       contentBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex')},

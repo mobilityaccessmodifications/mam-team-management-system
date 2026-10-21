@@ -76,6 +76,8 @@ try:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text)
         expected_compile[str(p)] = sha(text.encode())
+    successor = json.loads(gzip.decompress((ROOT / 'tests/performance-review-n8n-successor-runtime.fixture.gz').read_bytes()))
+    runtime = {} if SCENARIO == 'current-runtime-scope' else {str(ROOT / name): text.encode() for name, text in successor['source'].items()}
     external = {k: v.encode() for k, v in bundle['external'].items()}
     external_paths = {
         '/Volumes/UG/MAM/opencode/n8n/scripts/verify.py': external['MAM_VERIFY'],
@@ -156,7 +158,7 @@ try:
         print(json.dumps(result))
         raise SystemExit(0)
     for p in ROOT.glob('scripts/*performance-review*py'):
-        expected_compile[str(p)] = sha(p.read_bytes())
+        expected_compile[str(p)] = sha(runtime.get(str(p), p.read_bytes()))
     expected_compile[str(TARGET)] = sha(TARGET.read_bytes())
     ns: dict = {'__name__': 'performance_successor_fixture', '__file__': str(TARGET)}
     exec(compile(TARGET.read_bytes(), str(TARGET), 'exec'), ns)
@@ -175,7 +177,7 @@ try:
             raise SystemExit(73)
         if SCENARIO == 'full-source-map-positive' and str(path) == str(ROOT / 'deploy/n8n/synthetic-unrelated/validate-payload.js'):
             return b'throw new Error("SYNTHETIC_UNRELATED_WORKFLOW_SOURCE");\n'
-        raw = external_paths[str(path)] if str(path) in external_paths else native_read(path, limit)
+        raw = external_paths[str(path)] if str(path) in external_paths else runtime[str(path)] if str(path) in runtime else native_read(path, limit)
         if Path(path) == ROOT / 'scripts/build-performance-review-mail-workflow.py':
             if SCENARIO == 'scope-webhook-path': raw = raw.replace(b"POST_PATH = 'mam-people-hub-performance-review-mail-v1'", b"POST_PATH = 'synthetic-unapproved-path'")
             if SCENARIO == 'scope-sender-url': raw = raw.replace(b'https://graph.microsoft.com/v1.0/me/sendMail', b'https://graph.microsoft.com/v1.0/users/synthetic-other/sendMail')

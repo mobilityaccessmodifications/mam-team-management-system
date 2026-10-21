@@ -48,18 +48,22 @@ test('brief signed Careers HTML preserves canonical Word bytes and escapes the p
   assert.equal(value.valid, true);
   const mail = value.graphBody;
   assert.equal(mail.saveToSentItems, true);
-  assert.deepEqual(mail.message.toRecipients, [{emailAddress: {address: 'careers@mobilityaccess.com.au'}}]);
+  assert.deepEqual(mail.message.toRecipients, [{emailAddress: {address: 'manager@mobilityaccess.com.au'}}]);
   assert.deepEqual(mail.message.ccRecipients, []);
   assert.deepEqual(mail.message.bccRecipients, []);
   assert.equal(mail.message.body.contentType, 'HTML');
-  assert.equal(mail.message.subject, 'Performance review completed');
-  assert.ok(mail.message.body.content.includes('A performance review is complete. The completed document is attached.'));
+  assert.equal(mail.message.subject, 'Performance review: complete goals and return to Careers');
+  assert.ok(mail.message.body.content.includes('Please complete the goals in the Goals and meeting record section'));
   assert.equal(mail.message.body.content.split(HR_EMAIL_SIGNATURE_HTML).length, 2);
   for (const privateValue of [p.employeeName, p.managerName, 'Synthetic &lt;Employee&gt;', 'Synthetic &amp; Manager', p.reviewCode, p.finalisedAt]) {
     assert.equal(mail.message.body.content.includes(privateValue), false);
     assert.equal(mail.message.subject.includes(privateValue), false);
   }
-  assert.ok(mail.message.body.content.includes('&lt;script&gt;&quot;&amp;&#39;<br>'));
+  assert.equal(mail.message.body.content.includes('PRIVATE-SYNTHETIC-NOTE'), false);
+  assert.equal(mail.message.body.content.includes('Manager note:'), false);
+  assert.deepEqual(mail.message.from, {emailAddress: {address: 'careers@mobilityaccess.com.au'}});
+  assert.deepEqual(mail.message.replyTo, [{emailAddress: {address: 'careers@mobilityaccess.com.au'}}]);
+  assert.match(mail.message.body.content, /reply to this email with the updated attachment/);
   const attachment = mail.message.attachments[0];
   assert.equal(attachment['@odata.type'], '#microsoft.graph.fileAttachment');
   assert.equal(attachment.name, p.attachment.fileName);
@@ -68,7 +72,7 @@ test('brief signed Careers HTML preserves canonical Word bytes and escapes the p
   const bytes = Buffer.from(attachment.contentBytes, 'base64');
   assert.equal(createHash('sha256').update(bytes).digest('hex'), p.attachment.sha256);
   assert.equal(bytes.includes(Buffer.from('PRIVATE-SYNTHETIC-NOTE')), false);
-  assert.deepEqual(value.beginBody, {phase: 'begin', deliveryId: p.deliveryId, claimToken: p.claimToken, attachmentSha256: p.attachment.sha256});
+  assert.deepEqual(value.beginBody, {phase: 'begin', recipient: 'manager@mobilityaccess.com.au', deliveryId: p.deliveryId, claimToken: p.claimToken, attachmentSha256: p.attachment.sha256});
 });
 
 test('closed wire schema rejects unsafe recipients identifiers bytes and unrelated salary or calendar fields', () => {
@@ -122,11 +126,11 @@ test('only a strict literal allowed true from the closed begin acknowledgement r
       calls.push([n.name, body]);
       if (n.name === 'Begin Delivery') return begin;
       if (n.name === 'Finish Delivery') return {statusCode: 200, body: {ok: true, recorded: true}};
-      assert.equal(n.name, 'Send Word to Careers'); return {statusCode: 202, body: ''};
+      assert.equal(n.name, 'Send Word to Manager'); return {statusCode: 202, body: ''};
     });
-    assert.deepEqual(calls[0], ['Begin Delivery', {phase: 'begin', deliveryId: p.deliveryId, claimToken: p.claimToken, attachmentSha256: p.attachment.sha256}]);
-    assert.equal(calls.filter(([name]) => name === 'Send Word to Careers').length, index === 0 ? 1 : 0);
-    if (index > 0) assert.deepEqual(result.value, {ok: false, status: 'held', deliveryId: p.deliveryId, eventKey: p.eventKey, actualRecipients: ['careers@mobilityaccess.com.au'], attachmentSha256: p.attachment.sha256});
+    assert.deepEqual(calls[0], ['Begin Delivery', {phase: 'begin', recipient: 'manager@mobilityaccess.com.au', deliveryId: p.deliveryId, claimToken: p.claimToken, attachmentSha256: p.attachment.sha256}]);
+    assert.equal(calls.filter(([name]) => name === 'Send Word to Manager').length, index === 0 ? 1 : 0);
+    if (index > 0) assert.deepEqual(result.value, {ok: false, status: 'held', deliveryId: p.deliveryId, eventKey: p.eventKey, actualRecipients: [p.recipient], attachmentSha256: p.attachment.sha256});
   }
   const invalid = payload(); invalid.recipient = 'synthetic@example.invalid'; let calls = 0;
   const result = await executeGraph(workflow, 'Receive Finalisation', {body: invalid}, async () => {calls++; throw Error('unexpected');});
@@ -150,13 +154,13 @@ test('empty Graph 202 is accepted only after exact finish acknowledgement and ne
     const result = await executeGraph(workflow, 'Receive Finalisation', {body: p}, async (n, body) => {
       calls.push([n.name, body]);
       if (n.name === 'Begin Delivery') return {statusCode: 200, body: {ok: true, allowed: true}};
-      if (n.name === 'Send Word to Careers') {if (provider === null) throw Error('timeout'); return provider;}
+      if (n.name === 'Send Word to Manager') {if (provider === null) throw Error('timeout'); return provider;}
       assert.equal(n.name, 'Finish Delivery'); if (finish === null) throw Error('finish timeout'); return finish;
     });
-    assert.deepEqual(calls.map(([name]) => name), ['Begin Delivery', 'Send Word to Careers', 'Finish Delivery']);
+    assert.deepEqual(calls.map(([name]) => name), ['Begin Delivery', 'Send Word to Manager', 'Finish Delivery']);
     assert.deepEqual(calls[2][1], {phase: 'finish', deliveryId: p.deliveryId, claimToken: p.claimToken, attachmentSha256: p.attachment.sha256, outcome});
     const accepted = outcome === 'provider_accepted' && index === 0;
-    assert.deepEqual(result.value, {ok: accepted, status: accepted ? 'provider_accepted' : 'held', deliveryId: p.deliveryId, eventKey: p.eventKey, actualRecipients: ['careers@mobilityaccess.com.au'], attachmentSha256: p.attachment.sha256});
+    assert.deepEqual(result.value, {ok: accepted, status: accepted ? 'provider_accepted' : 'held', deliveryId: p.deliveryId, eventKey: p.eventKey, actualRecipients: [p.recipient], attachmentSha256: p.attachment.sha256});
     assert.equal(Object.hasOwn(result.value, 'messageId'), false);
   }
 });
@@ -165,7 +169,7 @@ test('concurrent begin CAS loser duplicate and late callback cannot dispatch ano
   const workflow = build(); const p = payload(); let begun = false; let sends = 0; let finishes = 0;
   const http = async n => {
     if (n.name === 'Begin Delivery') {const allowed = !begun; begun = true; return {statusCode: 200, body: {ok: true, allowed}};}
-    if (n.name === 'Send Word to Careers') {sends++; return {statusCode: 202, body: ''};}
+    if (n.name === 'Send Word to Manager') {sends++; return {statusCode: 202, body: ''};}
     finishes++; assert.equal(n.name, 'Finish Delivery'); return {statusCode: 200, body: {ok: true, recorded: true}};
   };
   const two = await Promise.all([executeGraph(workflow, 'Receive Finalisation', {body: p}, http), executeGraph(workflow, 'Receive Finalisation', {body: p}, http)]);
@@ -190,7 +194,7 @@ test('readiness is authenticated and disjoint from begin finish and every Graph 
     });
     assert.deepEqual(calls, [['Hub Readiness', {phase: 'readiness'}]]);
     assert.deepEqual(result.value, b.ready === true && !Object.hasOwn(b, 'extra') ? {ok: true, ready: true} : {ok: false, ready: false});
-    assert.equal(result.entered.includes('Send Word to Careers'), false);
+    assert.equal(result.entered.includes('Send Word to Manager'), false);
   }
 });
 
@@ -207,13 +211,13 @@ test('one new five minute scheduler dispatches only the new fixed Hub GET route 
     assert.ok(n.credentials.httpHeaderAuth.id.includes('PARENT_CRON'));
     return {statusCode: 200, body: {ok: true}};
   });
-  assert.equal(calls, 1); assert.equal(result.entered.includes('Send Word to Careers'), false);
+  assert.equal(calls, 1); assert.equal(result.entered.includes('Send Word to Manager'), false);
   for (const n of workflow.nodes.filter(n => n.type === 'n8n-nodes-base.httpRequest')) {
     assert.equal(n.retryOnFail, false); assert.equal(n.parameters.options.redirect.redirect.followRedirects, false);
     assert.ok(n.parameters.options.timeout > 0 && n.parameters.options.timeout <= 20000);
     assert.equal(n.parameters.options.response.response.fullResponse, true);
   }
-  const send = workflow.nodes.find(n => n.name === 'Send Word to Careers');
+  const send = workflow.nodes.find(n => n.name === 'Send Word to Manager');
   assert.equal(send.parameters.authentication, 'predefinedCredentialType');
   assert.equal(send.parameters.nodeCredentialType, 'microsoftOutlookOAuth2Api');
   assert.equal(send.parameters.url, 'https://graph.microsoft.com/v1.0/me/sendMail');

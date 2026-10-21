@@ -1,13 +1,13 @@
 # Production performance notification interface — v1
 
-Engineering contract for the already approved production scope. The user authorized real People Hub publication and Careers notifications, with no test email. Keep all existing performance Action/Review/Document DTOs unchanged. This file supplies disjoint owners with exact interfaces; it is not a technical acceptance receipt.
+Engineering contract for the already approved production scope. The user authorized real People Hub publication and Careers notifications, with no test email. Keep all existing performance Action/Review/Document DTOs unchanged. The current flow sends all Performance Review messages from Careers, routes the final Word attachment to the authorized manager for goals, and uses manual meeting entry. This contract is not a technical acceptance receipt.
 
 ## Owner boundaries
 
 - UI owner: native performance modules, real workspace, page/People shell integration, five Server Actions, related frontend/Action tests. Do not import UAT runtime/bootstrap/SDK/global-fetch/effect fences. Preserve the canonical question/Word modules byte-for-byte.
-- Database owner: one new versioned production migration, bounded guarded release helper and their SQL/helper tests. Port the reviewed native feature SQL, add only the durable final-notification state/RPCs, preserve all existing 195 migration files.
+- Database owner: one new versioned production migration, bounded guarded release helper and their SQL/helper tests. Preserve historical migrations, existing records and unrelated catalog objects; retain a healthy purge fingerprint or an existing purge HOLD.
 - Mail adapter owner: new server-only dispatcher, dedicated `/api/performance-reviews/mail` route, bounded tests, and only necessary sandbox/mail-variable guards. Do not change existing leave/subscription/check-in mail routes.
-- n8n owner: a dedicated new workflow template/builder, offline contract tests and operator handoff under this repository's `deploy/n8n/` and `scripts/`; no existing live workflow edits. Parent alone publishes through the verified original MAM n8n project REST configuration.
+- n8n owner: the Performance Review notification and final attachment workflow builders and offline tests under this repository's `deploy/n8n/` and `scripts/`; retire both meeting-import entry points. Publish only through the verified original MAM n8n project REST configuration.
 - Parent integrates, verifies targets, handles secrets, applies approved migrations, configures, merges and reads back. No child remote/provider/credential writes.
 
 ## Stable application seam
@@ -26,15 +26,15 @@ Finalization atomically creates exactly one queued row alongside the review/even
 
 Service-only RPC contracts:
 
-1. `claim_performance_review_mail(p_review_id uuid DEFAULT NULL, p_limit integer DEFAULT 10)` returns rows with exactly `delivery_id`, `review_id`, `claim_token`, `payload`. Claim only queued rows under bounded locks. `payload` contains exactly `reviewId`, `reviewCode`, `finalisedAt`, `managerNote`, `document`. `document` is the frozen manager-audience `PerformanceDocument`; the note is separate. No browser input supplies any of this.
-2. `begin_performance_review_mail(p_delivery_id uuid, p_claim_token uuid, p_attachment_sha256 text)` returns a scalar Boolean. Exactly one claimed-to-sending CAS may return true. Wrong/stale/duplicate claims never authorize another provider send.
+1. `claim_performance_review_mail(p_review_id uuid DEFAULT NULL, p_limit integer DEFAULT 10)` returns rows with exactly `delivery_id`, `review_id`, `claim_token`, `payload`. Claim only queued rows under bounded locks. `payload` contains exactly `reviewId`, `reviewCode`, `finalisedAt`, `managerNote`, `document`, `recipient`. `document` is the frozen manager-audience `PerformanceDocument`; the note is separate. No browser input supplies any of this.
+2. `begin_performance_review_manager_mail(p_delivery_id uuid, p_claim_token uuid, p_attachment_sha256 text, p_recipient text)` returns a scalar Boolean. Exactly one claimed-to-sending CAS may return true. Wrong/stale/duplicate claims never authorize another provider send. The current eligible manager address must still equal `p_recipient`; service-role access to the former unbound begin RPC is revoked.
 3. `finish_performance_review_mail(p_delivery_id uuid, p_claim_token uuid, p_outcome text, p_attachment_sha256 text)` returns a scalar Boolean. Outcomes are `provider_accepted`, `unknown`, `rejected`; unknown/rejected become sticky `needs_review`. Same acknowledged result may reconcile idempotently. Never downgrade an already provider-accepted delivery or release a claimed/sending unknown row for automatic retry.
 
 A durable claim is not a successful send. There is no automatic expiry/reclaim of uncertain attempts. No account/role/credential/reporting changes, trigger bypass, fabricated Auth claims, or salary data.
 
 ## Canonical attachment and wire payload
 
-The server validates the database-owned document with the real parser and calls the unchanged `buildPerformanceReviewDownload`. Require manager audience, a matching review code and finalized record. Use its `.docx` filename/MIME and exact returned bytes; max 2 MiB decoded attachment. Compute SHA-256 over those bytes. The private manager note is escaped into the email body, never inserted into Word.
+The server validates the database-owned document with the real parser and calls the unchanged `buildPerformanceReviewDownload`. Require manager audience, a matching review code and finalized record. Use its `.docx` filename/MIME and exact returned bytes; max 2 MiB decoded attachment. Compute SHA-256 over those bytes. The private reviewer note remains in the authorized portal and is excluded from the manager email body and Word attachment.
 
 POST wire keys are exactly:
 
@@ -43,7 +43,7 @@ POST wire keys are exactly:
 - `version = 1`, `event = performance-review-finalised`.
 - `eventKey = performance-review:<canonical review UUID>:finalised`.
 - All UUIDs canonical; review code from the validated snapshot.
-- `recipient` must equal the already confirmed Careers mailbox. n8n writes that fixed recipient itself, with no CC/BCC; no other employee/contact address is accepted.
+- `recipient` is the canonical eligible manager work address returned by the database. The provider begin step revalidates that address and authorization before granting one send. The sender and Reply-To are `careers@mobilityaccess.com.au`, with no CC/BCC. The manager completes the attached goals and returns the document by replying to Careers.
 - `attachment` keys exactly `fileName`, `mimeType`, `contentBase64`, `sha256`. MIME is `application/vnd.openxmlformats-officedocument.wordprocessingml.document`; filename is the canonical manager `.docx`. Validate canonical base64, decoded bound and SHA before provider authorization.
 - Do not persist/log this payload, private notes, answers, attachment bytes or credentials in ordinary logs/n8n execution history.
 
@@ -65,7 +65,7 @@ Use `X-MAM-Performance-Secret` on caller and callback. No credentials in argv, c
 `POST` to the same route uses the performance shared secret and a closed body:
 
 - `{phase: readiness}`: no RPC or send, only an authenticated readiness acknowledgement.
-- `{phase: begin, deliveryId, claimToken, attachmentSha256}`: invoke the strict Boolean begin RPC; expose only the decision.
+- `{phase: begin, deliveryId, claimToken, attachmentSha256, recipient}`: invoke the strict Boolean begin RPC; expose only the decision.
 - `{phase: finish, deliveryId, claimToken, attachmentSha256, outcome}`: invoke the strict Boolean finish RPC.
 
 Reject extra fields, unsafe types, invalid identifiers, unbounded input, wrong origin/secret and malformed results. Keep the existing actual native admin client and canonical database authorization. The route must not accept arbitrary URLs, recipients, document content or an impersonated staff actor.
@@ -80,4 +80,4 @@ A dedicated five-minute scheduler calls only this new protected Hub dispatcher r
 
 ## Acceptance boundaries
 
-Use synthetic isolated records/capture for the new code, Word bytes, failure/duplicate/unknown guards and role/privacy tests. No actual test email or real-staff mutation. Current production is PostgreSQL 17.6 with 171 ledger rows and latest version `20261014233948` (`subscription_request_start_date`), read-only verified on the exact MAM project. Refresh before apply and use a guarded, version-specific established release path; never `db push` unrelated local history or blindly refresh a purge fingerprint. Independently review the integrated production candidate and exact release helper, then use the normal GitHub-merge-to-Vercel flow. HR business acceptance does not replace these technical results.
+Use synthetic isolated records/capture for the new code, Word bytes, failure/duplicate/unknown guards and role/privacy tests. No actual test email or real-staff mutation. The 21 October 2026 read-only target check confirmed PostgreSQL 17, latest migration `20261021010742`, a healthy purge fingerprint and matching mail/meeting predecessor function bodies on the exact MAM project. Refresh before apply and use a guarded, version-specific established release path; never `db push` unrelated local history or blindly refresh a purge fingerprint. Independently review the integrated production candidate and exact release helper, then use the normal GitHub-merge-to-Vercel flow. HR business acceptance does not replace these technical results.

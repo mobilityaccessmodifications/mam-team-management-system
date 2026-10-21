@@ -3,7 +3,9 @@ import test from 'node:test';
 import ts from 'typescript';
 import { fixture, loadMailHarness, environment, ids, request, ack, readyHook, app, sharedSecret } from './helpers/performance-review-mail-harness.mjs';
 
-const beginBody = () => ({ phase: 'begin', deliveryId: ids.delivery, claimToken: ids.claim, attachmentSha256: 'a'.repeat(64) });
+const beginBody = () => ({ phase: 'begin', recipient: 'manager@mobilityaccess.com.au', deliveryId: ids.delivery, claimToken: ids.claim, attachmentSha256: 'a'.repeat(64) });
+
+const finishBody = () => { const body = beginBody(); delete body.recipient; return { ...body, phase: 'finish' }; };
 
 test('actual HTTP exports authenticate before any client, RPC or transport', async () => {
   const h = loadMailHarness(); const route = h.route();
@@ -47,11 +49,11 @@ test('authenticated GET without params drains only the native new outbox with sa
 test('begin and finish map only actual scalar Boolean RPC results to exact HTTP shapes', async () => {
   for (const phase of ['begin','finish']) for (const value of [true, false, null, 'true', 'false', [], [true], {}, { allowed: true }, undefined]) {
     const h = loadMailHarness({ rpc: (name, args) => {
-      assert.equal(name, phase === 'begin' ? 'begin_performance_review_mail' : 'finish_performance_review_mail');
-      assert.deepEqual(args, { p_delivery_id: ids.delivery, p_claim_token: ids.claim, p_attachment_sha256: 'a'.repeat(64), ...(phase === 'finish' ? { p_outcome: 'provider_accepted' } : {}) });
+      assert.equal(name, phase === 'begin' ? 'begin_performance_review_manager_mail' : 'finish_performance_review_mail');
+      assert.deepEqual(args, { p_delivery_id: ids.delivery, p_claim_token: ids.claim, p_attachment_sha256: 'a'.repeat(64), ...(phase === 'finish' ? { p_outcome: 'provider_accepted' } : { p_recipient: 'manager@mobilityaccess.com.au' }) });
       return { data: value, error: null };
     } });
-    const body = { ...beginBody(), phase, ...(phase === 'finish' ? { outcome: 'provider_accepted' } : {}) };
+    const body = { ...(phase === 'finish' ? finishBody() : beginBody()), phase, ...(phase === 'finish' ? { outcome: 'provider_accepted' } : {}) };
     const response = await h.route().POST(request('POST', body));
     assert.equal(response.status, typeof value === 'boolean' ? 200 : 503, phase + ':' + JSON.stringify(value));
     assert.deepEqual(await response.json(), typeof value === 'boolean' ? { ok: true, [phase === 'begin' ? 'allowed' : 'recorded']: value } : { ok: false, code: 'unavailable' });
@@ -62,7 +64,7 @@ test('begin and finish map only actual scalar Boolean RPC results to exact HTTP 
 test('finish accepts only the three contracted outcomes and never converts a rejected RPC into success', async () => {
   for (const outcome of ['provider_accepted','unknown','rejected']) {
     const h = loadMailHarness({ rpc: (name, args) => { assert.equal(name, 'finish_performance_review_mail'); assert.equal(args.p_outcome, outcome); return { data: false, error: null }; } });
-    const response = await h.route().POST(request('POST', { ...beginBody(), phase: 'finish', outcome }));
+    const response = await h.route().POST(request('POST', { ...finishBody(), outcome }));
     assert.equal(response.status, 200); assert.deepEqual(await response.json(), { ok: true, recorded: false });
   }
   for (const failing of ['throw','error']) {
@@ -78,7 +80,7 @@ test('route rejects injected fields, unsafe identifiers, bodies, origins and all
     { phase: 'readiness', url: 'https://foreign.example.test' }, { ...beginBody(), recipient: 'foreign@example.test' },
     { ...beginBody(), actor: 'employee' }, { ...beginBody(), document: {} }, { ...beginBody(), url: app },
     { ...beginBody(), deliveryId: 'forged' }, { ...beginBody(), claimToken: {} }, { ...beginBody(), attachmentSha256: 'A'.repeat(64) },
-    { ...beginBody(), phase: 'finish', outcome: 'delivered' }, { ...beginBody(), phase: 'finish', outcome: true },
+    { ...finishBody(), outcome: 'delivered' }, { ...finishBody(), outcome: true },
     { ...beginBody(), outcome: 'provider_accepted' }, { phase: 'begin' }, [], null, '{not JSON', 'x'.repeat(1025),
     JSON.stringify({ ...beginBody(), secret: 'synthetic-private-body-marker' }),
   ];
@@ -103,7 +105,7 @@ test('disabled and sandbox real HTTP routes cannot claim, call a service client 
     const h = loadMailHarness({ env: environment(patch) });
     const response = await h.route().GET(request()); assert.equal(response.status, 200); assert.equal((await response.json()).claimed, 0);
     assert.equal((await h.route().GET(request('GET', undefined, { query: '?readiness=1' }))).status, 503);
-    for (const body of [{ phase: 'readiness' }, beginBody(), { ...beginBody(), phase: 'finish', outcome: 'unknown' }]) assert.equal((await h.route().POST(request('POST', body))).status, 503);
+    for (const body of [{ phase: 'readiness' }, beginBody(), { ...finishBody(), outcome: 'unknown' }]) assert.equal((await h.route().POST(request('POST', body))).status, 503);
     assert.equal(h.clients, 0); assert.equal(h.calls.length, 0); assert.equal(h.requests.length, 0); assert.equal(h.logs.length, 0);
   }
 });

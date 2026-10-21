@@ -8,7 +8,7 @@ HUB = 'https://mam-team-management-system-ten.vercel.app'
 RECEIPTS = HUB + '/api/internal/integrations/notifications/receipts'
 POST_PATH = 'mam-people-hub-performance-review-notifications-v1'
 HEADER = {'id': 'tGtpwegru8OxtdCt', 'name': 'MAM Team Management - Notification Webhook Header'}
-OUTLOOK = {'id': 'Ug5bTBjvF1vCSdhQ', 'name': 'Microsoft Outlook - ai@mobilityaccess.com.au'}
+OUTLOOK = {'id': 'UW7gUbruKT6NzniR', 'name': 'Microsoft Outlook - careers@mobilityaccess.com.au'}
 CRON = {'id': 'Fa0hGUfG9sTqnZXP', 'name': 'MAM People System - Check-In Reminder Cron Bearer v2'}
 
 

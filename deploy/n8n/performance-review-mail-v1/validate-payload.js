@@ -1,7 +1,7 @@
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
 const closed = (value, keys) => value !== null && typeof value === 'object' && !Array.isArray(value)
   && Reflect.ownKeys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key) && Object.hasOwn(Object.getOwnPropertyDescriptor(value, key), 'value'));
-const held = {ok: false, status: 'held', deliveryId: null, eventKey: null, actualRecipients: ['careers@mobilityaccess.com.au'], attachmentSha256: null};
+const held = {ok: false, status: 'held', deliveryId: null, eventKey: null, actualRecipients: [], attachmentSha256: null};
 const reject = () => [{json: {valid: false, response: held}}];
 const items = $input.all();
 if (items.length !== 1) return reject();
@@ -19,7 +19,7 @@ const date = value => {
   return check.getUTCFullYear() === year && check.getUTCMonth() === month - 1 && check.getUTCDate() === day;
 };
 if (p.version !== 1 || p.event !== 'performance-review-finalised' || !uuid(p.deliveryId) || !uuid(p.reviewId) || !uuid(p.claimToken)
-  || p.eventKey !== `performance-review:${p.reviewId}:finalised` || p.recipient !== 'careers@mobilityaccess.com.au'
+  || p.eventKey !== `performance-review:${p.reviewId}:finalised` || (typeof p.recipient !== 'string' || p.recipient.length > 254 || p.recipient !== p.recipient.trim().toLowerCase() || p.recipient === 'careers@mobilityaccess.com.au' || !/^[^\s@,;]+@(mobilityaccess\.com\.au|equipsy\.com\.au)$/.test(p.recipient) || /[\u0000-\u001f\u007f]/.test(p.recipient))
   || typeof p.reviewCode !== 'string' || p.reviewCode.length > 64 || !/^PR-\d{4}-\d+$/.test(p.reviewCode)
   || !name(p.employeeName) || !name(p.managerName) || !text(p.managerNote, 8000, true) || !date(p.finalisedAt)) return reject();
 const a = p.attachment;
@@ -67,18 +67,19 @@ const sha256 = input => {
   return state.map(value => (value >>> 0).toString(16).padStart(8, '0')).join('');
 };
 if (sha256(bytes) !== a.sha256) return reject();
-held.deliveryId = p.deliveryId; held.eventKey = p.eventKey; held.attachmentSha256 = a.sha256;
-const escape = value => value.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])).replace(/\r\n?/g, '\n').replace(/\n/g, '<br>');
+held.actualRecipients = [p.recipient]; held.deliveryId = p.deliveryId; held.eventKey = p.eventKey; held.attachmentSha256 = a.sha256;
 const signature = '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;border-top:1px solid #dce4df;padding-top:16px;font-family:Segoe UI,Arial,sans-serif"><tr><td style="vertical-align:middle;padding-right:16px"><a href="https://www.mobilityaccess.com.au/" style="text-decoration:none"><img src="https://mam-team-management-system-ten.vercel.app/email/mam-logo.jpg" alt="MAM – Mobility Access Modifications" width="150" height="69" style="display:block;width:150px;height:auto;border:0"></a></td><td style="vertical-align:middle;color:#50615b;font-size:12px;line-height:1.5"><strong style="color:#22302b;font-size:13px">People &amp; Culture</strong><br>Mobility Access Modifications</td></tr></table>';
 const graphBody = {
   message: {
-    subject: 'Performance review completed',
-    body: {contentType: 'HTML', content: `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.6;color:#22302b"><p>Hi team,</p><p>A performance review is complete. The completed document is attached.</p><p>Manager note:<br>${escape(p.managerNote)}</p><p>Thanks,<br>People Hub</p>${signature}</div>`},
-    toRecipients: [{emailAddress: {address: 'careers@mobilityaccess.com.au'}}], ccRecipients: [], bccRecipients: [],
+    subject: 'Performance review: complete goals and return to Careers',
+    from: {emailAddress: {address: 'careers@mobilityaccess.com.au'}},
+    replyTo: [{emailAddress: {address: 'careers@mobilityaccess.com.au'}}],
+    body: {contentType: 'HTML', content: `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.6;color:#22302b"><p>Hi,</p><p>Please complete the goals in the Goals and meeting record section of the attached performance review document.</p><p>Once the goals are agreed and complete, reply to this email with the updated attachment to return it to careers@mobilityaccess.com.au.</p><p>Thanks,<br>Careers Team</p>${signature}</div>`},
+    toRecipients: [{emailAddress: {address: p.recipient}}], ccRecipients: [], bccRecipients: [],
     attachments: [{'@odata.type': '#microsoft.graph.fileAttachment', name: p.attachment.fileName, contentType: p.attachment.mimeType, contentBytes: p.attachment.contentBase64}],
   },
   saveToSentItems: true,
 };
-const beginBody = {phase: 'begin', deliveryId: p.deliveryId, claimToken: p.claimToken, attachmentSha256: p.attachment.sha256};
-const binding = {deliveryId: p.deliveryId, eventKey: p.eventKey, actualRecipients: ['careers@mobilityaccess.com.au'], attachmentSha256: p.attachment.sha256};
+const beginBody = {phase: 'begin', recipient: p.recipient, deliveryId: p.deliveryId, claimToken: p.claimToken, attachmentSha256: p.attachment.sha256};
+const binding = {deliveryId: p.deliveryId, eventKey: p.eventKey, actualRecipients: [p.recipient], attachmentSha256: p.attachment.sha256};
 return [{json: {valid: true, binding, beginBody, graphBody}}];

@@ -1,7 +1,7 @@
 import "server-only";
 import { dispatchPerformanceReviewNotifications } from "@/lib/performance-review-notifications";
 import { timingSafeEqual } from "node:crypto";
-import { dispatchPerformanceReviewMailOutbox, performanceReviewMailReadiness, performanceMailUuid } from "@/lib/performance-review-mail";
+import { dispatchPerformanceReviewMailOutbox, performanceReviewMailReadiness, performanceMailUuid, performanceManagerEmail } from "@/lib/performance-review-mail";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { closed } from "@/lib/performance-review-rules";
 import { performanceMailBudget, performanceReviewMailEnabled, performanceReviewMailTarget, readPerformanceMailJson, performanceMailRpcSucceeded } from "@/lib/performance-review-mail-policy";
@@ -57,9 +57,10 @@ export async function POST(request: Request) {
   try {
     const raw = await budget.run(signal => readPerformanceMailJson(request, 1_024, signal));
     const phase = raw && typeof raw === "object" ? Object.getOwnPropertyDescriptor(raw, "phase")?.value : undefined;
-    body = closed(raw, phase === "readiness" ? ["phase"] : phase === "begin" ? ["phase", "deliveryId", "claimToken", "attachmentSha256"] : ["phase", "deliveryId", "claimToken", "attachmentSha256", "outcome"]);
+    body = closed(raw, phase === "readiness" ? ["phase"] : phase === "begin" ? ["phase", "deliveryId", "claimToken", "attachmentSha256", "recipient"] : ["phase", "deliveryId", "claimToken", "attachmentSha256", "outcome"]);
     if (phase !== "readiness" && (!["begin", "finish"].includes(phase) || !performanceMailUuid(body.deliveryId) || !performanceMailUuid(body.claimToken)
       || typeof body.attachmentSha256 !== "string" || !/^[0-9a-f]{64}$/.test(body.attachmentSha256)
+      || (phase === "begin" && !performanceManagerEmail(body.recipient))
       || (phase === "finish" && !["provider_accepted", "unknown", "rejected"].includes(body.outcome as string)))) throw new Error("invalid_request");
   } catch { return reply({ ok: false, code: "invalid_request" }, 400); }
   try {
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
     if (body.phase === "readiness") return reply({ ok: true, ready: true });
     const admin = createAdminClient();
     const result = await budget.run(signal => body.phase === "begin"
-      ? admin.rpc("begin_performance_review_mail", { p_delivery_id: body.deliveryId, p_claim_token: body.claimToken, p_attachment_sha256: body.attachmentSha256 }).retry(false).abortSignal(signal)
+      ? admin.rpc("begin_performance_review_manager_mail", { p_delivery_id: body.deliveryId, p_claim_token: body.claimToken, p_attachment_sha256: body.attachmentSha256, p_recipient: body.recipient }).retry(false).abortSignal(signal)
       : admin.rpc("finish_performance_review_mail", { p_delivery_id: body.deliveryId, p_claim_token: body.claimToken, p_attachment_sha256: body.attachmentSha256, p_outcome: body.outcome }).retry(false).abortSignal(signal));
     if (!performanceMailRpcSucceeded(result) || typeof result.data !== "boolean") throw new Error("invalid_result");
     return reply({ ok: true, [body.phase === "begin" ? "allowed" : "recorded"]: result.data });

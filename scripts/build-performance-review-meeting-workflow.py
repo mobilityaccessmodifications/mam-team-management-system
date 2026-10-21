@@ -87,6 +87,8 @@ def build_workflow():
         calendar('Check Calendar Read Access', readiness_url, json.dumps(readiness_url)),
         code('Return Meeting Readiness', 'readiness.js'),
     ]
+    nodes[0]['disabled'] = True
+    nodes[11]['disabled'] = True
     nodes[11]['webhookId'] = '720f0200-0000-4000-8000-000000000021'
     connections = {}
 

@@ -43,7 +43,7 @@ for (const audience of ['employee', 'manager']) test(`AM-04 ${audience} conflict
       assert.equal(h.field('managerNote').props.value, 'PRIVATE-LOCAL-NOTE');
       assert.equal(h.field('meeting-notes').props.value, 'Local meeting draft');
       assert.equal(h.field('held').props.checked, true);
-      assert.equal(h.button('Save and send to HR').props.disabled, true);
+      assert.equal(h.button('Save and send to manager').props.disabled, true);
     }
     h.click(config.save); await h.settle();
     assert.equal(writes(h).length, 2);
@@ -304,6 +304,6 @@ test('AM-04 manager meeting conflict keeps assessment draft and held confirmatio
     assert.equal(writes(h)[1].args[0].expectedRevision, 'manager:0:1');
     assert.deepEqual(writes(h)[1].args[0].input, writes(h)[0].args[0].input);
     assert.equal(h.field('managerNote').props.value, 'PRIVATE-UNSAVED-ASSESSMENT');
-    assert.equal(h.button('Save and send to HR').props.disabled, true);
+    assert.equal(h.button('Save and send to manager').props.disabled, true);
   } finally { h.unmount(); }
 });
