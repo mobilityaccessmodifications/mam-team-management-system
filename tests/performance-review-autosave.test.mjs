@@ -65,6 +65,23 @@ test('manager answers, ratings, summary, overall rating and private note autosav
   } finally { h.unmount(); }
 });
 
+for (const audience of ['employee', 'manager']) test(`${audience} reload recovers the confirmed draft through a fresh authorised workspace load`, async () => {
+  let stored = review(audience);
+  const ports = {
+    loadPerformanceReviews: async () => ({ ok: true, data: workspace(audience, 'MAM', { reviews: [stored] }) }),
+    mutatePerformanceReview: async input => { const receipt = committed(input, stored); stored = receipt.review; return receipt; },
+  };
+  const field = audience === 'employee' ? 'self-0' : 'managerNote';
+  const h = mounted(audience, { ports });
+  try { await h.settle(); h.change(field, 'Synthetic draft retained after reload'); await tick(h); assert.equal(h.beforeUnload().prevented, false); }
+  finally { h.unmount(); }
+  const fresh = mounted(audience, { ports });
+  try {
+    await fresh.settle(); assert.equal(fresh.field(field).props.value, 'Synthetic draft retained after reload');
+    assert.equal(writes(fresh).length, 0); assert.equal(fresh.beforeUnload().prevented, false);
+  } finally { fresh.unmount(); }
+});
+
 for (const audience of ['employee', 'manager']) test(`${audience} keeps inputs editable and serially drains edits made during an autosave`, async () => {
   const row = review(audience), pending = deferred(); let attempt = 0;
   const h = mounted(audience, { ports: { mutatePerformanceReview: input => ++attempt === 1 ? pending.promise : Promise.resolve(committed(input, row)) } });
@@ -131,6 +148,31 @@ test('an explicit meeting invitation waits for background manager saving and inc
     pending.resolve(committed(writes(h)[0].args[0], row)); await h.settle(); await tick(h);
     const calls = writes(h).map(call => call.args[0]); assert.equal(calls.at(-1).command, 'complete_manager'); assert.equal(calls.at(-1).input.managerNote, 'Latest manager invitation draft');
     assert.equal(calls.filter(input => input.command === 'complete_manager').length, 1); assert.notEqual(calls.at(-1).expectedRevision, 'manager:0:0');
+  } finally { h.unmount(); }
+});
+
+test('a field blur keeps the invitation clickable while its draft saves', async () => {
+  const row = review('manager'), pending = deferred(); let attempt = 0;
+  const h = mounted('manager', { ports: { mutatePerformanceReview: input => ++attempt === 1 ? pending.promise : Promise.resolve(committed(input, row)) } });
+  try {
+    await h.settle(); h.change('managerNote', 'Blurred invitation draft'); h.blur('Manager assessment'); h.render();
+    assert.equal(h.button('Save draft and invite meeting').props.disabled, false);
+    h.click('Save draft and invite meeting'); pending.resolve(committed(writes(h)[0].args[0], row)); await h.settle();
+    assert.deepEqual(writes(h).map(call => call.args[0].command), ['save_manager', 'complete_manager']);
+  } finally { h.unmount(); }
+});
+
+test('queued HR submission rechecks the current meeting-held confirmation after autosave', async () => {
+  const row = review('manager', 'MAM', { managerCompletedAt: '2026-10-01T01:00:00Z', meeting: { date: '2026-10-01', time: '10:00', duration: 30, mode: 'in_person', location: 'Synthetic room', notes: '' } });
+  const pending = deferred();
+  const h = mounted('manager', { row, ports: { mutatePerformanceReview: () => pending.promise } });
+  try {
+    await h.settle(); h.change('held', true); h.change('managerNote', 'Queued HR draft'); await tick(h);
+    assert.equal(h.button('Save and send to HR').props.disabled, false);
+    h.submit('Review meeting'); h.change('held', false);
+    pending.resolve(committed(writes(h)[0].args[0], row)); await h.settle();
+    assert.deepEqual(writes(h).map(call => call.args[0].command), ['save_manager']);
+    assert.equal(h.field('held').props.checked, false);
   } finally { h.unmount(); }
 });
 

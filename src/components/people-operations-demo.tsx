@@ -345,6 +345,7 @@ export function PeopleOperationsDemo({
     ...(renderPerformanceReviews ? ["performance" as const] : []),
   ], [hasTasks, renderAccounts, renderAnalyticsApiManagement, renderAssetRegister, renderCheckInRegister, renderEmployeeDirectory, renderPerformanceReviews, renderSubscriptionRegister, showOrganisation, showProfile]);
   const [section, setSection] = useState<PeopleSection>(() => initialSection ?? availableSections[0] ?? "profile");
+  const [performanceVisited, setPerformanceVisited] = useState(section === "performance");
   const [taskSection, setTaskSection] = useState<PeopleTaskSection>(
     renderCheckInRegister ? "onboarding" : "checkins",
   );
@@ -540,7 +541,7 @@ export function PeopleOperationsDemo({
     <div className={styles.peopleLayout}>
       <MotionTabs
         value={visibleSection}
-        onValueChange={setSection}
+        onValueChange={value => { if (value === "performance") setPerformanceVisited(true); setSection(value); }}
         options={sectionTabs}
         ariaLabel="People sections"
         className={styles.sectionSwitch}
@@ -565,7 +566,7 @@ export function PeopleOperationsDemo({
         {visibleSection === "assets" ? renderAssetRegister : null}
         {visibleSection === "subscriptions" ? renderSubscriptionRegister : null}
         {visibleSection === "analytics" ? renderAnalyticsApiManagement : null}
-        {visibleSection === "performance" ? renderPerformanceReviews : null}
+        {renderPerformanceReviews && (visibleSection === "performance" || performanceVisited) ? <div hidden={visibleSection !== "performance"}>{renderPerformanceReviews}</div> : null}
         {visibleSection === "tasks" && hasRealCheckInTasks ? renderCheckInTasks?.(taskAction) : null}
         {visibleSection === "tasks" && !hasRealCheckInTasks ? <nav className={styles.taskSwitch} aria-label="Task type">
           {!isEmployee || employeeLifecycleSection === "onboarding" ? <button type="button" aria-pressed={visibleTaskSection === "onboarding"} onClick={() => setTaskSection("onboarding")}>Onboarding</button> : null}

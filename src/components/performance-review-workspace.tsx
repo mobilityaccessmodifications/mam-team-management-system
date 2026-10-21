@@ -16,7 +16,8 @@ import styles from "./performance-review-workspace.module.css";
 const REQUIRED = [0, 3, 4, 5, 6, 7, 8, 9, 10];
 const RATED = [0, 1, 2, 6, 7, 8, 9];
 const RATINGS = [["1 Needs improvement", "1 Needs improvement"], ["2 Meets expectations", "2 Meets expectations"], ["3 Exceeds expectations", "3 Exceeds expectations"], ["N Not enough evidence", "N Not enough evidence"]];
-type PendingOperation = { operationId: string; reviewId: string | null; phase: "pending" | "uncertain" };
+type DraftChannel = "self" | "assessment" | "meeting";
+type PendingOperation = { operationId: string; reviewId: string | null; phase: "pending" | "uncertain"; draft?: { channel: DraftChannel; version: number } };
 type ConflictScope = { generation: number; actorUserId: string; personId: string | null; role: PerformanceWorkspace["viewerContext"]["role"]; reviewId: string; employeePersonId: string; audience: PerformanceReview["audience"]; command: PerformanceMutationInput["command"] };
 const INVITATION_STATUS_DELAYS = [2000, 4000, 8000, 16000, 30000];
 const EMPTY_MEETING: PerformanceMeeting = { date: "", time: "", duration: 30, mode: "in_person", location: "", notes: "" };
@@ -79,18 +80,26 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const [assessment, setAssessment] = useState<PerformanceManagerInput | null>(null);
   const [meeting, setMeeting] = useState<PerformanceMeeting>({ ...EMPTY_MEETING });
   const [held, setHeld] = useState(false);
+  const heldDraft = useRef(false);
   const [startDraft, setStartDraft] = useState({ employeePersonId: "", cycle: "", dueDate: "" });
   const [startYear, setStartYear] = useState(0);
   const reviewChoice = useRef<{ employeePersonId: string; cycle: string } | null>(null);
   const [message, setMessage] = useState("");
   const [recoveryVisible, setRecoveryVisible] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [generation, setGeneration] = useState(0);
   const [revision, setRevision] = useState("");
   const epoch = useRef(0);
   const dirty = useRef(false);
-  const dirtyParts = useRef({ assessment: false, meeting: false });
+  const dirtyParts = useRef({ self: false, assessment: false, meeting: false });
+  const draftVersions = useRef({ self: 0, assessment: 0, meeting: 0 });
+  const draft = useRef<{ answers: string[]; assessment: PerformanceManagerInput | null; meeting: PerformanceMeeting }>({ answers: [], assessment: null, meeting: { ...EMPTY_MEETING } });
+  const currentRevision = useRef("");
+  const currentReviews = useRef<PerformanceReview[]>([]);
+  const autoPromise = useRef<Promise<boolean> | null>(null);
+  const flush = useRef<() => Promise<boolean>>(async () => true);
   const [clock, setClock] = useState(Date.now);
   const [confirmedInvitation, setConfirmedInvitation] = useState<string | null>(null);
   const nativeActor = useRef<string | null | undefined>(undefined);
@@ -117,7 +126,8 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const track = useCallback((next: PendingOperation | null) => { if (next) conflict.current = null; operationRef.current = next; setOperation(next); }, []);
   const advance = useCallback(() => {
     if (operationRef.current?.phase === "pending") track({ ...operationRef.current, phase: "uncertain" });
-    busyOwner.current = null; busyRef.current = false; setBusy(false); setLoading(false);
+    autoPromise.current = null;
+    busyOwner.current = null; busyRef.current = false; setBusy(false); setAutoSaving(false); setLoading(false);
     const next = ++epoch.current;
     if (conflict.current) conflict.current = conflict.current.generation === next - 1 ? { ...conflict.current, generation: next } : null;
     setGeneration(next); return next;
@@ -126,17 +136,20 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   function releaseBusy(owner: symbol) { if (busyOwner.current === owner) { busyOwner.current = null; busyRef.current = false; setBusy(false); } }
   const unknown = useCallback(() => { setRecoveryVisible(true); if (operationRef.current) track({ ...operationRef.current, phase: "uncertain" }); setMessage("The update could not be confirmed. Reconcile before submitting again."); }, [track]);
   const choose = useCallback((row: PerformanceReview | null) => {
-    advance(); conflict.current = null; setRecoveryVisible(false); dirty.current = false; dirtyParts.current = { assessment: false, meeting: false };
+    advance(); conflict.current = null; setRecoveryVisible(false); dirty.current = false; dirtyParts.current = { self: false, assessment: false, meeting: false };
+    draftVersions.current = { self: 0, assessment: 0, meeting: 0 };
+    draft.current = { answers: row ? [...row.selfAnswers] : [], assessment: row ? managerInput(row) : null, meeting: !row || row.audience === "employee" ? { ...EMPTY_MEETING } : { ...(row.meeting ?? EMPTY_MEETING) } };
     selection.current = row ? { id: row.id, audience: row.audience } : null;
-    setRevision(row ? row.audience === "employee" ? row.selfRevision : row.audience === "manager" ? row.managerRevision : row.readRevision : "");
+    currentRevision.current = row ? row.audience === "employee" ? row.selfRevision : row.audience === "manager" ? row.managerRevision : row.readRevision : "";
+    setRevision(currentRevision.current);
     setSelectedId(row?.id ?? null); setAnswers(row ? [...row.selfAnswers] : []);
     setAssessment(row ? managerInput(row) : null);
     setMeeting(!row || row.audience === "employee" ? { ...EMPTY_MEETING } : { ...(row.meeting ?? EMPTY_MEETING) });
-    setHeld(false); setMessage("");
+    heldDraft.current = false; setHeld(false); setMessage("");
   }, [advance]);
   const clearPrivate = useCallback((notice: string) => {
     track(null); choose(null); viewer.current = null;
-    setWorkspace(null); setConfirmedInvitation(null); setQuery(""); reviewChoice.current = null; setStartDraft({ employeePersonId: "", cycle: "", dueDate: "" });
+    setWorkspace(null); currentReviews.current = []; setConfirmedInvitation(null); setQuery(""); reviewChoice.current = null; setStartDraft({ employeePersonId: "", cycle: "", dueDate: "" });
     for (const [url, timer] of urls.current) { clearTimeout(timer); URL.revokeObjectURL(url); }
     urls.current.clear(); setMessage(notice);
   }, [track, choose]);
@@ -154,11 +167,11 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     const changed = previous !== null && (previous.actorUserId !== data.viewerContext.actorUserId || previous.role !== data.viewerContext.role || previous.personId !== data.viewerContext.personId);
     if (changed) clearPrivate("");
     nativeActor.current = data.viewerContext.actorUserId;
-    viewer.current = data.viewerContext; setWorkspace(data);
+    viewer.current = data.viewerContext; currentReviews.current = data.reviews; setWorkspace(data);
     const draft = newReviewDraft();
     setStartYear(Number(draft.cycle));
     const preferred = preferredId ? data.reviews.find(item => item.id === preferredId) : null;
-    if (preferredId && !preferred) { clearPrivate(""); viewer.current = data.viewerContext; setWorkspace(data); return; }
+    if (preferredId && !preferred) { clearPrivate(""); viewer.current = data.viewerContext; currentReviews.current = data.reviews; setWorkspace(data); return; }
     const currentChoice = changed ? null : reviewChoice.current;
     const person = preferred?.employee ?? reviewPeople(data).find(item => item.id === currentChoice?.employeePersonId) ?? data.reviews.find(row => row.audience !== "employee" && row.cycle === draft.cycle)?.employee ?? data.startablePeople[0] ?? data.reviews[0]?.employee;
     let cycle = preferred?.cycle ?? currentChoice?.cycle ?? draft.cycle;
@@ -173,7 +186,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       conflict.current = null; setRecoveryVisible(false);
       const editable = row.audience === "employee" ? !row.selfSubmittedAt && (recovery.command === "save_self" ? row.capabilities.saveSelf : recovery.command === "submit_self" && row.capabilities.submitSelf)
         : !row.finalisedAt && (recovery.command === "save_manager" ? row.capabilities.saveManager : recovery.command === "complete_manager" ? row.capabilities.completeManager : recovery.command === "save_meeting" ? row.capabilities.saveMeeting : recovery.command === "submit_review" && row.capabilities.submitReview);
-      if (editable) setRevision(row.audience === "employee" ? row.selfRevision : row.audience === "manager" ? row.managerRevision : row.readRevision);
+      if (editable) { currentRevision.current = row.audience === "employee" ? row.selfRevision : row.audience === "manager" ? row.managerRevision : row.readRevision; setRevision(currentRevision.current); }
       return;
     }
     if (!operationRef.current && !conflict.current) setRecoveryVisible(false);
@@ -183,11 +196,38 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     const keepAssessment = channel === "save_meeting" && dirtyParts.current.assessment;
     const keepMeeting = (channel === "save_manager" || channel === "complete_manager") && dirtyParts.current.meeting;
     track(null);
-    setWorkspace(current => current ? { ...current, reviews: orderedReviews([row, ...current.reviews.filter(old => old.id !== row.id)]) } : null);
+    currentReviews.current = orderedReviews([row, ...currentReviews.current.filter(old => old.id !== row.id)]);
+    setWorkspace(current => current ? { ...current, reviews: currentReviews.current } : null);
     choose(row);
     if (keepAssessment) { setAssessment(assessment); dirtyParts.current.assessment = true; dirty.current = true; }
-    if (keepMeeting) { setMeeting(meeting); setHeld(held); dirtyParts.current.meeting = true; dirty.current = true; }
+    if (keepMeeting) { setMeeting(meeting); heldDraft.current = held; setHeld(held); dirtyParts.current.meeting = true; dirty.current = true; }
+    if (keepAssessment) draft.current.assessment = assessment;
+    if (keepMeeting) draft.current.meeting = meeting;
     reviewChoice.current = { employeePersonId: row.employee.id, cycle: row.cycle }; setStartDraft(current => ({ ...current, employeePersonId: row.employee.id, cycle: row.cycle })); setMessage(notice);
+  }
+  function acceptDraft(row: PerformanceReview, saved: NonNullable<PendingOperation["draft"]>) {
+    track(null);
+    currentReviews.current = orderedReviews([row, ...currentReviews.current.filter(old => old.id !== row.id)]);
+    setWorkspace(current => current ? { ...current, reviews: currentReviews.current } : null);
+    currentRevision.current = row.audience === "employee" ? row.selfRevision : row.audience === "manager" ? row.managerRevision : row.readRevision;
+    setRevision(currentRevision.current);
+    if (draftVersions.current[saved.channel] === saved.version) dirtyParts.current[saved.channel] = false;
+    dirty.current = Object.values(dirtyParts.current).some(Boolean);
+    setRecoveryVisible(false);
+    setMessage(dirty.current ? "" : "Saved.");
+  }
+  function edited(channel: DraftChannel) {
+    dirty.current = true; dirtyParts.current[channel] = true; draftVersions.current[channel] += 1;
+  }
+  function editSelf(index: number, value: string) {
+    edited("self"); draft.current.answers = draft.current.answers.map((answer, i) => i === index ? value : answer); setAnswers(draft.current.answers);
+  }
+  function editAssessment(update: (current: PerformanceManagerInput) => PerformanceManagerInput) {
+    if (!draft.current.assessment) return;
+    edited("assessment"); draft.current.assessment = update(draft.current.assessment); setAssessment(draft.current.assessment);
+  }
+  function editMeeting(update: Partial<PerformanceMeeting>) {
+    edited("meeting"); draft.current.meeting = { ...draft.current.meeting, ...update }; setMeeting(draft.current.meeting);
   }
   async function reconcile() {
     const pending = operationRef.current;
@@ -201,7 +241,8 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       if (result.data.status !== "committed") { setMessage("The update is still unconfirmed."); return; }
       const row = ownedRow(result.data.review, workspace.viewerContext);
       if (!row || (preview && row.audience !== "manager") || (pending.reviewId !== null && row.id !== pending.reviewId)) { unknown(); return; }
-      accept(row, "Update confirmed.");
+      if (pending.draft) acceptDraft(row, pending.draft);
+      else accept(row, "Update confirmed.");
     } catch { if (epoch.current === ticket) unknown(); }
     finally { releaseBusy(owner); }
   }
@@ -254,16 +295,16 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     } catch { if (epoch.current === ticket) { setMessage("Reviews could not be loaded."); setRecoveryVisible(true); } }
     finally { if (epoch.current === ticket) setLoading(false); }
   }
-  function validMeeting() {
+  function validMeeting(value: PerformanceMeeting) {
     try {
-      return Number.isFinite(meetingEndMillis(meeting)) && Number.isInteger(meeting.duration) && meeting.duration >= 5 && meeting.duration <= 480 && meeting.notes.length <= 8000 && meeting.location.length <= 8000 && !!meeting.location.trim();
+      return Number.isFinite(meetingEndMillis(value)) && Number.isInteger(value.duration) && value.duration >= 5 && value.duration <= 480 && value.notes.length <= 8000 && value.location.length <= 8000 && !!value.location.trim() && (value.mode !== "teams" || /^https:\/\/(teams\.microsoft\.com|teams\.live\.com)(?:[/:?#]|$)/.test(value.location));
     } catch { return false; }
   }
-  function completeAssessment() {
+  function completeAssessment(assessment: PerformanceManagerInput | null) {
     return !!assessment && ![...assessment.answers, assessment.summary, assessment.managerNote].some(value => value.length > 8000) && !REQUIRED.some(index => !assessment.answers[index]?.trim()) && !RATED.some(index => !RATINGS.some(([value]) => value === assessment.ratings[index])) && !!assessment.summary.trim() && !!assessment.managerNote.trim() && RATINGS.some(([value]) => value === assessment.overallRating);
   }
   let meetingFinished = false;
-  try { meetingFinished = validMeeting() && meetingEndMillis(meeting) <= clock; } catch {}
+  try { meetingFinished = validMeeting(meeting) && meetingEndMillis(meeting) <= clock; } catch {}
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     let active = true;
@@ -278,9 +319,14 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     update();
     return () => { active = false; clearTimeout(timer); };
   }, [meeting]);
-  async function run(command: PerformanceMutationInput["command"]) {
+  async function run(command: PerformanceMutationInput["command"], automatic = false) {
+    if (!automatic && autoPromise.current && !await autoPromise.current) return;
+    const selected = currentReviews.current.find(row => row.id === selection.current?.id);
     if (readOnly || epoch.current !== generation || busyRef.current || operationRef.current || !selected || !workspace) return;
     const ticket = generation;
+    const answers = draft.current.answers, assessment = draft.current.assessment, meeting = draft.current.meeting, revision = currentRevision.current, held = heldDraft.current;
+    const channel: DraftChannel = command === "save_self" ? "self" : command === "save_manager" ? "assessment" : "meeting";
+    const saved = automatic ? { channel, version: draftVersions.current[channel] } : undefined;
     let mutation: PerformanceMutationInput;
     const operationId = crypto.randomUUID();
     if (command === "save_self" || command === "submit_self") {
@@ -295,12 +341,13 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     } else {
       if (selected.audience === "employee" || selected.finalisedAt || !(command === "save_meeting" ? selected.capabilities.saveMeeting : selected.capabilities.submitReview)) return;
       if (command === "submit_review" && dirtyParts.current.assessment && !selected.capabilities.saveManager) return;
-      if (command === "submit_review" && (!held || !selected.managerCompletedAt || !completeAssessment())) { setMessage("Complete the assessment and confirm the meeting was held."); return; }
-      if (command === "submit_review" && (!validMeeting() || meetingEndMillis(meeting) > Date.now())) { setMessage("The review meeting must finish before sending to HR."); return; }
-      if (!validMeeting()) { setMessage("Check the meeting details."); return; }
+      if (command === "submit_review" && (!held || !selected.managerCompletedAt || !completeAssessment(assessment))) { setMessage("Complete the assessment and confirm the meeting was held."); return; }
+      if (command === "submit_review" && (!validMeeting(meeting) || meetingEndMillis(meeting) > Date.now())) { setMessage("The review meeting must finish before sending to HR."); return; }
+      if (!validMeeting(meeting)) { setMessage("Check the meeting details."); return; }
       mutation = command === "save_meeting" ? { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...meeting } } : { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...meeting, held: true } };
     }
     const owner = claimBusy();
+    if (automatic) setAutoSaving(true);
     const mutations: PerformanceMutationInput[] = command === "submit_review" && dirtyParts.current.assessment && assessment
       ? [{ operationId: crypto.randomUUID(), reviewId: selected.id, expectedRevision: revision, command: "save_manager", input: { ...assessment, answers: [...assessment.answers], ratings: [...assessment.ratings] } }, mutation]
       : [mutation];
@@ -308,7 +355,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     try {
       for (const [index, item] of mutations.entries()) {
         const next = { ...item, expectedRevision };
-        track({ operationId: next.operationId, reviewId: selected.id, phase: "pending" });
+        track({ operationId: next.operationId, reviewId: selected.id, phase: "pending", ...(saved ? { draft: saved } : {}) });
         const result = previewPersonId === undefined ? await mutatePerformanceReview(next) : await mutatePerformanceReview(next, previewPersonId);
         if (epoch.current !== ticket) return;
         if (!result.ok) {
@@ -320,19 +367,53 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
         const row = ownedRow(result.review, workspace.viewerContext);
         if (!row) { unknown(); return; }
         if (index === mutations.length - 1) {
-          accept(row, (command.startsWith("save_") || command === "complete_manager") ? "Saved." : "Submitted.", command);
+          if (saved) acceptDraft(row, saved);
+          else accept(row, (command.startsWith("save_") || command === "complete_manager") ? "Saved." : "Submitted.", command);
         } else {
           if (row.audience === "employee") { unknown(); return; }
           expectedRevision = row.audience === "manager" ? row.managerRevision : row.readRevision;
+          currentRevision.current = expectedRevision;
           setRevision(expectedRevision);
           dirtyParts.current.assessment = false;
           dirty.current = dirtyParts.current.meeting;
-          setWorkspace(current => current ? { ...current, reviews: orderedReviews([row, ...current.reviews.filter(old => old.id !== row.id)]) } : null);
+          currentReviews.current = orderedReviews([row, ...currentReviews.current.filter(old => old.id !== row.id)]);
+          setWorkspace(current => current ? { ...current, reviews: currentReviews.current } : null);
         }
       }
+      return true;
     } catch { if (epoch.current === ticket) unknown(); }
-    finally { releaseBusy(owner); }
+    finally { if (automatic && epoch.current === ticket) setAutoSaving(false); releaseBusy(owner); }
   }
+  async function flushDrafts(): Promise<boolean> {
+    if (autoPromise.current) return autoPromise.current;
+    if (!dirty.current) return true;
+    if (readOnly || recoveryVisible || conflict.current || operationRef.current || busyRef.current) return false;
+    const ticket = epoch.current;
+    const saving = (async () => {
+      while (dirty.current && epoch.current === ticket) {
+        const command = dirtyParts.current.self ? "save_self" : dirtyParts.current.assessment ? "save_manager" : "save_meeting";
+        if (command === "save_meeting" && (!selected || selected.audience === "employee" || !selected.managerCompletedAt || !validMeeting(draft.current.meeting))) return false;
+        if (await run(command, true) !== true) return false;
+      }
+      return epoch.current === ticket && !dirty.current;
+    })();
+    autoPromise.current = saving;
+    try { return await saving; }
+    finally { if (autoPromise.current === saving) autoPromise.current = null; }
+  }
+  useEffect(() => { flush.current = flushDrafts; });
+  useEffect(() => {
+    if (!dirty.current || readOnly || busy || operation || recoveryVisible || conflict.current) return;
+    const timer = setTimeout(() => { void flush.current(); }, 600);
+    return () => clearTimeout(timer);
+  }, [answers, assessment, meeting, generation, revision, readOnly, busy, operation, recoveryVisible]);
+  useEffect(() => {
+    const onUnload = (event: BeforeUnloadEvent) => { if (dirty.current || operationRef.current) { event.preventDefault(); event.returnValue = ""; } };
+    const onHidden = () => { if (document.visibilityState === "hidden") void flush.current(); };
+    window.addEventListener("beforeunload", onUnload);
+    document.addEventListener("visibilitychange", onHidden);
+    return () => { window.removeEventListener("beforeunload", onUnload); document.removeEventListener("visibilitychange", onHidden); };
+  }, []);
   useEffect(() => {
     let active = true;
     const downloads = urls.current;
@@ -404,14 +485,16 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     void refresh();
     return () => { active = false; clearTimeout(timer); if (typeof window !== "undefined") window.removeEventListener("focus", onFocus); };
   }, [generation, invitationRequested, invitationScope, invitationSent, previewPersonId, selectedId]);
-  const blocked = readOnly || busy || operation !== null;
-  const selfDisabled = preview || blocked || selected?.audience !== "employee" || !selected.capabilities.saveSelf || Boolean(selected.selfSubmittedAt);
-  const managerDisabled = blocked || !selected || selected.audience === "employee" || !selected.capabilities.saveManager || Boolean(selected.finalisedAt);
-  const meetingDisabled = blocked || !selected || selected.audience === "employee" || !selected.capabilities.saveMeeting || Boolean(selected.finalisedAt);
+  const blocked = readOnly || (busy && !autoSaving) || (operation !== null && (!autoSaving || operation.phase === "uncertain"));
+  const editingBlocked = blocked;
+  const selfDisabled = preview || editingBlocked || selected?.audience !== "employee" || !selected.capabilities.saveSelf || Boolean(selected.selfSubmittedAt);
+  const managerDisabled = editingBlocked || !selected || selected.audience === "employee" || !selected.capabilities.saveManager || Boolean(selected.finalisedAt);
+  const meetingDisabled = editingBlocked || !selected || selected.audience === "employee" || !selected.capabilities.saveMeeting || Boolean(selected.finalisedAt);
   const heldDisabled = blocked || !selected || selected.audience === "employee" || !selected.capabilities.submitReview || Boolean(selected.finalisedAt);
   const managerActions = selected?.audience === "manager" || selected?.audience === "admin" && (selected.capabilities.saveManager || selected.capabilities.completeManager || selected.capabilities.saveMeeting || selected.capabilities.submitReview);
   return <section className={styles.workspace} aria-label="Performance reviews" aria-busy={busy || loading}>
     <header className={styles.toolbar}><h1>Performance reviews</h1></header>
+    {autoSaving ? <p role="status">Saving…</p> : null}
     {message ? <p role={["Saved.", "Submitted.", "Review opened.", "Review created.", "Update confirmed."].includes(message) ? "status" : "alert"}>{message}</p> : null}
     {recoveryVisible ? <button type="button" className={styles.recovery} onClick={() => reload()} disabled={busy}>Reload</button> : null}
     {loading ? <p role="status">Loading performance reviews…</p> : !message && people.length === 0 && workspace ? <p role="status">No performance reviews yet.</p> : null}
@@ -419,10 +502,13 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     {workspace && people.length > 0 ? <div className={styles.startLayout}>
       <aside className={styles.employeeSidebar}>
         <div className={styles.searchTools}><label className={`${toolbar.search} ${styles.searchField}`}><Search size={17} aria-hidden="true" /><input aria-label="Search employees" type="search" placeholder="Search your team" value={query} onChange={event => setQuery(event.target.value)} /></label></div>
-      <nav className={styles.employeeList} aria-label="Review employees">{filteredPeople.map(person => <button type="button" key={person.id} aria-label={`${person.name} — ${person.company}`} aria-pressed={person.id === startDraft.employeePersonId} disabled={operation !== null} onClick={() => {
-        if (epoch.current !== generation || busyRef.current || operationRef.current) return;
+      <nav className={styles.employeeList} aria-label="Review employees">{filteredPeople.map(person => <button type="button" key={person.id} aria-label={`${person.name} — ${person.company}`} aria-pressed={person.id === startDraft.employeePersonId} disabled={operation !== null && !autoSaving} onClick={async () => {
+        if (epoch.current !== generation || ((busyRef.current || operationRef.current) && !autoPromise.current)) return;
+        const ticket = generation;
+        if (dirty.current && !await flush.current()) return;
+        if (epoch.current !== ticket || busyRef.current || operationRef.current) return;
         const draft = newReviewDraft(), selectedCycle = startDraft.cycle || draft.cycle;
-        const row = workspace.reviews.find(item => item.employee.id === person.id && item.cycle === selectedCycle) ?? (!workspace.startablePeople.some(item => item.id === person.id) ? workspace.reviews.find(item => item.employee.id === person.id) : undefined);
+        const row = currentReviews.current.find(item => item.employee.id === person.id && item.cycle === selectedCycle) ?? (!workspace.startablePeople.some(item => item.id === person.id) ? currentReviews.current.find(item => item.employee.id === person.id) : undefined);
         const cycle = row?.cycle ?? selectedCycle;
         reviewChoice.current = { employeePersonId: person.id, cycle };
         choose(row ?? null); setStartYear(Number(draft.cycle)); setStartDraft(current => ({ employeePersonId: person.id, cycle, dueDate: current.dueDate || draft.dueDate }));
@@ -435,11 +521,14 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       </aside>
       <div className={styles.reviewPanel}>
         {startPerson ? <header><h2>{startPerson.name} — {startPerson.company}</h2><p>{startPerson.jobTitle} · {startPerson.team}</p></header> : null}
-        {startPerson ? <label className={styles.cycle}>Cycle<select name="start-cycle" disabled={busy || operation !== null} value={startDraft.cycle} onChange={event => {
-          if (epoch.current !== generation || busyRef.current || operationRef.current) return;
+        {startPerson ? <label className={styles.cycle}>Cycle<select name="start-cycle" disabled={(busy || operation !== null) && !autoSaving} value={startDraft.cycle} onChange={async event => {
           const cycle = event.target.value;
+          if (epoch.current !== generation || ((busyRef.current || operationRef.current) && !autoPromise.current)) return;
+          const ticket = generation;
+          if (dirty.current && !await flush.current()) return;
+          if (epoch.current !== ticket || busyRef.current || operationRef.current) return;
           reviewChoice.current = { employeePersonId: startPerson.id, cycle };
-          choose(workspace.reviews.find(row => row.employee.id === startPerson.id && row.cycle === cycle) ?? null);
+          choose(currentReviews.current.find(row => row.employee.id === startPerson.id && row.cycle === cycle) ?? null);
           setStartDraft(current => ({ ...current, cycle }));
         }}>{cycles.map(year => <option key={year} value={year}>{year}</option>)}</select></label> : null}
         {creating ? <form className={styles.startForm} aria-label="New yearly review" onSubmit={event => { event.preventDefault(); void start(); }}>
@@ -449,29 +538,29 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       {selected ? <article className={styles.card}>
         {selected.capabilities.downloadDocument ? <button type="button" disabled={busy} onClick={() => download()}>Download Word</button> : null}
         <p>{selected.cycle} · {selected.dueDate} · {selected.selfStatus === "awaiting_employee" ? "Awaiting employee" : "Manager review"}</p>
-        {selected.audience === "employee" ? <form aria-label="Self assessment" onSubmit={event => { event.preventDefault(); void run("submit_self"); }}><h2>Self assessment</h2>
-          {QUESTIONS[selected.employee.company].map((prompt: string, index: number) => <label key={prompt}>{prompt}<textarea name={`self-${index}`} maxLength={8000} value={answers[index] ?? ""} disabled={selfDisabled} onChange={event => { if (!selfDisabled && epoch.current === generation) { dirty.current = true; setAnswers(current => current.map((value, i) => i === index ? event.target.value : value)); } }} /></label>)}
+        {selected.audience === "employee" ? <form aria-label="Self assessment" onBlur={() => flush.current()} onSubmit={event => { event.preventDefault(); void run("submit_self"); }}><h2>Self assessment</h2>
+          {QUESTIONS[selected.employee.company].map((prompt: string, index: number) => <label key={prompt}>{prompt}<textarea name={`self-${index}`} maxLength={8000} value={answers[index] ?? ""} disabled={selfDisabled} onChange={event => { if (!selfDisabled && epoch.current === generation) { editSelf(index, event.target.value); } }} /></label>)}
           {selected.audience === "employee" ? <div className={styles.toolbar}><button type="button" disabled={selfDisabled} onClick={() => run("save_self")}>Save self draft</button><button type="submit" className={selected.selfSubmittedAt ? styles.submittedButton : undefined} disabled={blocked || !selected.capabilities.submitSelf || Boolean(selected.selfSubmittedAt)}>{selected.selfSubmittedAt ? "Self assessment submitted" : "Submit self assessment"}</button></div> : null}
         </form> : null}
-        {selected.audience !== "employee" && assessment ? <form aria-label="Manager assessment" onSubmit={event => { event.preventDefault(); void run(invitationSent ? "save_manager" : "complete_manager"); }}><h2>Manager assessment</h2>
+        {selected.audience !== "employee" && assessment ? <form aria-label="Manager assessment" onBlur={() => flush.current()} onSubmit={event => { event.preventDefault(); void run(invitationSent ? "save_manager" : "complete_manager"); }}><h2>Manager assessment</h2>
           {QUESTIONS[selected.employee.company].map((prompt: string, index: number) => <div className={styles.question} key={prompt}>
             <label>{prompt}<span className={styles.answerLabel}>Employee answer</span><textarea name={`self-${index}`} value={answers[index] ?? ""} disabled /></label>
-            <label>Manager answer<textarea aria-label={`${prompt} — Manager answer`} name={`manager-${index}`} maxLength={8000} value={assessment.answers[index] ?? ""} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, answers: current.answers.map((value, i) => i === index ? event.target.value : value) } : null); } }} /></label>
-            {RATED.includes(index) ? <label>Manager rating<select name={`rating-${index}`} disabled={managerDisabled} value={assessment.ratings[index] ?? ""} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, ratings: current.ratings.map((value, i) => i === index ? event.target.value : value) } : null); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label> : null}
+            <label>Manager answer<textarea aria-label={`${prompt} — Manager answer`} name={`manager-${index}`} maxLength={8000} value={assessment.answers[index] ?? ""} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, answers: current.answers.map((value, i) => i === index ? event.target.value : value) })); } }} /></label>
+            {RATED.includes(index) ? <label>Manager rating<select name={`rating-${index}`} disabled={managerDisabled} value={assessment.ratings[index] ?? ""} onChange={event => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, ratings: current.ratings.map((value, i) => i === index ? event.target.value : value) })); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label> : null}
           </div>)}
-          <label>Overall manager assessment<textarea name="summary" maxLength={8000} value={assessment.summary} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, summary: event.target.value } : null); } }} /></label>
-          <label>Overall rating<select name="overallRating" value={assessment.overallRating} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, overallRating: event.target.value } : null); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label>Private manager note<textarea name="managerNote" maxLength={8000} value={assessment.managerNote} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.assessment = true; setAssessment(current => current ? { ...current, managerNote: event.target.value } : null); } }} /></label>
+          <label>Overall manager assessment<textarea name="summary" maxLength={8000} value={assessment.summary} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, summary: event.target.value })); } }} /></label>
+          <label>Overall rating<select name="overallRating" value={assessment.overallRating} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, overallRating: event.target.value })); } }}><option value="">Select rating</option>{RATINGS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label>Private manager note<textarea name="managerNote" maxLength={8000} value={assessment.managerNote} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, managerNote: event.target.value })); } }} /></label>
           {managerActions ? <div className={styles.toolbar}><button type="button" className={styles.primaryButton} onClick={() => run(invitationSent ? "save_manager" : "complete_manager")} disabled={blocked || !(invitationSent ? selected.capabilities.saveManager : selected.capabilities.completeManager) || Boolean(selected.finalisedAt)}>{invitationSent ? "Save draft" : "Save draft and invite meeting"}</button>{invitationSent ? <span className={styles.invitationHint}>Reply with Meeting in Outlook to schedule the review. Include ai@mobilityaccess.com.au and the employee, and keep the review code.</span> : null}</div> : null}
         </form> : null}
-        {selected.audience !== "employee" ? <form aria-label="Review meeting" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget) && selected.managerCompletedAt && dirtyParts.current.meeting && validMeeting()) void run("save_meeting"); }} onSubmit={event => { event.preventDefault(); void run("submit_review"); }}><h2>Review meeting</h2>
-          <label>Date<input type="date" name="meeting-date" value={meeting.date} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, date: event.target.value })); } }} /></label>
-          <label>Time (Melbourne)<input type="time" name="meeting-time" value={meeting.time} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, time: event.target.value })); } }} /></label>
-          <label>Duration (minutes)<input type="number" min={5} max={480} name="meeting-duration" value={meeting.duration} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, duration: Number(event.target.value) })); } }} /></label>
-          <label>Mode<select name="meeting-mode" value={meeting.mode} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, mode: event.target.value as PerformanceMeeting["mode"] })); } }}><option value="in_person">In person</option><option value="teams">Teams</option><option value="phone">Phone</option></select></label>
-          <label>Location<input name="meeting-location" maxLength={8000} value={meeting.location} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, location: event.target.value })); } }} /></label>
-          <label>Meeting notes<textarea name="meeting-notes" maxLength={8000} value={meeting.notes} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { dirty.current = true; dirtyParts.current.meeting = true; setMeeting(current => ({ ...current, notes: event.target.value })); } }} /></label>
-          {managerActions ? <><label><input type="checkbox" name="held" checked={held} disabled={heldDisabled} onChange={event => { if (epoch.current === generation && !heldDisabled) setHeld(event.target.checked); }} />Meeting was held</label><div className={styles.toolbar}><button type="submit" disabled={blocked || !held || !meetingFinished || !completeAssessment() || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Save and send to HR</button></div></> : null}
+        {selected.audience !== "employee" ? <form aria-label="Review meeting" onBlur={() => flush.current()} onSubmit={event => { event.preventDefault(); void run("submit_review"); }}><h2>Review meeting</h2>
+          <label>Date<input type="date" name="meeting-date" value={meeting.date} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ date: event.target.value }); } }} /></label>
+          <label>Time (Melbourne)<input type="time" name="meeting-time" value={meeting.time} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ time: event.target.value }); } }} /></label>
+          <label>Duration (minutes)<input type="number" min={5} max={480} name="meeting-duration" value={meeting.duration} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ duration: Number(event.target.value) }); } }} /></label>
+          <label>Mode<select name="meeting-mode" value={meeting.mode} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ mode: event.target.value as PerformanceMeeting["mode"] }); } }}><option value="in_person">In person</option><option value="teams">Teams</option><option value="phone">Phone</option></select></label>
+          <label>Location<input name="meeting-location" maxLength={8000} value={meeting.location} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ location: event.target.value }); } }} /></label>
+          <label>Meeting notes<textarea name="meeting-notes" maxLength={8000} value={meeting.notes} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ notes: event.target.value }); } }} /></label>
+          {managerActions ? <><label><input type="checkbox" name="held" checked={held} disabled={heldDisabled} onChange={event => { if (epoch.current === generation && !heldDisabled) { heldDraft.current = event.target.checked; setHeld(event.target.checked); } }} />Meeting was held</label><div className={styles.toolbar}><button type="submit" disabled={blocked || !held || !meetingFinished || !completeAssessment(assessment) || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Save and send to HR</button></div></> : null}
           {selected.managerCompletedAt ? <p>Assessment saved: {selected.managerCompletedAt}</p> : null}{selected.finalisedAt ? <p>Finalised: {selected.finalisedAt}</p> : null}
         </form> : null}
       </article> : null}

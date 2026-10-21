@@ -48,7 +48,7 @@ test('invitation confirmation updates only the control and hint while preserving
   assert.equal(h.field('managerNote').props.value, 'Unsaved latest private note');
   assert.equal(h.field('meeting-location').props.value, 'Unsaved room');
   assert.equal(h.calls.filter(call => call.name === 'loadPerformanceReviews').length, 1);
-  assert.equal(h.calls.filter(call => call.name === 'mutatePerformanceReview').length, 1);
+  assert.deepEqual(h.calls.filter(call => call.name === 'mutatePerformanceReview').map(call => call.args[0].command), ['complete_manager', 'save_manager'], 'Autosave may persist answers without inviting again');
   const count = h.invitationStatusCalls.length;
   h.timers(); h.focus(); await h.settle();
   assert.equal(h.invitationStatusCalls.length, count);

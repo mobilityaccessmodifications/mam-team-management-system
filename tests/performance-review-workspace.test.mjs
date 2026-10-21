@@ -142,7 +142,7 @@ test('meeting edits persist on leaving the form and HR submission waits for the 
   } }); await h.settle();
   h.change('meeting-date', '2026-10-01'); h.change('meeting-time', '10:30'); h.change('meeting-duration', '45'); h.change('meeting-location', 'Synthetic room'); h.change('meeting-notes', 'Synthetic notes');
   h.blur('Review meeting', true); await h.settle();
-  assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 0);
+  assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1, 'Leaving an individual meeting field saves the draft');
   h.blur(); await h.settle();
   const sent = h.calls.at(-1).args[0];
   assert.equal(sent.command, 'save_meeting'); assert.equal(sent.input.held, undefined);
@@ -365,7 +365,7 @@ test('definitive action permission loss clears private state while transient fai
   for (const route of ['load', 'mutation', 'document', 'reconcile', 'start']) {
     const data = workspace('manager'); data.startablePeople = [data.reviews[0].employee];
     const h = mount(data, { mutatePerformanceReview: async () => route === 'reconcile' ? failure('uncertain', true) : failure('forbidden'), getPerformanceReviewDocument: async () => failure('unauthenticated'), reconcilePerformanceReviewOperation: async () => failure('forbidden'), startPerformanceReview: async () => failure('forbidden') }); await h.settle();
-    h.change('managerNote', 'PRIVATE-DRAFT-TO-ERASE');
+    if (route !== 'start') h.change('managerNote', 'PRIVATE-DRAFT-TO-ERASE');
     if (route === 'load') { h.ports.loadPerformanceReviews = async () => failure('forbidden'); refresh(h); }
     if (route === 'mutation' || route === 'reconcile') { h.click('Save draft and invite meeting'); await h.settle(); }
     if (route === 'document') h.click('Download Word');

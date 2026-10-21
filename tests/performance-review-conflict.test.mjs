@@ -198,19 +198,20 @@ for (const scope of ['role', 'person', 'actor', 'audience', 'missing-review']) t
   } finally { h.unmount(); }
 });
 
-test('AM-04 conflict recovery is retired by review selection A to B to A', async () => {
+test('AM-04 review navigation cannot discard an unresolved conflict draft', async () => {
   const a = review('manager'), b = review('manager', 'MAM', { id: ids.other, code: 'PR-2026-0002', employee: { ...a.employee, id: '22000000-0000-4000-8000-000000000099', name: 'Synthetic B colleague' } });
   const h = mount(workspace('manager', 'MAM', { reviews: [a, b] }), { mutatePerformanceReview: async () => failure('conflict') });
   try {
     await h.settle(); h.change('managerNote', 'PRIVATE-OLD-A-CONFLICT'); h.click('Save draft and invite meeting'); await h.settle();
     const pending = deferred(); h.ports.loadPerformanceReviews = () => pending.promise; refresh(h); h.render();
-    for (const row of [b, a]) { h.click(`${row.employee.name} — ${row.employee.company}`); h.render(); }
+    for (const row of [b, a]) { await h.click(`${row.employee.name} — ${row.employee.company}`); h.render(); }
+    assert.equal(h.field('managerNote').props.value, 'PRIVATE-OLD-A-CONFLICT');
     h.change('managerNote', 'PRIVATE-NEW-A-DRAFT');
     pending.resolve({ ok: true, data: workspace('manager', 'MAM', { reviews: [updated('manager'), b] }) }); await h.settle();
     assert.equal(h.field('managerNote').props.value, 'PRIVATE-NEW-A-DRAFT');
     h.ports.loadPerformanceReviews = async () => ({ ok: true, data: workspace('manager', 'MAM', { reviews: [updated('manager'), b] }) });
     refresh(h); await h.settle(); h.click('Save draft and invite meeting'); await h.settle();
-    assert.equal(writes(h)[1].args[0].expectedRevision, 'manager:0:0');
+    assert.equal(writes(h)[1].args[0].expectedRevision, 'manager:0:1', 'The explicit reload refreshes the retained conflict draft');
     assert.equal(writes(h)[1].args[0].input.managerNote, 'PRIVATE-NEW-A-DRAFT');
   } finally { h.unmount(); }
 });
