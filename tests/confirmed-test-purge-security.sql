@@ -20,13 +20,16 @@ raise exception 'Unbanned direct RPC destroyed business identity';
 exception when check_violation then assert sqlerrm like '%already be banned%', 'Wrong ban prerequisite failure'; end;
 end $$;
 reset role;
-update auth.users set banned_until=now()+interval '500 milliseconds' where id='96000000-0000-4000-8000-000000000002';
+update auth.users set banned_until=clock_timestamp()+interval '10 seconds' where id='96000000-0000-4000-8000-000000000002';
 set local role authenticated;
 do $$ declare reviewed jsonb; begin
 reviewed:=public.preview_confirmed_test_identity_purge('96000000-0000-4000-8000-000000000002','96000000-0000-4000-8000-000000000002','mam','Zed','zed@example.test',1,1);
 perform public.prepare_confirmed_test_identity_purge('96000000-0000-4000-8000-000000000002','96000000-0000-4000-8000-000000000002','mam','Zed','zed@example.test',1,1,reviewed->>'manifest_hash',true,true);
 end $$;
-select pg_sleep(0.6);
+reset role;
+select pg_sleep(greatest(0,extract(epoch from banned_until-clock_timestamp()))+0.1)
+from auth.users where id='96000000-0000-4000-8000-000000000002';
+set local role authenticated;
 do $$ declare receipt jsonb; begin
 receipt:=public.get_confirmed_test_identity_purge('96000000-0000-4000-8000-000000000002');
 begin perform public.claim_confirmed_test_identity_auth_delete((receipt->>'id')::uuid); raise exception 'Expired ban authorized Auth deletion'; exception when check_violation then null; end;

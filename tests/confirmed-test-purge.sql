@@ -114,8 +114,8 @@ perform public.preview_confirmed_test_identity_purge('93000000-0000-4000-8000-00
 raise exception 'Indirect reminder receipt accepted';
 exception when foreign_key_violation then assert sqlerrm like '%openclaw_leave_receipts%', 'Wrong indirect blocker'; end;
 end $$;
-insert into public.leave_requests(id,user_id,employee_person_id,leave_type,request_type_label,start_date,end_date,status,submitted_at,business_days)
-select ('93200000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'93000000-0000-4000-8000-000000000002','93000000-0000-4000-8000-000000000002','unpaid','Unpaid leave',date '2026-11-01'+n,date '2026-11-01'+n,'cancelled',now(),1 from generate_series(1,2) n;
+insert into public.leave_requests(id,user_id,employee_person_id,leave_type,request_type_label,start_date,end_date,status,submitted_at,business_days,reason)
+select ('93200000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'93000000-0000-4000-8000-000000000002','93000000-0000-4000-8000-000000000002','unpaid','Unpaid leave',date '2026-11-01'+n,date '2026-11-01'+n,'cancelled',now(),1,'Synthetic cancelled leave' from generate_series(1,2) n;
 set local role authenticated;
 do $$ declare reviewed jsonb; receipt uuid; state jsonb; begin
 reviewed:=public.preview_confirmed_test_identity_purge('93000000-0000-4000-8000-000000000002','93000000-0000-4000-8000-000000000002','mam','Confirmed Fake Synthetic','purge-fake@example.test',1,1);

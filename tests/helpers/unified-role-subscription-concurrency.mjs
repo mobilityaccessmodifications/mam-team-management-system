@@ -91,8 +91,10 @@ export async function runSubscriptionAuthorityConcurrency(socket, database) {
     {name:'update_subscription_v4',args:(name,id)=>`'${id}',1,'${name} changed',null,'active','paid','monthly',100,null,1,false,null,current_date,'${user}','equipsy','{}'::uuid[]`},
     {name:'mark_subscription_reviewed',args:(_name,id)=>`'${id}',1`},
     {name:'mark_subscription_reviewed_v2',args:(_name,id)=>`'${id}',1`},
+    {name:'complete_my_subscription_review_task',review:true,args:(_name,id)=>`'${id}',2`},
     {name:'patch_subscription_v1',args:(_name,id)=>`'${id}',1,'{"company_scope":"equipsy"}'::jsonb`},
     {name:'set_subscription_company',schema:'private',owner:true,args:(_name,id)=>`'${id}','equipsy'`},
+    {name:'set_subscription_start_date',schema:'private',owner:true,args:(_name,id)=>`'${id}',current_date`},
     {name:'save_subscription_credential',vault:true,args:(_name,id)=>`'${id}',1,'U3ludGhldGlj','abcdefghijklmnop','abcdefghijklmnopqrstuv',1`},
     {name:'remove_subscription_credential',vault:true,args:(_name,id)=>`'${id}',1`},
     {name:'get_subscription_credential',vault:true,reveal:true,args:(_name,id)=>`'${id}'`},
@@ -100,7 +102,7 @@ export async function runSubscriptionAuthorityConcurrency(socket, database) {
   const effectiveNames=JSON.parse(sql(socket,database,`select jsonb_agg(n.nspname||'.'||p.proname order by n.nspname,p.proname)
     from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname in ('public','private') and p.prokind='f' and p.provolatile='v'
-      and p.proname like '%subscription%' and p.proname not in ('lock_subscription_role_authority','complete_my_subscription_password_task')
+      and p.proname like '%subscription%' and p.proname not in ('lock_subscription_role_authority','complete_my_subscription_password_task','subscription_request_complete_purchase_v3')
       and (p.prosrc like '%public.can_manage_subscriptions()%' or p.prosrc like '%private.is_current_subscription_credential_manager()%'
         or p.prosrc like '%private.lock_subscription_role_authority(%');`).trim());
   assert.deepEqual(effectiveNames,writers.map(w=>`${w.schema ?? 'public'}.${w.name}`).sort(),'Every effective register/vault writer and audited reveal is covered');
@@ -116,6 +118,7 @@ export async function runSubscriptionAuthorityConcurrency(socket, database) {
       values('${id}','MAM-SUB-${900000+fixture}','${name}','paid','monthly',100,1,false,current_date,current_date,'${user}','mam');
       insert into private.subscription_credential_vault(subscription_id,credential_ciphertext,credential_iv,credential_auth_tag,credential_key_version,credential_version,created_by,updated_by)
       values('${id}','U3ludGhldGlj','abcdefghijklmnop','abcdefghijklmnopqrstuv',1,1,'${p0}','${p0}');`);
+    if (w.review) sql(socket,database,`update private.subscription_register set next_review_on=private.mam_local_calendar_date()-7 where id='${id}';`);
     const resource=w.create ? 'lock table private.subscription_register in share mode;'
       : w.reveal ? 'lock table private.subscription_credential_audit_events in share mode;'
       : w.vault ? `select pg_advisory_xact_lock(hashtextextended('mam:subscription-credential:${id}',0));`
@@ -200,8 +203,8 @@ export async function runSubscriptionAuthorityConcurrency(socket, database) {
       });
     }
     assert.equal(failures.length,0,JSON.stringify(failures));
-    assert.equal(passed,77,'All 15 effective consumers, both orders, independent revocation/demotion and stale/actor fences execute');
-    console.log(`PASS: subscription authority concurrency ${passed}/77 scenarios across ${writers.length} effective consumers`);
+    assert.equal(passed,87,'All 17 effective consumers, both orders, independent revocation/demotion and stale/actor fences execute');
+    console.log(`PASS: subscription authority concurrency ${passed}/87 scenarios across ${writers.length} effective consumers`);
   } finally {
     for (const child of sessions) { child.stdin.end('rollback;\n'); child.kill('SIGTERM'); }
   }
