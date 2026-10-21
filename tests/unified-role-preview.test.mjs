@@ -353,3 +353,28 @@ test('late Employee delegation capabilities cannot grant the newer selected Empl
   assert.equal(people.activeProfile.accessRole,'employee');
   assert.ok(!people.renderSubscriptionRegister && !people.renderAccounts && !people.renderAnalyticsApiManagement);
 });
+
+for (const role of ['admin', 'manager', 'account', 'employee']) test(`organisation editor follows the selected ${role} capability`, async () => {
+  const ui = portal({ targetRole: role });
+  await ui.settle();
+  ui.select(targetId);
+  const people = component(await ui.settle(), 'PeopleOperationsDemo').props;
+  assert.equal(people.canEditOrganisation, role === 'admin');
+  assert.equal(people.canArrangeOrganisation, role === 'admin');
+  if (role !== 'admin') {
+    await assert.rejects(people.onCreateOrganisationPerson({ name: 'Synthetic C', position: 'Tester', company: 'mam', reportsTo: null }), /permission/);
+    await assert.rejects(people.onUpdateOrganisationPerson(targetId, { name: 'Synthetic A', position: 'Tester', company: 'mam', reportsTo: null }), /permission/);
+    assert.equal(ui.calls.filter(([name]) => name === 'organisation-mutation').length, 0);
+  }
+});
+
+test('Admin organisation editing requires the current explicit chart capability', async () => {
+  const ui = portal({ targetRole: 'admin', grants: { can_edit_organisation_chart: false } });
+  await ui.settle();
+  ui.select(targetId);
+  const people = component(await ui.settle(), 'PeopleOperationsDemo').props;
+  assert.equal(people.canEditOrganisation, false);
+  assert.equal(people.canArrangeOrganisation, false);
+  await assert.rejects(people.onCreateOrganisationPerson({ name: 'Synthetic C', position: 'Tester', company: 'mam', reportsTo: null }), /permission/);
+  assert.equal(ui.calls.filter(([name]) => name === 'organisation-mutation').length, 0);
+});

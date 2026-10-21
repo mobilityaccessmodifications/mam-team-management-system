@@ -395,7 +395,7 @@ const client = {
   } },
   from(table) {
     if (table !== 'internal_org_people') throw new Error(`Unexpected synthetic table ${table}`);
-    const query = { select: () => query, order: () => query, then: done => Promise.resolve({ data: syntheticRoleOrgRows, error: null }).then(done) };
+    const query = { select: () => query, order: () => query, then: done => Promise.resolve({ data: syntheticRoleOrgRows.map(row => ({ ...row })), error: null }).then(done) };
     return query;
   },
   async rpc(name, args) {
@@ -410,7 +410,15 @@ const client = {
     if (name === 'list_subscription_review_tasks_for_preview') return { data: grantsById[args.p_person_id]?.can_manage_subscriptions && outcomeFor(args.p_person_id).capabilities.can_manage_subscriptions ? reviewRows : [], error: null };
     if (name === 'list_my_subscription_password_tasks') return {data:ordinaryReviewEmployee ? passwordRows : [],error:null};
     if (name === 'list_subscription_password_tasks_for_preview') return {data:grantsById[args.p_person_id]?.can_manage_subscriptions && outcomeFor(args.p_person_id).capabilities.can_manage_subscriptions ? passwordRows : [],error:null};
-    if (name === 'can_edit_internal_org' || name === 'can_manage_employee_directory') return { data: true, error: null };
+    if (name === 'can_edit_internal_org') return { data: actorCapabilities.can_edit_organisation_chart, error: null };
+    if (name === 'can_manage_employee_directory') return { data: actorCapabilities.can_manage_employee_directory, error: null };
+    if (name === 'update_internal_org_node') {
+      if (!actorCapabilities.can_edit_organisation_chart) return { data: null, error: { code: '42501' } };
+      const index = syntheticRoleOrgRows.findIndex(row => row.id === args.p_node_id);
+      if (index < 0 || syntheticRoleOrgRows[index].version !== args.p_expected_version) return { data: null, error: { code: '40001' } };
+      syntheticRoleOrgRows[index] = { ...syntheticRoleOrgRows[index], parent_id: args.p_parent_id, version: args.p_expected_version + 1 };
+      return { data: null, error: null };
+    }
     unexpected.push({ module: 'supabase', name });
     throw new Error(`Unexpected synthetic RPC ${name}`);
   },

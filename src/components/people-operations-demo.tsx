@@ -297,7 +297,6 @@ export function PeopleOperationsDemo({
   activeProfile: PeopleOperationsProfile;
   organisationProfiles: OrganisationPerson[];
   canEditOrganisation: boolean;
-  /** Allows the safe visual arrangement controls for a normal HR workspace only. */
   canArrangeOrganisation?: boolean;
   onCreateOrganisationPerson: (person: OrganisationPersonDraft) => Promise<void>;
   onUpdateOrganisationPerson: (id: string, person: OrganisationPersonDraft) => Promise<void>;
@@ -558,7 +557,7 @@ export function PeopleOperationsDemo({
         {visibleSection === "profile" ? <AboutMeDemo roleLabel={activeProfile.roleLabel} manager={activeProfile.manager} company={activeProfile.company} /> : null}
         {visibleSection === "directory" ? renderEmployeeDirectory : null}
         {visibleSection === "checkins" ? renderCheckInRegister : null}
-        {visibleSection === "organisation" && showOrganisation ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation} canArrange={canArrangeOrganisation && !isAccessPreview} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={onOpenEmployeeDirectoryRecord ? (personId) => {
+        {visibleSection === "organisation" && showOrganisation ? <OrganisationTree profiles={organisationProfiles} canEdit={canEditOrganisation} canArrange={canArrangeOrganisation} onCreate={onCreateOrganisationPerson} onUpdate={onUpdateOrganisationPerson} onRequestWorkEmail={getOrganisationPersonWorkEmail} onOpenEmployeeRecord={onOpenEmployeeDirectoryRecord ? (personId) => {
           onOpenEmployeeDirectoryRecord?.(personId);
           setSection("directory");
         } : undefined} /> : null}

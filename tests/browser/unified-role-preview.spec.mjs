@@ -279,3 +279,44 @@ test('new paid register entry expands the same Add subscription dialog while fre
   expect(await page.evaluate(()=>window.fixtureNavigation)).toBeUndefined();
   expect(await page.evaluate(()=>window.unifiedRoleFixture.calls.filter(c=>c.name==='createSubscription'||c.name==='mutateSubscriptionRequest'))).toEqual([]);
 });
+
+for (const scope of ['system_admin', 'admin', 'admin-preview']) {
+  test(`organisation editing gives ${scope} reporting-line save and undo`, async ({ page }) => {
+    const role = scope === 'system_admin' ? 'system_admin' : 'admin';
+    if (scope === 'admin') await page.goto('/?fixture=unified-roles&actor-role=admin');
+    if (scope === 'admin-preview') await selectProfile(page, 'admin');
+    await openPeople(page, role);
+    await peopleTabs(page).getByRole('tab', { name: 'Organisation', exact: true }).click();
+    await page.getByRole('button', { name: 'Arrange', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Finish arranging', exact: true })).toBeVisible();
+    const options = () => page.getByRole('button', { name: 'Edit chart options for Synthetic Employee', exact: true });
+    await page.locator(`[data-node-id="${ids.employee}"]`).hover();
+    await options().click();
+    await page.getByRole('button', { name: 'Disconnect Synthetic Employee from its manager', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Disconnect this link?' }).getByRole('button', { name: 'Disconnect', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Disconnect this link?' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Undo last reporting-line change' })).toBeEnabled();
+    const updates = () => page.evaluate(() => window.unifiedRoleFixture.calls.filter(call => call.name === 'update_internal_org_node'));
+    expect(await updates()).toHaveLength(1);
+    expect((await updates())[0].args[0]).toMatchObject({ p_node_id: ids.employee, p_parent_id: null, p_expected_version: 1 });
+    await page.getByRole('button', { name: 'Undo last reporting-line change' }).click();
+    await expect.poll(updates).toHaveLength(2);
+    expect((await updates())[1].args[0]).toMatchObject({ p_node_id: ids.employee, p_parent_id: ids.manager, p_expected_version: 2 });
+    await page.getByRole('button', { name: 'Finish arranging', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Arrange', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Role', exact: true })).toHaveCount(0);
+  });
+}
+
+for (const scope of ['manager', 'manager-preview', 'account', 'employee']) {
+  test(`organisation editing keeps ${scope} outside the editor`, async ({ page }) => {
+    const role = scope === 'manager-preview' ? 'manager' : scope;
+    if (scope === 'manager-preview') await selectProfile(page, 'manager');
+    else await page.goto(`/?fixture=unified-roles&actor-role=${role}`);
+    await openPeople(page, role);
+    if (role === 'manager') await peopleTabs(page).getByRole('tab', { name: 'Organisation', exact: true }).click();
+    else await expect(peopleTabs(page).getByRole('tab', { name: 'Organisation', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Arrange', exact: true })).toHaveCount(0);
+    expect(await page.evaluate(() => window.unifiedRoleFixture.calls.filter(call => call.name === 'update_internal_org_node'))).toEqual([]);
+  });
+}
