@@ -5,7 +5,7 @@ import {spawnSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {ownedCluster,definition,rows,q,user,person,env} from './performance-review-production-harness.mjs';
 const migration='supabase/migrations/20261020235553_performance_review_invitation_manager_routing.sql';
-const source=readFileSync(migration,'utf8'),db='mam_test_pr_invite_routing',sig='public.claim_performance_review_notifications(uuid,integer,integer)';
+const source=readFileSync(migration,'utf8'),db='mam_test_pr_invite_routing',sig='public.claim_performance_review_notifications(uuid,integer,integer)',major=Number(process.env.MAM_PERFORMANCE_ROUTING_TEST_PG_MAJOR??'17');
 const id='c4000000-0000-4000-8000-000000000001';
 const draft={answers:Array(12).fill(''),ratings:Array(12).fill(''),summary:'',overallRating:'',managerNote:''};
 const signed=(i,s,extra={})=>`set local role authenticated;select set_config('request.jwt.claims',${q(JSON.stringify({sub:user(i),iat:1900000000,...extra}))},true);${s}reset role;`;
@@ -30,7 +30,7 @@ const event=(patch={})=>({id:'synthetic-graph-event',uid:'synthetic-ical-uid',su
 const importEvent=(patch={})=>`select public.import_performance_review_meeting((select request_token from private.performance_review_meeting_requests where review_id=${q(id)}),'manager:1:1',${q(JSON.stringify(event(patch)))}::jsonb||jsonb_build_object('subject',(select 'RE: Arrange performance review PR-'||cycle||'-'||review_no from private.performance_reviews where id=${q(id)})));`;
 const reserve=()=>`select public.reserve_performance_review_notification_mail(payload->>'eventKey',payload->>'recipient',payload->>'cc',claim_token,null) from invite_claim where payload->>'event'='manager-invited';`;
 const rowsHash=()=>`select md5(jsonb_build_object('reviews',(select jsonb_agg(to_jsonb(r) order by id) from private.performance_reviews r),'events',(select jsonb_agg(to_jsonb(r) order by id) from private.performance_review_events r),'operations',(select jsonb_agg(to_jsonb(r) order by operation_id) from private.performance_review_operations r),'notifications',(select jsonb_agg(to_jsonb(r) order by delivery_id) from private.performance_review_notifications r),'requests',(select jsonb_agg(to_jsonb(r) order by review_id) from private.performance_review_meeting_requests r),'receipts',(select jsonb_agg(to_jsonb(r) order by event_key) from private.notification_delivery_receipts r),'outbox',(select jsonb_agg(to_jsonb(r) order by delivery_id) from private.performance_review_mail_outbox r))::text);`;
-before(()=>{c=ownedCluster(17);predecessor(db);c.sql(db,source);});
+before(()=>{c=ownedCluster(major);predecessor(db);c.sql(db,source);});
 after(()=>c?.stop());
 for(const reviewer of ['manager','admin','p0'])test(`${reviewer} invitation targets canonical employee manager with empty CC without changing reviewer ownership`,()=>{
  const who=reviewer==='manager'?2:reviewer==='admin'?4:5;
@@ -93,6 +93,19 @@ for(const hold of [false,true])test(`routing migration preserves ${hold?'existin
 });
 test('routing migration rejects unexpected function drift, unrelated privilege and data writes atomically',()=>{
  for(const [name,setup,injection] of [['body',"create or replace function private.performance_review_meeting_addresses(p_review private.performance_reviews) returns jsonb language sql stable security definer set search_path='' as $$select null::jsonb$$;",''],['grant','','grant select on public.profiles to authenticated;'],['data','','update private.performance_reviews set due_date=due_date+1;']]){const database='mam_test_pr_routing_reject_'+name;predecessor(database);c.sql(database,insert());if(setup)c.sql(database,setup);const result=c.run(database,injection?source.replace('do $invitation_routing_catalog_after$',injection+'\ndo $invitation_routing_catalog_after$'):source);assert.notEqual(result.status,0);assert.match(result.stderr,/55000.*Performance invitation routing (predecessor differs|unrelated catalog delta)/s);assert.equal(c.sql(database,`select to_regprocedure(${q(sig)}) is null;`).trim(),'t');}
+});
+test('routine default source offsets may change while exact default trees remain preserved',()=>{
+ const database='mam_test_pr_routing_default_location';predecessor(database);
+ const defaults="select jsonb_build_object('tree',proargdefaults::text,'expression',pg_get_expr(proargdefaults,0)) from pg_proc where oid='public.list_performance_review_meeting_imports(integer)'::regprocedure;";
+ const before=rows(c.sql(database,defaults))[0],padded=source.replace('p_limit integer default 1001)','p_limit integer default    1001)');
+ assert.notEqual(padded,source);c.sql(database,padded);const after=rows(c.sql(database,defaults))[0];
+ assert.equal(after.expression,before.expression);assert.equal(after.tree.replaceAll(/ :location -?[0-9]+/g,' :location -1'),before.tree.replaceAll(/ :location -?[0-9]+/g,' :location -1'));
+ if(major===16)assert.notEqual(after.tree,before.tree);
+});
+test('routine default value and unrelated metadata changes still roll back the complete routing delta',()=>{
+ for(const [label,changed] of [['limit',source.replace('p_limit integer default 1001)','p_limit integer default 1002)')],['legacy',source.replace('p_legacy_event_key text default null',"p_legacy_event_key text default 'unapproved'")],['cost',source.replace('do $invitation_routing_catalog_after$','alter function public.list_performance_review_meeting_imports(integer) cost 200;\ndo $invitation_routing_catalog_after$')]]){
+  const database='mam_test_pr_routing_default_'+label;predecessor(database);assert.notEqual(changed,source);const result=c.run(database,changed);assert.notEqual(result.status,0);assert.match(result.stderr,/55000.*Performance invitation routing unrelated catalog delta/s);assert.equal(c.sql(database,`select to_regprocedure(${q(sig)}) is null;`).trim(),'t');
+ }
 });
 function releasePython(code,value){const r=spawnSync('python3',['-B','-c',"import runpy,json,sys;m=runpy.run_path('scripts/deploy-performance-review-invitation-routing.py');v=json.load(sys.stdin);"+code],{env,encoding:'utf8',input:JSON.stringify(value)});assert.equal(r.status,0,r.stderr);return JSON.parse(r.stdout);}
 function ledger(database){const prev=readFileSync('supabase/migrations/20261020232835_performance_review_meeting_invitation_status.sql','utf8');c.sql(database,`create schema supabase_migrations;create table supabase_migrations.schema_migrations(version text primary key,name text,statements text[]);insert into supabase_migrations.schema_migrations values('20261020232835','performance_review_meeting_invitation_status',ARRAY[${q(prev)}]::text[]);`);return prev;}

@@ -39,7 +39,10 @@ end $invitation_routing_catalog_projection$;
 create temporary table performance_invitation_routing_preserved_before on commit drop as
 select * from pg_temp.performance_invitation_routing_preserved_catalog();
 
-create temporary table performance_invitation_routing_metadata_before on commit drop as select signature,to_jsonb(p)-'prosrc' metadata from pg_temp.performance_invitation_routing_function_spec s join pg_proc p on p.oid=to_regprocedure(s.signature);
+create temporary table performance_invitation_routing_metadata_before on commit drop as
+select signature,to_jsonb(p)-'prosrc'-'proargdefaults' metadata,
+  regexp_replace(p.proargdefaults::text,' :location -?[0-9]+',' :location -1','g') default_tree
+from pg_temp.performance_invitation_routing_function_spec s join pg_proc p on p.oid=to_regprocedure(s.signature);
 create temporary table performance_invitation_routing_rows_before on commit drop as
 select 'performance_reviews' kind,id::text key,to_jsonb(r) document from private.performance_reviews r union all
 select 'performance_review_events' kind,id::text key,to_jsonb(r) document from private.performance_review_events r union all
@@ -290,7 +293,8 @@ select 'performance_review_mail_outbox' kind,delivery_id::text key,to_jsonb(r) d
 select 'performance_review_notifications' kind,delivery_id::text key,to_jsonb(r) document from private.performance_review_notifications r union all
 select 'performance_review_meeting_requests' kind,review_id::text key,to_jsonb(r) document from private.performance_review_meeting_requests r union all
 select 'notification_delivery_receipts' kind,event_key::text key,to_jsonb(r) document from private.notification_delivery_receipts r) (select * from pg_temp.performance_invitation_routing_rows_before except all select * from current_rows) union all (select * from current_rows except all select * from pg_temp.performance_invitation_routing_rows_before))
-    or exists(select 1 from pg_temp.performance_invitation_routing_metadata_before b join pg_proc p on p.oid=to_regprocedure(b.signature) where to_jsonb(p)-'prosrc' is distinct from b.metadata)
+    or exists(select 1 from pg_temp.performance_invitation_routing_metadata_before b join pg_proc p on p.oid=to_regprocedure(b.signature) where to_jsonb(p)-'prosrc'-'proargdefaults' is distinct from b.metadata
+      or regexp_replace(p.proargdefaults::text,' :location -?[0-9]+',' :location -1','g') is distinct from b.default_tree)
     or (select schema_hash from private.confirmed_test_purge_schema where singleton) is distinct from baseline.stored_hash then
     raise exception 'Performance invitation routing unrelated catalog delta.' using errcode='55000';
   end if;

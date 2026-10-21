@@ -20,7 +20,7 @@ MIGRATION = ROOT / 'supabase/migrations' / (VERSION + '_' + NAME + '.sql')
 PREDECESSOR = MIGRATION.parent / (PREDECESSOR_VERSION + '_' + PREDECESSOR_NAME + '.sql')
 TRANSPORT = ROOT / 'scripts/deploy-staff-leave-calendar.py'
 CATALOG_FIXTURE = ROOT / 'scripts/performance-review-invitation-routing-catalog-20261020235553.pg17.json'
-CATALOG_SHA256 = '68833b32da87f73b89f6102a1ad3d4c1fe44fdf98f2e04316a5cb46d2a515c15'
+CATALOG_SHA256 = '98ded4bc8eebbe1442a6ce32896a90c8bc86771c21b4cacc28e57e00c6d1f224'
 SIGNATURES = ('private.performance_review_meeting_addresses(private.performance_reviews)', 'public.claim_performance_review_notifications(uuid,integer)', 'public.reserve_performance_review_notification_mail(text,text,text,uuid,text)', 'public.list_performance_review_meeting_imports(integer)', 'public.import_performance_review_meeting(uuid,text,jsonb)', 'public.claim_performance_review_notifications(uuid,integer,integer)')
 
 
