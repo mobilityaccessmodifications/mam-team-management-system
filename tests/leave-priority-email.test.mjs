@@ -18,7 +18,7 @@ function runPayroll(extra={}, state={}) {
 }
 test('submission reviewer copy excludes employee addresses and includes HR',()=>{
   const out=run('leave-submitted');
-  assert.equal(out.outcome,'send'); assert.equal(out.deliveryRecipient,'manager@example.test,hr@mobilityaccess.com.au');
+  assert.equal(out.outcome,'send'); assert.equal(out.deliveryRecipient,'manager@example.test,career@mobilityaccess.com.au');
   assert.equal(out.ccRecipients,'');
 });
 test('trade school uses the existing notification contract without balance amounts',()=>{
@@ -32,7 +32,7 @@ test('trade school uses the existing notification contract without balance amoun
 });
 test('missing employee email never blocks the manager submission notice',()=>{
   const out=run('leave-submitted',{employeeEmail:null,employeeEmails:[]});
-  assert.equal(out.outcome,'send');assert.equal(out.deliveryRecipient,'manager@example.test,hr@mobilityaccess.com.au');
+  assert.equal(out.outcome,'send');assert.equal(out.deliveryRecipient,'manager@example.test,career@mobilityaccess.com.au');
 });
 test('multiline textarea notes are accepted and HTML remains escaped',()=>{
   const out=run('leave-declined',{status:'Declined',employeeNote:'First line\nSecond line',managerNote:'Approved\r\n<unsafe>\ttext'});
@@ -54,12 +54,12 @@ for (const company of ['mam','equipsy']) test(`${company} decline email delivers
 for(const event of ['leave-approved','leave-declined','leave-conditionally-approved']) test(event,()=>{
   const out=run(event,{status:event==='leave-conditionally-approved'?'Approved – pending leave balance':event==='leave-approved'?'Approved':'Declined',managerNote:'<unsafe>'});
   assert.equal(out.deliveryRecipient,'employee@example.test');
-  assert.equal(out.ccRecipients,event==='leave-approved'?'hr@mobilityaccess.com.au,accounts@mobilityaccess.com.au':'hr@mobilityaccess.com.au');
+  assert.equal(out.ccRecipients,event==='leave-approved'?'career@mobilityaccess.com.au,accounts@mobilityaccess.com.au':'career@mobilityaccess.com.au');
   assert(!out.emailHtml.includes('<unsafe>')); assert.equal(out.emailHtml.includes('&lt;unsafe&gt;'),event!=='leave-approved');
 });
 test('Accounts receives only approved cancellation',()=>{
-  assert.equal(run('leave-cancelled',{wasApproved:true}).ccRecipients,'hr@mobilityaccess.com.au,accounts@mobilityaccess.com.au');
-  assert.equal(run('leave-cancelled',{wasApproved:false}).ccRecipients,'hr@mobilityaccess.com.au');
+  assert.equal(run('leave-cancelled',{wasApproved:true}).ccRecipients,'career@mobilityaccess.com.au,accounts@mobilityaccess.com.au');
+  assert.equal(run('leave-cancelled',{wasApproved:false}).ccRecipients,'career@mobilityaccess.com.au');
 });
 for(const event of ['leave-reminder','team-birthday']) test(event,()=>{
   const out=run(event,{employeeEmail:null,leaveType:event==='team-birthday'?'Birthday':'Annual leave'});
@@ -70,7 +70,7 @@ test('deduplicates sent event and fails closed without a manager',()=>{
   const state={};
   confirmDelivery(run('leave-submitted',{},state),[{json:{statusCode:202}}],state);
   const out=run('leave-submitted',{},state);
-  assert.equal(out.outcome,'duplicate'); assert.equal(out.actualRecipient,'hr@mobilityaccess.com.au,manager@example.test');
+  assert.equal(out.outcome,'duplicate'); assert.equal(out.actualRecipient,'career@mobilityaccess.com.au,manager@example.test');
   assert.equal(run('leave-submitted',{managerEmail:null}).outcome,'rejected');
 });
 test('conditional approval reminder explains the leave balance condition',()=>{
@@ -95,10 +95,10 @@ test('ordinary leave emails omit balance language from their subject and body',(
   }
 });
 test('reminder cannot re-enable HR CC through the payload',()=>{
-  assert.equal(run('leave-reminder',{ccEmails:['hr@mobilityaccess.com.au']}).ccRecipients,'');
+  assert.equal(run('leave-reminder',{ccEmails:['career@mobilityaccess.com.au']}).ccRecipients,'');
 });
 test('manager requests notify every group reviewer and do not duplicate HR in CC',()=>{
-  const group='reviewer1@example.test,reviewer2@example.test,hr@mobilityaccess.com.au';
+  const group='reviewer1@example.test,reviewer2@example.test,career@mobilityaccess.com.au';
   const out=run('leave-submitted',{managerEmail:group});
   assert.equal(out.outcome,'send');
   assert.equal(out.confirmationRecipient,group);
@@ -137,7 +137,7 @@ test('legacy balance snapshots are accepted but never rendered',()=>{
 test('sick submissions contain no balance in either legacy split copy',()=>{
   const extra={leaveType:'Sick leave',leaveBalance:{kind:'sick',status:'current',hours:40.9297}};
   const review=run('leave-submitted',{...extra,audience:'reviewers',managerEmail:'manager@example.test,employee@example.test'});
-  assert.equal(review.deliveryRecipient,'manager@example.test,hr@mobilityaccess.com.au');
+  assert.equal(review.deliveryRecipient,'manager@example.test,career@mobilityaccess.com.au');
   assert.equal(review.confirmationRecipient,review.deliveryRecipient);
   assert.equal(review.ccRecipients,'');
   assert(!review.emailHtml.toLowerCase().includes('balance'));
@@ -173,7 +173,7 @@ test('monthly payroll reminder sends only to the server-resolved recipient',()=>
   assert(out.emailHtml.includes('October 2026'));
   assert(out.emailHtml.includes('MAM and Equipsy'));
   assert(out.emailHtml.includes('/?view=leave'));
-  assert(!out.emailHtml.includes('hr@mobilityaccess.com.au'));
+  assert(!out.emailHtml.includes('career@mobilityaccess.com.au'));
   assert(!out.emailHtml.includes('accounts@mobilityaccess.com.au'));
 });
 
@@ -235,7 +235,7 @@ test('all submission categories isolate the applicant work/personal addresses fr
     const employeeEmails=['employee@example.test','personal@example.test'];
     const reviewerState={},employeeState={};
     const reviewer=run('leave-submitted',{leaveType,employeeEmails,managerEmail:'manager@example.test,personal@example.test'},reviewerState);
-    assert.equal(reviewer.deliveryRecipient,'manager@example.test,hr@mobilityaccess.com.au');
+    assert.equal(reviewer.deliveryRecipient,'manager@example.test,career@mobilityaccess.com.au');
     const employee=run('leave-submitted',{leaveType,employeeEmails,audience:'employee'},employeeState);
     assert.equal(employee.deliveryRecipient,employeeEmails.join(','));
     assert.equal(employee.ccRecipients,'');

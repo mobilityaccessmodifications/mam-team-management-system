@@ -13,6 +13,8 @@
 .card { display: grid; gap: 20px; min-width: 0; padding: 20px; border: 1px solid var(--surface-border); border-radius: var(--radius-md); background: var(--surface-raised); }
 .workspace form, .workspace fieldset { display: grid; gap: 16px; min-width: 0; }
 .workspace label { display: flex; flex-direction: column; gap: 6px; min-width: 0; white-space: pre-line; color: var(--text-secondary); font-size: 12px; font-weight: 600; line-height: 1.5; }
+.workspace .meetingHeld { flex-direction: row; align-items: center; gap: 8px; justify-self: start; }
+.meetingHeld input[type="checkbox"] { flex: 0 0 auto; width: 16px; height: 16px; margin: 0; accent-color: var(--mam-orange-strong); }
 .workspace input:not([type="checkbox"]), .workspace select, .workspace textarea { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--surface-border-strong); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--text-primary); font: inherit; font-size: 13px; font-weight: 400; }
 .workspace textarea { min-height: 96px; resize: vertical; }
 .workspace :is(input, select, textarea):disabled { background: var(--surface-muted); color: var(--text-secondary); cursor: not-allowed; opacity: 1; }
@@ -20,6 +22,7 @@
 .workspace button:hover:not(:disabled) { background: var(--surface-warm); color: var(--mam-orange-dark); }
 .workspace button[type="submit"], .workspace .primaryButton { border-color: var(--mam-orange-strong); background: var(--mam-orange-strong); color: var(--text-on-inverse); }
 .workspace .primaryButton:hover:not(:disabled) { border-color: var(--mam-orange-dark); background: var(--mam-orange-dark); color: var(--text-on-inverse); }
+.workspace .draftButton, .workspace .draftButton:hover:not(:disabled) { border-color: var(--surface-border-strong); background: var(--surface-muted); color: var(--text-secondary); }
 .workspace button:disabled { opacity: .55; cursor: not-allowed; }
 .workspace .submittedButton:disabled { border-color: var(--surface-border-strong); background: var(--surface-muted); color: var(--text-secondary); opacity: 1; }
 .workspace :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--mam-orange-strong); outline-offset: 3px; }

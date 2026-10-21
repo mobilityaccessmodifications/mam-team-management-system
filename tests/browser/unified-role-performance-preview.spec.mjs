@@ -28,7 +28,7 @@ async function assertReadOnly(page, managerScope = false) {
   const fields = panel.locator('input:not([type="search"]), textarea, select:not([name="start-cycle"])');
   expect(await fields.count()).toBeGreaterThan(0);
   for (const field of await fields.all()) await expect(field).toBeDisabled();
-  for (const button of await panel.getByRole('button', { name: /^(?:New yearly review|Save self draft|Submit self assessment|Save draft and invite meeting|Save and send to manager|Reconcile update)$/ }).all()) {
+  for (const button of await panel.getByRole('button', { name: /^(?:New yearly review|Save self draft|Submit self assessment|Save draft|Save draft and invite meeting|Save and send to manager|Reconcile update)$/ }).all()) {
     if (managerScope && await button.textContent() === 'New yearly review') continue;
     await expect(button).toBeDisabled();
   }
@@ -149,7 +149,7 @@ test('direct yearly review form has editable Melbourne defaults and orange Start
   expect(await writes(page)).toEqual([]);
 });
 
-test('P0 creates and completes assigned manager work with the target on every write while own self stays read-only', async ({ page }) => {
+test('P0 creates reviews and saves invited manager work with the target on every write while own self stays read-only', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-10-20T00:00:00Z'));
   await selectProfile(page, 'manager'); await openPerformance(page);
   const panel = workspace(page);
@@ -165,9 +165,9 @@ test('P0 creates and completes assigned manager work with the target on every wr
   await panel.getByRole('navigation', { name: 'Review employees' }).getByRole('button').filter({ hasText: 'Synthetic A report' }).click();
   await panel.locator('[name="start-cycle"]').selectOption('2026');
   await panel.locator('[name="managerNote"]').fill('Synthetic delegated manager evidence');
-  await panel.getByRole('button', { name: 'Save draft and invite meeting', exact: true }).click();
+  await panel.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(panel.getByRole('status')).toHaveText('Saved.');
-  await panel.getByRole('button', { name: 'Save draft and invite meeting', exact: true }).click();
+  await panel.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(panel.getByRole('status')).toHaveText('Saved.');
   await panel.locator('[name="meeting-notes"]').fill('Synthetic delegated meeting');
   await panel.getByRole('form', { name: 'Review meeting', exact: true }).evaluate(form => form.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null })));
@@ -177,7 +177,7 @@ test('P0 creates and completes assigned manager work with the target on every wr
   await expect(panel.getByRole('status')).toHaveText('Submitted.');
   await expect(panel.locator('[name="managerNote"]')).toBeDisabled();
   const mutations = await calls(page, 'mutatePerformanceReview');
-  expect(mutations.map(call => call.args[0].command)).toEqual(['save_manager', 'complete_manager', 'complete_manager', 'save_meeting', 'submit_review']);
+  expect(mutations.map(call => call.args[0].command)).toEqual(['save_manager', 'save_manager', 'save_manager', 'save_meeting', 'submit_review']);
   expect(mutations[0].args[0].input.managerNote).toBe('Synthetic delegated manager evidence');
   expect(mutations.every(call => call.args[1] === people.manager.id)).toBe(true);
   const before = (await writes(page)).length;
@@ -217,7 +217,7 @@ test('a late delegated manager write cannot replace a new Employee target or rel
   await selectProfile(page, 'manager'); await openPerformance(page);
   await page.evaluate(id => window.unifiedRoleFixture.holdNext('mutatePerformanceReview', id), people.manager.id);
   await workspace(page).locator('[name="managerNote"]').fill('Synthetic retired manager note');
-  await workspace(page).getByRole('button', { name: 'Save draft and invite meeting', exact: true }).click();
+  await workspace(page).getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.unifiedRoleFixture.pendingKeys())).toContain(`mutatePerformanceReview:${people.manager.id}`);
   await selectProfile(page, 'employee'); await openPerformance(page);
   await expect(workspace(page).locator('[name="self-0"]')).toHaveValue('Synthetic Employee answer 1');
@@ -241,7 +241,7 @@ test('actual manager Performance remains editable outside Change profile preview
   await expect(panel.locator('[name="meeting-date"]')).toBeEnabled();
   await panel.locator('[name="held"]').check();
   await expect(panel.locator('[name="held"]')).toBeChecked();
-  await expect(panel.getByRole('button', { name: 'Save draft and invite meeting', exact: true })).toBeEnabled();
+  await expect(panel.getByRole('button', { name: 'Save draft', exact: true })).toBeEnabled();
   await expect(panel.getByRole('button', { name: 'New yearly review', exact: true })).toHaveCount(0);
   await panel.getByRole('navigation', { name: 'Review employees' }).getByRole('button').filter({ hasText: people.manager.name }).click();
   await expect(panel.locator('[name="self-0"]')).toBeEnabled();

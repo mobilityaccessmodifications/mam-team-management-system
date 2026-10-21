@@ -100,7 +100,11 @@ test('self save and submit use exact revisioned commands, validate required answ
 test('assigned manager assesses with original ratings while HR is read-only and manager own review stays self-only', async () => {
   for (const audience of ['manager', 'admin']) {
     const data = workspace(audience, 'Equipsy');
-    const h = mount(data, { mutatePerformanceReview: async input => ({ ok: true, committed: true, operationId: input.operationId, review: review('manager', 'Equipsy', { managerRevision: 'manager:0:1', managerCompletedAt: input.command === 'complete_manager' ? '2026-10-01T02:00:00Z' : null, managerAnswers: input.input.answers, ratings: input.input.ratings, summary: input.input.summary, overallRating: input.input.overallRating, managerNote: input.input.managerNote }) }) });
+    let row = review('manager', 'Equipsy');
+    const h = mount(data, { mutatePerformanceReview: async input => {
+      row = { ...row, managerRevision: `manager:0:${Number(row.managerRevision.split(':').at(-1)) + 1}`, managerCompletedAt: input.command === 'complete_manager' ? '2026-10-01T02:00:00Z' : row.managerCompletedAt, managerAnswers: input.input.answers, ratings: input.input.ratings, summary: input.input.summary, overallRating: input.input.overallRating, managerNote: input.input.managerNote };
+      return { ok: true, committed: true, operationId: input.operationId, review: row };
+    } });
     await h.settle();
     assert.ok(h.text.includes('Manager assessment'));
     assert.equal(h.field('managerNote').props.value, 'PRIVATE-SYNTHETIC-MANAGER-NOTE');
@@ -122,8 +126,8 @@ test('assigned manager assesses with original ratings while HR is read-only and 
       assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 2);
       assert.equal(h.calls.at(-1).args[0].input.managerNote, '');
       h.change('managerNote', 'Required private note'); h.submit('Manager assessment'); await h.settle();
-      assert.equal(h.calls.at(-1).args[0].command, 'complete_manager');
-      assert.equal(h.calls.at(-1).args[0].expectedRevision, 'manager:0:1');
+      assert.equal(h.calls.at(-1).args[0].command, 'save_manager');
+      assert.equal(h.calls.at(-1).args[0].expectedRevision, 'manager:0:2');
     }
     h.unmount();
   }
@@ -596,7 +600,7 @@ test('P0 manager delegation writes only assigned manager rows and passes the can
   const h = mount(workspace('manager', 'MAM', { reviews: [row, own], startablePeople: [row.employee] }), { mutatePerformanceReview: async (input, target) => {
     assert.equal(target, ids.manager);
     row = { ...row, managerRevision: `manager:0:${Number(row.managerRevision.split(':').at(-1)) + 1}`,
-      ...(input.command === 'save_manager' || input.command === 'complete_manager' ? { managerAnswers: input.input.answers, ratings: input.input.ratings, summary: input.input.summary, overallRating: input.input.overallRating, managerNote: input.input.managerNote, managerCompletedAt: input.command === 'complete_manager' ? '2026-10-01T02:00:00Z' : null } : { meeting: input.input }),
+      ...(input.command === 'save_manager' || input.command === 'complete_manager' ? { managerAnswers: input.input.answers, ratings: input.input.ratings, summary: input.input.summary, overallRating: input.input.overallRating, managerNote: input.input.managerNote, managerCompletedAt: input.command === 'complete_manager' ? '2026-10-01T02:00:00Z' : row.managerCompletedAt } : { meeting: input.input }),
       ...(input.command === 'submit_review' ? { finalisedAt: '2026-10-01T03:00:00Z' } : {}) };
     return { ok: true, committed: true, operationId: input.operationId, review: row };
   } }, { previewPersonId: ids.manager });
@@ -610,7 +614,7 @@ test('P0 manager delegation writes only assigned manager rows and passes the can
     h.change('meeting-notes', 'Delegated meeting'); h.blur(); await h.settle();
     h.change('held', true); h.submit('Review meeting'); await h.settle();
     const writes = h.calls.filter(call => call.name === 'mutatePerformanceReview');
-    assert.deepEqual(writes.map(call => call.args[0].command), ['complete_manager', 'complete_manager', 'save_meeting', 'submit_review']);
+    assert.deepEqual(writes.map(call => call.args[0].command), ['complete_manager', 'save_manager', 'save_meeting', 'submit_review']);
     assert.ok(writes.every(call => call.args[1] === ids.manager));
     assert.equal(h.field('managerNote').props.disabled, true);
     h.click(`${own.employee.name} — ${own.employee.company}`); h.render();
@@ -734,7 +738,7 @@ test('native Admin and P0 start reviews for visible managers and edit only manag
     const h = mount(data, {
       startPerformanceReview: async input => ({ ok: true, committed: true, operationId: input.operationId, existing: false, review: { ...row, cycle: input.cycle } }),
       mutatePerformanceReview: async input => {
-        if (input.command === 'save_manager' || input.command === 'complete_manager') row = { ...row, readRevision: 'read:0:1', ...{ managerAnswers: input.input.answers, managerNote: input.input.managerNote }, managerCompletedAt: input.command === 'complete_manager' ? '2026-10-01T02:00:00Z' : null };
+        if (input.command === 'save_manager' || input.command === 'complete_manager') row = { ...row, readRevision: 'read:0:1', ...{ managerAnswers: input.input.answers, managerNote: input.input.managerNote }, managerCompletedAt: input.command === 'complete_manager' ? '2026-10-01T02:00:00Z' : row.managerCompletedAt };
         else row = { ...row, readRevision: 'read:0:2', meeting: input.input, ...(input.command === 'submit_review' ? { finalisedAt: '2026-10-01T03:00:00Z' } : {}) };
         return { ok: true, committed: true, operationId: input.operationId, review: row };
       },
@@ -750,7 +754,7 @@ test('native Admin and P0 start reviews for visible managers and edit only manag
     h.submit('Manager assessment'); await h.settle();
     h.change('meeting-date', '2026-10-01'); h.change('meeting-time', '10:30'); h.change('meeting-location', 'Synthetic room'); h.blur(); await h.settle();
     h.change('held', true); h.submit('Review meeting'); await h.settle();
-    assert.deepEqual(h.calls.filter(call => call.name === 'mutatePerformanceReview').map(call => call.args[0].command), ['complete_manager', 'complete_manager', 'save_meeting', 'submit_review']);
+    assert.deepEqual(h.calls.filter(call => call.name === 'mutatePerformanceReview').map(call => call.args[0].command), ['complete_manager', 'save_manager', 'save_meeting', 'submit_review']);
     assert.equal(h.field('managerNote').props.disabled, true);
     h.unmount();
   }

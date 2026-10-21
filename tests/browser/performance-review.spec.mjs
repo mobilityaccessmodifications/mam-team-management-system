@@ -220,7 +220,7 @@ test('native auth event clears manager DOM and ignores late manager load after s
   await expect(field(page, 'managerNote')).toHaveCount(0); await expect(page.getByRole('heading', { name: 'Manager assessment', exact: true })).toHaveCount(0);
 });
 
-test('native Admin Performance starts a manager review and saves with its admin revision', async ({ page }) => {
+test('native Admin Performance invites once and manually saves with its admin revision', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-10-20T00:00:00Z'));
   await open(page, 'admin');
   const manager = { ...review().employee, id: ids.other, name: 'Synthetic Manager', jobTitle: 'Manager' };
@@ -257,6 +257,19 @@ test('native Admin Performance starts a manager review and saves with its admin 
   await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: write.operationId, review: { ...row, readRevision: 'read:0:2', managerNote: write.input.managerNote, managerCompletedAt: '2026-10-20T00:00:00Z' } });
   await expect(page.getByRole('status')).toHaveText('Saved.');
   await expect(field(page, 'managerNote')).toHaveValue('Synthetic Admin reviewer note');
-  expect((await calls(page, 'mutatePerformanceReview')).map(call => call.args[0].command)).toEqual(['save_manager', 'complete_manager']);
+  const saveDraft = page.getByRole('button', { name: 'Save draft', exact: true });
+  await expect(saveDraft).toBeEnabled();
+  await expect(saveDraft).not.toHaveCSS('background-color', 'rgb(195, 77, 20)');
+  await expect(page.getByRole('button', { name: 'Save draft and invite meeting', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Reply with Meeting in Outlook', { exact: false })).toHaveCount(0);
+  await hold(page, 'mutatePerformanceReview');
+  await saveDraft.click(); await waitPending(page, 'mutatePerformanceReview');
+  const manual = (await calls(page, 'mutatePerformanceReview'))[2].args[0];
+  expect(manual.command).toBe('save_manager'); expect(manual.expectedRevision).toBe('read:0:2');
+  expect(manual.input).toEqual(write.input); expect(manual.operationId).not.toBe(write.operationId);
+  await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: manual.operationId, review: { ...row, readRevision: 'read:0:3', managerNote: manual.input.managerNote, managerCompletedAt: '2026-10-20T00:00:00Z' } });
+  await expect(page.getByRole('status')).toHaveText('Saved.');
+  await expect(saveDraft).toBeEnabled();
+  expect((await calls(page, 'mutatePerformanceReview')).map(call => call.args[0].command)).toEqual(['save_manager', 'complete_manager', 'save_manager']);
   expect((await calls(page, 'mutatePerformanceReview')).every(call => call.args[1] === undefined)).toBe(true);
 });

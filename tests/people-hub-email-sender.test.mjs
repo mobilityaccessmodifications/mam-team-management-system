@@ -9,13 +9,13 @@ import { buildOnboardingCredentialWorkflow } from '../scripts/build-onboarding-c
 const credential = { id: 'Ug5bTBjvF1vCSdhQ', name: 'Microsoft Outlook - ai@mobilityaccess.com.au' };
 const cases = [
   ['Day 1 test', () => buildNewStarterDayOneWorkflow({ mode: 'test' }), 1,
-    'e81865fed47e564b840408fee33aa0b3bc62f60217c9815e99a06ef6d58c8b26'],
+    'e80e5c9ae9c23f8a5cf0438f49f70871ee148ebe8243b10ac8cab26260845a4f'],
   ['Day 1 live', () => buildNewStarterDayOneWorkflow({ mode: 'live' }), 1,
-    'a116b444352eb972d83b6f327bd9817638f4d69653a5468151a7df26fc67cc17'],
+    '3ed014cb9030ef3cd3d7184fd1cdf331c18763037a5cee0849670b6112e40bae'],
   ['Check-In test', () => buildCheckInReminderWorkflow({ mode: 'test' }), 8,
-    '405e65cfd44fe6cedce41fe6e197bf55bcb920ffce5e01111a63e02977a3be88'],
+    '8fc7ab9fb6f20270ec00972c234bf550093e4731742bd16eb1873d99497a2e71'],
   ['Check-In live', () => buildCheckInReminderWorkflow({ mode: 'live' }), 8,
-    '17c4484d686fdcbfaeac9a8e7015a30ae64695dc84451fb381a19b3d0978468f'],
+    'f6c3172304a52757c05504f4ec57bc002487ab3fbf987115191d6e2db092161e'],
   ['Onboarding credentials', () => buildOnboardingCredentialWorkflow({
     webhookCredential: { id: 'synthetic-webhook', name: 'Synthetic webhook' },
   }), 1, '52949cc375551d5a973f0501f0522ea44614254e7eceb01a8592bc64cf1368a2'],
