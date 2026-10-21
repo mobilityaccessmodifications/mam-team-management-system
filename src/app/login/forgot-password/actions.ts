@@ -1,13 +1,13 @@
 "use server";
 
 import { createHash, randomBytes } from "node:crypto";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 
-import { isPortalLoginEmail, normalisePortalLogin } from "@/lib/portal-login";
+import { isPortalLoginEmail, isValidPortalLogin, normalisePortalLogin } from "@/lib/portal-login";
 import {
-  PASSWORD_RECOVERY_INVALID, PASSWORD_RECOVERY_MESSAGE, PASSWORD_RECOVERY_PASSWORD_PATTERN,
+  PASSWORD_RECOVERY_INVALID, PASSWORD_RECOVERY_LOGIN_COOKIE, PASSWORD_RECOVERY_MESSAGE, PASSWORD_RECOVERY_PASSWORD_PATTERN,
   PASSWORD_RECOVERY_PASSWORD_RULE, PASSWORD_RECOVERY_TOKEN_PATTERN, PEOPLE_HUB_ORIGIN,
   type PasswordRecoveryState,
 } from "@/lib/password-recovery";
@@ -118,6 +118,17 @@ export async function resetRecoveredPassword(
     if (result.error || result.data !== true) return { status: "error", message: "Your password changed, but the account update could not be confirmed. Contact your administrator." };
   } catch {
     return { status: "error", message: "Your password changed, but the account update could not be confirmed. Contact your administrator." };
+  }
+  try {
+    const { data: account, error } = await admin.from("profiles").select("login_name").eq("id", claim.auth_user_id).single();
+    if (error || typeof account?.login_name !== "string" || !isValidPortalLogin(account.login_name)) {
+      return { status: "error", message: "Your password changed, but your login details could not be loaded. Contact your administrator." };
+    }
+    (await cookies()).set(PASSWORD_RECOVERY_LOGIN_COOKIE, account.login_name, {
+      httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", maxAge: 300, path: "/login",
+    });
+  } catch {
+    return { status: "error", message: "Your password changed, but your login details could not be loaded. Contact your administrator." };
   }
   redirect("/login?password=reset");
 }

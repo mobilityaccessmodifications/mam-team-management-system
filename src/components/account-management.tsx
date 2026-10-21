@@ -881,6 +881,7 @@ export function AccountManagement({
                           <strong>
                             Password{" "}
                             {receipt.kind === "created" ? "created" : "reset"}
+                            {receipt.kind === "reset" && account.loginName ? ` for ${account.loginName}` : ""}
                           </strong>
                           <p>
                             Copy it now. It will be removed from this page after

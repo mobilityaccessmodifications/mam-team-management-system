@@ -8,7 +8,7 @@ import { signIn, type LoginState } from "@/app/login/actions";
 
 const initialState: LoginState = { status: "idle", message: "" };
 
-export function LoginForm({ initialMessage = "", returnTo = "", passwordReset = false }: { initialMessage?: string; returnTo?: string; passwordReset?: boolean }) {
+export function LoginForm({ initialMessage = "", returnTo = "", passwordReset = false, initialLogin = "" }: { initialMessage?: string; returnTo?: string; passwordReset?: boolean; initialLogin?: string }) {
   const [state, action, pending] = useActionState(signIn, initialState);
   const [messageDismissed, setMessageDismissed] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -26,6 +26,7 @@ export function LoginForm({ initialMessage = "", returnTo = "", passwordReset = 
       <input
         id="username"
         name="username"
+        defaultValue={initialLogin}
         type="text"
         autoComplete="username"
         autoCapitalize="none"

@@ -28,6 +28,7 @@ function fixture(options = {}) {
   Object.assign(process.env, {PASSWORD_RECOVERY_WEBHOOK_ORIGIN:'https://n8n.example.test', PASSWORD_RECOVERY_WEBHOOK_URL:'https://n8n.example.test/webhook/mam-people-hub-password-recovery-v1', PASSWORD_RECOVERY_WEBHOOK_SECRET:'synthetic'});
   const calls = [];
   const background = [];
+  const cookies = new Map();
   const admin = {rpc: async (name,args) => {
     calls.push([name,args]);
     if (name==='claim_portal_login_attempt') return ok(!options.limited);
@@ -38,6 +39,17 @@ function fixture(options = {}) {
       return ok(true);
     }
     throw new Error(name);
+  }, from(table) {
+    assert.equal(table, 'profiles');
+    const query = {
+      select(columns) { assert.equal(columns, 'login_name'); return query; },
+      eq(column, value) { assert.equal(column, 'id'); assert.equal(value, userId); return query; },
+      async single() {
+        calls.push(['login-details']);
+        return options.loginLookupFails ? {data:null,error:{message:'private synthetic detail'}} : ok({login_name:'current@company.example'});
+      },
+    };
+    return query;
   }, auth:{admin:{updateUserById:async (id,value)=>{
     calls.push(['password',[id,value]]);
     if (options.uncertain) throw new Error('timeout');
@@ -53,11 +65,11 @@ function fixture(options = {}) {
   };
   const actions = load('src/app/login/forgot-password/actions.ts', {
     '@/lib/password-recovery':recovery,'@/lib/portal-login':login,'@/lib/supabase/admin':{createAdminClient:()=>admin},
-    'next/headers':{headers:async()=>new Headers({'x-real-ip':'192.0.2.2'})},
+    'next/headers':{headers:async()=>new Headers({'x-real-ip':'192.0.2.2'}),cookies:async()=>({set:(name,value,options)=>cookies.set(name,{value,options})})},
     'next/server':{after:callback=>background.push(callback)},
     'next/navigation':{redirect:url=>{throw new Error('redirect:'+url);}},
   });
-  return {actions,calls,background,async flush(){for(const callback of background.splice(0))await callback();},cleanup(){globalThis.fetch=fetchBefore;for(const k of Object.keys(process.env))if(!(k in previous))delete process.env[k];Object.assign(process.env,previous);}};
+  return {actions,calls,background,cookies,async flush(){for(const callback of background.splice(0))await callback();},cleanup(){globalThis.fetch=fetchBefore;for(const k of Object.keys(process.env))if(!(k in previous))delete process.env[k];Object.assign(process.env,previous);}};
 }
 test('recovery sends one single-use secret only to the database-confirmed email',async()=>{
   const f=fixture();try {
@@ -124,6 +136,28 @@ test('successful reset uses the claimed user only and retries finalisation witho
     assert.equal(f.calls.filter(([n])=>n==='password').length,1);
     assert.equal(f.calls.filter(([n])=>n==='finish_portal_password_recovery').length,2);
   }finally{f.cleanup();}
+});
+test('successful recovery carries the registered login to sign-in without putting credentials in the URL',async()=>{
+  const f=fixture();try{
+    process.env.NODE_ENV='production';
+    await assert.rejects(f.actions.resetRecoveredPassword({},form({token,password,confirmPassword:password,loginName:'obsolete.username'})),error=>error.message==='redirect:/login?password=reset');
+    assert.deepEqual(f.cookies.get(recovery.PASSWORD_RECOVERY_LOGIN_COOKIE),{
+      value:'current@company.example',options:{httpOnly:true,secure:true,sameSite:'strict',maxAge:300,path:'/login'},
+    });
+    assert.deepEqual(f.calls.slice(-2).map(([name])=>name),['finish_portal_password_recovery','login-details']);
+    assert(!JSON.stringify([...f.cookies]).includes(password));
+    assert(!JSON.stringify([...f.cookies]).includes(token));
+  }finally{f.cleanup();}
+});
+test('invalid recovery and unconfirmed password updates never expose a login identifier',async()=>{
+  for(const options of [{invalid:true},{uncertain:true},{finishFails:true},{loginLookupFails:true}]){
+    const f=fixture(options);try{
+      const result=await f.actions.resetRecoveredPassword({},form({token,password,confirmPassword:password}));
+      assert.equal(result.status,'error');assert.equal(f.cookies.size,0);
+      assert(!JSON.stringify(result).includes('current@company.example'));
+      assert(!JSON.stringify(result).includes('private synthetic detail'));
+    }finally{f.cleanup();}
+  }
 });
 test('definite Auth failure cancels claim; uncertain outcomes preserve the claim and never show success',async()=>{
   for(const opts of [{rejected:true},{uncertain:true},{providerError:504},{providerError:503},{providerError:401},{finishFails:true}]){const f=fixture(opts);try{
