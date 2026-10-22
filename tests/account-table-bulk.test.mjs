@@ -175,3 +175,16 @@ test('locked reset retains the password draft and never displays a false one-tim
   assert.deepEqual(action.calls, ['can_manage_portal_accounts','begin_portal_password_reset']);
   assert.doesNotMatch(text(tree), /Password reset for|Copy password/);
 });
+
+test('confirmed administrator reset identifies the current login email with its password', async () => {
+  const record = {...account('one'),loginName:'obsolete.username'};
+  const h = harness([record], { onResetPassword: async input => ({account:{...record,loginName:'current@example.test',accountVersion:6},oneTimePassword:input.newPassword}) });
+  button(h.render(), 'Reset password').props.onClick({currentTarget:{closest:()=>({querySelector:()=>({focus(){}}),removeAttribute(){}})}});
+  find(h.render(),node=>node.type?.name==='PasswordField').props.onChange(resetInput.newPassword);
+  await find(h.render(),node=>node.type==='form').props.onSubmit({preventDefault(){}});
+  const tree = h.render();
+  assert.match(text(tree),/Password reset for current@example.test/);
+  assert.doesNotMatch(text(tree),/obsolete\.username/);
+  assert.ok(button(tree,'Copy once'));
+  assert.match(text(tree),/Synthetic-Password-123!/);
+});
