@@ -22,7 +22,7 @@ export function LoginForm({ initialMessage = "", returnTo = "", passwordReset = 
       onSubmit={() => setMessageDismissed(false)}
     >
       <input type="hidden" name="next" value={returnTo} />
-      <label htmlFor="username">Email or admin username</label>
+      <label htmlFor="username">Email or username</label>
       <input
         id="username"
         name="username"

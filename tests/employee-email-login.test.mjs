@@ -85,6 +85,21 @@ test("administrator username retains the existing sign-in path", async () => {
   assert.equal(calls.find(([name])=>name==="resolve_portal_login_auth_email")[1].p_login_name,"admin");
 });
 
+test("employee username and email use the same password and retain the shared source limit", async () => {
+  const identifiers = ["staff.member", "staff.member@company.example"];
+  const sources = [];
+  for (const identifier of identifiers) {
+    const {submit,calls}=loadSignIn();
+    await assert.rejects(submit(identifier),/^Error: redirect:\/$/);
+    assert.deepEqual(calls.find(([name])=>name==='password')[1],{email:'opaque@accounts.example',password:'Synthetic-password-123!'});
+    sources.push(calls.find(([name])=>name==='claim_portal_login_attempt')[1].p_source_hash);
+    const blocked=loadSignIn({allowed:false});
+    assert.equal((await blocked.submit(identifier)).status,'error');
+    assert.equal(blocked.calls.find(([name])=>name==='password')[1].email,'invalid-portal-login@invalid.example');
+  }
+  assert.equal(sources[0],sources[1]);
+});
+
 test("sign-in returns to the scanned device while rejecting external destinations", async () => {
   for (const next of ["/assets/MAM-IT-000001", "/assets/scan"]) {
     await assert.rejects(loadSignIn().submit("admin", next), new RegExp(`^Error: redirect:${next}$`));

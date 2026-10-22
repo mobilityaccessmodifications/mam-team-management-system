@@ -84,7 +84,7 @@ remain separate operational boundaries.
 
 `profiles` is the account registry linked one-to-one to Supabase Auth and to a real directory person. It stores the normalised login name, controlled application role, active/disabled state, password-change metadata, credential validity cutoff and optimistic account version. Private HR-authorisation and audit tables control who may manage accounts and record mutations without recording password values.
 
-Normal login is deliberately username-based. The login Server Action resolves the username to an opaque internal Auth address using the server-only client, then asks Supabase Auth to verify the supplied password. The opaque address is not exposed as a staff contact address.
+The login Server Action resolves a registered email or username to an opaque internal Auth address using the service-only resolver, then asks Supabase Auth to verify the supplied password. An employee's existing username remains usable when trusted account-administration history records its transition to email login. Canonical names are reserved before historical lookup, ambiguous historical ownership is rejected, and historical aliases require a currently active profile and linked employee. Retired emails and guessed usernames are not aliases. The opaque Auth address is not exposed as a staff contact address.
 
 Account-management Server Actions always:
 
