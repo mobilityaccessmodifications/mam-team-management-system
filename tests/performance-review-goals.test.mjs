@@ -97,7 +97,7 @@ test('new in-person meetings default to editable Boardroom and every rating is d
    assert.deepEqual(options.map(n => n.props.value), ratings);
    h.change(name, ratings[2]); assert.equal(h.all.find(n => n.props?.name === name && n.props.value === ratings[2]).props.checked, true);
   }
-  assert.equal(h.button('Save and send final review').props.disabled, true);
+  assert.equal(h.button('Save and send final review').props.disabled, false);
  } finally { h.unmount(); }
 });
 
@@ -107,13 +107,17 @@ test('a completed past meeting cannot finalize without complete goals', async ()
  const h = mount(workspace('manager', 'MAM', { reviews: [row] }));
  try {
   await h.settle(); h.change('held', true);
-  assert.equal(h.button('Save and send final review').props.disabled, true);
+  assert.equal(h.button('Save and send final review').props.disabled, false);
+  h.submit('Review meeting'); await h.settle();
+  assert.match(h.text, /Complete at least one goal/);
   h.click('Add goal'); h.render();
   const fields = { priority: 'priority', measureOfSuccess: 'measure', supportAndResponsiblePerson: 'support', dueDate: 'due', progressCheck: 'check' };
   for (const [key, suffix] of Object.entries(fields)) h.change(`goal-0-${suffix}`, goal()[key]);
   assert.equal(h.button('Save and send final review').props.disabled, false);
   h.change('goal-0-check', '');
-  assert.equal(h.button('Save and send final review').props.disabled, true);
+  assert.equal(h.button('Save and send final review').props.disabled, false);
+  h.submit('Review meeting'); await h.settle();
+  assert.match(h.text, /Complete at least one goal/);
   assert.equal(writes(h).length, 0);
  } finally { h.unmount(); }
 });

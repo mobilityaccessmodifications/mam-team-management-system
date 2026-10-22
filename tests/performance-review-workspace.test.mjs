@@ -151,8 +151,9 @@ test('meeting edits persist on leaving the form and HR submission waits for the 
   const sent = h.calls.at(-1).args[0];
   assert.equal(sent.command, 'save_meeting'); assert.equal(sent.input.held, undefined);
   assert.equal(h.field('held').props.checked, false);
-  h.change('held', true); assert.equal(h.button('Save and send final review').props.disabled, true);
+  h.change('held', true); assert.equal(h.button('Save and send final review').props.disabled, false);
   h.submit('Review meeting'); await h.settle();
+  assert.match(h.text, /meeting must finish/);
   assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1);
   t.mock.timers.setTime(new Date('2026-10-01T01:15:00Z').getTime()); h.timers(); await h.settle();
   assert.equal(h.button('Save and send final review').props.disabled, false);
@@ -820,8 +821,9 @@ test('the invite control saves an incomplete manager draft without requiring fin
   const sent = h.calls.filter(c => c.name === 'mutatePerformanceReview');
   assert.equal(sent.length, 1); assert.equal(sent[0].args[0].command, 'complete_manager');
   assert.equal(sent[0].args[0].input.answers[0], 'Initial manager draft');
-  assert.equal(h.button('Save and send final review').props.disabled, true);
+  assert.equal(h.button('Save and send final review').props.disabled, false);
   h.submit('Review meeting'); await h.settle();
+  assert.match(h.text, /Complete the assessment/);
   assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 1); h.unmount();
 });
 
@@ -834,7 +836,10 @@ test('invalid and untouched meeting forms never autosave or mark the meeting hel
   h.change('meeting-date', '2026-10-04'); h.change('meeting-time', '02:30'); h.blur(); await h.settle();
   h.change('meeting-date', '2027-04-04'); h.change('meeting-time', '02:30'); h.blur(); await h.settle();
   assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 0);
-  assert.equal(h.field('held').props.checked, false); assert.equal(h.button('Save and send final review').props.disabled, true);
+  assert.equal(h.field('held').props.checked, false); assert.equal(h.button('Save and send final review').props.disabled, false);
+  h.submit('Review meeting'); await h.settle();
+  assert.match(h.text, /Check the meeting details/);
+  assert.equal(h.calls.filter(c => c.name === 'mutatePerformanceReview').length, 0);
   h.unmount();
 });
 
