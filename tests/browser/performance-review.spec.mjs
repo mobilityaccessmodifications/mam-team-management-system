@@ -86,6 +86,11 @@ test('native manager yearly review defaults cross daylight saving by calendar da
   expect(Math.abs(startBox.x + startBox.width - formBox.x - formBox.width)).toBeLessThan(2);
   expect(Math.abs(startBox.y + startBox.height - formBox.y - formBox.height)).toBeLessThan(2);
   await expect(startButton).toHaveCSS('background-color', 'rgb(195, 77, 20)');
+  await field(page, 'start-dueDate').fill('');
+  await startButton.click();
+  await expect(field(page, 'start-dueDate')).toBeFocused();
+  expect(await calls(page, 'startPerformanceReview')).toHaveLength(0);
+  await field(page, 'start-dueDate').fill('2026-10-11');
   await employees.getByRole('button', { name: 'Synthetic Second — MAM', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(employees.getByRole('button').last()).toHaveAttribute('aria-pressed', 'true');
@@ -204,7 +209,10 @@ test('manager meeting is not held by registration and final needs explicit held 
   const input = (await calls(page, 'mutatePerformanceReview'))[0].args[0]; expect(input.command).toBe('save_meeting'); expect(input.input).not.toHaveProperty('held');
   const row = review('manager', 'MAM', { managerRevision: 'manager:0:1', meeting: input.input, managerCompletedAt: '2026-10-01T02:00:00Z' });
   await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: input.operationId, review: row });
-  await expect(field(page, 'held')).not.toBeChecked(); await expect(page.getByRole('button', { name: 'Save and send final review', exact: true })).toBeDisabled();
+  await expect(field(page, 'held')).not.toBeChecked();
+  await page.getByRole('button', { name: 'Save and send final review', exact: true }).click();
+  await expect(field(page, 'held')).toBeFocused();
+  expect(await calls(page, 'mutatePerformanceReview')).toHaveLength(1);
   await field(page, 'held').check(); await hold(page, 'mutatePerformanceReview'); await submit(page, 'Review meeting'); await waitPending(page, 'mutatePerformanceReview');
   const final = (await calls(page, 'mutatePerformanceReview'))[1].args[0]; expect(final.command).toBe('submit_review'); expect(final.input.held).toBe(true);
   await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: final.operationId, review: { ...row, managerRevision: 'manager:0:2', finalisedAt: '2026-10-01T03:00:00Z' } });
@@ -319,4 +327,63 @@ test('manager ratings need one selection and editable goals survive saving and e
  await page.setViewportSize({ width: 390, height: 844 });
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
  await expect(page.locator('[name="rating-0"]').first()).toBeVisible();
+});
+
+
+for (const company of ['MAM', 'Equipsy']) test(`self submission focuses the first missing required answer in ${company}`, async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, 'employee', company);
+  await page.evaluate(actor => {
+    const row = window.performanceReviewFixture.workspace.reviews[0];
+    for (const index of [1, 2, 3, 7, 11]) row.selfAnswers[index] = '   ';
+    window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor);
+  }, ids.actor);
+  await expect(field(page, 'self-3')).toHaveValue('   ');
+  await page.getByRole('button', { name: 'Submit self assessment', exact: true }).click();
+  await expect(field(page, 'self-3')).toBeFocused();
+  await expect(field(page, 'self-3')).toBeInViewport();
+  expect(await calls(page, 'mutatePerformanceReview')).toHaveLength(0);
+});
+
+const missingReviewFields = [
+  ['manager answer', { managerAnswers: review('manager').managerAnswers.map((value, index) => [1, 3, 7].includes(index) ? '   ' : value) }, 'manager-3'],
+  ['rating', { ratings: review('manager').ratings.map((value, index) => index === 1 ? '' : value) }, 'rating-1'],
+  ['summary', { summary: '   ' }, 'summary'],
+  ['overall rating', { overallRating: '' }, 'overallRating'],
+  ['private note', { managerNote: '' }, 'managerNote'],
+  ['meeting date', { meeting: null }, 'meeting-date'],
+  ['meeting time', { meeting: { date: '2026-10-01', time: '', duration: 30, mode: 'in_person', location: 'Boardroom', notes: '' } }, 'meeting-time'],
+  ['meeting location', { meeting: { date: '2026-10-01', time: '10:00', duration: 30, mode: 'teams', location: '', notes: '' } }, 'meeting-location'],
+  ['goal row', { goals: [] }, 'add-goal'],
+  ['goal detail', { goals: [{ ...review('manager').goals[0], measureOfSuccess: '   ' }] }, 'goal-0-measure'],
+  ['meeting confirmation', {}, 'held'],
+];
+for (const [description, overrides, name] of missingReviewFields) test(`final submission focuses missing ${description} without writing`, async ({ page }) => {
+  await open(page, 'manager');
+  const row = review('manager', 'MAM', { managerCompletedAt: '2026-10-01T00:00:00Z', meeting: { date: '2026-10-01', time: '10:00', duration: 30, mode: 'in_person', location: 'Boardroom', notes: '' }, ...overrides });
+  await page.evaluate(({ row, actor }) => { window.performanceReviewFixture.workspace.reviews = [row]; window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor); }, { row, actor: ids.actor });
+  await expect(page.getByText('Assessment saved: 2026-10-01T00:00:00Z', { exact: true })).toBeVisible();
+  if (name !== 'held') await field(page, 'held').check();
+  await page.getByRole('button', { name: 'Save and send final review', exact: true }).click();
+  await expect(field(page, name).first()).toBeFocused();
+  await expect(field(page, name).first()).toBeInViewport();
+  expect(await calls(page, 'mutatePerformanceReview')).toHaveLength(0);
+});
+
+test('final submission focuses missing meeting time after an in-flight assessment autosave', async ({ page }) => {
+  await open(page, 'manager');
+  const row = review('manager', 'MAM', { managerCompletedAt: '2026-10-01T00:00:00Z' });
+  await page.evaluate(({ row, actor }) => { window.performanceReviewFixture.workspace.reviews = [row]; window.performanceReviewFixture.emitAuth('TOKEN_REFRESHED', actor); }, { row, actor: ids.actor });
+  await expect(page.getByText('Assessment saved: 2026-10-01T00:00:00Z', { exact: true })).toBeVisible();
+  await field(page, 'meeting-date').fill('2026-10-01');
+  await hold(page, 'mutatePerformanceReview');
+  await field(page, 'summary').fill('Latest synthetic assessment');
+  await page.getByRole('button', { name: 'Save and send final review', exact: true }).click();
+  await waitPending(page, 'mutatePerformanceReview');
+  const draft = (await calls(page, 'mutatePerformanceReview'))[0].args[0];
+  expect(draft.command).toBe('save_manager');
+  await release(page, 'mutatePerformanceReview', { ok: true, committed: true, operationId: draft.operationId, review: { ...row, managerRevision: 'manager:0:1', summary: draft.input.summary } });
+  await expect(field(page, 'meeting-time')).toBeFocused();
+  await expect(field(page, 'meeting-time')).toBeInViewport();
+  expect((await calls(page, 'mutatePerformanceReview')).map(call => call.args[0].command)).toEqual(['save_manager']);
 });

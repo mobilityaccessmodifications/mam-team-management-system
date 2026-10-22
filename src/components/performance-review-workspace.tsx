@@ -87,6 +87,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const [startYear, setStartYear] = useState(0);
   const reviewChoice = useRef<{ employeePersonId: string; cycle: string } | null>(null);
   const [message, setMessage] = useState("");
+  const formRoot = useRef<HTMLElement>(null);
   const [recoveryVisible, setRecoveryVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [autoSaving, setAutoSaving] = useState(false);
@@ -102,7 +103,6 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const currentReviews = useRef<PerformanceReview[]>([]);
   const autoPromise = useRef<Promise<boolean> | null>(null);
   const flush = useRef<() => Promise<boolean>>(async () => true);
-  const [clock, setClock] = useState(Date.now);
   const [confirmedInvitation, setConfirmedInvitation] = useState<string | null>(null);
   const nativeActor = useRef<string | null | undefined>(undefined);
   const viewer = useRef<PerformanceWorkspace["viewerContext"] | null>(null);
@@ -276,7 +276,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     if (readOnly || epoch.current !== generation || busyRef.current || operationRef.current || !creating || !workspace || !["manager", "admin", "system_admin"].includes(workspace.viewerContext.role)) return;
     const ticket = generation;
     const parsed = new Date(startDraft.dueDate + "T00:00:00Z");
-    if (!workspace.startablePeople.some(person => person.id === startDraft.employeePersonId) || !/^\d{4}$/.test(startDraft.cycle) || !/^\d{4}-\d{2}-\d{2}$/.test(startDraft.dueDate) || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== startDraft.dueDate) { setMessage("Select an eligible employee, four-digit cycle and valid due date."); return; }
+    if (!workspace.startablePeople.some(person => person.id === startDraft.employeePersonId) || !/^\d{4}$/.test(startDraft.cycle) || !/^\d{4}-\d{2}-\d{2}$/.test(startDraft.dueDate) || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== startDraft.dueDate) { rejectField("Select an eligible employee, four-digit cycle and valid due date.", "start-dueDate"); return; }
     const owner = claimBusy(), operationId = crypto.randomUUID();
     track({ operationId, reviewId: null, phase: "pending" });
     try {
@@ -309,29 +309,36 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       return Number.isFinite(meetingEndMillis(value)) && Number.isInteger(value.duration) && value.duration >= 5 && value.duration <= 480 && value.notes.length <= 8000 && value.location.length <= 8000 && !!value.location.trim() && (value.mode !== "teams" || /^https:\/\/(teams\.microsoft\.com|teams\.live\.com)(?:[/:?#]|$)/.test(value.location));
     } catch { return false; }
   }
-  function completeAssessment(assessment: PerformanceManagerInput | null) {
-    return !!assessment && ![...assessment.answers, assessment.summary, assessment.managerNote].some(value => value.length > 8000) && !REQUIRED.some(index => !assessment.answers[index]?.trim()) && !RATED.some(index => !RATINGS.some(([value]) => value === assessment.ratings[index])) && !!assessment.summary.trim() && !!assessment.managerNote.trim() && RATINGS.some(([value]) => value === assessment.overallRating);
+  function rejectField(notice: string, name: string, automatic = false) {
+    setMessage(notice);
+    if (automatic) return;
+    const field = formRoot.current?.querySelector<HTMLElement>(`[name="${name}"]:not(:disabled)`);
+    field?.focus({ preventScroll: true });
+    field?.scrollIntoView({ block: "center", behavior: "instant" });
   }
-  let meetingFinished = false;
-  try { meetingFinished = validMeeting(meeting) && meetingEndMillis(meeting) <= clock; } catch {}
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    let active = true;
-    const update = () => {
-      if (!active) return;
-      setClock(Date.now());
-      try {
-        const remaining = meetingEndMillis(meeting) - Date.now();
-        if (remaining > 0) timer = setTimeout(update, Math.min(remaining, 2147483647));
-      } catch {}
-    };
-    update();
-    return () => { active = false; clearTimeout(timer); };
-  }, [meeting]);
+  function incompleteAssessmentField(value: PerformanceManagerInput | null) {
+    if (!value) return "manager-0";
+    for (let index = 0; index < value.answers.length; index++) {
+      if (value.answers[index].length > 8000 || REQUIRED.includes(index) && !value.answers[index].trim()) return `manager-${index}`;
+      if (RATED.includes(index) && !RATINGS.some(([rating]) => rating === value.ratings[index])) return `rating-${index}`;
+    }
+    if (!value.summary.trim() || value.summary.length > 8000) return "summary";
+    if (!RATINGS.some(([rating]) => rating === value.overallRating)) return "overallRating";
+    if (!value.managerNote.trim() || value.managerNote.length > 8000) return "managerNote";
+    return null;
+  }
+  function invalidMeetingField(value: PerformanceMeeting) {
+    if (!value.date) return "meeting-date";
+    try { meetingEndMillis({ ...value, time: "12:00", duration: 30 }); } catch { return "meeting-date"; }
+    if (!value.time) return "meeting-time";
+    if (!Number.isInteger(value.duration) || value.duration < 5 || value.duration > 480) return "meeting-duration";
+    if (!value.location.trim() || value.location.length > 8000 || value.mode === "teams" && !/^https:\/\/(teams\.microsoft\.com|teams\.live\.com)(?:[/:?#]|$)/.test(value.location)) return "meeting-location";
+    if (value.notes.length > 8000) return "meeting-notes";
+    return "meeting-time";
+  }
   async function run(command: PerformanceMutationInput["command"], automatic = false) {
-    if (!automatic && autoPromise.current && !await autoPromise.current) return;
     const selected = currentReviews.current.find(row => row.id === selection.current?.id);
-    if (readOnly || epoch.current !== generation || busyRef.current || operationRef.current || !selected || !workspace) return;
+    if (readOnly || epoch.current !== generation || !selected || !workspace || operationRef.current?.phase === "uncertain" || (busyRef.current || operationRef.current) && (automatic || !autoPromise.current)) return;
     const ticket = generation;
     const answers = draft.current.answers, assessment = draft.current.assessment, meeting = draft.current.meeting, revision = currentRevision.current, held = heldDraft.current;
     const channel: DraftChannel = command === "save_self" ? "self" : command === "save_manager" ? "assessment" : "meeting";
@@ -340,21 +347,36 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
     const operationId = crypto.randomUUID();
     if (command === "save_self" || command === "submit_self") {
       if (preview || selected.audience !== "employee" || selected.selfSubmittedAt || !(command === "save_self" ? selected.capabilities.saveSelf : selected.capabilities.submitSelf)) return;
-      if (answers.some(answer => answer.length > 8000)) { setMessage("Use at most 8000 characters per answer."); return; }
-      if (command === "submit_self" && REQUIRED.some(index => !answers[index]?.trim())) { setMessage("Complete the required answers."); return; }
+      const tooLong = answers.findIndex(answer => answer.length > 8000);
+      if (tooLong !== -1) { rejectField("Use at most 8000 characters per answer.", `self-${tooLong}`, automatic); return; }
+      const missing = REQUIRED.find(index => !answers[index]?.trim());
+      if (command === "submit_self" && missing !== undefined) { rejectField("Complete the required answers.", `self-${missing}`); return; }
       mutation = { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { answers: [...answers] } };
     } else if (command === "save_manager" || command === "complete_manager") {
       if (selected.audience === "employee" || !assessment || selected.finalisedAt || !(command === "save_manager" ? selected.capabilities.saveManager : selected.capabilities.completeManager)) return;
-      if ([...assessment.answers, assessment.summary, assessment.managerNote].some(value => value.length > 8000)) { setMessage("Use at most 8000 characters per answer."); return; }
+      const tooLong = [...assessment.answers, assessment.summary, assessment.managerNote].findIndex(value => value.length > 8000);
+      if (tooLong !== -1) { rejectField("Use at most 8000 characters per answer.", tooLong < assessment.answers.length ? `manager-${tooLong}` : tooLong === assessment.answers.length ? "summary" : "managerNote", automatic); return; }
       mutation = { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...assessment, answers: [...assessment.answers], ratings: [...assessment.ratings] } };
     } else {
       if (selected.audience === "employee" || selected.finalisedAt || !(command === "save_meeting" ? selected.capabilities.saveMeeting : selected.capabilities.submitReview)) return;
       if (command === "submit_review" && dirtyParts.current.assessment && !selected.capabilities.saveManager) return;
-      if (command === "submit_review" && (!held || !selected.managerCompletedAt || !completeAssessment(assessment))) { setMessage("Complete the assessment and confirm the meeting was held."); return; }
-      if (command === "submit_review" && !completePerformanceGoals(assessment?.goals)) { setMessage("Complete at least one goal before sending the final review."); return; }
-      if (command === "submit_review" && (!validMeeting(meeting) || meetingEndMillis(meeting) > Date.now())) { setMessage("The review meeting must finish before sending to the manager."); return; }
-      if (!validMeeting(meeting)) { setMessage("Check the meeting details."); return; }
+      const incomplete = incompleteAssessmentField(assessment);
+      if (command === "submit_review" && incomplete) { rejectField("Complete the assessment and confirm the meeting was held.", incomplete); return; }
+      if (!validMeeting(meeting)) { rejectField("Check the meeting details.", invalidMeetingField(meeting), automatic); return; }
+      if (command === "submit_review" && meetingEndMillis(meeting) > Date.now()) { rejectField("The review meeting must finish before sending to the manager.", "meeting-time"); return; }
+      if (command === "submit_review" && !completePerformanceGoals(assessment?.goals)) {
+        const index = assessment?.goals?.findIndex(goal => !completePerformanceGoals([goal])) ?? -1;
+        const fields = [["priority", "priority"], ["measureOfSuccess", "measure"], ["supportAndResponsiblePerson", "support"], ["dueDate", "due"], ["progressCheck", "check"]] as const;
+        const goal = assessment?.goals?.[index];
+        const suffix = goal ? fields.find(([key]) => !goal[key].trim() || goal[key].length > 2000)?.[1] ?? "due" : null;
+        rejectField("Complete at least one goal before sending the final review.", suffix ? `goal-${index}-${suffix}` : "add-goal"); return;
+      }
+      if (command === "submit_review" && (!held || !selected.managerCompletedAt)) { rejectField("Complete the assessment and confirm the meeting was held.", "held"); return; }
       mutation = command === "save_meeting" ? { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...meeting } } : { operationId, reviewId: selected.id, expectedRevision: revision, command, input: { ...meeting, held: true } };
+    }
+    if (!automatic && autoPromise.current) {
+      if (!await autoPromise.current) return;
+      return run(command);
     }
     const owner = claimBusy();
     if (automatic) setAutoSaving(true);
@@ -502,7 +524,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const meetingDisabled = editingBlocked || !selected || selected.audience === "employee" || !selected.capabilities.saveMeeting || Boolean(selected.finalisedAt);
   const heldDisabled = blocked || !selected || selected.audience === "employee" || !selected.capabilities.submitReview || Boolean(selected.finalisedAt);
   const managerActions = selected?.audience === "manager" || selected?.audience === "admin" && (selected.capabilities.saveManager || selected.capabilities.completeManager || selected.capabilities.saveMeeting || selected.capabilities.submitReview);
-  return <section className={styles.workspace} aria-label="Performance reviews" aria-busy={busy || loading}>
+  return <section ref={formRoot} className={styles.workspace} aria-label="Performance reviews" aria-busy={busy || loading}>
     <header className={styles.toolbar}><h1>Performance reviews</h1></header>
     {autoSaving ? <p role="status">Saving…</p> : null}
     {message ? <p role={["Saved.", "Submitted.", "Review opened.", "Review created.", "Update confirmed."].includes(message) ? "status" : "alert"}>{message}</p> : null}
@@ -563,7 +585,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
           <label>Private manager note<textarea name="managerNote" maxLength={8000} value={assessment.managerNote} disabled={managerDisabled} onChange={event => { if (!managerDisabled && epoch.current === generation) { editAssessment(current => ({ ...current, managerNote: event.target.value })); } }} /></label>
           {managerActions ? <div className={styles.toolbar}><button type="button" className={invitationStarted ? styles.draftButton : styles.primaryButton} onClick={() => run(invitationStarted ? "save_manager" : "complete_manager")} disabled={blocked || !(invitationStarted ? selected.capabilities.saveManager : selected.capabilities.completeManager) || Boolean(selected.finalisedAt)}>{invitationStarted ? "Save draft" : "Save draft and invite meeting"}</button>{invitationSent ? <span className={styles.invitationHint}>Arrange the review meeting with the employee, then enter the meeting details in People Hub.</span> : null}</div> : null}
         </form> : null}
-        {selected.audience !== "employee" ? <form aria-label="Review meeting" onBlur={() => flush.current()} onSubmit={event => { event.preventDefault(); void run("submit_review"); }}><h2>Review meeting</h2>
+        {selected.audience !== "employee" ? <form noValidate aria-label="Review meeting" onBlur={() => flush.current()} onSubmit={event => { event.preventDefault(); void run("submit_review"); }}><h2>Review meeting</h2>
           <label>Date<input type="date" name="meeting-date" value={meeting.date} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ date: event.target.value }); } }} /></label>
           <label>Time (Melbourne)<input type="time" name="meeting-time" value={meeting.time} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ time: event.target.value }); } }} /></label>
           <label>Duration (minutes)<input type="number" min={5} max={480} name="meeting-duration" value={meeting.duration} disabled={meetingDisabled} onChange={event => { if (!meetingDisabled && epoch.current === generation) { editMeeting({ duration: Number(event.target.value) }); } }} /></label>
@@ -577,8 +599,8 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
             <div className={styles.goalDates}><label>Due date<input type="date" disabled={managerDisabled} name={`goal-${index}-due`} value={goal.dueDate} onChange={event => { if (!managerDisabled && epoch.current === generation) editGoal(index, { dueDate: event.target.value }); }} /></label>
             <label>Progress check<input disabled={managerDisabled} name={`goal-${index}-check`} maxLength={2000} value={goal.progressCheck} onChange={event => { if (!managerDisabled && epoch.current === generation) editGoal(index, { progressCheck: event.target.value }); }} /></label></div>
             {managerActions ? <button type="button" className={styles.removeGoal} aria-label={`Remove goal ${index + 1}`} onClick={() => { if (!managerDisabled && epoch.current === generation) editAssessment(current => ({ ...current, goals: (current.goals ?? []).filter((_, i) => i !== index) })); }}>Remove goal</button> : null}
-          </fieldset>)}{managerActions ? <button type="button" className={styles.addGoal} disabled={managerDisabled || (assessment.goals?.length ?? 0) >= 10} onClick={() => { if (!managerDisabled && epoch.current === generation) editAssessment(current => ({ ...current, goals: [...(current.goals ?? []), { ...EMPTY_GOAL }] })); }}>Add goal</button> : null}</section> : null}
-          {managerActions ? <><label className={styles.meetingHeld}><input type="checkbox" name="held" checked={held} disabled={heldDisabled} onChange={event => { if (epoch.current === generation && !heldDisabled) { heldDraft.current = event.target.checked; setHeld(event.target.checked); } }} />Meeting was held</label><div className={styles.toolbar}><button type="submit" disabled={blocked || !held || !meetingFinished || !completeAssessment(assessment) || !completePerformanceGoals(assessment?.goals) || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Save and send final review</button></div></> : null}
+          </fieldset>)}{managerActions ? <button type="button" name="add-goal" className={styles.addGoal} disabled={managerDisabled || (assessment.goals?.length ?? 0) >= 10} onClick={() => { if (!managerDisabled && epoch.current === generation) editAssessment(current => ({ ...current, goals: [...(current.goals ?? []), { ...EMPTY_GOAL }] })); }}>Add goal</button> : null}</section> : null}
+          {managerActions ? <><label className={styles.meetingHeld}><input type="checkbox" name="held" checked={held} disabled={heldDisabled} onChange={event => { if (epoch.current === generation && !heldDisabled) { heldDraft.current = event.target.checked; setHeld(event.target.checked); } }} />Meeting was held</label><div className={styles.toolbar}><button type="submit" disabled={blocked || !selected.managerCompletedAt || !selected.capabilities.submitReview || Boolean(selected.finalisedAt)}>Save and send final review</button></div></> : null}
           {selected.managerCompletedAt ? <p>Assessment saved: {selected.managerCompletedAt}</p> : null}{selected.finalisedAt ? <p>Finalised: {selected.finalisedAt}</p> : null}
         </form> : null}
       </article> : null}
