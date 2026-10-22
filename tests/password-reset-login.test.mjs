@@ -39,6 +39,7 @@ test('recovery landing fills the current registered email instead of the obsolet
   assert.match(html,/<input[^>]*id="username"[^>]*value="current@company.example"/);
   assert.doesNotMatch(html,/obsolete\.username/);
   assert.match(html,/Your password has been reset/);
+  assert.match(html,/Email or username/);
   assert.equal(f.cookieReads,1);
 });
 test('ordinary login and invalid recovery hints do not prefill an identifier',async()=>{
