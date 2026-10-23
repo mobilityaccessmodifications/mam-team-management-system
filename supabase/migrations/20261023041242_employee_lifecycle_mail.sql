@@ -150,19 +150,17 @@ begin
   if (select count(*) from private.employee_lifecycle_mail_recipients)<>9
     or (select count(*) from private.employee_lifecycle_mail_recipients where team_name is null)<>5
     or exists(select 1 from private.employee_lifecycle_mail_recipients c where c.team_name is null and not private.employee_lifecycle_mail_recipient_valid(c)) then return null; end if;
-  if detail.team_name in ('Minor','Major','Warehouse','Equipsy') then
-    with recursive ancestors as (
-      select p.id,p.parent_id,1 depth,array[subject.id,p.id] path from public.internal_org_people p where p.id=subject.parent_id and p.id<>subject.id
-      union all select p.id,p.parent_id,a.depth+1,a.path||p.id from ancestors a join public.internal_org_people p on p.id=a.parent_id
-      where not p.id=any(a.path) and a.depth<100)
-    select c.* into manager from ancestors a join private.employee_lifecycle_mail_recipients c on c.person_id=a.id
-      where c.team_name is not null and c.company_key=subject.company_key and c.person_id<>subject.id order by a.depth,c.slot limit 1;
-    if manager.slot is null then
-      select c.* into manager from private.employee_lifecycle_mail_recipients c
-      where c.company_key=subject.company_key and c.team_name=detail.team_name and c.person_id<>subject.id;
-    end if;
-    if manager.slot is not null and not private.employee_lifecycle_mail_recipient_valid(manager) then return null; end if;
+  with recursive ancestors as (
+    select p.id,p.parent_id,1 depth,array[subject.id,p.id] path from public.internal_org_people p where p.id=subject.parent_id and p.id<>subject.id
+    union all select p.id,p.parent_id,a.depth+1,a.path||p.id from ancestors a join public.internal_org_people p on p.id=a.parent_id
+    where not p.id=any(a.path) and a.depth<100)
+  select c.* into manager from ancestors a join private.employee_lifecycle_mail_recipients c on c.person_id=a.id
+    where c.team_name is not null and c.company_key=subject.company_key and c.person_id<>subject.id order by a.depth,c.slot limit 1;
+  if manager.slot is null and detail.team_name in ('Minor','Major','Warehouse','Equipsy') then
+    select c.* into manager from private.employee_lifecycle_mail_recipients c
+    where c.company_key=subject.company_key and c.team_name=detail.team_name and c.person_id<>subject.id;
   end if;
+  if manager.slot is not null and not private.employee_lifecycle_mail_recipient_valid(manager) then return null; end if;
   select string_agg(address,',' order by address collate "C") into target from (
     select c.approved_email address from private.employee_lifecycle_mail_recipients c where c.team_name is null
     union select manager.approved_email where manager.slot is not null) addresses;

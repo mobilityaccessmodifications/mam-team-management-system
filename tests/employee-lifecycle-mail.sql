@@ -238,3 +238,34 @@ do $$ begin
   exception when sqlstate '55000' then null; end;
 end $$;
 rollback;
+
+begin;
+set constraints all immediate;
+do $$ declare team text; person uuid; c record; begin
+  foreach team in array array['Management','Operation & Accounts',null]::text[] loop
+    person:=gen_random_uuid();
+    insert into public.internal_org_people(id,full_name,started_date,parent_id)
+      values(person,'Other Team Synthetic',current_date,'20000000-0000-4000-8000-000000000007');
+    insert into private.employee_directory_details(person_id,team_name) values(person,team);
+    select * into strict c from public.claim_employee_lifecycle_mail(person);
+    assert c.payload->>'recipient'='contact1@example.test,contact2@example.test,contact3@example.test,contact4@example.test,contact7@example.test,external.it@example.test',
+      'approved ancestor must be included regardless of employee team';
+    update public.profiles set app_role='employee' where id='10000000-0000-4000-8000-000000000007';
+    assert public.reserve_employee_lifecycle_mail(c.payload->>'eventKey',c.payload->>'recipient','',c.claim_token)->>'outcome'='rejected',
+      'ancestor for an unmapped team must still pass reserve-time manager validation';
+    update public.profiles set app_role='manager' where id='10000000-0000-4000-8000-000000000007';
+    update private.employee_directory_details set scheduled_employment_end_date=current_date-1 where person_id=person;
+    update public.internal_org_people set is_active=false where id=person;
+    select * into strict c from public.claim_employee_lifecycle_mail(person);
+    assert c.payload->>'event'='offboarding' and position('contact7@' in c.payload->>'recipient')>0,
+      'offboarding also resolves approved ancestor for an unmapped team';
+  end loop;
+  person:=gen_random_uuid();
+  insert into public.internal_org_people(id,full_name,started_date,parent_id)
+    values(person,'Other Company Ancestor Synthetic',current_date,'20000000-0000-4000-8000-000000000008');
+  insert into private.employee_directory_details(person_id,team_name) values(person,'Management');
+  select * into strict c from public.claim_employee_lifecycle_mail(person);
+  assert c.payload->>'recipient'='contact1@example.test,contact2@example.test,contact3@example.test,contact4@example.test,external.it@example.test',
+    'unmapped team with no same-company approved ancestor stays core-only';
+end $$;
+rollback;
