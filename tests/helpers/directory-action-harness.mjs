@@ -29,6 +29,7 @@ export function loadActions({ dbError = null, authError = null, transportError =
   new Function('require', 'module', 'exports', ts.transpileModule(readFileSync(path.join(sourceRoot, 'src/app/people/actions.ts'), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText)((id) => ({
+    '@/lib/employee-lifecycle-mail': { scheduleEmployeeLifecycleMail() {} },
     '@/lib/employee-teams': team.exports,
     '@/lib/portal-role-capabilities': loadModule(path.join(sourceRoot, 'src/lib/portal-role-capabilities.ts')),
     '@/lib/portal-role-access': loadModule(path.join(sourceRoot, 'src/lib/portal-role-access.ts'), { '@/lib/supabase/server': { createClient: async () => supabase }, '@/lib/portal-role-capabilities': loadModule(path.join(sourceRoot, 'src/lib/portal-role-capabilities.ts')) }),

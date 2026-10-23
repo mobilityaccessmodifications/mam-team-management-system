@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 const personId = '10000000-0000-4000-8000-000000000001';
 function fixture({ startDate = '2020-01-01', workEmail = 'work@example.test', personalEmail = 'home@example.test', accountFails = false } = {}) {
   const calls = [];
+  const lifecycle = [];
   const created = { personId, personVersion: 1 };
   const client = { rpc: async (name) => {
     calls.push(name);
@@ -19,6 +20,7 @@ function fixture({ startDate = '2020-01-01', workEmail = 'work@example.test', pe
   const source = ts.transpileModule(readFileSync('src/app/people/actions.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const mod = { exports: {} };
   new Function('require','module','exports',source)((id) => ({
+    '@/lib/employee-lifecycle-mail': { scheduleEmployeeLifecycleMail: id => lifecycle.push(id) },
     'next/cache': { revalidatePath: () => {} },
     '@/lib/portal-role-capabilities': loadModule('src/lib/portal-role-capabilities.ts'),
     '@/lib/portal-role-access': loadModule('src/lib/portal-role-access.ts', { '@/lib/supabase/server': { createClient: async () => client } }),
@@ -30,7 +32,7 @@ function fixture({ startDate = '2020-01-01', workEmail = 'work@example.test', pe
     '@/app/accounts/actions': { createPortalAccount: account },
   })[id] ?? require(id), mod, mod.exports);
   const input = { firstName:'Synthetic',lastName:'Employee',workEmail,personalEmail,phone:'',positionTitle:'Tester',teamName:'Operation & Accounts',managerId:null,country:'',address:'',dateOfBirth:'',startedDate:startDate,scheduledEmploymentEndDate:'',workingWeekdays:null,workingDayTimes:[],archiveReason:'',employmentType:'full_time',laptopSupplied:'',laptopId:'',mouseId:'',keyboardId:'',assetTags:[],company:'mam',isActive:true };
-  return { ...mod.exports, input, calls };
+  return { ...mod.exports, input, calls, lifecycle };
 }
 test('creating employee provisions unprivileged login with work email and keeps password out of result', async () => {
   const f = fixture();
@@ -60,4 +62,16 @@ test('account provisioning failure returns a saved employee with explicit warnin
   const result = await f.createEmployeeDirectoryRecord(f.input);
   assert.equal(result.record.personId, personId);
   assert.match(result.warning, /account.*review/i);
+});
+
+
+test('new employee checklist dispatch follows the saved directory record even without email or a working portal login', async () => {
+  for (const options of [{}, {workEmail:'',personalEmail:''}, {accountFails:true}]) {
+    const f=fixture(options);
+    await f.createEmployeeDirectoryRecord(f.input);
+    assert.deepEqual(f.lifecycle,[personId]);
+  }
+  const f=fixture();
+  await f.createEmployeeDirectoryRecord({...f.input,firstName:''});
+  assert.deepEqual(f.lifecycle,[]);
 });

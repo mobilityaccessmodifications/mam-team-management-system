@@ -1,5 +1,6 @@
 "use server";
 
+import { scheduleEmployeeLifecycleMail } from "@/lib/employee-lifecycle-mail";
 import { randomBytes } from "node:crypto";
 import { requirePortalRoleActor } from "@/lib/portal-role-access";
 import { ORDINARY_PORTAL_ROLES, type OrdinaryPortalRole, type PortalRole } from "@/lib/portal-role-capabilities";
@@ -525,6 +526,7 @@ export async function createEmployeeDirectoryRecord(
 
     const personId = returnedPersonId(data);
     committedPersonId = personId;
+    scheduleEmployeeLifecycleMail(personId);
     // A new person has no classification, so only an explicit choice needs the
     // second call. The employee already exists; never turn its failure into a
     // save error that invites a duplicate create.
@@ -600,6 +602,7 @@ export async function updateEmployeeDirectoryRecord(
 
     const personId = returnedPersonId(data);
     committedPersonId = personId;
+    scheduleEmployeeLifecycleMail(personId);
     // The directory change is already committed; report a classification
     // failure against the fresh record instead of failing the whole save.
     const warning = await saveContractClassification(supabase, personId, selectedContractType);
@@ -850,6 +853,7 @@ export async function archiveEmployeeDirectoryRecord(input: {
     }
 
     databaseArchived = true;
+    scheduleEmployeeLifecycleMail(inputValue.personId);
 
     if (targetAuthUserId && statusChangeToken) {
       try {

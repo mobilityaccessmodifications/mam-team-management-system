@@ -25,6 +25,7 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
     providerReads: 0,
     providerStatus: existingDisable ? "succeeded" : "not_started",
     archiveCalls: 0,
+    lifecycleMail: [],
     scheduleCalls: 0,
     reportReads: [],
     preflightCalls: [],
@@ -175,6 +176,7 @@ function loadArchiveAction({ archiveOutcome, failInspection = false, providerTim
       if (id === '@/lib/portal-role-access') return loadModule('src/lib/portal-role-access.ts', { '@/lib/supabase/server': { createClient: async () => supabase } });
       if (id === "next/cache") return { revalidatePath() {} };
       if (id === "@/app/accounts/actions") return { createPortalAccount: async () => ({}) };
+      if (id === "@/lib/employee-lifecycle-mail") return { scheduleEmployeeLifecycleMail: personId => state.lifecycleMail.push(personId) };
       if (id === "@/lib/supabase/admin") return { createAdminClient: () => admin };
       if (id === "@/lib/employee-teams") return teamModule.exports;
       if (id === "@/lib/portal-account-status") return helper.exports;
@@ -487,4 +489,14 @@ test("an already archived retry only finalises its confirmed claim, without Auth
   assert.equal(state.claimStatus, "finalised");
   assert.equal(state.providerUpdates, 1);
   assert.equal(state.archiveCalls, 1);
+});
+
+
+test('lifecycle dispatch follows committed archive only, including committed transport recovery', async () => {
+  for (const archiveOutcome of ['committed', 'rolled_back', 'rejected']) {
+    const {archiveEmployeeDirectoryRecord, state} = loadArchiveAction({archiveOutcome});
+    await archiveEmployeeDirectoryRecord({personId,personVersion:1,detailVersion:1,endDate:'2026-10-09',reason:'Other'});
+    assert.equal(state.lifecycleMail.length, archiveOutcome === 'committed' ? 1 : 0);
+    if (state.lifecycleMail.length) assert.equal(state.lifecycleMail[0], personId);
+  }
 });

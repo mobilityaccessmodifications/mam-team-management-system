@@ -75,6 +75,7 @@ export function archivePreflightFixture({ sourceRoot = process.cwd(), readError 
     },
   };
   const actions = loadSourceModule(path.join(sourceRoot, 'src/app/people/actions.ts'), sourceRoot, {
+    '@/lib/employee-lifecycle-mail': { scheduleEmployeeLifecycleMail: () => forbidden('lifecycle email') },
     'next/cache': { revalidatePath() { forbidden('revalidation'); } },
     '@/lib/supabase/admin': { createAdminClient: () => admin },
     '@/lib/supabase/server': { createClient: async () => supabase },

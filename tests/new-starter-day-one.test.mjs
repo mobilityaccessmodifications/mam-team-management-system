@@ -225,6 +225,7 @@ test('new active employee creation still requires a start date before mutation',
   new Function('require','module','exports',source)((id) => ({
     '@/lib/portal-role-capabilities': loadModule('src/lib/portal-role-capabilities.ts'),
     '@/lib/portal-role-access': loadModule('src/lib/portal-role-access.ts', { '@/lib/supabase/server': { createClient: async () => supabase } }),
+    '@/lib/employee-lifecycle-mail': { scheduleEmployeeLifecycleMail() {} },
     '@/lib/employee-teams': teamModule.exports,
     'next/cache': { revalidatePath: () => {} },
     '@/lib/employee-directory': {
@@ -263,6 +264,7 @@ test('active directory-only create without email skips portal-account provisioni
   new Function('require','module','exports',source)((id) => ({
     '@/lib/portal-role-capabilities': loadModule('src/lib/portal-role-capabilities.ts'),
     '@/lib/portal-role-access': loadModule('src/lib/portal-role-access.ts', { '@/lib/supabase/server': { createClient: async () => supabase } }),
+    '@/lib/employee-lifecycle-mail': { scheduleEmployeeLifecycleMail() {} },
     '@/lib/employee-teams': teamModule.exports,
     'next/cache': { revalidatePath: () => {} },
     '@/lib/employee-directory': {

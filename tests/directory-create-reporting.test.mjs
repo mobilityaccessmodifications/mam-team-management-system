@@ -32,6 +32,7 @@ function loadActions() {
   }).outputText;
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', source)((id) => ({
+    '@/lib/employee-lifecycle-mail': { scheduleEmployeeLifecycleMail() {} },
     '@/lib/employee-teams': teamModule.exports,
     '@/lib/portal-role-capabilities': loadModule('src/lib/portal-role-capabilities.ts'),
     '@/lib/portal-role-access': loadModule('src/lib/portal-role-access.ts', { '@/lib/supabase/server': { createClient: async () => supabase } }),
