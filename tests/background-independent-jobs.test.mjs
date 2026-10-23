@@ -7,7 +7,7 @@ import yaml from 'js-yaml';
 import { runRecovery } from '../scripts/recover-background-jobs.mjs';
 
 const expectedJobs = [
-  'leave-notifications', 'check-in-reminders', 'new-starter-day-one',
+  'employee-lifecycle', 'leave-notifications', 'check-in-reminders', 'new-starter-day-one',
   'onboarding-credentials', 'scheduled-offboarding', 'leave-priority-reminders',
 ];
 const workflow = () => yaml.load(readFileSync('.github/workflows/background-recovery.yml', 'utf8'));
@@ -43,7 +43,7 @@ test('the same business shares a lock across scheduled and manual runs', () => {
   const group = job.concurrency?.group;
   assert.equal(group, 'people-hub-background-recovery-${{ matrix.job }}');
   const keys = expectedJobs.map(name => group.replace('${{ matrix.job }}', name));
-  assert.equal(new Set(keys).size, 6);
+  assert.equal(new Set(keys).size, expectedJobs.length);
   assert.equal(group.includes('run_id'), false);
   assert.equal(group.includes('event_name'), false);
   assert.equal(job.concurrency['cancel-in-progress'], false);
@@ -113,7 +113,7 @@ test('a failed CLI worker returns failure without retry or private diagnostics',
   assert.match(result.stderr, /onboarding-credentials: dispatcher unavailable/);
 });
 
-test('five actual runner processes finish while an unrelated runner is held', { timeout: 5_000 }, async t => {
+test('other actual runner processes finish while an unrelated runner is held', { timeout: 5_000 }, async t => {
   const children = expectedJobs.map(job => {
     const child = fork('scripts/recover-background-jobs.mjs', [job], {
       execArgv: ['--import', './tests/fixtures/background-recovery-fetch.mjs'],

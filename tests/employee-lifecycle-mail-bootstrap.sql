@@ -1,0 +1,21 @@
+create schema private;
+create schema auth;
+create schema storage;
+create schema extensions;
+create extension pgcrypto with schema extensions;
+do $$ begin
+  if not exists(select 1 from pg_roles where rolname='anon') then create role anon; end if;
+  if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated; end if;
+  if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role; end if;
+end $$;
+create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+create table auth.users(id uuid primary key);
+create table public.profiles(id uuid primary key,account_status text,app_role text);
+create table public.internal_org_people(id uuid primary key default gen_random_uuid(),node_kind text default 'person',company_key text default 'mam',full_name text,position_title text,auth_user_id uuid,parent_id uuid,started_date date,is_active boolean default true);
+create table private.employee_directory_details(person_id uuid primary key,work_email text,personal_email text,team_name text,country text,employment_type text,scheduled_employment_end_date date,archive_reason text);
+create table private.scheduled_employee_offboarding(person_id uuid primary key,end_date date not null,reason text,scheduled_at timestamptz default clock_timestamp());
+revoke all on schema private from public,anon,authenticated;
+create table private.confirmed_test_purge_schema(singleton boolean primary key default true check(singleton),schema_hash text not null);
+alter table private.confirmed_test_purge_schema enable row level security;
+alter table private.confirmed_test_purge_schema force row level security;
+revoke all on private.confirmed_test_purge_schema from public,anon,authenticated,service_role;

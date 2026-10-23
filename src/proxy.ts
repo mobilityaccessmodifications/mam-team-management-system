@@ -18,6 +18,7 @@ export async function proxy(request: NextRequest) {
     || pathname === "/api/internal/integrations/notifications/receipts"
     || pathname === "/api/cron/openclaw-leave-cleanup"
     || pathname === "/api/cron/recovery"
+    || pathname === "/api/cron/employee-lifecycle"
     || pathname === "/api/performance-reviews/mail"
     || pathname === "/api/performance-reviews/meeting") {
     return NextResponse.next({ request });

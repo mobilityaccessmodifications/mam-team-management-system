@@ -16,6 +16,7 @@ jobs:
       max-parallel: 6
       matrix:
         job:
+          - employee-lifecycle
           - leave-notifications
           - check-in-reminders
           - new-starter-day-one

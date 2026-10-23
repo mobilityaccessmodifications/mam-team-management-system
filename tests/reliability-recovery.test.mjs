@@ -98,22 +98,22 @@ test('check-in worker delivers a recipient-free People & Culture escalation thro
   }finally{globalThis.Date=oldDate;globalThis.fetch=oldFetch;for(const k of Object.keys(process.env))if(!(k in oldEnv))delete process.env[k];Object.assign(process.env,oldEnv);}
 });
 
-test('independent recovery credential permits only the six explicit workers',async()=>{
+test('independent recovery credential permits only the seven explicit workers',async()=>{
   const prior={recovery:process.env.MAM_BACKGROUND_RECOVERY_SECRET,cron:process.env.CRON_SECRET};
   process.env.MAM_BACKGROUND_RECOVERY_SECRET='synthetic-recovery';process.env.CRON_SECRET='synthetic-primary';
   const calls=[];
   const worker=async(request)=>{assert.equal(request.headers.get('authorization'),'Bearer synthetic-primary');calls.push(1);return Response.json({ok:true});};
   const {GET}=load('src/app/api/cron/recovery/route.ts',{
     '../leave-notifications/route':{GET:worker},'../check-in-reminders/route':{GET:worker},'../leave-priority-reminders/route':{GET:worker},
-    '../new-starter-day-one/route':{GET:worker},'../onboarding-credentials/route':{GET:worker},'../scheduled-offboarding/route':{GET:worker},
+    '../new-starter-day-one/route':{GET:worker},'../onboarding-credentials/route':{GET:worker},'../scheduled-offboarding/route':{GET:worker},'../employee-lifecycle/route':{GET:worker},
   });
   const request=(job,token='synthetic-recovery')=>new Request(`https://synthetic.example/recovery?job=${job}`,{headers:{authorization:`Bearer ${token}`}});
   try{
     assert.equal((await GET(request('leave-notifications','wrong'))).status,401);
     for(const name of ['leave-attachment-cleanup','constructor','__proto__','https://attacker.example'])assert.equal((await GET(request(name))).status,400);
     assert.equal(calls.length,0);
-    for(const name of ['leave-notifications','check-in-reminders','new-starter-day-one','onboarding-credentials','scheduled-offboarding','leave-priority-reminders'])assert.equal((await GET(request(name))).status,200);
-    assert.equal(calls.length,6);
+    for(const name of ['leave-notifications','check-in-reminders','new-starter-day-one','onboarding-credentials','scheduled-offboarding','leave-priority-reminders','employee-lifecycle'])assert.equal((await GET(request(name))).status,200);
+    assert.equal(calls.length,7);
   }finally{
     for(const [key,value] of [['MAM_BACKGROUND_RECOVERY_SECRET',prior.recovery],['CRON_SECRET',prior.cron]]){
       if(value===undefined)delete process.env[key];else process.env[key]=value;
@@ -139,6 +139,7 @@ test('recovery reaches its bearer-authenticated handler without a browser sessio
   });
   const request=(pathname)=>({nextUrl:{pathname,clone:()=>new URL(`https://synthetic.example${pathname}`)}});
   assert.equal((await proxy(request('/api/cron/recovery'))).status,200);
+  assert.equal((await proxy(request('/api/cron/employee-lifecycle'))).status,200);
   for(const path of ['/api/cron/recovery/other','/api/cron/not-authorised','/'])assert.equal((await proxy(request(path))).status,307);
 });
 test('manual recovery runs only trusted main code in its branch-restricted credential environment',()=>{

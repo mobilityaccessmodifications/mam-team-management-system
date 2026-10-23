@@ -1,3 +1,4 @@
+import { GET as employeeLifecycle } from "../employee-lifecycle/route";
 import { timingSafeEqual } from "node:crypto";
 import { GET as leaveNotifications } from "../leave-notifications/route";
 import { GET as checkInReminders } from "../check-in-reminders/route";
@@ -13,6 +14,7 @@ export const maxDuration = 300;
 // The independent scheduler has a separate credential, scoped only to these
 // delivery workers. It cannot call arbitrary internal routes or cleanup jobs.
 const jobs: Record<string, (request: Request) => Promise<Response>> = {
+  "employee-lifecycle": employeeLifecycle,
   "leave-notifications": leaveNotifications,
   "check-in-reminders": checkInReminders,
   "new-starter-day-one": newStarterDayOne,
