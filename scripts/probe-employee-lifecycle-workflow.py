@@ -24,8 +24,10 @@ def build():
     unauth.pop('credentials')
     unauth['parameters']['authentication']='none'
     unauth['parameters'].pop('genericAuthType')
+    nodes.extend([source['http']('Check Authenticated Cron',source['HUB']+'/api/cron/employee-lifecycle',credential=source['CRON'],timeout=55000),
+      source['node']('Require Empty Dispatcher','code',{'mode':'runOnceForAllItems','jsCode':"const b=$json.body;if($json.statusCode!==200 || b?.ok!==true || b?.code!=='processed' || b?.claimed!==0 || b?.sent!==0 || b?.held!==0) throw new Error('Disabled lifecycle dispatcher verification failed');return [{json:{verified:true}}];"})])
     return {'name':NAME,'nodes':nodes,'connections':{a['name']:{'main':[[{'node':b['name'],'type':'main','index':0}]]} for a,b in zip(nodes,nodes[1:])},
-      'settings':{'executionOrder':'v1','timezone':'Australia/Melbourne','saveDataSuccessExecution':'none','saveDataErrorExecution':'none','saveManualExecutions':False,'saveExecutionProgress':False,'executionTimeout':60}}
+      'settings':{'executionOrder':'v1','timezone':'Australia/Melbourne','saveDataSuccessExecution':'all','saveDataErrorExecution':'all','saveManualExecutions':False,'saveExecutionProgress':False,'executionTimeout':60}}
 
 
 def main():
