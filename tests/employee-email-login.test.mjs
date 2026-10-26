@@ -54,7 +54,8 @@ function loadSignIn({ allowed=true, resolved="opaque@accounts.example", accountS
   new Function("require","module","exports",source)((id) => {
     if (id==="@/lib/portal-login") return login;
     if (id==="@/lib/asset-qr") return loadAssetQrModule();
-    if (id==="next/headers") return {headers:async()=>new Headers({"x-real-ip":"192.0.2.1"})};
+    if (id==="@/lib/password-recovery") return {PASSWORD_RECOVERY_LOGIN_COOKIE:"mam-password-reset-login"};
+    if (id==="next/headers") return {headers:async()=>new Headers({"x-real-ip":"192.0.2.1"}),cookies:async()=>({delete:(options)=>calls.push(["deleteCookie",options])})};
     if (id==="next/navigation") return {redirect:(url)=>{throw new Error("redirect:"+url);}};
     if (id==="@/lib/supabase/config") return {isSupabaseConfigured:()=>true};
     if (id==="@/lib/supabase/admin") return {createAdminClient:()=>admin};
@@ -77,6 +78,16 @@ test("normalised email resolves privately before password authentication", async
   assert.equal(calls.find(([name])=>name==="resolve_portal_login_auth_email")[1].p_login_name,"person@company.example");
   assert.equal(calls.find(([name])=>name==="password")[1].email,"opaque@accounts.example");
   assert(calls.some(([name])=>name==="clear_portal_login_rate_limit"));
+});
+
+test("sign-in clears the password recovery login cookie on every attempt", async () => {
+  const success=loadSignIn();
+  await assert.rejects(success.submit("admin"),/redirect:\//);
+  const failure=loadSignIn({resolved:null});
+  assert.equal((await failure.submit("unknown@company.example")).status,"error");
+  for (const {calls} of [success,failure]) {
+    assert.deepEqual(calls[0],["deleteCookie",{name:"mam-password-reset-login",path:"/login"}]);
+  }
 });
 
 test("administrator username retains the existing sign-in path", async () => {

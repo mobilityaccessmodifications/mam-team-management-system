@@ -2,10 +2,11 @@
 
 import { createHash } from "node:crypto";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { assetLoginReturnPath } from "@/lib/asset-qr";
 
+import { PASSWORD_RECOVERY_LOGIN_COOKIE } from "@/lib/password-recovery";
 import { isValidPortalLogin, normalisePortalLogin } from "@/lib/portal-login";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -49,6 +50,7 @@ export async function signIn(
   formData: FormData,
 ): Promise<LoginState> {
   const startedAt = Date.now();
+  (await cookies()).delete({ name: PASSWORD_RECOVERY_LOGIN_COOKIE, path: "/login" });
   if (!isSupabaseConfigured()) {
     return {
       status: "error",

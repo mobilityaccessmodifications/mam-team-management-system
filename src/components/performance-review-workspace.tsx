@@ -198,14 +198,13 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   function accept(row: PerformanceReview, notice: string, channel: PerformanceMutationInput["command"] | null = null) {
     const keepAssessment = channel === "save_meeting" && dirtyParts.current.assessment;
     const keepMeeting = (channel === "save_manager" || channel === "complete_manager") && dirtyParts.current.meeting;
+    const keptAssessment = draft.current.assessment, keptMeeting = draft.current.meeting, keptHeld = heldDraft.current;
     track(null);
     currentReviews.current = orderedReviews([row, ...currentReviews.current.filter(old => old.id !== row.id)]);
     setWorkspace(current => current ? { ...current, reviews: currentReviews.current } : null);
     choose(row);
-    if (keepAssessment) { setAssessment(assessment); dirtyParts.current.assessment = true; dirty.current = true; }
-    if (keepMeeting) { setMeeting(meeting); heldDraft.current = held; setHeld(held); dirtyParts.current.meeting = true; dirty.current = true; }
-    if (keepAssessment) draft.current.assessment = assessment;
-    if (keepMeeting) draft.current.meeting = meeting;
+    if (keepAssessment) { draft.current.assessment = keptAssessment; setAssessment(keptAssessment); dirtyParts.current.assessment = true; dirty.current = true; }
+    if (keepMeeting) { draft.current.meeting = keptMeeting; setMeeting(keptMeeting); heldDraft.current = keptHeld; setHeld(keptHeld); dirtyParts.current.meeting = true; dirty.current = true; }
     reviewChoice.current = { employeePersonId: row.employee.id, cycle: row.cycle }; setStartDraft(current => ({ ...current, employeePersonId: row.employee.id, cycle: row.cycle })); setMessage(notice);
   }
   function acceptDraft(row: PerformanceReview, saved: NonNullable<PendingOperation["draft"]>) {
