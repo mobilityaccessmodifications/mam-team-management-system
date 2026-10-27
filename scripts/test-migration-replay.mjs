@@ -11,6 +11,12 @@ sql(socket, database, readFileSync(new URL("../tests/migrations/0001-supabase-pl
 const files = readdirSync("supabase/migrations").filter((file) => file.endsWith(".sql")).sort();
 for (const file of files) {
   console.log(`Replay ${file}`);
+  if (file === '20261027011041_subscription_team_access.sql') {
+    const predecessor = `${database}_team_access_pred`;
+    command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', `--template=${database}`, predecessor]);
+    console.log(command('python3', ['-B', path.resolve('tests/run-subscription-team-access-release.py'), socket, predecessor]));
+    command('dropdb', ['-h', socket, '-p', '55439', '-U', 'postgres', predecessor]);
+  }
   if (file === '20261008140000_employee_team_manager_defaults.sql') {
     runTeamManagerMigrationGuards(socket, database, readFileSync(path.join('supabase/migrations', file), 'utf8'));
   }

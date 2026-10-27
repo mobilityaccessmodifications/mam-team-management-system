@@ -13,7 +13,16 @@ export const actorAuthId = '11000000-0000-4000-8000-000000000001';
 
 const completedMode = new URLSearchParams(location.search).has('leave-completed');
 const inlineRequestMode = new URLSearchParams(location.search).get('subscription-inline');
+const teamAccessMode = new URLSearchParams(location.search).has('subscription-team-access');
+const subscriptionPeople = [
+  ...syntheticRolePeople.map(person => ({ personId: person.id, fullName: person.name, positionTitle: person.title, teamName: 'Operation & Accounts', company: person.company })),
+  ...(teamAccessMode ? [
+    { personId: '11000000-0000-4000-8000-000000000010', fullName: 'Alex Synthetic', positionTitle: 'Analyst', teamName: 'Marketing', company: 'mam' },
+    { personId: '11000000-0000-4000-8000-000000000011', fullName: 'Alex Synthetic', positionTitle: 'Coordinator', teamName: 'Operations', company: 'equipsy' },
+  ] : []),
+];
 let requestRows = [], registeredSubscriptions = [syntheticRoleSubscription];
+if (teamAccessMode) registeredSubscriptions = [{ ...syntheticRoleSubscription, seatCount: null, billingDate: null, creditCardUsed: null }];
 const requestApplicant = { id: syntheticRolePeople[0].id, name: 'Synthetic Applicant' };
 function requestWorkspace() {
   if (inlineRequestMode === 'denied') return { ok: false, denied: true, message: 'You do not have permission for this request.' };
@@ -290,6 +299,16 @@ const handlers = {
   '@/app/assets/actions': { listItAssetsForEmployee: () => [], listItAssets: () => [], listItAssetAssignees: () => [] },
   '@/app/subscriptions/actions': {
     listSubscriptions: () => registeredSubscriptions,
+    updateSubscriptionTeamAccess: input => {
+      if (!actorCapabilities.can_manage_subscriptions) throw new Error('Synthetic actor cannot manage subscriptions');
+      const current = registeredSubscriptions.find(row => row.id === input.subscriptionId);
+      if (!current || current.version !== input.version) return { ok: false, message: 'This subscription has changed. Reload access before saving.', refreshRequired: true };
+      const members = subscriptionPeople.filter(person => input.memberPersonIds.includes(person.personId))
+        .sort((a, b) => a.fullName.localeCompare(b.fullName) || a.personId.localeCompare(b.personId));
+      const subscription = { ...current, version: current.version + 1, memberPersonIds: members.map(person => person.personId), memberNames: members.map(person => person.fullName) };
+      registeredSubscriptions = registeredSubscriptions.map(row => row.id === current.id ? subscription : row);
+      return { ok: true, subscription };
+    },
     createSubscription: input => {
       const person = syntheticRolePeople.find(person => person.id === input.responsiblePersonId);
       const subscription = { ...syntheticRoleSubscription, ...input, id: '33000000-0000-4000-8000-000000000020',
@@ -298,7 +317,7 @@ const handlers = {
       registeredSubscriptions = [...registeredSubscriptions, subscription];
       return subscription;
     },
-    listSubscriptionPeople: () => syntheticRolePeople.map(person => ({ personId: person.id, fullName: person.name, positionTitle: person.title, teamName: 'Operation & Accounts', company: person.company })),
+    listSubscriptionPeople: () => subscriptionPeople,
   },
   '@/app/subscription-requests/actions': {
     loadSubscriptionRequests: requestWorkspace,
@@ -366,6 +385,11 @@ export async function invokeServerAction(module, name, args) {
     if (name === 'mutateSubscriptionRequest' && failure === 'uncertain') return { ok: false, denied: false, uncertain: true, message: 'The request could not be confirmed. Reload before retrying.' };
     if (name === 'getPortalRoleCapabilities' && (failure === 'denied' || failure === 'malformed')) return UNIFIED_ROLE_FIXTURE_RESULTS[failure];
     if (name === 'saveTaskNotes' && failure === 'stale') return { ok: false, error: 'Notes have changed. Refresh and try again.' };
+    if (name === 'updateSubscriptionTeamAccess' && failure === 'stale') {
+      registeredSubscriptions = registeredSubscriptions.map(row => row.id === args[0].subscriptionId
+        ? { ...row, version: row.version + 1, memberPersonIds: [subscriptionPeople[0].personId], memberNames: [subscriptionPeople[0].fullName] } : row);
+      return { ok: false, message: 'This subscription has changed. Reload access before saving.', refreshRequired: true };
+    }
     if (failure === 'transport') throw new Error('private synthetic provider permission detail');
     throw new Error(`Unexpected synthetic failure ${failure}`);
   }

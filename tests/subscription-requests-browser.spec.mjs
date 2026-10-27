@@ -118,8 +118,11 @@ test('annual approval preserves setup cost and finance decision before registeri
   await region.getByLabel('Renewal date',{exact:true}).fill('2027-10-14');
   const owner=region.getByRole('combobox',{name:'Responsible person',exact:true});
   const personId=await owner.locator('option').nth(1).getAttribute('value');await owner.selectOption(personId);
-  await region.getByRole('group',{name:'Who has access',exact:true}).locator('input[type=checkbox]').first().check();
+  const personName=await owner.locator('option:checked').textContent();
+  await region.getByRole('group',{name:'Team access',exact:true}).getByRole('checkbox',{name:personName,exact:true}).check();
+  const activation=page.waitForRequest(request=>request.method()==='POST'&&request.url().endsWith('/action')&&request.postDataJSON()?.name==='activateSubscriptionRequest');
   await region.getByRole('button',{name:'Add subscription',exact:true}).click();
+  expect((await activation).postDataJSON().args[0].memberPersonIds).toEqual([personId]);
   await expect(page.getByText('Approved — subscription added',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Withdraw',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Add subscription',exact:true})).toHaveCount(0);

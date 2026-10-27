@@ -270,11 +270,11 @@
 }
 
 .subscriptionSheet {
-  --subscription-sheet-columns: minmax(214px, 1.2fr) minmax(148px, .68fr) minmax(166px, .68fr) minmax(210px, .95fr) minmax(156px, .72fr) minmax(180px, .8fr) minmax(184px, .82fr) minmax(142px, .58fr) minmax(104px, .42fr) 194px;
-  min-width: 1802px;
+  --subscription-sheet-columns: minmax(214px, 1.2fr) minmax(192px, .9fr) minmax(148px, .68fr) minmax(166px, .68fr) minmax(210px, .95fr) minmax(156px, .72fr) minmax(180px, .8fr) minmax(184px, .82fr) minmax(142px, .58fr) 194px;
+  min-width: 1890px;
 }
 
-.selectableSheet { min-width: 1918px; }
+.selectableSheet { min-width: 2006px; }
 .selectableSheet .subscriptionSheetRow { grid-template-columns: 90px var(--subscription-sheet-columns); }
 .selectionCell { justify-content: center; }
 .selectionLabel { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; cursor: pointer; font-size: 12px; }
@@ -511,7 +511,7 @@
 .modal label > span > b { color: var(--subscription-accent-deep); }
 .modal label > span > small,
 .membersFieldset legend small { color: var(--subscription-muted); font-size: 10px; font-weight: 650; }
-.modal input:not([type="radio"]),
+.modal input:where(:not([type="radio"]):not([type="checkbox"])),
 .modal select { width: 100%; min-height: 40px; box-sizing: border-box; border: 1px solid var(--surface-border-strong, #cbd7d2); border-radius: 9px; outline: 0; background: var(--surface-raised, #fff); color: var(--subscription-ink); font: inherit; font-size: 13px; padding: 8px 10px; }
 .formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .editorFields { display: grid; gap: 14px; min-width: 0; margin: 0; padding: 0; border: 0; }
@@ -529,19 +529,37 @@
 .formHelp { gap: 7px; margin: -2px 0 0; color: var(--subscription-muted); font-size: 11px; line-height: 1.45; }
 .formHelp svg { flex: 0 0 auto; color: var(--subscription-accent); }
 .membersFieldset > p { margin: -2px 0 0; color: var(--subscription-muted); font-size: 11px; line-height: 1.45; }
-.memberSearch { width: 100%; box-sizing: border-box; min-height: 38px; background: var(--surface-raised, #fff); padding: 0 10px; }
-.memberSearch input { min-height: 34px; padding: 0; }
+.membersFieldset .memberSearch { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; min-height: 44px; border: 1px solid var(--subscription-line); background: var(--surface-raised, #fff); padding: 0 12px; }
+.membersFieldset .memberSearch input { min-width: 0; min-height: 42px; height: 42px; border: 0; background: transparent; padding: 0; }
+.memberSearch svg { flex-shrink: 0; color: var(--subscription-muted); }
 .memberSummary { color: var(--subscription-muted); font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.memberList { display: grid; max-height: 190px; overflow-y: auto; border: 1px solid #dfe7e3; border-radius: 10px; background: var(--surface-raised, #fff); }
-.memberOption { gap: 9px; min-height: 48px; padding: 8px 10px; border-bottom: 1px solid #edf0ef; cursor: pointer; }
+.memberList { display: grid; max-height: 280px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--subscription-line); border-radius: 10px; background: var(--surface-raised, #fff); }
+.membersFieldset .memberOption { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 60px; box-sizing: border-box; padding: 10px 12px; border-bottom: 1px solid var(--subscription-line); cursor: pointer; touch-action: manipulation; }
 .memberOption:last-child { border-bottom: 0; }
-.memberOption:hover { background: #fff8f4; }
-.memberOption input { width: 16px; height: 16px; margin: 0; accent-color: var(--subscription-accent); }
+.memberOption:hover { background: var(--surface-muted, #f5f7f6); }
+.memberOption[data-selected="true"] { background: color-mix(in srgb, var(--subscription-accent) 7%, var(--surface-raised, #fff)); }
+.membersFieldset .memberOption input[type="checkbox"] { width: 20px; min-width: 20px; height: 20px; min-height: 20px; margin: 0; padding: 0; accent-color: var(--subscription-accent); cursor: pointer; }
 .memberOption span { display: grid; min-width: 0; gap: 2px; }
 .memberOption strong,
 .memberOption small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .memberOption strong { color: var(--subscription-ink); font-size: 12px; }
 .memberOption small { color: var(--subscription-muted); font-size: 11px; font-weight: 500; }
+.memberOption .memberCompany { display: block; border-radius: 5px; background: #fff1e7; color: #9f4113; font-size: 10px; font-weight: 700; padding: 4px 6px; }
+.memberOption .memberCompany[data-member-company="equipsy"] { background: #edf5ff; color: #225ca3; }
+.memberFilters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.selectedMembers { display: flex; flex-wrap: wrap; gap: 6px; max-height: 132px; overflow-y: auto; }
+.selectedMember { display: flex; align-items: center; gap: 8px; min-height: 44px; max-width: 100%; border: 1px solid var(--subscription-line); border-radius: 9px; background: var(--surface-raised, #fff); color: var(--subscription-ink); font: inherit; font-size: 12px; text-align: left; padding: 6px 10px; cursor: pointer; }
+.selectedMember > span { display: grid; min-width: 0; gap: 2px; overflow-wrap: anywhere; }
+.selectedMember small { color: var(--subscription-muted); font-size: 10px; }
+.selectedMember svg { flex-shrink: 0; color: var(--subscription-muted); }
+.teamAccessButton { display: grid; gap: 4px; min-height: 44px; min-width: 0; width: 100%; border: 0; border-radius: 8px; background: transparent; color: var(--subscription-ink); font: inherit; font-size: 12px; text-align: left; padding: 6px; cursor: pointer; }
+.teamAccessButton > span { display: flex; align-items: center; gap: 6px; font-weight: 650; }
+.teamAccessButton:hover { background: var(--surface-muted, #f5f7f6); }
+.teamAccessButton:focus-visible { outline: 3px solid color-mix(in srgb, var(--subscription-accent) 35%, transparent); outline-offset: 2px; }
+.teamAccessModal { width: min(660px, 100%); }
+.teamAccessModal .membersFieldset { background: transparent; border: 0; padding: 0; gap: 14px; }
+.teamAccessModal .membersFieldset > legend { padding: 0 0 12px; font-size: 13px; }
+.teamAccessModal footer { flex-wrap: wrap; border-top: 1px solid var(--subscription-line); padding-top: 16px; }
 .memberEmpty { margin: 0; padding: 16px; color: var(--subscription-muted); font-size: 12px; text-align: center; }
 .inlineError { gap: 7px; margin: 0; border: 1px solid #efc9c3; border-radius: 9px; background: #fff7f6; color: #983e35; font-size: 12px; line-height: 1.4; padding: 9px 10px; }
 .modal footer { justify-content: flex-end; gap: 8px; padding-top: 3px; }
@@ -607,7 +625,7 @@
   .responsibleCell { grid-column: 1 / -1; }
   .statusCell { grid-column: 1; align-self: end; }
   .statusCell::before { display: none !important; }
-  .membersCell { grid-column: 2; }
+  .membersCell { grid-column: 1 / -1; }
   .subscriptionActions {
     position: static;
     grid-column: 1 / -1;
@@ -776,7 +794,7 @@
 .inlineModal .editorFields { gap: 20px; }
 .inlineModal .formGrid { align-items: start; gap: 16px; }
 .inlineModal label { gap: 8px; font-weight: 650; line-height: 1.4; }
-.inlineModal input:not([type="radio"]), .inlineModal select, .modal textarea { min-width: 0; width: 100%; min-height: 44px; box-sizing: border-box; border: 1px solid var(--surface-border-strong, #cbd4d0); border-radius: 10px; background: var(--surface-raised, #fff); color: var(--text-primary, #263b35); font: inherit; font-size: 13px; padding: 11px 12px; }
+.inlineModal input:where(:not([type="radio"]):not([type="checkbox"])), .inlineModal select, .modal textarea { min-width: 0; width: 100%; min-height: 44px; box-sizing: border-box; border: 1px solid var(--surface-border-strong, #cbd4d0); border-radius: 10px; background: var(--surface-raised, #fff); color: var(--text-primary, #263b35); font: inherit; font-size: 13px; padding: 11px 12px; }
 .modal textarea { resize: vertical; line-height: 1.5; }
 .modal input:focus-visible, .modal select:focus-visible, .modal textarea:focus-visible { border-color: var(--mam-orange-strong, #c34d14); outline: 3px solid rgb(239 106 36 / 15%); outline-offset: 1px; }
 .inlineModal input[readonly] { background: var(--surface-muted, #f5f7f6); color: var(--text-secondary, #53625e); }

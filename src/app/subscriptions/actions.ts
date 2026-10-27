@@ -16,6 +16,8 @@ import {
   type SubscriptionPerson,
   type SubscriptionPricingModel,
   type SubscriptionStatus,
+  type SubscriptionTeamAccessInput,
+  type SubscriptionTeamAccessResult,
   type UpdateSubscriptionInput,
 } from "@/lib/subscription-types";
 
@@ -407,6 +409,54 @@ export async function updateSubscription(input: UpdateSubscriptionInput): Promis
   const subscription = mapSubscription(data);
   revalidatePath("/");
   return subscription;
+}
+
+export async function updateSubscriptionTeamAccess(input: SubscriptionTeamAccessInput): Promise<SubscriptionTeamAccessResult> {
+  let attempted = false;
+  try {
+    const supabase = await requireSubscriptionAdministrator();
+    const value = inputObject(input);
+    const subscriptionId = requiredUuid(value.subscriptionId, "The subscription record is invalid.");
+    if (typeof value.version !== "number" || !Number.isSafeInteger(value.version) || value.version < 1) {
+      return { ok: false, message: "The subscription record is invalid." };
+    }
+    const members = [...new Set(personIds(value.memberPersonIds).map((id) => id.toLowerCase()))];
+    attempted = true;
+    const { data, error } = await supabase.rpc("update_subscription_members_v1", {
+      p_subscription_id: subscriptionId,
+      p_expected_version: value.version,
+      p_member_person_ids: members,
+    });
+    if (error) {
+      if (error.code === "40001" || error.code === "P0002") return { ok: false, message: "This subscription has changed. Reload access before saving.", refreshRequired: true };
+      if (error.code === "42501") return { ok: false, message: "You do not have permission to manage subscriptions.", refreshRequired: true };
+      if (error.code === "23503" || error.code === "22023") return { ok: false, message: "Choose active team members for subscription access." };
+      return { ok: false, message: "Team access could not be confirmed. Reload access before trying again.", refreshRequired: true };
+    }
+    const subscription = mapSubscription(data);
+    if (subscription.id !== subscriptionId.toLowerCase()
+      || subscription.memberPersonIds.length !== members.length
+      || new Set(subscription.memberPersonIds.map((id) => id.toLowerCase())).size !== members.length
+      || subscription.memberPersonIds.some((id) => !members.includes(id.toLowerCase()))) {
+      return { ok: false, message: "Team access could not be confirmed. Reload access before trying again.", refreshRequired: true };
+    }
+    try {
+      revalidatePath("/");
+    } catch {
+      return { ok: true, subscription, warning: "Team access saved. Refresh the page to update other views." };
+    }
+    return { ok: true, subscription };
+  } catch (error) {
+    const safeMessages = [
+      "Your session has expired. Sign in again.",
+      "You do not have permission to manage subscriptions.",
+      "The subscription record is invalid.",
+      "Choose valid employees for subscription access.",
+    ];
+    return attempted
+      ? { ok: false, message: "Team access could not be confirmed. Reload access before trying again.", refreshRequired: true }
+      : { ok: false, message: error instanceof Error && safeMessages.includes(error.message) ? error.message : "Team access could not be saved. Refresh and try again." };
+  }
 }
 
 /** Records the quarterly review and lets the database set the next date. */
