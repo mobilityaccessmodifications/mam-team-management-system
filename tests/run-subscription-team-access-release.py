@@ -54,6 +54,37 @@ def clone(label, template=predecessor):
 helper = runpy.run_path(str(ROOT / "scripts/deploy-subscription-team-access.py"))
 source = helper["MIGRATION"].read_text()
 literal = helper["literal"]
+locale_database = prefix + "_locale"
+command(["createdb", "-h", socket, "-p", "55439", "-U", "postgres",
+         "--template=template0", "--locale-provider=icu", "--icu-locale=en-US", locale_database])
+collector_source = re.search(
+    r"create function private\.confirmed_test_purge_schema_hash\(\)[\s\S]*?\$\$;",
+    (ROOT / "supabase/migrations/20261001130000_confirmed_test_identity_cleanup.sql").read_text(),
+).group()
+sql(locale_database, """
+create schema private;create schema storage;create schema extensions;create schema auth;
+create extension pgcrypto with schema extensions;
+create table auth.users(id uuid primary key);
+create table private.confirmed_test_identity_purges(id uuid primary key);
+create table private.confirmed_test_purge_schema(singleton boolean primary key default true,schema_hash text);
+create table private.subscription_register(id uuid primary key,version bigint);
+create function private.sr_register_gate() returns trigger language plpgsql as $$
+begin
+  if tg_op='INSERT' and (new.source_request_id is not null) then return new; end if;
+  return new;
+end;$$;
+""" + collector_source + """
+insert into private.confirmed_test_purge_schema(schema_hash) select private.confirmed_test_purge_schema_hash();
+""")
+sql(locale_database, helper["PREDECESSOR"].read_text())
+try:
+    sql(locale_database, source.replace(' collate "C"', ""))
+    raise AssertionError("Locale regression fixture did not distinguish inherited catalog ordering")
+except RuntimeError as failure:
+    assert "55000" in str(failure), str(failure)
+sql(locale_database, source)
+assert sql(locale_database, "select schema_hash=private.confirmed_test_purge_schema_hash() from private.confirmed_test_purge_schema;") == "t"
+print("PASS: non-C database locale reproduces the ordering regression and reconciles with explicit catalog ordering", flush=True)
 baseline = clone("base")
 sql(baseline, "update private.subscription_request_config set enabled=true where singleton;")
 original_hash = sql(baseline, "select schema_hash from private.confirmed_test_purge_schema where singleton;")

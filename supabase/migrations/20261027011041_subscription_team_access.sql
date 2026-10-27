@@ -27,7 +27,7 @@ begin
     $aggregate$select encode(extensions.digest(coalesce(string_agg(definition,E'\n' order by definition),''),'sha256'),'hex') from ($aggregate$,
     'select array_agg(definition order by definition) from (');
   execute query into definitions;
-  select encode(extensions.digest(coalesce(string_agg(definition, E'\n' order by definition), ''), 'sha256'), 'hex')
+  select encode(extensions.digest(coalesce(string_agg(definition, E'\n' order by definition collate "C"), ''), 'sha256'), 'hex')
   into removed_hash from (
     select replace(replace(definition, ':' || 'postgres'::regrole::oid || ':', ':owner:'),
       'arwdDxtm/postgres', 'arwdDxt/postgres') as definition
@@ -41,7 +41,7 @@ begin
     raise exception 'Existing subscription import catalog differs.' using errcode = '55000';
   end if;
   select encode(extensions.digest(coalesce(string_agg(replace(definition, import_line, ''),
-    E'\n' order by replace(definition, import_line, '')), ''), 'sha256'), 'hex')
+    E'\n' order by replace(definition, import_line, '') collate "C"), ''), 'sha256'), 'hex')
   into previous_hash from unnest(definitions) item(definition)
   where definition not like 'private.existing_subscription_imports:%'
     and definition not like 'private.existing_subscription_imports_pkey:%'
