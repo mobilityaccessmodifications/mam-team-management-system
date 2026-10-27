@@ -100,6 +100,14 @@ export type ReviewSubscriptionInput = {
   version: number;
 };
 
+export type SubscriptionTeamAccessInput = ReviewSubscriptionInput & {
+  memberPersonIds: string[];
+};
+
+export type SubscriptionTeamAccessResult =
+  | { ok: true; subscription: Subscription; warning?: string }
+  | { ok: false; message: string; refreshRequired?: boolean };
+
 export function subscriptionMonthlyEquivalentCents(subscription: Pick<Subscription, "pricingModel" | "billingCycle" | "amountCents">) {
   if (subscription.pricingModel !== "paid" || subscription.amountCents === null) return null;
   if (subscription.billingCycle === "monthly") return subscription.amountCents;

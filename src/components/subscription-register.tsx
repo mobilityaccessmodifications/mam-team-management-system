@@ -23,7 +23,9 @@ import {
 } from "lucide-react";
 import {
   type FormEvent,
+  type Dispatch,
   type RefObject,
+  type SetStateAction,
   useCallback,
   useEffect,
   useId,
@@ -38,6 +40,7 @@ import {
   listSubscriptions,
   markSubscriptionReviewed,
   updateSubscription,
+  updateSubscriptionTeamAccess,
 } from "@/app/subscriptions/actions";
 import { patchSubscription } from "@/app/subscriptions/bulk-actions";
 import { runSubscriptionBulkEdit, type SubscriptionBulkPatch, type SubscriptionBulkResult } from "@/lib/subscription-bulk";
@@ -277,6 +280,7 @@ export function SubscriptionRegister({
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [editTarget, setEditTarget] = useState<Subscription | null>(null);
+  const [accessTarget, setAccessTarget] = useState<Subscription | null>(null);
   const [credentialTarget, setCredentialTarget] = useState<Subscription | null>(null);
   const [credentialStates, setCredentialStates] = useState<Record<string, boolean>>({});
   const [showCredentialAccess, setShowCredentialAccess] = useState(false);
@@ -558,7 +562,7 @@ export function SubscriptionRegister({
         { value: "service", label: "Service" }, { value: "monthly", label: "Monthly cost" },
         { value: "seats", label: "Seats / licences" }, { value: "nextBilling", label: "Next billing" },
         { value: "lastReviewed", label: "Last reviewed" }, { value: "nextReview", label: "Next review" }, { value: "responsible", label: "Responsible" },
-        { value: "status", label: "Status" }, { value: "members", label: "Access" },
+        { value: "status", label: "Status" }, { value: "members", label: "Team access" },
       ]}
       filters={([
         { key: "billing", label: "Billing" }, { key: "nextReview", label: "Next review" },
@@ -577,6 +581,7 @@ export function SubscriptionRegister({
         <div className={`${styles.subscriptionSheetRow} ${styles.subscriptionSheetHeader}`} role="row">
           {!readOnly ? <div className={`${styles.sheetHeaderCell} ${styles.selectionCell}`} role="columnheader"><label className={styles.selectionLabel}><input type="checkbox" checked={allShownSelected} ref={(node) => { if (node) node.indeterminate = someShownSelected && !allShownSelected; }} onChange={toggleShown} aria-label="Select all shown subscriptions" /><span>Select</span></label></div> : null}
           <SubscriptionSheetHeader label="Service" sortKey="service" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
+          <SubscriptionSheetHeader label="Team access" sortKey="members" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
           <SubscriptionSheetHeader label="Monthly" sortKey="monthly" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="billing" filterOptions={subscriptionFilterOptions.billing} filterValue={subscriptionFilters.billing} isFilterOpen={activeSubscriptionFilter === "billing"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
           <SubscriptionSheetHeader label="Seats / licences" sortKey="seats" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
           <SubscriptionSheetHeader label="Next billing" sortKey="nextBilling" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
@@ -584,7 +589,6 @@ export function SubscriptionRegister({
           <SubscriptionSheetHeader label="Next review" sortKey="nextReview" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="nextReview" filterOptions={subscriptionFilterOptions.nextReview} filterValue={subscriptionFilters.nextReview} isFilterOpen={activeSubscriptionFilter === "nextReview"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
           <SubscriptionSheetHeader label="Responsible" sortKey="responsible" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="responsible" filterOptions={subscriptionFilterOptions.responsible} filterValue={subscriptionFilters.responsible} isFilterOpen={activeSubscriptionFilter === "responsible"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
           <SubscriptionSheetHeader label="Status" sortKey="status" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} filterKey="status" filterOptions={subscriptionFilterOptions.status} filterValue={subscriptionFilters.status} isFilterOpen={activeSubscriptionFilter === "status"} onToggleFilter={toggleSubscriptionFilter} onFilter={setSubscriptionFilter} />
-          <SubscriptionSheetHeader label="Access" sortKey="members" activeSort={subscriptionSort} onSort={toggleSubscriptionSort} />
           <div className={styles.sheetHeaderCell} role="columnheader"><span>Actions</span></div>
         </div>
         {filteredSubscriptions.map((subscription) => <div className={styles.subscriptionSheetRow} key={subscription.id} role="row" data-selected={selectedIds.has(subscription.id) || undefined}>
@@ -592,6 +596,12 @@ export function SubscriptionRegister({
           <div className={`${styles.sheetCell} ${styles.serviceCell}`} role="cell" data-label="Service">
             <div className={styles.subscriptionIcon}><CreditCard size={18} aria-hidden="true" /></div>
             <div className={styles.subscriptionIdentity}><strong>{subscription.serviceName}</strong><span className={styles.companyBadge} data-company={subscription.company ?? "unset"} aria-label={`Company: ${subscriptionCompanyLabel(subscription.company)}`}>{subscriptionCompanyLabel(subscription.company)}</span>{subscription.planName ? <span title={subscription.planName}>{subscription.planName}</span> : null}</div>
+          </div>
+          <div className={`${styles.sheetCell} ${styles.membersCell}`} role="cell" data-label="Team access">
+            {readOnly ? <><strong>{subscription.memberPersonIds.length} assigned</strong><small title={subscription.memberNames.join(", ")}>{subscription.memberNames.join(", ") || "No team members"}</small></> : <button className={styles.teamAccessButton} type="button" aria-label={`Manage team access for ${subscription.serviceName}`} onClick={(event) => { subscriptionDialogReturnFocusRef.current = event.currentTarget; setAccessTarget(subscription); }} disabled={reviewingId !== null}>
+              <span><UsersRound size={14} aria-hidden="true" />{subscription.memberPersonIds.length} assigned</span>
+              <small title={subscription.memberNames.join(", ")}>{subscription.memberNames.join(", ") || "Add team members"}</small>
+            </button>}
           </div>
           <div className={`${styles.sheetCell} ${styles.monthlyCell}`} role="cell" data-label="Monthly"><strong>{monthlyCostLabel(subscription)}</strong></div>
           <div className={`${styles.sheetCell} ${styles.detailCell} ${styles.seatCell}`} role="cell" data-label="Seats / licences"><strong>{subscription.pricingModel === "paid" ? subscription.seatCount ?? "Not recorded" : "—"}</strong></div>
@@ -603,7 +613,6 @@ export function SubscriptionRegister({
           <div className={`${styles.sheetCell} ${styles.reviewCell}`} role="cell" data-label="Next review" data-due={isReviewDue(subscription)}><strong>{hasQuarterlyReview(subscription) ? formatDate(subscription.nextReviewOn) : <><span aria-hidden="true">—</span><span className={styles.visuallyHidden}>No quarterly review scheduled</span></>}</strong></div>
           <div className={`${styles.sheetCell} ${styles.responsibleCell}`} role="cell" data-label="Responsible"><strong>{subscription.responsible.fullName}</strong></div>
           <div className={`${styles.sheetCell} ${styles.statusCell}`} role="cell" data-label="Status"><span data-status={subscription.status}>{subscription.status}</span></div>
-          <div className={`${styles.sheetCell} ${styles.membersCell}`} role="cell" data-label="Access"><strong title={`${subscription.memberNames.length} ${subscription.memberNames.length === 1 ? "person" : "people"} assigned`}>{subscription.memberNames.length || "—"}</strong></div>
           <div className={`${styles.sheetCell} ${styles.subscriptionActions}`} role="cell" data-label="Actions">
             {canManageCredentials ? <button type="button" onClick={() => setCredentialTarget(subscription)} disabled={reviewingId !== null}><KeyRound size={15} /> Credentials</button> : null}
             {!readOnly ? <button type="button" onClick={(event) => { subscriptionDialogReturnFocusRef.current = event.currentTarget; setEditTarget(subscription); }} disabled={reviewingId !== null}><Pencil size={15} /> Edit</button> : null}
@@ -616,6 +625,7 @@ export function SubscriptionRegister({
     {showBulkEdit && !readOnly ? <SubscriptionBulkModal subscriptions={selectedSubscriptions} people={people} fallbackFocusRef={selectionFocusRef} onClose={() => setShowBulkEdit(false)} onCompleted={bulkEditCompleted} /> : null}
     {showAdd ? <SubscriptionModal people={people} fallbackFocusRef={subscriptionDialogReturnFocusRef} onClose={() => setShowAdd(false)} onCreated={subscriptionCreated} onRequested={() => { setShowAdd(false); setNotice("Request submitted for approval."); }} /> : null}
     {editTarget ? <SubscriptionModal people={people} subscription={editTarget} fallbackFocusRef={subscriptionDialogReturnFocusRef} onClose={() => setEditTarget(null)} onUpdated={(next) => { replaceSubscription(next, `${next.serviceName} has been updated.`); setEditTarget(null); }} onReview={() => recordReview(editTarget)} /> : null}
+    {accessTarget && !readOnly ? <SubscriptionTeamAccessModal subscription={accessTarget} people={people} fallbackFocusRef={subscriptionDialogReturnFocusRef} onClose={() => setAccessTarget(null)} onReloaded={(subscriptions, activePeople) => { setRegisterState({ state: "ready", subscriptions }); setPeople(activePeople); setSelectedIds((current) => new Set([...current].filter((id) => subscriptions.some((item) => item.id === id)))); }} onSaved={(next, warning) => { replaceSubscription(next, warning ?? `Team access for ${next.serviceName} has been updated.`); setAccessTarget(null); }} /> : null}
     {credentialTarget ? <SubscriptionCredentialEditor
       subscriptionId={credentialTarget.id}
       serviceName={credentialTarget.serviceName}
@@ -692,6 +702,88 @@ function SubscriptionBulkModal({ subscriptions, people, fallbackFocusRef, onClos
   </ModalBackdrop>;
 }
 
+function SubscriptionTeamAccessModal({ subscription, people, fallbackFocusRef, onClose, onReloaded, onSaved }: {
+  subscription: Subscription;
+  people: SubscriptionPerson[];
+  fallbackFocusRef: RefObject<HTMLElement | null>;
+  onClose: () => void;
+  onReloaded: (subscriptions: Subscription[], people: SubscriptionPerson[]) => void;
+  onSaved: (subscription: Subscription, warning?: string) => void;
+}) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const busyRef = useRef(false);
+  const [current, setCurrent] = useState(subscription);
+  const [candidates, setCandidates] = useState(people);
+  const [memberPersonIds, setMemberPersonIds] = useState(subscription.memberPersonIds);
+  const [saving, setSaving] = useState(false);
+  const [refreshRequired, setRefreshRequired] = useState(false);
+  const [error, setError] = useState("");
+  const titleId = useId();
+  const closeWhenReady = useCallback(() => { if (!busyRef.current) onClose(); }, [onClose]);
+  useDialogFocus(true, dialogRef, null, closeWhenReady, fallbackFocusRef);
+  const unavailable = unavailableSubscriptionMemberIds(candidates, memberPersonIds);
+  const changed = [...memberPersonIds].sort().join(",") !== [...current.memberPersonIds].sort().join(",");
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busyRef.current || refreshRequired || !changed || unavailable.length) return;
+    busyRef.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      const result = await updateSubscriptionTeamAccess({ subscriptionId: current.id, version: current.version, memberPersonIds });
+      if (result.ok) onSaved(result.subscription, result.warning);
+      else {
+        setError(result.message);
+        setRefreshRequired(result.refreshRequired === true);
+      }
+    } catch {
+      setError("Team access could not be confirmed. Reload access before trying again.");
+      setRefreshRequired(true);
+    } finally {
+      busyRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  async function reload() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setSaving(true);
+    try {
+      const [subscriptions, activePeople] = await Promise.all([listSubscriptions(), listSubscriptionPeople()]);
+      const latest = subscriptions.find((item) => item.id === current.id);
+      if (!latest) throw new Error("This subscription is no longer available.");
+      setCurrent(latest);
+      setCandidates(activePeople);
+      setMemberPersonIds(latest.memberPersonIds);
+      onReloaded(subscriptions, activePeople);
+      setRefreshRequired(false);
+      setError("");
+    } catch {
+      setError("Team access could not be reloaded. Close this form and refresh the page.");
+    } finally {
+      busyRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  return <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeWhenReady(); }}>
+    <section className={`${styles.modal} ${styles.teamAccessModal}`} ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={saving} tabIndex={-1}>
+      <header><div><h2 id={titleId}>Team access</h2><p>{current.serviceName} · {subscriptionCompanyLabel(current.company)}</p></div><button type="button" aria-label="Close team access" disabled={saving} onClick={closeWhenReady}><X size={19} /></button></header>
+      <form onSubmit={save}>
+        <fieldset className={styles.editorFields} disabled={saving || refreshRequired}>
+          <SubscriptionMemberPicker people={candidates} selectedIds={memberPersonIds} onChange={setMemberPersonIds} />
+        </fieldset>
+        {error ? <p className={styles.inlineError} role="alert">{error}</p> : null}
+        <footer><button className={styles.secondaryAction} type="button" disabled={saving} onClick={closeWhenReady}>Cancel</button>
+          {refreshRequired ? <button className={styles.primaryAction} type="button" disabled={saving} onClick={() => void reload()}>{saving ? "Reloading…" : "Reload access"}</button> : <button className={styles.primaryAction} type="submit" disabled={saving || !changed || unavailable.length > 0}>{saving ? <LoaderCircle className={styles.spinner} size={16} aria-hidden="true" /> : <UsersRound size={16} aria-hidden="true" />}{saving ? "Saving…" : "Save team access"}</button>}
+        </footer>
+      </form>
+    </section>
+  </ModalBackdrop>;
+}
+
 function SubscriptionModal({
   people,
   subscription,
@@ -742,7 +834,7 @@ function SubscriptionModal({
     const form = new FormData(event.currentTarget);
     if (isPaidRequest) { await paid.submit(form); return; }
     if (unavailableMemberIds.length) {
-      setError("Remove inactive or unavailable members under Employee access before saving.");
+      setError("Remove inactive or unavailable members under Team access before saving.");
       return;
     }
     const amountText = String(form.get("amount") ?? "");
@@ -845,8 +937,8 @@ function SubscriptionModal({
           <label><span>Renewal date <small>Optional</small></span><input name="renewalDate" type="date" defaultValue={subscription?.renewalDate ?? ""} /></label>
           <label><span>Responsible person <b aria-hidden="true">*</b></span><EmployeePicker assignees={people} defaultValue={subscription?.responsible.personId ?? ""} name="responsiblePersonId" disabled={!people.length} /></label>
         </div>
-        {unavailableMemberIds.length ? <p className={styles.inlineError} role="status">{unavailableMemberIds.length} selected {unavailableMemberIds.length === 1 ? "member is" : "members are"} inactive or unavailable. Open Employee access to remove them before saving.</p> : null}
-        <details className={styles.accessDetails}><summary>Employee access{memberPersonIds.length ? ` · ${memberPersonIds.length}` : ""}</summary><SubscriptionMemberPicker people={people} selectedIds={memberPersonIds} onChange={setMemberPersonIds} /></details>
+        {unavailableMemberIds.length ? <p className={styles.inlineError} role="status">{unavailableMemberIds.length} selected {unavailableMemberIds.length === 1 ? "member is" : "members are"} inactive or unavailable. Open Team access to remove them before saving.</p> : null}
+        <details className={styles.accessDetails}><summary>Team access{memberPersonIds.length ? ` · ${memberPersonIds.length}` : ""}</summary><SubscriptionMemberPicker people={people} selectedIds={memberPersonIds} onChange={setMemberPersonIds} /></details>
 
         {isEditing && passwordReminder ? <p className={styles.formHelp}><KeyRound size={15} /> {passwordReminder} </p> : null}
         </fieldset>
@@ -867,29 +959,49 @@ function SubscriptionMemberPicker({
 }: {
   people: SubscriptionPerson[];
   selectedIds: string[];
-  onChange: (ids: string[]) => void;
+  onChange: Dispatch<SetStateAction<string[]>>;
 }) {
   const [query, setQuery] = useState("");
+  const [company, setCompany] = useState("");
+  const [team, setTeam] = useState("");
   const listId = useId();
   const selected = new Set(selectedIds);
   const unavailableMemberIds = unavailableSubscriptionMemberIds(people, selectedIds);
+  const selectedPeople = people.filter((person) => selected.has(person.personId));
+  const teams = [...new Set(people.map((person) => person.teamName).filter(Boolean))].sort((first, second) => first.localeCompare(second));
   const filteredPeople = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
-    return people.filter((person) => !term || [person.fullName, person.positionTitle, person.teamName, person.company].join(" ").toLocaleLowerCase().includes(term));
-  }, [people, query]);
+    return people.filter((person) => (!company || person.company === company)
+      && (!team || person.teamName === team)
+      && (!term || [person.fullName, person.positionTitle, person.teamName, person.company].join(" ").toLocaleLowerCase().includes(term)))
+      .sort((first, second) => first.fullName.localeCompare(second.fullName) || first.personId.localeCompare(second.personId));
+  }, [people, query, company, team]);
 
-  function toggle(personId: string) {
-    if (selected.has(personId)) onChange(selectedIds.filter((id) => id !== personId));
-    else if (people.some((person) => person.personId === personId)) onChange([...selectedIds, personId]);
+  function select(personId: string, checked: boolean) {
+    onChange((current) => checked
+      ? people.some((person) => person.personId === personId) && !current.includes(personId) ? [...current, personId] : current
+      : current.filter((id) => id !== personId));
   }
 
-  return <fieldset className={styles.membersFieldset}><legend>Who can view this subscription</legend>
+  return <fieldset className={styles.membersFieldset}><legend>Team members</legend>
+    <div className={styles.memberSummary} role="status" aria-live="polite">{selectedIds.length} assigned</div>
+    {selectedPeople.length ? <div className={styles.selectedMembers} aria-label="Assigned team members">{selectedPeople.map((person) => <button type="button" className={styles.selectedMember} key={person.personId} aria-label={`Remove ${person.fullName}, ${person.teamName || person.positionTitle}, ${subscriptionCompanyLabel(person.company)}`} onClick={() => select(person.personId, false)}><span>{person.fullName}<small>{[person.teamName, subscriptionCompanyLabel(person.company)].filter(Boolean).join(" · ")}</small></span><X size={14} aria-hidden="true" /></button>)}</div> : null}
     {unavailableMemberIds.length ? <div className={styles.unavailableMembers}>
       <p>These selected members are no longer available for assignment. Remove them before saving.</p>
       {unavailableMemberIds.map((personId, index) => <div className={styles.unavailableMember} key={personId}>
         <span>Inactive or unavailable member {index + 1}</span>
-        <button type="button" className={styles.secondaryAction} onClick={() => toggle(personId)} aria-label={`Remove inactive or unavailable member ${index + 1}`}>Remove</button>
+        <button type="button" className={styles.secondaryAction} onClick={() => select(personId, false)} aria-label={`Remove inactive or unavailable member ${index + 1}`}>Remove</button>
       </div>)}
     </div> : null}
-    <label className={styles.memberSearch}><Search size={15} aria-hidden="true" /><span className={styles.visuallyHidden}>Search employees for subscription access</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search employees" type="search" /></label><div className={styles.memberSummary}>{selectedIds.length} selected</div><div className={styles.memberList} id={listId}>{filteredPeople.length ? filteredPeople.map((person) => <label className={styles.memberOption} key={person.personId}><input checked={selected.has(person.personId)} onChange={() => toggle(person.personId)} type="checkbox" /><span><strong>{person.fullName}</strong><small>{[person.positionTitle, person.teamName].filter(Boolean).join(" · ")}</small></span></label>) : <p className={styles.memberEmpty}>No employees match that search.</p>}</div></fieldset>;
+    <label className={styles.memberSearch}><Search size={16} aria-hidden="true" /><span className={styles.visuallyHidden}>Search team members</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, role or team" type="search" /></label>
+    <div className={styles.memberFilters}>
+      <label><span>Company</span><select aria-label="Filter team members by company" value={company} onChange={(event) => setCompany(event.target.value)}><option value="">All companies</option><option value="mam">MAM</option><option value="equipsy">Equipsy</option></select></label>
+      <label><span>Team</span><select aria-label="Filter team members by team" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">All teams</option>{teams.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+    </div>
+    <div className={styles.memberList} id={listId}>{filteredPeople.length ? filteredPeople.map((person) => <label className={styles.memberOption} key={person.personId} htmlFor={`${listId}-${person.personId}`} data-selected={selected.has(person.personId) || undefined}>
+      <input id={`${listId}-${person.personId}`} checked={selected.has(person.personId)} onChange={(event) => select(person.personId, event.currentTarget.checked)} type="checkbox" />
+      <span><strong>{person.fullName}</strong><small>{[person.positionTitle, person.teamName].filter(Boolean).join(" · ")}</small></span>
+      <span className={styles.memberCompany} data-member-company={person.company}>{subscriptionCompanyLabel(person.company)}</span>
+    </label>) : <p className={styles.memberEmpty}>No team members match these filters.</p>}</div>
+  </fieldset>;
 }

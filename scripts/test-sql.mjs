@@ -144,9 +144,12 @@ try {
   if (afterAnnualUnit.status !== 0) throw new Error('After-annual offboarding portable release adapter tests failed');
   console.log('PASS: after-annual offboarding portable MODEL source, query, dispatch and readback controls');
   if (!reportingSpliceOnly) {
-  for (const regression of ['subscription-request-simple-activation.sql', 'subscription-request-penny-mail.sql', 'subscription-password-tasks.sql', 'subscription-request-template.sql', 'subscription-start-date.sql']) {
+  for (const regression of ['subscription-request-simple-activation.sql', 'subscription-request-penny-mail.sql', 'subscription-password-tasks.sql', 'subscription-request-template.sql', 'subscription-start-date.sql', 'subscription-team-access.sql']) {
     console.log(command('psql', [...target(socket, 'mam_test_replay'), '-f', path.join(sourceRoot, 'tests', regression)]));
   }
+  command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', '--template=mam_test_replay', 'mam_test_subscription_team_race']);
+  const teamAccessRace = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/subscription-team-access-concurrency.mjs'), socket, 'mam_test_subscription_team_race'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
+  if (teamAccessRace.status !== 0) throw new Error('Subscription team access concurrency failed');
   command('createdb', ['-h', socket, '-p', '55439', '-U', 'postgres', '--template=mam_test_replay', 'mam_test_sra_concurrency']);
   const activationRace = spawnSync(process.execPath, [path.join(sourceRoot, 'tests/subscription-request-activation-concurrency.mjs'), socket, 'mam_test_sra_concurrency'], { cwd: sourceRoot, env: postgresEnv, stdio: 'inherit' });
   if (activationRace.status !== 0) throw new Error('Subscription activation and withdrawal concurrency failed');
