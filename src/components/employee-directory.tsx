@@ -1159,8 +1159,8 @@ function EmployeeEditor({
               <option value="overseas">Overseas</option>
             </select>
           </Field>
-          <Field label="Contract type">
-            <select value={editor.draft.contractType} onChange={(event) => onChange("contractType", event.target.value)}>
+          <Field label="Contract type" required={isCreate}>
+            <select value={editor.draft.contractType} onChange={(event) => onChange("contractType", event.target.value)} required={isCreate}>
               <option value="">Not set</option>
               <option value="permanent">Permanent</option>
               <option value="fixed_term">Fixed-Term</option>
