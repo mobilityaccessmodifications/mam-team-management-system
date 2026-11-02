@@ -4,6 +4,13 @@ import { ExternalLink, LockKeyhole } from "lucide-react";
 
 const apps = [
   {
+    name: "AroFlo",
+    url: "https://aroflo.com/",
+    description: "Manage jobs, quotes, scheduling and field work across MAM operations in our core job management system.",
+    initials: "AF",
+    accent: "#176b7b",
+  },
+  {
     name: "MAM Picked",
     url: "https://mam-picked.vercel.app/",
     description: "Organise warehouse picking, stock requests and returns so materials are ready for our trade teams.",
