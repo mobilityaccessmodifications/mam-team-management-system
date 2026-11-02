@@ -31,6 +31,7 @@ import {
 import { FormEvent, type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
+import { AppsLanding } from "@/components/apps-landing";
 import { SubscriptionRequestTasks } from "@/components/subscription-request-tasks";
 import { getPortalRoleCapabilities } from "@/app/roles/actions";
 import { ROLE_CAPABILITY_ERROR, type PortalRole, type PortalRoleCapabilities } from "@/lib/portal-role-capabilities";
@@ -2086,24 +2087,7 @@ export function LeaveDemo({
           {selectedEmployeeProfileError && isPreviewingEmployeeAccess ? <div className={styles.loadErrorAction} role="alert"><span>{selectedEmployeeProfileError}</span><button type="button" onClick={() => setSelectedEmployeeProfileReloadKey((current) => current + 1)}>Retry profile</button></div> : null}
           {organisationAccessError && activeView === "people" ? <div className={styles.loadErrorAction} role="alert"><span>{organisationAccessError}</span><button type="button" onClick={() => void loadOrganisation()}>Retry permissions</button></div> : null}
           {!activeCapabilities ? rolePermissionsError ? <div role="alert"><span>{ROLE_CAPABILITY_ERROR}</span><button type="button" onClick={() => { setSelectedRoleState(null); setSelectedRoleReloadKey((key) => key + 1); }}>Retry permissions</button></div> : <p role="status">Loading role permissions…</p> : null}
-          {activeCapabilities && activeView === "home" ? <HomeView
-            profile={activeProfile}
-            requests={calendarRequests}
-            myRequests={myRequests}
-            pending={approvalQueue}
-            canReview={canReviewLeave}
-            onNavigate={navigate}
-            onSelect={selectRequest}
-            isNonRosterSystemAdmin={isNonRosterAdminHrWorkspace}
-            workSchedule={<WorkScheduleHome
-              workspace={visibleWorkScheduleWorkspace}
-              loading={workScheduleLoading}
-              error={workScheduleError}
-              onRefresh={refreshWorkScheduleWorkspace}
-              onRequest={submitWorkScheduleRequest}
-              onReview={reviewWorkScheduleRequest}
-            />}
-          /> : null}
+          {activeCapabilities && activeView === "home" ? <AppsLanding /> : null}
           {activeCapabilities && activeView === "leave" ? <LeaveWorkspaceLoadBoundary loading={leaveDataLoading}>
             <LeaveView today={leaveRegisterToday} leavePriority={leavePriority} onBalancesSaved={refreshLeaveWorkspace} profile={activeProfile} section={authorisedLeaveSection} requests={filteredRequests} allRequests={visibleRequests} selected={selectedRequest} filter={statusFilter} pending={approvalQueue} canReview={canReviewLeave} canViewAllLeave={canViewAllLeave} canAccessBalance={canAccessBalance} balanceContent={<><PayrollBalanceImporter previewPersonId={previewPersonId || undefined} comparisonOnly={activeCapabilities?.payroll_comparison_only === true} hideManagementControls={!activeCapabilities?.can_manage_leave_balances} onSaved={refreshLeaveWorkspace} />{activeCapabilities?.can_manage_leave_balances ? <LeavePriorityControls key={previewPersonId || "self"} previewPersonId={previewPersonId} workspace={leavePriority} busy={isMutating} onRequest={openTeamLeaveRequestForm} onSaved={refreshLeaveWorkspace} /> : null}</>} selectedId={selectedRequestId} note={managerNote} calendarRequests={calendarRequests} calendarCheckIns={calendarCheckIns} attachmentsByRequestId={attachmentsByRequestId} busy={isMutating} readOnly={false} hidePrivateDetails={false} canApplyForLeave={canApplyForLeave} canCancelOwnLeave={canCancelOwnLeave} mobileDetailOpen={mobileRequestDetailOpen} cancellationRequestId={cancellationRequestId} cancellationError={cancellationError} cancelledRequestId={cancelledRequestId} onRequestLeave={openLeaveRequestForm} onFilter={changeLeaveStatusFilter} onSection={chooseLeaveSection} onNote={setManagerNote} onSelect={selectRequest} onCloseMobileDetail={closeMobileRequestDetail} onDecision={decideRequest} onAddSupportingFiles={addSupportingFiles} onDeleteSupportingFile={deleteSupportingFile} onStartCancellation={startLeaveCancellation} onDismissCancellation={dismissLeaveCancellation} onConfirmCancellation={confirmLeaveCancellation} />
           </LeaveWorkspaceLoadBoundary> : null}
