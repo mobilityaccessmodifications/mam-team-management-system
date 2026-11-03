@@ -47,6 +47,30 @@ const apps = [
   },
 ] as const;
 
+const equipsyApps = [
+  {
+    name: "Donut",
+    url: "https://equipsy-donut.vercel.app/",
+    description: "Open Equipsy's Donut app for its dedicated team workflows and tools.",
+    initials: "DN",
+    accent: "#1f766e",
+  },
+  {
+    name: "Tiramisu",
+    url: "https://deft-tiramisu-3790ab.netlify.app/",
+    description: "Access the Equipsy Tiramisu application from the shared apps hub.",
+    initials: "TI",
+    accent: "#7b5c9e",
+  },
+  {
+    name: "5S Audit",
+    url: "https://5s-audit-wine.vercel.app/",
+    description: "Complete workplace 5S audits to support organisation, cleanliness and continuous improvement.",
+    initials: "5S",
+    accent: "#b65b25",
+  },
+] as const;
+
 export function AppsLanding() {
   return (
     <section aria-labelledby="apps-landing-title" style={{ padding: "12px 0 28px" }}>
@@ -55,8 +79,26 @@ export function AppsLanding() {
         <h1 id="apps-landing-title" style={{ fontSize: "clamp(25px, 3vw, 34px)", fontWeight: 750, letterSpacing: "-0.035em", margin: 0 }}>MAM &amp; Equipsy Apps</h1>
         <p style={{ marginTop: 10, color: "var(--muted, #64748b)", maxWidth: 650, lineHeight: 1.55 }}>Quick access to the systems we use across our teams.</p>
       </div>
+      <h2 style={{ margin: "0 0 16px", fontSize: 22, fontWeight: 750 }}>MAM &amp; Shared Apps</h2>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 245px), 1fr))", gap: 16 }}>
         {apps.map((app) => (
+          <a key={app.name} href={app.url} target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", flexDirection: "column", minHeight: 194, textDecoration: "none", color: "inherit", border: "1px solid var(--line, #dce1e7)", borderRadius: 16, padding: 20, background: "var(--surface, #fff)", boxShadow: "0 2px 12px rgba(19,35,56,.045)", transition: "border-color 160ms, transform 160ms" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 17 }}>
+              <span style={{ width: 44, height: 44, borderRadius: 12, display: "grid", placeItems: "center", background: app.accent, color: "#fff", fontWeight: 800, fontSize: 13 }}>{app.initials}</span>
+              <ExternalLink size={17} aria-hidden="true" style={{ opacity: 0.6 }} />
+            </div>
+            <strong style={{ fontSize: 17, marginBottom: 7 }}>{app.name}</strong>
+            <span style={{ fontSize: 13.5, lineHeight: 1.55, color: "var(--muted, #64748b)" }}>{app.description}</span>
+          </a>
+        ))}
+      </div>
+      <div style={{ margin: "36px 0 18px" }}>
+        <h2 style={{ fontSize: 22, fontWeight: 750, margin: "0 0 8px" }}>Equipsy Apps</h2>
+        <p style={{ margin: 0, color: "var(--muted, #64748b)", lineHeight: 1.55 }}>Quick links to Equipsy-specific tools.</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 245px), 1fr))", gap: 16 }}>
+        {equipsyApps.map((app) => (
           <a key={app.name} href={app.url} target="_blank" rel="noopener noreferrer"
             style={{ display: "flex", flexDirection: "column", minHeight: 194, textDecoration: "none", color: "inherit", border: "1px solid var(--line, #dce1e7)", borderRadius: 16, padding: 20, background: "var(--surface, #fff)", boxShadow: "0 2px 12px rgba(19,35,56,.045)", transition: "border-color 160ms, transform 160ms" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 17 }}>
