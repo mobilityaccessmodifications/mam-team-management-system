@@ -772,6 +772,33 @@
   font-size: 10px;
 }
 
+.copyWorkTimeButton {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  justify-self: start;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--directory-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--directory-accent-deep);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.copyWorkTimeButton:hover {
+  border-color: var(--directory-accent);
+  background: var(--directory-accent-soft);
+}
+
+.copyWorkTimeButton:focus-visible {
+  outline: 2px solid var(--directory-accent);
+  outline-offset: 2px;
+}
+
 .workdayPicker {
   display: grid;
   grid-template-columns: repeat(7, minmax(44px, 1fr));
