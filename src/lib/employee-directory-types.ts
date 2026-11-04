@@ -4,6 +4,7 @@ export type EmployeeTeamManagerDefault =
   | { status: "missing" | "invalid"; managerId: null; managerName: "" };
 export type EmployeeTeamManagerDefaultResult = EmployeeTeamManagerDefault | { error: string };
 export type EmployeeLaptopSupply = "" | "own_laptop" | "mam_laptop";
+export type EmployeeTimesheetEntries = "" | "aroflo" | "deputy" | "hubstaff" | "deputy_hubstaff" | "aroflo_hubstaff" | "aroflo_deputy";
 export type EmployeeLocation = "" | "hq" | "onsite_trade" | "remote_worker" | "hybrid";
 export type EmployeeEmploymentType = "abn" | "casual" | "full_time" | "part_time" | "overseas";
 export type EmployeeContractType = "permanent" | "fixed_term";
@@ -36,6 +37,8 @@ export type EmployeeDirectoryRecord = {
   phone: string;
   country: string;
   location: EmployeeLocation;
+  timesheetEntries: EmployeeTimesheetEntries;
+  expectedWeeklyHours: string;
   address: string;
   dateOfBirth: string;
   startedDate: string;
@@ -64,6 +67,8 @@ export type EmployeeDirectoryDraft = {
   managerId: string | null;
   country: string;
   location: EmployeeLocation;
+  timesheetEntries: EmployeeTimesheetEntries;
+  expectedWeeklyHours: string;
   address: string;
   dateOfBirth: string;
   startedDate: string;
