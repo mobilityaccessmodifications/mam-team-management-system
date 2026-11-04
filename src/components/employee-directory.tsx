@@ -57,6 +57,7 @@ import type {
   EmployeeDirectoryDraft,
   EmployeeDirectoryRecord,
   EmployeeLocation,
+  EmployeeTimesheetEntries,
   EmployeeTeamManagerDefaultResult,
   EmployeeWorkingDayTime,
   EmployeeWorkingWeekday,
@@ -132,6 +133,8 @@ const emptyDraft: EmployeeDirectoryDraft = {
   managerId: null,
   country: "",
   location: "",
+  timesheetEntries: "",
+  expectedWeeklyHours: "",
   address: "",
   dateOfBirth: "",
   startedDate: "",
@@ -162,6 +165,8 @@ function toDraft(record: EmployeeDirectoryRecord): EmployeeDirectoryDraft {
     managerId: record.managerId,
     country: record.country,
     location: record.location,
+    timesheetEntries: record.timesheetEntries,
+    expectedWeeklyHours: record.expectedWeeklyHours,
     address: record.address,
     dateOfBirth: record.dateOfBirth,
     startedDate: record.startedDate,
@@ -274,7 +279,7 @@ function updateWorkTime(
 }
 
 function isCompleteWorkTime(time: EmployeeWorkingDayTime | undefined): time is EmployeeWorkingDayTime {
-  const timePattern = /^(?:[01]\\d|2[0-3]):(?:00|15|30|45)$/;
+  const timePattern = /^(?:[01]\\d|2[0-3]):[0-5]\\d$/;
   return Boolean(time
     && timePattern.test(time.startTime)
     && timePattern.test(time.endTime)
@@ -500,6 +505,8 @@ export function EmployeeDirectory({
       record.teamName,
       record.managerName,
       record.location,
+      record.timesheetEntries,
+      record.expectedWeeklyHours,
       record.company,
       record.laptopId,
       record.mouseId,
@@ -1223,6 +1230,21 @@ function EmployeeEditor({
               <option value="overseas">Overseas</option>
             </select>
           </Field>
+          <Field label="Timesheet Entries" required>
+            <select value={editor.draft.timesheetEntries} onChange={(event) => onChange("timesheetEntries", event.target.value as EmployeeTimesheetEntries)} required aria-required="true">
+              <option value="" disabled>Select timesheet system</option>
+              <option value="aroflo">AroFlo</option>
+              <option value="deputy">Deputy</option>
+              <option value="hubstaff">Hubstaff</option>
+              <option value="deputy_hubstaff">Deputy & Hubstaff</option>
+              <option value="aroflo_hubstaff">AroFlo & Hubstaff</option>
+              <option value="aroflo_deputy">AroFlo & Deputy</option>
+            </select>
+          </Field>
+          <Field label="Expected weekly hours">
+            <input type="number" min={0} max={168} step="any" value={editor.draft.expectedWeeklyHours}
+              placeholder="e.g. 38; leave blank if unknown" onChange={(event) => onChange("expectedWeeklyHours", event.target.value)} />
+          </Field>
           <Field label="Contract type" required={isCreate}>
             <select value={editor.draft.contractType} onChange={(event) => onChange("contractType", event.target.value)} required={isCreate}>
               <option value="">Not set</option>
@@ -1330,7 +1352,7 @@ function EmployeeEditor({
                     <span>Start</span>
                     <input
                       type="time"
-                      step={900}
+                      step={60}
                       value={time?.startTime ?? ""}
                       onChange={(event) => onScheduleChange(
                         editor.draft.workingWeekdays,
@@ -1342,7 +1364,7 @@ function EmployeeEditor({
                     <span>Finish</span>
                     <input
                       type="time"
-                      step={900}
+                      step={60}
                       value={time?.endTime ?? ""}
                       onChange={(event) => onScheduleChange(
                         editor.draft.workingWeekdays,
