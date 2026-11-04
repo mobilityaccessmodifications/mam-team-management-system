@@ -644,6 +644,22 @@
   justify-self: start;
 }
 
+.scheduleRequiredHint {
+  margin: 0 0 11px;
+  padding: 9px 11px;
+  border-left: 3px solid var(--directory-accent);
+  border-radius: var(--radius-sm);
+  background: var(--directory-accent-soft);
+  color: var(--directory-ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.scheduleCompletionStatus {
+  font-weight: 700;
+  white-space: normal !important;
+}
+
 .scheduleOverview {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
