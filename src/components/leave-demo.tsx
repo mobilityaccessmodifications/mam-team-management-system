@@ -284,7 +284,7 @@ type InitialNavigation = {
   view: AppView;
   section: LeaveSection;
   requestId?: string;
-  peopleSection?: "assets" | "accounts" | "subscriptions" | "tasks" | "performance";
+  peopleSection?: "assets" | "accounts" | "accounts-report" | "subscriptions" | "tasks" | "performance";
 };
 
 function businessDaysBetween(start: string, end: string) {
@@ -541,6 +541,7 @@ export function LeaveDemo({
 
   canViewTeamCalendar = false,
   canViewSubscriptionReviewCalendar = false,
+  canViewAccountsReport = false,
   checkInResources,
   actorCapabilities,
   authActorId,
@@ -580,6 +581,7 @@ export function LeaveDemo({
   canViewTeamCalendar?: boolean;
   /** Server-issued capability for an employee's own subscription review dates. */
   canViewSubscriptionReviewCalendar?: boolean;
+  canViewAccountsReport?: boolean;
   checkInResources?: CheckInResourceLinks;
 }) {
   const [ownCapabilities, setOwnCapabilities] = useState<PortalRoleCapabilities | null>(actorCapabilities ?? null);
@@ -2202,7 +2204,7 @@ export function LeaveDemo({
                     />}
                   />{!isPreviewingEmployeeAccess ? <SubscriptionRequestTasks /> : null}</>
                 : undefined}
-              renderAccountsReport={activeCapabilities.can_manage_accounts || activeCapabilities.can_manage_employee_directory ? <AccountsReport /> : undefined}
+              renderAccountsReport={canViewAccountsReport && !isPreviewingEmployeeAccess ? <AccountsReport /> : undefined}
               renderAccounts={activeCapabilities.can_manage_accounts ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
                 : accountsError
