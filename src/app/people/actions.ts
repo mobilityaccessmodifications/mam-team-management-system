@@ -23,6 +23,7 @@ import type {
   EmployeeTeamManagerDefaultResult,
   EmployeeEmploymentType,
   EmployeeLocation,
+  EmployeeTimesheetEntries,
   EmployeeContractType,
   EmployeeDirectoryMutationResult,
   EmployeeDirectoryRecord,
@@ -196,6 +197,20 @@ function employmentType(value: unknown): EmployeeEmploymentType {
   throw new DirectoryInputError("Choose an employment type.");
 }
 
+function timesheetSource(value: unknown): Exclude<EmployeeTimesheetEntries, ""> {
+  if (value === "aroflo" || value === "deputy" || value === "hubstaff" || value === "deputy_hubstaff"
+    || value === "aroflo_hubstaff" || value === "aroflo_deputy") return value;
+  throw new DirectoryInputError("Choose a Timesheet Entries source.");
+}
+function weeklyHours(value: unknown): number | null {
+  if (value === "" || value == null) return null;
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0 || num > 168 || Math.round(num * 100) !== num * 100) {
+    throw new DirectoryInputError("Expected hours must be between 0 and 168 (up to two decimal places).");
+  }
+  return num;
+}
+
 function employeeLocation(value: unknown): Exclude<EmployeeLocation, ""> {
   if (value === "hq" || value === "onsite_trade" || value === "remote_worker" || value === "hybrid") return value;
   throw new DirectoryInputError("Choose a location: HQ, Onsite Trade, Remote Worker or Hybrid.");
@@ -315,6 +330,8 @@ function validateDraft(input: unknown) {
     p_manager_id: optionalUuid(value.managerId, "Manager"),
     p_country: optionalText(value.country, "Country", 100),
     p_location: employeeLocation(value.location),
+    p_timesheet_entries: timesheetSource(value.timesheetEntries),
+    p_expected_weekly_hours: weeklyHours(value.expectedWeeklyHours),
     p_address: optionalText(value.address, "Address", 500),
     p_date_of_birth: optionalDate(value.dateOfBirth, "Date of birth"),
     p_started_date: optionalDate(value.startedDate, "Start date"),
@@ -337,7 +354,9 @@ function validateDraft(input: unknown) {
 }
 
 function legacyDraftValues(values: ReturnType<typeof validateDraft>) {
-  const { p_working_weekdays, p_working_day_times, p_contract_type, p_location, ...legacyValues } = values;
+  const { p_working_weekdays, p_working_day_times, p_contract_type, p_location, p_timesheet_entries, p_expected_weekly_hours, ...legacyValues } = values;
+  void p_timesheet_entries;
+  void p_expected_weekly_hours;
   void p_location;
   void p_working_day_times;
   void p_contract_type;
@@ -521,7 +540,7 @@ export async function createEmployeeDirectoryRecord(
         throw new DirectoryInputError("The configured Team Manager is not available. Choose a valid manager before saving.");
       }
     }
-    let { data, error } = await supabase.rpc("create_employee_directory_record_with_location", {
+    let { data, error } = await supabase.rpc("create_employee_directory_record_with_profile_extras", {
       ...directoryValues,
       p_sort_order: 0,
     });
@@ -574,7 +593,7 @@ export async function updateEmployeeDirectoryRecord(
     const { p_contract_type: selectedContractType, ...directoryValues } = values;
     const currentRecord = await findEmployeeDirectoryRecord(supabase, inputValue.personId);
     directoryValues.p_manager_id = currentRecord.managerId;
-    let { data, error } = await supabase.rpc("update_employee_directory_record_with_location", {
+    let { data, error } = await supabase.rpc("update_employee_directory_record_with_profile_extras", {
       ...directoryValues,
       p_person_id: inputValue.personId,
       p_expected_person_version: version(inputValue.personVersion),
