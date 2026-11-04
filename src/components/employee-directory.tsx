@@ -6,6 +6,7 @@ import {
   AlertCircle,
   CalendarDays,
   Check,
+  Copy,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
@@ -270,6 +271,28 @@ function updateWorkTime(
     ...times.filter((time) => time.weekday !== day),
     next,
   ].sort((first, second) => first.weekday - second.weekday);
+}
+
+function isCompleteWorkTime(time: EmployeeWorkingDayTime | undefined): time is EmployeeWorkingDayTime {
+  const timePattern = /^(?:[01]\\d|2[0-3]):(?:00|15|30|45)$/;
+  return Boolean(time
+    && timePattern.test(time.startTime)
+    && timePattern.test(time.endTime)
+    && time.endTime > time.startTime);
+}
+
+function copyWorkTimeToSelectedDays(
+  days: EmployeeWorkingWeekday[] | null,
+  times: EmployeeWorkingDayTime[],
+  sourceDay: EmployeeWorkingWeekday,
+): EmployeeWorkingDayTime[] {
+  const source = times.find((time) => time.weekday === sourceDay);
+  if (!days?.length || !isCompleteWorkTime(source)) return times;
+  return days.map((weekday) => ({
+    weekday,
+    startTime: source.startTime,
+    endTime: source.endTime,
+  }));
 }
 
 function companyLabel(company: EmployeeDirectoryRecord["company"]) {
@@ -1241,7 +1264,7 @@ function EmployeeEditor({
           </div>
           {editor.draft.workingWeekdays?.length ? <div className={styles.workTimeField}>
             <span>Optional daily times</span>
-            <small>Leave both fields blank when exact hours are not fixed.</small>
+            <small>Enter hours for one day, then use “Apply to all days” to copy them to every selected day. You can still adjust individual days afterwards. Leave times blank when hours vary.</small>
             <div className={styles.workTimeRows}>
               {workingDayOptions.filter((day) => editor.draft.workingWeekdays?.includes(day.value)).map((day) => {
                 const time = editor.draft.workingDayTimes.find((candidate) => candidate.weekday === day.value);
@@ -1271,6 +1294,21 @@ function EmployeeEditor({
                       )}
                     />
                   </label>
+                  {isCompleteWorkTime(time) && editor.draft.workingWeekdays && editor.draft.workingWeekdays.length > 1
+                    && editor.draft.workingWeekdays.some((weekday) => {
+                      const current = editor.draft.workingDayTimes.find((entry) => entry.weekday === weekday);
+                      return !current || current.startTime !== time.startTime || current.endTime !== time.endTime;
+                    })
+                    ? <button
+                      type="button"
+                      className={styles.copyWorkTimeButton}
+                      aria-label={`Apply ${day.label}'s hours to all selected work days`}
+                      title={`Copy ${day.label}'s hours to every selected work day`}
+                      onClick={() => onScheduleChange(
+                        editor.draft.workingWeekdays,
+                        copyWorkTimeToSelectedDays(editor.draft.workingWeekdays, editor.draft.workingDayTimes, day.value),
+                      )}
+                    ><Copy size={13} aria-hidden="true" /> Apply to all days</button> : null}
                 </div>;
               })}
             </div>
