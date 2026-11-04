@@ -51,14 +51,14 @@ const equipsyApps = [
   {
     name: "Donut",
     url: "https://equipsy-donut.vercel.app/",
-    description: "Open Equipsy's Donut app for its dedicated team workflows and tools.",
+    description: "Track Equipsy orders waiting to be picked so the warehouse knows what needs preparing.",
     initials: "DN",
     accent: "#1f766e",
   },
   {
     name: "Tiramisu",
     url: "https://deft-tiramisu-3790ab.netlify.app/",
-    description: "Access the Equipsy Tiramisu application from the shared apps hub.",
+    description: "Track Equipsy orders and their progress from placement through fulfilment.",
     initials: "TI",
     accent: "#7b5c9e",
   },
@@ -71,7 +71,9 @@ const equipsyApps = [
   },
 ] as const;
 
-export function AppsLanding() {
+export function AppsLanding({ company, isManagement }: { company: "mam" | "equipsy"; isManagement: boolean }) {
+  const showMamApps = isManagement || company === "mam";
+  const showEquipsyApps = isManagement || company === "equipsy";
   return (
     <section aria-labelledby="apps-landing-title" style={{ padding: "12px 0 28px" }}>
       <div style={{ marginBottom: 22 }}>
@@ -79,6 +81,7 @@ export function AppsLanding() {
         <h1 id="apps-landing-title" style={{ fontSize: "clamp(25px, 3vw, 34px)", fontWeight: 750, letterSpacing: "-0.035em", margin: 0 }}>MAM &amp; Equipsy Apps</h1>
         <p style={{ marginTop: 10, color: "var(--muted, #64748b)", maxWidth: 650, lineHeight: 1.55 }}>Quick access to the systems we use across our teams.</p>
       </div>
+      {showMamApps ? <>
       <h2 style={{ margin: "0 0 16px", fontSize: 22, fontWeight: 750 }}>MAM &amp; Shared Apps</h2>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 245px), 1fr))", gap: 16 }}>
         {apps.map((app) => (
@@ -93,6 +96,8 @@ export function AppsLanding() {
           </a>
         ))}
       </div>
+      </> : null}
+      {showEquipsyApps ? <>
       <div style={{ margin: "36px 0 18px" }}>
         <h2 style={{ fontSize: 22, fontWeight: 750, margin: "0 0 8px" }}>Equipsy Apps</h2>
         <p style={{ margin: 0, color: "var(--muted, #64748b)", lineHeight: 1.55 }}>Quick links to Equipsy-specific tools.</p>
@@ -110,6 +115,7 @@ export function AppsLanding() {
           </a>
         ))}
       </div>
+      </> : null}
       <p style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 20, fontSize: 13, color: "var(--muted, #64748b)" }}>
         <LockKeyhole size={15} aria-hidden="true" /> Access to each system depends on your existing account and permissions. People Hub does not automatically sign you in.
       </p>
