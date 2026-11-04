@@ -316,7 +316,7 @@ export function PeopleOperationsDemo({
   renderAccountsReport?: ReactNode;
   /** System-admin asset register. The component rechecks its own server capability. */
   renderAssetRegister?: ReactNode;
-  initialSection?: "assets" | "accounts" | "subscriptions" | "tasks" | "performance";
+  initialSection?: "assets" | "accounts" | "accounts-report" | "subscriptions" | "tasks" | "performance";
   /** System Admin-managed subscription register; managers receive its read-only projection. */
   renderSubscriptionRegister?: ReactNode;
   /** System Admin-only analytics key lifecycle and integration guide. */
