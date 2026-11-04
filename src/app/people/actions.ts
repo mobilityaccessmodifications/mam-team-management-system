@@ -494,6 +494,9 @@ export async function createEmployeeDirectoryRecord(
   try {
     const { supabase } = await requireDirectoryMutationManager();
     const values = validateDraft(input);
+    if (!values.p_working_weekdays?.length) {
+      throw new DirectoryInputError("Select at least one usual work day in Work schedule before creating an employee.");
+    }
     const { p_contract_type: selectedContractType, ...directoryValues } = values;
     if (!selectedContractType) throw new DirectoryInputError("Choose a contract type (Permanent or Fixed-Term) before creating an employee.");
     if (values.p_is_active) {
