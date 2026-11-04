@@ -241,7 +241,7 @@ function workingDayTimes(value: unknown, selectedWeekdays: number[] | null) {
   }
   const selected = new Set(selectedWeekdays ?? []);
   const seen = new Set<number>();
-  const timePattern = /^(?:[01]\d|2[0-3]):(?:00|15|30|45)$/;
+  const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
   return value.map((candidate) => {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
       throw new DirectoryInputError("Work times are invalid.");
@@ -258,7 +258,7 @@ function workingDayTimes(value: unknown, selectedWeekdays: number[] | null) {
       || !timePattern.test(endTime)
       || endTime <= startTime
     ) {
-      throw new DirectoryInputError("Choose valid start and finish times in 15-minute intervals.");
+      throw new DirectoryInputError("Choose valid start and finish times.");
     }
     seen.add(weekday);
     return { weekday, start_time: startTime, end_time: endTime };
