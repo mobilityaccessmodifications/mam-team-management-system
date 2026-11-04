@@ -688,6 +688,10 @@ export function EmployeeDirectory({
     event.preventDefault();
     const editorToSave = editor ?? activeEditor;
     if (!editorToSave || saving || committedPersonId) return;
+    if (editorToSave.mode === "create" && !editorToSave.draft.workingWeekdays?.length) {
+      setSaveError("Select at least one usual work day in Work schedule before creating an employee.");
+      return;
+    }
     if (editorToSave.mode === "create" && managerSelectionBlocked) {
       setSaveError("Check the Team Manager or choose a valid manager before saving.");
       return;
@@ -1186,7 +1190,7 @@ function EmployeeEditor({
       </fieldset>
 
       <fieldset disabled={saving}>
-        <legend>Work schedule</legend>
+        <legend>Work schedule{isCreate ? " *" : ""}</legend>
         <div className={styles.scheduleOverview}>
           <span className={styles.scheduleIcon}><CalendarDays size={18} aria-hidden="true" /></span>
           <span className={styles.scheduleCopy}>
@@ -1212,8 +1216,8 @@ function EmployeeEditor({
             <input name="scheduledEmploymentEndDate" value={editor.draft.scheduledEmploymentEndDate} onChange={(event) => onChange("scheduledEmploymentEndDate", event.target.value)} type="date" min={editor.draft.startedDate || undefined} />
           </Field>
           <div className={styles.workdayField}>
-            <span id="employee-workdays-label">Usual work days</span>
-            <div className={styles.workdayPicker} role="group" aria-labelledby="employee-workdays-label">
+            <span id="employee-workdays-label">Usual work days{isCreate ? " *" : ""}</span>
+            <div className={styles.workdayPicker} role="group" aria-labelledby="employee-workdays-label" aria-required={isCreate}>
               {workingDayOptions.map((day) => {
                 const selected = editor.draft.workingWeekdays?.includes(day.value) ?? false;
                 return <button
@@ -1233,6 +1237,7 @@ function EmployeeEditor({
                 ><span>{day.short}</span>{selected ? <Check size={12} aria-hidden="true" /> : null}</button>;
               })}
             </div>
+            {isCreate && !editor.draft.workingWeekdays?.length ? <small role="status">Select at least one work day to create this employee.</small> : null}
           </div>
           {editor.draft.workingWeekdays?.length ? <div className={styles.workTimeField}>
             <span>Optional daily times</span>
