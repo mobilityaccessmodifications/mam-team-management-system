@@ -497,6 +497,14 @@ export async function createEmployeeDirectoryRecord(
     if (!values.p_working_weekdays?.length) {
       throw new DirectoryInputError("Select at least one usual work day in Work schedule before creating an employee.");
     }
+    const scheduledDays = new Set(values.p_working_day_times.map((time) => time.weekday));
+    const missingDays = values.p_working_weekdays.filter((weekday) => !scheduledDays.has(weekday));
+    if (missingDays.length) {
+      const dayLabels = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+      throw new DirectoryInputError(
+        `Enter a start and finish time for each selected work day. Missing: ${missingDays.map((day) => dayLabels[day]).join(", ")}.`
+      );
+    }
     const { p_contract_type: selectedContractType, ...directoryValues } = values;
     if (!selectedContractType) throw new DirectoryInputError("Choose a contract type (Permanent or Fixed-Term) before creating an employee.");
     if (values.p_is_active) {
