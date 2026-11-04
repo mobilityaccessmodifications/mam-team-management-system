@@ -1054,6 +1054,14 @@ function EmployeeEditor({
   const [roleSaving, setRoleSaving] = useState(false);
   const [roleError, setRoleError] = useState("");
   const [editingSchedule, setEditingSchedule] = useState(isCreate);
+  const [preferredCopyDay, setPreferredCopyDay] = useState<EmployeeWorkingWeekday | null>(null);
+  const copyableDays = workingDayOptions.filter((day) =>
+    editor.draft.workingWeekdays?.includes(day.value)
+    && isCompleteWorkTime(editor.draft.workingDayTimes.find((time) => time.weekday === day.value))
+  );
+  const copySourceDay = copyableDays.find((day) => day.value === preferredCopyDay)?.value
+    ?? copyableDays[0]?.value
+    ?? null;
   const roleEditable = canManageRoles && role !== "system_admin";
   const roleCard = selectedRole && selectedRole in ROLE_PERMISSION_CARDS
     ? ROLE_PERMISSION_CARDS[selectedRole as keyof typeof ROLE_PERMISSION_CARDS] : null;
@@ -1264,7 +1272,33 @@ function EmployeeEditor({
           </div>
           {editor.draft.workingWeekdays?.length ? <div className={styles.workTimeField}>
             <span>Optional daily times</span>
-            <small>Enter hours for one day, then use “Apply to all days” to copy them to every selected day. You can still adjust individual days afterwards. Leave times blank when hours vary.</small>
+            <small>Enter hours for one day, then copy them to all selected work days. You can still adjust individual days afterwards. Leave times blank when hours vary.</small>
+            <div className={styles.workTimeCopyControls}>
+              <label>
+                <span>Copy hours from</span>
+                <select
+                  aria-label="Copy work hours from day"
+                  value={copySourceDay ?? ""}
+                  onChange={(event) => setPreferredCopyDay(Number(event.target.value) as EmployeeWorkingWeekday)}
+                  disabled={!copyableDays.length}
+                >
+                  {!copyableDays.length ? <option value="">Enter valid hours below first</option> : null}
+                  {copyableDays.map((day) => <option key={day.value} value={day.value}>{day.label}</option>)}
+                </select>
+              </label>
+              <button
+                type="button"
+                className={styles.copyWorkTimeButton}
+                disabled={!copySourceDay || (editor.draft.workingWeekdays?.length ?? 0) < 2}
+                onClick={() => {
+                  if (!copySourceDay) return;
+                  onScheduleChange(
+                    editor.draft.workingWeekdays,
+                    copyWorkTimeToSelectedDays(editor.draft.workingWeekdays, editor.draft.workingDayTimes, copySourceDay),
+                  );
+                }}
+              ><Copy size={14} aria-hidden="true" /> Apply to all selected days</button>
+            </div>
             <div className={styles.workTimeRows}>
               {workingDayOptions.filter((day) => editor.draft.workingWeekdays?.includes(day.value)).map((day) => {
                 const time = editor.draft.workingDayTimes.find((candidate) => candidate.weekday === day.value);
@@ -1294,21 +1328,7 @@ function EmployeeEditor({
                       )}
                     />
                   </label>
-                  {isCompleteWorkTime(time) && editor.draft.workingWeekdays && editor.draft.workingWeekdays.length > 1
-                    && editor.draft.workingWeekdays.some((weekday) => {
-                      const current = editor.draft.workingDayTimes.find((entry) => entry.weekday === weekday);
-                      return !current || current.startTime !== time.startTime || current.endTime !== time.endTime;
-                    })
-                    ? <button
-                      type="button"
-                      className={styles.copyWorkTimeButton}
-                      aria-label={`Apply ${day.label}'s hours to all selected work days`}
-                      title={`Copy ${day.label}'s hours to every selected work day`}
-                      onClick={() => onScheduleChange(
-                        editor.draft.workingWeekdays,
-                        copyWorkTimeToSelectedDays(editor.draft.workingWeekdays, editor.draft.workingDayTimes, day.value),
-                      )}
-                    ><Copy size={13} aria-hidden="true" /> Apply to all days</button> : null}
+
                 </div>;
               })}
             </div>
