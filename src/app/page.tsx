@@ -17,14 +17,17 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   if (userError || !userData.user) redirect("/login");
   let actor: PortalRoleCapabilities;
   let canViewSubscriptionReviewCalendar = false;
+  let canViewAccountsReport = false;
   try {
-    const [roleResult, reviewResult] = await Promise.all([
+    const [roleResult, reviewResult, accountsReportResult] = await Promise.all([
       supabase.rpc("get_portal_role_capabilities", { p_person_id: null }),
       supabase.rpc("can_view_subscription_review_calendar"),
+      supabase.rpc("can_view_accounts_employee_report"),
     ]);
     if (roleResult.error || roleResult.status >= 500) throw new Error(ROLE_CAPABILITY_ERROR);
     actor = parsePortalRoleCapabilities(roleResult.data);
     canViewSubscriptionReviewCalendar = !reviewResult.error && !(reviewResult.status >= 500) && reviewResult.data === true;
+    canViewAccountsReport = !accountsReportResult.error && !(accountsReportResult.status >= 500) && accountsReportResult.data === true;
   } catch {
     return <RolePermissionRecovery />;
   }
@@ -45,6 +48,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     canViewOwnTasks={Boolean(actor.person_id)}
     canViewTeamCalendar={Boolean(actor.person_id) || actor.is_super_admin}
     canViewSubscriptionReviewCalendar={canViewSubscriptionReviewCalendar}
+    canViewAccountsReport={canViewAccountsReport}
     checkInResources={actor.can_view_check_in_workspace ? {
       ...getCheckInResourceLinks(),
       canApproveEmploymentDecisions: actor.can_approve_employment_decisions,
@@ -53,7 +57,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       view: requestedView,
       section: section === "approvals" || section === "balance" ? section : "requests",
       requestId: firstValue(params.request),
-      peopleSection: peopleSection === "assets" || peopleSection === "accounts" || peopleSection === "subscriptions" || peopleSection === "tasks" || peopleSection === "performance" ? peopleSection : undefined,
+      peopleSection: peopleSection === "assets" || peopleSection === "accounts" || peopleSection === "accounts-report" || peopleSection === "subscriptions" || peopleSection === "tasks" || peopleSection === "performance" ? peopleSection : undefined,
     }}
   />;
 }
