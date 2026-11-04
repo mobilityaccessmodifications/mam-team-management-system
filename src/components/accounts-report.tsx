@@ -16,12 +16,9 @@ function daysText(row: AccountsReportRow) {
 function timesText(row: AccountsReportRow) {
   const times = row.daily_times || [];
   if (!times.length) return "—";
-  const grouped = new Map<string, string[]>();
-  for (const time of times) {
-    const label = `${time.start_time}–${time.end_time}`;
-    grouped.set(label, [...(grouped.get(label) ?? []), weekdayNames[time.weekday] ?? "?"]);
-  }
-  return [...grouped].map(([time, days]) => `${days.join(", ")}: ${time}`).join("; ");
+  const distinct = [...new Set(times.map((time) => `${time.start_time}–${time.end_time}`))];
+  // Work Days has its own column. Avoid repeating weekday labels alongside regular hours.
+  return distinct.length === 1 ? distinct[0] : `Varies: ${distinct.join(" / ")}`;
 }
 const columns = ["Employee", "Team Lead", "Team", "Company", "Location", "Work Days", "Start – Finish", "Expected Hours", "Employment Type", "Timesheet Entries"];
 const csvCell = (value: string) => {
