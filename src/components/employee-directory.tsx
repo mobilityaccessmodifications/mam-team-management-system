@@ -55,6 +55,7 @@ import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryDraft,
   EmployeeDirectoryRecord,
+  EmployeeLocation,
   EmployeeTeamManagerDefaultResult,
   EmployeeWorkingDayTime,
   EmployeeWorkingWeekday,
@@ -129,6 +130,7 @@ const emptyDraft: EmployeeDirectoryDraft = {
   teamName: "",
   managerId: null,
   country: "",
+  location: "",
   address: "",
   dateOfBirth: "",
   startedDate: "",
@@ -158,6 +160,7 @@ function toDraft(record: EmployeeDirectoryRecord): EmployeeDirectoryDraft {
     teamName: record.teamName,
     managerId: record.managerId,
     country: record.country,
+    location: record.location,
     address: record.address,
     dateOfBirth: record.dateOfBirth,
     startedDate: record.startedDate,
@@ -473,6 +476,7 @@ export function EmployeeDirectory({
       record.positionTitle,
       record.teamName,
       record.managerName,
+      record.location,
       record.company,
       record.laptopId,
       record.mouseId,
@@ -914,7 +918,7 @@ function EmployeeDirectoryList({
           <span className={styles.avatar}>{initials(record.fullName)}</span>
           <span className={styles.recordCopy}>
             <strong>{record.fullName}</strong>
-            <small>{record.positionTitle}{record.teamName ? ` · ${record.teamName}` : ""}</small>
+            <small>{record.positionTitle}{record.teamName ? ` · ${record.teamName}` : ""}{record.location ? ` · ${record.location === "hq" ? "HQ" : record.location === "onsite_trade" ? "Onsite Trade" : record.location === "remote_worker" ? "Remote Worker" : "Hybrid"}` : ""}</small>
           </span>
           <span className={styles.recordMeta}>
             <i data-company={record.company}>{companyLabel(record.company)}</i>
@@ -1112,6 +1116,15 @@ function EmployeeEditor({
             {roleError ? <p role="alert">{roleError}</p> : null}
             <button type="button" className={styles.secondaryAction} onClick={() => void saveRole()} disabled={saving || roleSaving || refreshRequired || !currentRecord?.isActive || !role || !roleCard || selectedRole === role}>Save role</button>
           </div> : !isCreate && roleLoadError ? <p className={`${styles.fullSpan} ${styles.formError}`} role="alert">{roleLoadError}</p> : null}
+          <Field label="Location" required>
+            <select value={editor.draft.location} onChange={(event) => onChange("location", event.target.value as EmployeeLocation)} required aria-required="true">
+              <option value="" disabled>Select location</option>
+              <option value="hq">HQ</option>
+              <option value="onsite_trade">Onsite Trade</option>
+              <option value="remote_worker">Remote Worker</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </Field>
           <Field label="Company">
             <select value={editor.draft.company} onChange={(event) => onChange("company", event.target.value)}>
               <option value="mam">MAM</option>
