@@ -135,7 +135,7 @@ function workingDayTimes(
   if (!Array.isArray(value) || value.length > 7) throw new Error(GENERIC_LOAD_ERROR);
   const selected = new Set(selectedWeekdays ?? []);
   const seen = new Set<number>();
-  const timePattern = /^(?:[01]\d|2[0-3]):(?:00|15|30|45)$/;
+  const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
   const result: EmployeeWorkingDayTime[] = [];
   for (const candidate of value) {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
