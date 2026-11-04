@@ -14,6 +14,7 @@ import {
   CreditCard,
   FileCheck2,
   KeyRound,
+  FileSpreadsheet,
   Laptop,
   ListChecks,
   Network,
@@ -42,7 +43,7 @@ import {
 import styles from "@/components/people-operations-demo.module.css";
 
 type AccessRole = "employee" | "manager" | "account" | "admin" | "system_admin" | null;
-type PeopleSection = "profile" | "directory" | "organisation" | "tasks" | "checkins" | "accounts" | "assets" | "subscriptions" | "analytics" | "performance";
+type PeopleSection = "profile" | "directory" | "organisation" | "tasks" | "checkins" | "accounts" | "accounts-report" | "assets" | "subscriptions" | "analytics" | "performance";
 type PeopleTaskSection = "onboarding" | "offboarding" | "checkins";
 type WorkflowKind = "onboarding" | "offboarding";
 type TaskOwner = "HR" | "Team Leader" | "IT" | "Accounts" | "Analyst" | "Warehouse" | "Employee";
@@ -283,6 +284,7 @@ export function PeopleOperationsDemo({
   renderCheckInRegister,
   renderCheckInTasks,
   renderAccounts,
+  renderAccountsReport,
   renderAssetRegister,
   initialSection,
   renderSubscriptionRegister,
@@ -311,6 +313,7 @@ export function PeopleOperationsDemo({
   /** Opens the selected safe tree node in the HR-only directory detail drawer. */
   onOpenEmployeeDirectoryRecord?: (personId: string) => void;
   renderAccounts?: ReactNode;
+  renderAccountsReport?: ReactNode;
   /** System-admin asset register. The component rechecks its own server capability. */
   renderAssetRegister?: ReactNode;
   initialSection?: "assets" | "accounts" | "subscriptions" | "tasks" | "performance";
@@ -339,11 +342,12 @@ export function PeopleOperationsDemo({
     ...(renderCheckInRegister ? ["checkins" as const] : []),
     ...(hasTasks ? ["tasks" as const] : []),
     ...(renderAccounts ? ["accounts" as const] : []),
+    ...(renderAccountsReport ? ["accounts-report" as const] : []),
     ...(renderAssetRegister ? ["assets" as const] : []),
     ...(renderSubscriptionRegister ? ["subscriptions" as const] : []),
     ...(renderAnalyticsApiManagement ? ["analytics" as const] : []),
     ...(renderPerformanceReviews ? ["performance" as const] : []),
-  ], [hasTasks, renderAccounts, renderAnalyticsApiManagement, renderAssetRegister, renderCheckInRegister, renderEmployeeDirectory, renderPerformanceReviews, renderSubscriptionRegister, showOrganisation, showProfile]);
+  ], [hasTasks, renderAccounts, renderAccountsReport, renderAnalyticsApiManagement, renderAssetRegister, renderCheckInRegister, renderEmployeeDirectory, renderPerformanceReviews, renderSubscriptionRegister, showOrganisation, showProfile]);
   const [section, setSection] = useState<PeopleSection>(() => initialSection ?? availableSections[0] ?? "profile");
   const [performanceVisited, setPerformanceVisited] = useState(section === "performance");
   const [taskSection, setTaskSection] = useState<PeopleTaskSection>(
@@ -522,6 +526,7 @@ export function PeopleOperationsDemo({
     if (value === "organisation") return { value, label: "Organisation", icon: <Network size={16} /> };
     if (value === "checkins") return { value, label: "Check-ins", icon: <CalendarClock size={16} /> };
     if (value === "tasks") return { value, label: "Tasks", icon: <ListChecks size={16} /> };
+    if (value === "accounts-report") return { value, label: "Accounts Report", icon: <FileSpreadsheet size={16} /> };
     if (value === "assets") return { value, label: "Assets", icon: <Laptop size={16} /> };
     if (value === "subscriptions") return { value, label: "Subscriptions", icon: <CreditCard size={16} /> };
     if (value === "analytics") return { value, label: "Analytics API", icon: <Code2 size={16} /> };
@@ -563,6 +568,7 @@ export function PeopleOperationsDemo({
           setSection("directory");
         } : undefined} /> : null}
         {visibleSection === "accounts" ? renderAccounts : null}
+        {visibleSection === "accounts-report" ? renderAccountsReport : null}
         {visibleSection === "assets" ? renderAssetRegister : null}
         {visibleSection === "subscriptions" ? renderSubscriptionRegister : null}
         {visibleSection === "analytics" ? renderAnalyticsApiManagement : null}
