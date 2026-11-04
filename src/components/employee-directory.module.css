@@ -772,6 +772,34 @@
   font-size: 10px;
 }
 
+.workTimeCopyControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  padding: 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--directory-line);
+  border-radius: var(--radius-sm);
+}
+
+.workTimeCopyControls label {
+  display: grid;
+  flex: 1 1 180px;
+  gap: 4px;
+  min-width: 0;
+}
+
+.workTimeCopyControls label span {
+  font-size: 11px;
+  color: var(--directory-muted);
+}
+
+.workTimeCopyControls select {
+  width: 100%;
+  min-width: 0;
+}
+
 .copyWorkTimeButton {
   grid-column: 1 / -1;
   display: inline-flex;
@@ -789,7 +817,12 @@
   touch-action: manipulation;
 }
 
-.copyWorkTimeButton:hover {
+.copyWorkTimeButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.copyWorkTimeButton:hover:not(:disabled) {
   border-color: var(--directory-accent);
   background: var(--directory-accent-soft);
 }
