@@ -22,6 +22,7 @@ import type {
   EmployeeTeamManagerDefault,
   EmployeeTeamManagerDefaultResult,
   EmployeeEmploymentType,
+  EmployeeLocation,
   EmployeeContractType,
   EmployeeDirectoryMutationResult,
   EmployeeDirectoryRecord,
@@ -195,6 +196,11 @@ function employmentType(value: unknown): EmployeeEmploymentType {
   throw new DirectoryInputError("Choose an employment type.");
 }
 
+function employeeLocation(value: unknown): Exclude<EmployeeLocation, ""> {
+  if (value === "hq" || value === "onsite_trade" || value === "remote_worker" || value === "hybrid") return value;
+  throw new DirectoryInputError("Choose a location: HQ, Onsite Trade, Remote Worker or Hybrid.");
+}
+
 function contractType(value: unknown): EmployeeContractType | null {
   if (value === "" || value === null || value === undefined) return null;
   if (value === "permanent" || value === "fixed_term") return value;
@@ -308,6 +314,7 @@ function validateDraft(input: unknown) {
     p_team_name: validatedTeam(value.teamName),
     p_manager_id: optionalUuid(value.managerId, "Manager"),
     p_country: optionalText(value.country, "Country", 100),
+    p_location: employeeLocation(value.location),
     p_address: optionalText(value.address, "Address", 500),
     p_date_of_birth: optionalDate(value.dateOfBirth, "Date of birth"),
     p_started_date: optionalDate(value.startedDate, "Start date"),
@@ -330,7 +337,8 @@ function validateDraft(input: unknown) {
 }
 
 function legacyDraftValues(values: ReturnType<typeof validateDraft>) {
-  const { p_working_weekdays, p_working_day_times, p_contract_type, ...legacyValues } = values;
+  const { p_working_weekdays, p_working_day_times, p_contract_type, p_location, ...legacyValues } = values;
+  void p_location;
   void p_working_day_times;
   void p_contract_type;
   if (p_working_weekdays !== null) {
@@ -502,27 +510,10 @@ export async function createEmployeeDirectoryRecord(
         throw new DirectoryInputError("The configured Team Manager is not available. Choose a valid manager before saving.");
       }
     }
-    let { data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule_times", {
+    let { data, error } = await supabase.rpc("create_employee_directory_record_with_location", {
       ...directoryValues,
       p_sort_order: 0,
     });
-    if (isMissingWorkScheduleRpc(error) && values.p_working_day_times.length === 0) {
-      const { p_working_day_times, ...weekdayValues } = directoryValues;
-      void p_working_day_times;
-      ({ data, error } = await supabase.rpc("create_employee_directory_record_with_work_schedule", {
-        ...weekdayValues,
-        p_sort_order: 0,
-      }));
-    }
-    if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
-      ({ data, error } = await supabase.rpc("create_employee_directory_record_with_employment_type", {
-        ...legacyDraftValues({ ...directoryValues, p_contract_type: selectedContractType }),
-        p_sort_order: 0,
-      }));
-    }
-    if (isMissingWorkScheduleRpc(error)) {
-      throw new DirectoryInputError("Work schedule storage is not ready. Refresh and try again.");
-    }
     if (error) return { error: mutationErrorMessage(error) };
 
     const personId = returnedPersonId(data);
@@ -572,33 +563,12 @@ export async function updateEmployeeDirectoryRecord(
     const { p_contract_type: selectedContractType, ...directoryValues } = values;
     const currentRecord = await findEmployeeDirectoryRecord(supabase, inputValue.personId);
     directoryValues.p_manager_id = currentRecord.managerId;
-    let { data, error } = await supabase.rpc("update_employee_directory_record_with_work_schedule_times", {
+    let { data, error } = await supabase.rpc("update_employee_directory_record_with_location", {
       ...directoryValues,
       p_person_id: inputValue.personId,
       p_expected_person_version: version(inputValue.personVersion),
       p_expected_detail_version: version(inputValue.detailVersion),
     });
-    if (isMissingWorkScheduleRpc(error) && values.p_working_day_times.length === 0) {
-      const { p_working_day_times, ...weekdayValues } = directoryValues;
-      void p_working_day_times;
-      ({ data, error } = await supabase.rpc("update_employee_directory_record_with_work_schedule", {
-        ...weekdayValues,
-        p_person_id: inputValue.personId,
-        p_expected_person_version: version(inputValue.personVersion),
-        p_expected_detail_version: version(inputValue.detailVersion),
-      }));
-    }
-    if (isMissingWorkScheduleRpc(error) && values.p_working_weekdays === null) {
-      ({ data, error } = await supabase.rpc("update_employee_directory_record_with_employment_type", {
-        ...legacyDraftValues({ ...directoryValues, p_contract_type: selectedContractType }),
-        p_person_id: inputValue.personId,
-        p_expected_person_version: version(inputValue.personVersion),
-        p_expected_detail_version: version(inputValue.detailVersion),
-      }));
-    }
-    if (isMissingWorkScheduleRpc(error)) {
-      throw new DirectoryInputError("Work schedule storage is not ready. Refresh and try again.");
-    }
     if (error) return { error: mutationErrorMessage(error) };
 
     const personId = returnedPersonId(data);
