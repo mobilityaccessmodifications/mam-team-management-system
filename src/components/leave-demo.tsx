@@ -131,6 +131,7 @@ function PanelLoading() {
   return <p role="status" aria-live="polite" aria-busy="true">Loading workspace…</p>;
 }
 const AccountManagement = dynamic(() => import("@/components/account-management").then((module) => module.AccountManagement), { loading: PanelLoading });
+const AccountsReport = dynamic(() => import("@/components/accounts-report").then((module) => module.AccountsReport), { loading: PanelLoading });
 const AssetRegister = dynamic(() => import("@/components/asset-register").then((module) => module.AssetRegister), { loading: PanelLoading });
 const AnalyticsApiManagement = dynamic(() => import("@/components/analytics-api-management").then((module) => module.AnalyticsApiManagement), { loading: PanelLoading });
 const EmployeeDirectory = dynamic(() => import("@/components/employee-directory").then((module) => module.EmployeeDirectory), { loading: PanelLoading });
@@ -2201,6 +2202,7 @@ export function LeaveDemo({
                     />}
                   />{!isPreviewingEmployeeAccess ? <SubscriptionRequestTasks /> : null}</>
                 : undefined}
+              renderAccountsReport={activeCapabilities.can_manage_accounts || activeCapabilities.can_manage_employee_directory ? <AccountsReport /> : undefined}
               renderAccounts={activeCapabilities.can_manage_accounts ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
                 : accountsError
