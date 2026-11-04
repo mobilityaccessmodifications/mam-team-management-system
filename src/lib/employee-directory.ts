@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   EmployeeDirectoryCompany,
   EmployeeEmploymentType,
+  EmployeeLocation,
   EmployeeContractType,
   EmployeeLaptopSupply,
   EmployeeDirectoryRecord,
@@ -28,6 +29,7 @@ type DirectoryRpcRow = {
   personal_email: string | null;
   phone: string | null;
   country: string | null;
+  location?: string | null;
   address: string | null;
   date_of_birth: string | null;
   started_date: string | null;
@@ -78,6 +80,12 @@ function company(value: unknown): EmployeeDirectoryCompany {
 function laptopSupply(value: unknown): EmployeeLaptopSupply {
   if (value === null || value === undefined || value === "") return "";
   if (value === "own_laptop" || value === "mam_laptop") return value;
+  throw new Error(GENERIC_LOAD_ERROR);
+}
+
+function location(value: unknown): EmployeeLocation {
+  if (value === null || value === undefined || value === "") return "";
+  if (value === "hq" || value === "onsite_trade" || value === "remote_worker" || value === "hybrid") return value;
   throw new Error(GENERIC_LOAD_ERROR);
 }
 
@@ -165,6 +173,7 @@ function toRecord(row: DirectoryRpcRow, contractType: EmployeeContractType | "")
     personalEmail: optionalText(row.personal_email),
     phone: optionalText(row.phone),
     country: optionalText(row.country),
+    location: location(row.location),
     address: optionalText(row.address),
     dateOfBirth: optionalText(row.date_of_birth),
     startedDate: optionalText(row.started_date),
@@ -219,6 +228,19 @@ async function listContractTypes(supabase: Awaited<ReturnType<typeof createClien
   return contractTypes;
 }
 
+async function listLocations(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const { data, error } = await supabase.rpc("list_employee_directory_locations");
+  if (error || !Array.isArray(data)) throw new Error(GENERIC_LOAD_ERROR);
+  const locations = new Map<string, EmployeeLocation>();
+  for (const item of data) {
+    if (!item || typeof item !== "object" || typeof item.person_id !== "string" || !UUID_PATTERN.test(item.person_id)) {
+      throw new Error(GENERIC_LOAD_ERROR);
+    }
+    locations.set(item.person_id, location(item.location));
+  }
+  return locations;
+}
+
 async function listDirectoryRows(supabase: Awaited<ReturnType<typeof createClient>>) {
   let { data: archiveData, error: archiveError } = await supabase.rpc("list_employee_directory_records_with_work_schedule_times", {
     p_include_archived: true,
@@ -259,9 +281,9 @@ export async function listEmployeeDirectoryRecordsWithClient(
   supabase: Awaited<ReturnType<typeof createClient>>,
 ) {
   // The two reads are independent, so neither waits for the other.
-  const [rows, contractTypes] = await Promise.all([listDirectoryRows(supabase), listContractTypes(supabase)]);
+  const [rows, contractTypes, locations] = await Promise.all([listDirectoryRows(supabase), listContractTypes(supabase), listLocations(supabase)]);
   return rows
-    .map((row) => toRecord(row, contractTypes.get(row.person_id) ?? ""))
+    .map((row) => toRecord({ ...row, location: locations.get(row.person_id) ?? "" }, contractTypes.get(row.person_id) ?? ""))
     .sort((first, second) => first.fullName.localeCompare(second.fullName));
 }
 
@@ -270,6 +292,11 @@ export async function findEmployeeDirectoryRecord(
   personId: string,
 ) {
   if (!UUID_PATTERN.test(personId)) throw new Error(GENERIC_LOAD_ERROR);
-  const [row, contractTypes] = await Promise.all([getDirectoryRow(supabase, personId), listContractTypes(supabase)]);
-  return toRecord(row, contractTypes.get(personId) ?? "");
+  const [row, contractTypes, locationResult] = await Promise.all([
+    getDirectoryRow(supabase, personId),
+    listContractTypes(supabase),
+    supabase.rpc("get_employee_directory_location", { p_person_id: personId }),
+  ]);
+  if (locationResult.error) throw new Error(GENERIC_LOAD_ERROR);
+  return toRecord({ ...row, location: locationResult.data }, contractTypes.get(personId) ?? "");
 }
