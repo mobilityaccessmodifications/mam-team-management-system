@@ -52,6 +52,7 @@ import styles from "@/components/employee-directory.module.css";
 import { MotionLoader } from "@/components/ui/motion-loader";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import { useMediaQuery } from "@/components/ui/use-media-query";
+import { defaultTimesheetEntriesForLocation } from "@/lib/employee-timesheet-default";
 import type {
   CreateEmployeeDirectoryInput,
   EmployeeDirectoryDraft,
@@ -609,11 +610,10 @@ export function EmployeeDirectory({
     const base = editor ?? activeEditor;
     if (!base) return;
     let changed = updateDraft(base, key, value);
-    if (key === "timesheetEntries") {
-      const derivedLocation = value === "deputy" ? "hq"
-        : value === "deputy_hubstaff" ? "hybrid"
-        : value === "hubstaff" ? "overseas" : null;
-      if (derivedLocation) changed = updateDraft(changed, "location", derivedLocation);
+    // Location suggests a timesheet system; HR can override the suggestion
+    // without silently changing the employee's chosen location.
+    if (key === "location") {
+      changed = updateDraft(changed, "timesheetEntries", defaultTimesheetEntriesForLocation(value as EmployeeLocation));
     }
     if (base.mode === "create" && (key === "teamName" || key === "company")) {
       invalidateTeamManagerScope();
@@ -1166,7 +1166,7 @@ function EmployeeEditor({
             <button type="button" className={styles.secondaryAction} onClick={() => void saveRole()} disabled={saving || roleSaving || refreshRequired || !currentRecord?.isActive || !role || !roleCard || selectedRole === role}>Save role</button>
           </div> : !isCreate && roleLoadError ? <p className={`${styles.fullSpan} ${styles.formError}`} role="alert">{roleLoadError}</p> : null}
           <Field label="Location" required>
-            <select value={editor.draft.location} onChange={(event) => onChange("location", event.target.value as EmployeeLocation)} disabled={["deputy", "deputy_hubstaff", "hubstaff"].includes(editor.draft.timesheetEntries)} required aria-required="true">
+            <select value={editor.draft.location} onChange={(event) => onChange("location", event.target.value as EmployeeLocation)} required aria-required="true">
               <option value="" disabled>Select location</option>
               <option value="hq">HQ</option>
               <option value="onsite_trade">Onsite Trade</option>
@@ -1174,7 +1174,6 @@ function EmployeeEditor({
               <option value="hybrid">Hybrid</option>
               <option value="overseas">Overseas</option>
             </select>
-            {["deputy", "deputy_hubstaff", "hubstaff"].includes(editor.draft.timesheetEntries) ? <small>Location is automatically set from Timesheet Entries.</small> : null}
           </Field>
           <Field label="Company">
             <select value={editor.draft.company} onChange={(event) => onChange("company", event.target.value)}>
@@ -1233,6 +1232,7 @@ function EmployeeEditor({
               <option value="aroflo_hubstaff">AroFlo & Hubstaff</option>
               <option value="aroflo_deputy">AroFlo & Deputy</option>
             </select>
+            <small>Pre-filled from Location. Change this if the employee has a different timesheet arrangement.</small>
           </Field>
           <Field label="Expected weekly hours">
             <input type="number" min={0} max={168} step="any" value={editor.draft.expectedWeeklyHours}
