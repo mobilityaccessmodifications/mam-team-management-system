@@ -5,7 +5,6 @@ import { fetchAccountsPayrollWeek, type AccountsPayrollWeek, type PayrollLeaveRe
 import type { AccountsReportRow } from "@/app/people/accounts-report-actions";
 import styles from "./accounts-payroll.module.css";
 
-const dayMs = 86400000;
 function iso(date: Date) { return date.toISOString().slice(0, 10); }
 function monday(date: Date) {
   const weekday = date.getUTCDay();
@@ -39,13 +38,12 @@ function entrySchedule(row: AccountsReportRow) {
   const factor = weekly !== null && Number.isFinite(weekly) && gross > 0 ? weekly / gross : 1;
   return { records, factor, weekly: weekly !== null && Number.isFinite(weekly) ? weekly : (gross > 0 ? gross : null) };
 }
-type Cell = { approved: number; submitted: number; rejected: number; cancelled: number; estimated: boolean; notes: string[] };
-function emptyCell(): Cell { return { approved: 0, submitted: 0, rejected: 0, cancelled: 0, estimated: false, notes: [] }; }
+type Cell = { approved: number; submitted: number; rejected: number; cancelled: number; estimated: boolean; unknown: string[]; notes: string[] };
+function emptyCell(): Cell { return { approved: 0, submitted: 0, rejected: 0, cancelled: 0, estimated: false, unknown: [], notes: [] }; }
 function statusOf(value: string): keyof Pick<Cell, "approved" | "submitted" | "rejected" | "cancelled"> {
   return value === "approved" || value === "rejected" || value === "cancelled" ? value : "submitted";
 }
-function leaveHours(leave: PayrollLeaveRequest, date: string, workHours: number, weekStart: string) {
-  if (workHours <= 0) return null;
+function leaveHours(leave: PayrollLeaveRequest, date: string, workHours: number) {
   // Explicit single-day hours are authoritative; multi-day hours cannot safely be distributed.
   if (leave.start_date === leave.end_date && leave.hours !== null) {
     const exact = Number(leave.hours);
@@ -54,9 +52,9 @@ function leaveHours(leave: PayrollLeaveRequest, date: string, workHours: number,
   if (leave.start_date === leave.end_date && leave.start_time && leave.end_time) {
     return { value: hoursBetween(leave.start_time, leave.end_time), estimated: true };
   }
+  if (workHours <= 0) return null;
   // Partial-day boundaries on a multi-day request cannot be inferred reliably.
   if ((date === leave.start_date && leave.start_time) || (date === leave.end_date && leave.end_time)) return null;
-  void weekStart;
   return { value: workHours, estimated: true };
 }
 export type PayrollComputedRow = {
@@ -92,12 +90,13 @@ function compute(row: AccountsReportRow, data: AccountsPayrollWeek, start: strin
     const matching = dayLeaves.filter((leave) => date >= leave.start_date && date <= leave.end_date);
     for (const leave of matching) {
       const bucket = leave.leave_type === "annual" ? result.annual : leave.leave_type === "unpaid" ? result.unpaid : result.sick;
-      const amount = leaveHours(leave, date, hours, start);
+      const amount = leaveHours(leave, date, hours);
+      const state = statusOf(leave.status);
       if (!amount) {
-        result.warning.push(`${leave.label} on ${date}: cannot calculate hours from the saved schedule`);
+        bucket.unknown.push(state);
+        result.warning.push(`${leave.label} on ${date}: leave hours unknown; review required`);
         continue;
       }
-      const state = statusOf(leave.status);
       bucket[state] += amount.value;
       bucket.estimated ||= amount.estimated;
       if (!bucket.notes.includes(leave.label)) bucket.notes.push(leave.label);
@@ -117,15 +116,17 @@ function leaveText(cell: Cell) {
     cell.submitted ? `${duration(cell.submitted)} Pending${cell.estimated ? " (est.)" : ""}` : "",
     cell.rejected ? `${duration(cell.rejected)} Rejected` : "",
     cell.cancelled ? `${duration(cell.cancelled)} Cancelled` : "",
+    ...cell.unknown.map((s) => `Hours unknown (${s === "submitted" ? "Pending" : s})`),
   ].filter(Boolean).join("; ") || "—";
 }
 function CellView({ cell }: { cell: Cell }) {
-  if (!cell.approved && !cell.submitted && !cell.rejected && !cell.cancelled) return <>—</>;
+  if (!cell.approved && !cell.submitted && !cell.rejected && !cell.cancelled && !cell.unknown.length) return <>—</>;
   return <div className={styles.statuses}>
     {cell.approved > 0 ? <span className={styles.approved} title={cell.notes.join(", ")}>{duration(cell.approved)} Approved{cell.estimated ? " *" : ""}</span> : null}
     {cell.submitted > 0 ? <span className={styles.pending} title={cell.notes.join(", ")}>{duration(cell.submitted)} Pending{cell.estimated ? " *" : ""}</span> : null}
     {cell.rejected > 0 ? <span className={styles.rejected}>{duration(cell.rejected)} Rejected</span> : null}
     {cell.cancelled > 0 ? <span className={styles.cancelled}>{duration(cell.cancelled)} Cancelled</span> : null}
+    {cell.unknown.map((s,i) => <span key={i} className={styles.pending}>Hours unknown · {s === "submitted" ? "Pending" : s}</span>)}
   </div>;
 }
 export function AccountsPayroll({ employees, onOpenEmployeeProfile }: {
@@ -157,8 +158,8 @@ export function AccountsPayroll({ employees, onOpenEmployeeProfile }: {
     (company === "All" || r.employee.company === company) &&
     (team === "All" || r.employee.team === team) &&
     (search === "" || [r.employee.employee_name, r.employee.team, r.employee.team_lead].some((v) => v.toLowerCase().includes(search.trim().toLowerCase()))) &&
-    (status === "All" || (status === "Needs review" && (r.warning.length > 0 || [r.sick,r.annual,r.unpaid].some((c) => c.submitted || c.rejected))) ||
-     (status === "Has leave" && [r.sick,r.annual,r.unpaid].some((c) => c.approved || c.submitted || c.rejected)))
+    (status === "All" || (status === "Needs review" && (r.warning.length > 0 || [r.sick,r.annual,r.unpaid].some((c) => c.submitted || c.rejected || c.unknown.length))) ||
+     (status === "Has leave" && [r.sick,r.annual,r.unpaid].some((c) => c.approved || c.submitted || c.rejected || c.unknown.length)))
   ) : [], [data, employees, weekStart, company, team, search, status]);
   function exportCsv() {
     const heading = ["Employee", "Company", "Team", "Week starting", "Scheduled hours (reference)", "Sick leave", "Annual leave", "Unpaid leave", "Public holidays (VIC scheduled, not confirmed paid)", "Review notes"];
