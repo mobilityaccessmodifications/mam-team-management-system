@@ -326,7 +326,7 @@ function validateDraft(input: unknown) {
 
   return {
     p_first_name: requiredText(value.firstName, "First name", 80),
-    p_last_name: optionalText(value.lastName, "Last name", 80),
+    p_last_name: requiredText(value.lastName, "Last name", 80),
     p_work_email: optionalEmail(value.workEmail, "Work email"),
     p_personal_email: optionalEmail(value.personalEmail, "Personal email"),
     p_phone: optionalText(value.phone, "Phone", 60),
@@ -541,8 +541,8 @@ export async function createEmployeeDirectoryRecord(
       }
     } else {
       const configured = await resolveTeamManagerDefault(supabase, values.p_company_key, values.p_team_name);
-      if (configured.status === "invalid") {
-        throw new DirectoryInputError("The configured Team Manager is not available. Choose a valid manager before saving.");
+      if (configured.status !== "valid") {
+        throw new DirectoryInputError("Choose an active reporting manager, or configure a valid Team Manager for this team before creating the employee.");
       }
     }
     let { data, error } = await supabase.rpc("create_employee_directory_record_with_profile_extras", {

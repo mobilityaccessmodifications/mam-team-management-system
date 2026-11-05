@@ -545,7 +545,7 @@ export function EmployeeDirectory({
   const managerOptions = records.filter((record) => record.isActive && record.company === selectedCompany);
   const managerSelectionBlocked = creatingEmployee && (activeEditor.draft.managerId
     ? !managerOptions.some((record) => record.personId === activeEditor.draft.managerId)
-    : !teamManagerDefault || "error" in teamManagerDefault || teamManagerDefault.status === "invalid");
+    : !teamManagerDefault || "error" in teamManagerDefault || teamManagerDefault.status !== "valid");
 
   useEffect(() => {
     if (!creatingEmployee || !selectedCompany || !selectedTeam) return;
@@ -1091,6 +1091,8 @@ function EmployeeEditor({
     isCompleteWorkTime(editor.draft.workingDayTimes.find((time) => time.weekday === day))
   );
   const scheduleComplete = selectedDays.length > 0 && completedDays.length === selectedDays.length;
+  const defaultManagerId = teamManagerDefault && "status" in teamManagerDefault && teamManagerDefault.status === "valid"
+    ? teamManagerDefault.managerId : null;
   const roleEditable = canManageRoles && role !== "system_admin";
   const roleCard = selectedRole && selectedRole in ROLE_PERMISSION_CARDS
     ? ROLE_PERMISSION_CARDS[selectedRole as keyof typeof ROLE_PERMISSION_CARDS] : null;
@@ -1134,8 +1136,8 @@ function EmployeeEditor({
           <Field label="First name" required>
             <input value={editor.draft.firstName} onChange={(event) => onChange("firstName", event.target.value)} autoComplete="given-name" required maxLength={80} />
           </Field>
-          <Field label="Last name">
-            <input value={editor.draft.lastName} onChange={(event) => onChange("lastName", event.target.value)} autoComplete="family-name" maxLength={80} />
+          <Field label="Last name" required>
+            <input value={editor.draft.lastName} onChange={(event) => onChange("lastName", event.target.value)} autoComplete="family-name" required maxLength={80} />
           </Field>
           <Field label="Job title" required className={styles.fullSpan}>
             <input value={editor.draft.positionTitle} onChange={(event) => onChange("positionTitle", event.target.value)} required maxLength={120} />
@@ -1146,18 +1148,18 @@ function EmployeeEditor({
               {EMPLOYEE_TEAMS.map((team) => <option key={team} value={team}>{team}</option>)}
             </select>
           </Field>
-          {isCreate ? <Field label="Reports to">
-            <select aria-label="Reports to" value={editor.draft.managerId ?? ""} onChange={(event) => onChange("managerId", event.target.value || null)}>
-              <option value="" disabled={!teamManagerDefault || "error" in teamManagerDefault || teamManagerDefault.status === "invalid"}>
+          {isCreate ? <Field label="Reports to" required>
+            <select aria-label="Reports to" aria-required="true" required value={editor.draft.managerId ?? defaultManagerId ?? ""} onChange={(event) => onChange("managerId", event.target.value || null)}>
+              <option value="" disabled>
                 {!editor.draft.teamName ? "Select a team" : !teamManagerDefault ? "Checking Team Manager…"
-                  : "error" in teamManagerDefault ? "Team Manager unavailable"
-                  : teamManagerDefault.status === "valid" ? `Team Manager: ${teamManagerDefault.managerName}`
-                  : teamManagerDefault.status === "missing" ? "No Team Manager — saved unassigned" : "Configured Team Manager unavailable"}
+                  : "error" in teamManagerDefault ? "Team Manager unavailable — choose a manager"
+                  : teamManagerDefault.status === "missing" ? "No Team Manager — choose a manager" : "Configured Team Manager unavailable — choose a manager"}
               </option>
-              {managerOptions.map((manager) => <option key={manager.personId} value={manager.personId}>{manager.fullName}</option>)}
+              {managerOptions.map((manager) => <option key={manager.personId} value={manager.personId}>{manager.fullName}{manager.personId === defaultManagerId ? " (Team Manager default)" : ""}</option>)}
             </select>
-            {!editor.draft.managerId && teamManagerDefault && ("error" in teamManagerDefault || teamManagerDefault.status === "invalid")
-              ? <span role="alert">{"error" in teamManagerDefault ? teamManagerDefault.error : "Choose a valid manager before saving."}</span> : null}
+            <small>Required. The configured Team Manager is selected automatically, or choose another active manager in the same company.</small>
+            {!editor.draft.managerId && teamManagerDefault && ("error" in teamManagerDefault || teamManagerDefault.status !== "valid")
+              ? <span role="alert">{"error" in teamManagerDefault ? teamManagerDefault.error : "Choose a reporting manager before saving."}</span> : null}
           </Field> : null}
           {!isCreate && roleEditable ? <div className={styles.pickerField}>
             <button type="button" className={styles.secondaryAction} aria-expanded={editingRole} onClick={() => setEditingRole(!editingRole)} disabled={saving || roleSaving}>Role</button>
@@ -1191,8 +1193,8 @@ function EmployeeEditor({
             </select>
             {["deputy", "deputy_hubstaff", "hubstaff"].includes(editor.draft.timesheetEntries) ? <small>Location is automatically set from Timesheet Entries.</small> : null}
           </Field>
-          <Field label="Company">
-            <select value={editor.draft.company} onChange={(event) => onChange("company", event.target.value)}>
+          <Field label="Company" required>
+            <select value={editor.draft.company} onChange={(event) => onChange("company", event.target.value)} required aria-required="true">
               <option value="mam">MAM</option>
               <option value="equipsy">Equipsy</option>
             </select>
