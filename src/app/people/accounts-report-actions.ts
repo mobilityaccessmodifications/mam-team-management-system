@@ -26,3 +26,44 @@ export async function fetchAccountsReport(): Promise<{ rows: AccountsReportRow[]
     return { error: "Accounts Report could not be loaded. Refresh and try again." };
   }
 }
+
+export type PayrollLeaveRequest = {
+  id: string;
+  person_id: string;
+  leave_type: "annual" | "personal" | "unpaid";
+  label: string;
+  start_date: string;
+  end_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  hours: number | string | null;
+  business_days: number;
+  status: "approved" | "submitted" | "rejected" | "cancelled";
+  pay_treatment: string | null;
+};
+export type PayrollHoliday = { date: string; name: string };
+export type AccountsPayrollWeek = {
+  week_start: string;
+  week_end: string;
+  leave: PayrollLeaveRequest[];
+  holidays: PayrollHoliday[];
+};
+export async function fetchAccountsPayrollWeek(weekStart: string):
+  Promise<{ data: AccountsPayrollWeek } | { error: string }> {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(weekStart)) {
+    return { error: "Select a valid Monday work week." };
+  }
+  try {
+    const date = new Date(weekStart + "T12:00:00Z");
+    if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0,10) !== weekStart
+        || date.getUTCDay() !== 1) return { error: "Work week must begin on Monday." };
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("get_accounts_payroll_week", { p_week_start: weekStart });
+    if (error || !data || !Array.isArray(data.leave) || !Array.isArray(data.holidays)) {
+      return { error: "Payroll leave data could not be loaded, or you do not have access." };
+    }
+    return { data: data as AccountsPayrollWeek };
+  } catch {
+    return { error: "Could not load this payroll week. Refresh and retry." };
+  }
+}
