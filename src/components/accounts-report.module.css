@@ -27,3 +27,9 @@
 .employeeLink { display:inline; padding:0; border:0; background:none; color:var(--directory-accent-deep,#156c76); font:inherit; font-weight:750; text-align:left; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
 .employeeLink:hover { text-decoration-thickness:2px; }
 .employeeLink:focus-visible { outline:2px solid currentColor; outline-offset:3px; border-radius:2px; }
+
+.reportSwitch { display:inline-flex; justify-self:start; border:1px solid var(--surface-border-strong,#cbd5d3); border-radius:9px; overflow:hidden; background:var(--surface-raised,#fff); }
+.reportSwitch button { font:inherit; font-size:13px; font-weight:750; padding:10px 17px; background:transparent; color:var(--text-primary,#28353b); border:0; cursor:pointer; }
+.reportSwitch button + button { border-left:1px solid var(--surface-border-strong,#cbd5d3); }
+.reportSwitch button[data-active="true"] { background:var(--directory-accent-soft,#d8e9e9); color:var(--directory-accent-deep,#185c66); }
+.reportSwitch button:focus-visible { outline:2px solid var(--directory-accent-deep,#185c66); outline-offset:-2px; }
