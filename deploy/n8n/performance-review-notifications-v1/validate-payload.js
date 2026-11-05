@@ -28,16 +28,17 @@ if (p.version !== 1 || !['started','self-submitted','manager-invited','manager-c
   || recipients.some(value => value.length > 254 || control.test(value) || value !== value.trim().toLowerCase() || !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(value))) return reject();
 const cc = hasCc ? p.cc : '';
 const expectedCc = p.event === 'manager-invited' || p.event === 'manager-completed' || recipients.includes('careers@mobilityaccess.com.au') ? '' : 'careers@mobilityaccess.com.au';
-if (((hasCc || p.event === 'manager-invited') && cc !== expectedCc)
+if (((hasCc || p.event === 'manager-invited' || p.event === 'manager-completed') && cc !== expectedCc)
   || (p.event === 'manager-invited' && (!hasCc || recipients.includes('careers@mobilityaccess.com.au'))) || (p.event === 'manager-completed' && (!hasCc || p.recipient !== 'careers@mobilityaccess.com.au'))) return reject();
 const link = 'https://mam-team-management-system-ten.vercel.app/?view=people&tab=performance';
 const signature = '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;border-top:1px solid #dce4df;padding-top:16px;font-family:Segoe UI,Arial,sans-serif"><tr><td style="vertical-align:middle;padding-right:16px"><a href="https://www.mobilityaccess.com.au/" style="text-decoration:none"><img src="https://mam-team-management-system-ten.vercel.app/email/mam-logo.jpg" alt="MAM – Mobility Access Modifications" width="150" height="69" style="display:block;width:150px;height:auto;border:0"></a></td><td style="vertical-align:middle;color:#50615b;font-size:12px;line-height:1.5"><strong style="color:#22302b;font-size:13px">People &amp; Culture</strong><br>Mobility Access Modifications</td></tr></table>';
+const escapedEmployeeName = p.employeeName.replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 const message = p.event === 'started'
   ? 'We invite you to complete your performance self-assessment in People Hub.'
   : p.event === 'self-submitted'
     ? 'The employee’s self-assessment is ready for your review. Please complete your manager assessment in People Hub, then arrange a review meeting.'
     : p.event === 'manager-completed'
-      ? `The manager has completed the assessment for ${p.employeeName} (${p.reviewCode}). Review the results in People Hub.`
+      ? `The manager has completed the assessment for ${escapedEmployeeName} (${p.reviewCode}). Review the results in People Hub.`
       : 'Please arrange a performance review meeting with the employee. Once agreed, enter the meeting details manually in People Hub.';
 const content = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.6;color:#22302b"><p>Hi,</p><p>${message}</p><p><a href="${link}" style="color:#c84d0e">Open People Hub</a></p><p>Thanks,<br>Careers Team</p>${signature}</div>`;
 return [{json: {valid: true, eventKey: p.eventKey, recipient: p.recipient, cc,
