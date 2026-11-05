@@ -963,7 +963,7 @@ function EmployeeDirectoryList({
           <span className={styles.avatar}>{initials(record.fullName)}</span>
           <span className={styles.recordCopy}>
             <strong>{record.fullName}</strong>
-            <small>{record.positionTitle}{record.teamName ? ` · ${record.teamName}` : ""}{record.location ? ` · ${record.location === "hq" ? "HQ" : record.location === "onsite_trade" ? "Onsite Trade" : record.location === "remote_worker" ? "Remote Worker" : "Hybrid"}` : ""}</small>
+            <small>{record.positionTitle}{record.teamName ? ` · ${record.teamName}` : ""}{record.location ? ` · ${record.location === "hq" ? "HQ" : record.location === "onsite_trade" ? "Onsite Trade" : record.location === "remote_worker" ? "Remote Worker" : record.location === "hybrid" ? "Hybrid" : "Overseas"}` : ""}</small>
           </span>
           <span className={styles.recordMeta}>
             <i data-company={record.company}>{companyLabel(record.company)}</i>
@@ -1181,6 +1181,7 @@ function EmployeeEditor({
               <option value="onsite_trade">Onsite Trade</option>
               <option value="remote_worker">Remote Worker</option>
               <option value="hybrid">Hybrid</option>
+              <option value="overseas">Overseas</option>
             </select>
           </Field>
           <Field label="Company">
