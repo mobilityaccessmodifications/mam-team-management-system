@@ -50,7 +50,7 @@ export type AccountsPayrollWeek = {
 };
 export async function fetchAccountsPayrollWeek(weekStart: string):
   Promise<{ data: AccountsPayrollWeek } | { error: string }> {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(weekStart)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
     return { error: "Select a valid Monday work week." };
   }
   try {
