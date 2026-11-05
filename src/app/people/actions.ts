@@ -315,10 +315,8 @@ function validateDraft(input: unknown) {
   const p_laptop_id = optionalText(value.laptopId, "Laptop ID", 120);
   const p_working_weekdays = workingWeekdays(value.workingWeekdays);
   const p_timesheet_entries = timesheetSource(value.timesheetEntries);
-  const p_location = p_timesheet_entries === "deputy" ? "hq"
-    : p_timesheet_entries === "deputy_hubstaff" ? "hybrid"
-    : p_timesheet_entries === "hubstaff" ? "overseas"
-    : employeeLocation(value.location);
+  // Timesheet Entries can be manually overridden. Never replace the employee's location.
+  const p_location = employeeLocation(value.location);
 
   if (p_laptop_supplied === "mam_laptop" && !p_laptop_id) {
     throw new DirectoryInputError("A Laptop ID is required for a MAM laptop.");
