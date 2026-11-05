@@ -113,4 +113,5 @@ EXECUTE FUNCTION private.queue_performance_review_manager_completed_hr();
 INSERT INTO private.performance_review_notifications(review_id,event)
 SELECT id,'manager-completed' FROM private.performance_reviews
 WHERE manager_completed_at IS NOT NULL AND cycle='2026'
+  AND id='6f38d695-88c3-4db3-a4d2-516fa3151890'::uuid
 ON CONFLICT (review_id,event) DO NOTHING;
