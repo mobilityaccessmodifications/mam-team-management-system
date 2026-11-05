@@ -101,7 +101,7 @@ function expectedWeeklyHours(value: unknown): string {
 
 function location(value: unknown): EmployeeLocation {
   if (value === null || value === undefined || value === "") return "";
-  if (value === "hq" || value === "onsite_trade" || value === "remote_worker" || value === "hybrid") return value;
+  if (value === "hq" || value === "onsite_trade" || value === "remote_worker" || value === "hybrid" || value === "overseas") return value;
   throw new Error(GENERIC_LOAD_ERROR);
 }
 
