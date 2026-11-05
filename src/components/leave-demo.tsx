@@ -133,6 +133,8 @@ function PanelLoading() {
 const AccountManagement = dynamic(() => import("@/components/account-management").then((module) => module.AccountManagement), { loading: PanelLoading });
 const AccountsReport = dynamic(() => import("@/components/accounts-report").then((module) => module.AccountsReport), { loading: PanelLoading });
 const AssetRegister = dynamic(() => import("@/components/asset-register").then((module) => module.AssetRegister), { loading: PanelLoading });
+const CompanyDirectoryReadOnly = dynamic(() => import("@/components/people-company-readonly").then((module) => module.CompanyDirectoryReadOnly), { loading: PanelLoading });
+const CompanyAssetsReadOnly = dynamic(() => import("@/components/people-company-readonly").then((module) => module.CompanyAssetsReadOnly), { loading: PanelLoading });
 const AnalyticsApiManagement = dynamic(() => import("@/components/analytics-api-management").then((module) => module.AnalyticsApiManagement), { loading: PanelLoading });
 const EmployeeDirectory = dynamic(() => import("@/components/employee-directory").then((module) => module.EmployeeDirectory), { loading: PanelLoading });
 const EmployeeTeamDirectory = dynamic(() => import("@/components/employee-team-directory").then((module) => module.EmployeeTeamDirectory), { loading: PanelLoading });
@@ -1344,6 +1346,9 @@ export function LeaveDemo({
   const hasManagerPeopleWorkspace = activeCapabilities?.can_view_employee_directory === true;
   const showManagerDirectory = activeProfile.accessRole === "manager"
     && hasManagerPeopleWorkspace;
+  // Separate Account viewing grants do not confer HR, asset or review management.
+  const showCompanyReadOnly = !isPreviewingEmployeeAccess && activeProfile.accessRole === "account"
+    && activeCapabilities?.can_view_employee_directory === true;
   const showManagerCheckIns = activeProfile.accessRole === "manager"
     && activeCapabilities?.can_view_check_in_workspace === true;
 
@@ -2147,7 +2152,7 @@ export function LeaveDemo({
                 onSelectedPersonId={(id) => { if (scopeIsCurrent()) setEmployeeDirectorySelectedPersonId(id); }}
                 refreshKey={employeeDirectoryRefreshKey}
                 selectedPersonId={employeeDirectorySelectedPersonId}
-              /> : showManagerDirectory ? <ManagerEmployeeDirectory
+              /> : showCompanyReadOnly ? <CompanyDirectoryReadOnly /> : showManagerDirectory ? <ManagerEmployeeDirectory
                 previewManagerPersonId={previewScopedManagerPersonId}
                 managerPersonId={previewScopedManagerPersonId ?? currentPersonId}
                 onLoadMyDevices={employeeDirectoryDeviceLoader}
@@ -2220,7 +2225,7 @@ export function LeaveDemo({
                 : undefined}
               renderAssetRegister={activeCapabilities?.can_manage_assets
                 ? <AssetRegister />
-                : undefined}
+                : showCompanyReadOnly ? <CompanyAssetsReadOnly /> : undefined}
               renderSubscriptionRegister={showSubscriptionRegister
                 ? activeCapabilities?.can_view_subscription_register
                   ? <SubscriptionRegister
