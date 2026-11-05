@@ -68,6 +68,14 @@ test('Overseas employment passes through create and update server actions unchan
   assert.ok(writes.every((call) => call.args.p_employment_type === 'overseas'));
 });
 
+test('contract type is optional in the employee creation form', () => {
+  const source = readFileSync('src/components/employee-directory.tsx', 'utf8');
+  assert.match(source, /<Field label="Contract type">/);
+  assert.match(source, /<option value="">Not set<\/option>/);
+  assert.doesNotMatch(source, /<Field label="Contract type" required/);
+  assert.doesNotMatch(source, /<select value={editor\.draft\.contractType}[^>]*required/);
+});
+
 test('creating an employee without a contract type makes no second write', async () => {
   const { actions, calls } = loadActions();
   const result = await actions.createEmployeeDirectoryRecord(draft);
