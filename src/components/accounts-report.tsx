@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Download, RefreshCcw, Search } from "lucide-react";
 import { fetchAccountsReport, type AccountsReportRow } from "@/app/people/accounts-report-actions";
 import styles from "./accounts-report.module.css";
+import { AccountsPayroll } from "./accounts-payroll";
 
 const weekdayNames: Record<number, string> = {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"};
 const locationNames: Record<string, string> = { hq:"HQ", onsite_trade:"Onsite Trade", remote_worker:"Remote Worker", hybrid:"Hybrid", overseas:"Overseas" };
@@ -43,6 +44,7 @@ export function AccountsReport({ onOpenEmployeeProfile }: { onOpenEmployeeProfil
   const [company, setCompany] = useState("All");
   const [team, setTeam] = useState("All");
   const [source, setSource] = useState("All");
+  const [reportView, setReportView] = useState<"directory" | "payroll">("directory");
   async function load() {
     setLoading(true);
     const result = await fetchAccountsReport();
@@ -77,6 +79,11 @@ export function AccountsReport({ onOpenEmployeeProfile }: { onOpenEmployeeProfil
         <button type="button" onClick={exportCsv} disabled={loading || !visible.length}><Download size={15} /> Export CSV</button>
       </div>
     </header>
+    <div className={styles.reportSwitch} role="group" aria-label="Accounts Report view">
+      <button type="button" aria-pressed={reportView === "directory"} data-active={reportView === "directory"} onClick={() => setReportView("directory")}>Employee Details</button>
+      <button type="button" aria-pressed={reportView === "payroll"} data-active={reportView === "payroll"} onClick={() => setReportView("payroll")}>Payroll</button>
+    </div>
+    {reportView === "payroll" ? <AccountsPayroll employees={rows} onOpenEmployeeProfile={onOpenEmployeeProfile} /> : <>
     <div className={styles.filters}>
       <label><span>Find employee</span><div className={styles.search}><Search size={15}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, lead or team" /></div></label>
       <label><span>Company</span><select value={company} onChange={(e) => setCompany(e.target.value)}><option>All</option><option>MAM</option><option>Equipsy</option></select></label>
@@ -94,5 +101,6 @@ export function AccountsReport({ onOpenEmployeeProfile }: { onOpenEmployeeProfil
     </div>
     {!loading && !visible.length && !error ? <p>No employees match the current filters.</p> : null}
     <p className={styles.note}>Expected Hours is a separately recorded weekly figure and is not calculated from start/finish times. A dash means the value has not been supplied.</p>
+    </>}
   </section>;
 }
