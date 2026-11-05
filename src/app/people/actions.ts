@@ -519,7 +519,6 @@ export async function createEmployeeDirectoryRecord(
     const { supabase } = await requireDirectoryMutationManager();
     const values = validateDraft(input);
     const { p_contract_type: selectedContractType, ...directoryValues } = values;
-    if (!selectedContractType) throw new DirectoryInputError("Choose a contract type (Permanent or Fixed-Term) before creating an employee.");
     if (values.p_is_active) {
       if (!values.p_started_date) throw new DirectoryInputError("A start date is required for a new active employee.");
     }
