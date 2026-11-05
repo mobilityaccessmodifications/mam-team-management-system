@@ -1,0 +1,22 @@
+.root { display:grid; gap:12px; min-width:0; }
+.toolbar,.filters { display:flex; align-items:end; flex-wrap:wrap; gap:8px; }
+.toolbar label { display:grid; gap:5px; font-size:12px; font-weight:700; }
+.toolbar button,.filters select,.filters input,.toolbar input { padding:9px 11px; background:var(--surface-raised,#fff); color:var(--text-primary,#293439); border:1px solid var(--surface-border-strong,#cbd5d3); border-radius:8px; font:inherit; font-size:12px; }
+.toolbar button { cursor:pointer; font-weight:700; }
+.toolbar button:disabled { cursor:not-allowed; opacity:.5; }
+.filters input { min-width:190px; }
+.weekLabel { font-weight:750; font-size:12px; color:var(--text-secondary,#606e74); margin:0; }
+.tableWrap { overflow-x:auto; border:1px solid var(--surface-border-strong,#cbd5d3); border-radius:10px; background:var(--surface-raised,#fff); }
+.tableWrap table { border-collapse:collapse; width:100%; min-width:1040px; font-size:12px; }
+.tableWrap th { padding:12px 11px; text-align:left; white-space:nowrap; background:var(--surface-muted,#f4f7f7); border-bottom:1px solid var(--surface-border-strong,#cbd5d3); }
+.tableWrap td { padding:10px 11px; vertical-align:top; border-bottom:1px solid var(--surface-border,#e6ebea); }
+.tableWrap tbody tr:last-child td { border-bottom:0; }
+.nameLink { border:0; padding:0; background:transparent; color:var(--directory-accent-deep,#186c76); text-decoration:underline; text-underline-offset:3px; font:inherit; font-weight:750; text-align:left; cursor:pointer; }
+.nameLink:focus-visible { outline:2px solid currentColor; outline-offset:3px; }
+.statuses { display:grid; justify-items:start; gap:4px; }
+.statuses span { font-size:11px; white-space:nowrap; padding:2px 5px; border:1px solid currentColor; border-radius:5px; font-weight:700; }
+.approved { color:#23744e; }.pending { color:#92580c; }.rejected { color:#aa4237; }.cancelled { color:#7e8287; }
+.warning { color:#965411; font-weight:750; }
+.error { color:#ad2c26; }
+.note { color:var(--text-secondary,#6b767b); font-size:11px; line-height:1.6; margin:0; }
+@media(max-width:600px) {.toolbar button { flex:1; }.filters>* { flex:1; min-width:130px; }}
