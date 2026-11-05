@@ -6,7 +6,7 @@ import { fetchAccountsReport, type AccountsReportRow } from "@/app/people/accoun
 import styles from "./accounts-report.module.css";
 
 const weekdayNames: Record<number, string> = {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"};
-const locationNames: Record<string, string> = { hq:"HQ", onsite_trade:"Onsite Trade", remote_worker:"Remote Worker", hybrid:"Hybrid" };
+const locationNames: Record<string, string> = { hq:"HQ", onsite_trade:"Onsite Trade", remote_worker:"Remote Worker", hybrid:"Hybrid", overseas:"Overseas" };
 const employmentNames: Record<string, string> = { abn:"ABN", casual:"Casual", full_time:"Full Time", part_time:"Part Time", overseas:"Overseas" };
 const sourceNames: Record<string, string> = {aroflo:"AroFlo",deputy:"Deputy",hubstaff:"Hubstaff",deputy_hubstaff:"Deputy & Hubstaff",aroflo_hubstaff:"AroFlo & Hubstaff",aroflo_deputy:"AroFlo & Deputy"};
 
@@ -35,7 +35,7 @@ function rowValues(row: AccountsReportRow) {
   ];
 }
 
-export function AccountsReport() {
+export function AccountsReport({ onOpenEmployeeProfile }: { onOpenEmployeeProfile?: (personId: string) => void }) {
   const [rows, setRows] = useState<AccountsReportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -87,7 +87,9 @@ export function AccountsReport() {
     <p className={styles.count}>{loading ? "Loading employee records…" : `${visible.length} of ${rows.length} active employees`}</p>
     <div className={styles.tableWrap}>
       <table><thead><tr>{columns.map((column) => <th key={column} scope="col">{column}</th>)}</tr></thead>
-        <tbody>{visible.map((row) => <tr key={row.person_id}>{rowValues(row).map((value,i) => <td key={columns[i]}>{value}</td>)}</tr>)}</tbody>
+        <tbody>{visible.map((row) => <tr key={row.person_id}>{rowValues(row).map((value,i) => <td key={columns[i]}>{i === 0 && onOpenEmployeeProfile
+          ? <button type="button" className={styles.employeeLink} onClick={() => onOpenEmployeeProfile(row.person_id)} title={`Open ${row.employee_name}'s profile`}>{value}</button>
+          : value}</td>)}</tr>)}</tbody>
       </table>
     </div>
     {!loading && !visible.length && !error ? <p>No employees match the current filters.</p> : null}
