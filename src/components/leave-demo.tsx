@@ -2204,7 +2204,7 @@ export function LeaveDemo({
                     />}
                   />{!isPreviewingEmployeeAccess ? <SubscriptionRequestTasks /> : null}</>
                 : undefined}
-              renderAccountsReport={canViewAccountsReport && !isPreviewingEmployeeAccess ? <AccountsReport /> : undefined}
+              renderAccountsReport={canViewAccountsReport && !isPreviewingEmployeeAccess ? (openProfile) => <AccountsReport onOpenEmployeeProfile={showHrWorkspace ? openProfile : undefined} /> : undefined}
               renderAccounts={activeCapabilities.can_manage_accounts ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
                 : accountsError
