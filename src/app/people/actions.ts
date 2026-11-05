@@ -314,6 +314,11 @@ function validateDraft(input: unknown) {
   const p_laptop_supplied = laptopSupplied(value.laptopSupplied);
   const p_laptop_id = optionalText(value.laptopId, "Laptop ID", 120);
   const p_working_weekdays = workingWeekdays(value.workingWeekdays);
+  const p_timesheet_entries = timesheetSource(value.timesheetEntries);
+  const p_location = p_timesheet_entries === "deputy" ? "hq"
+    : p_timesheet_entries === "deputy_hubstaff" ? "hybrid"
+    : p_timesheet_entries === "hubstaff" ? "overseas"
+    : employeeLocation(value.location);
 
   if (p_laptop_supplied === "mam_laptop" && !p_laptop_id) {
     throw new DirectoryInputError("A Laptop ID is required for a MAM laptop.");
@@ -329,8 +334,8 @@ function validateDraft(input: unknown) {
     p_team_name: validatedTeam(value.teamName),
     p_manager_id: optionalUuid(value.managerId, "Manager"),
     p_country: optionalText(value.country, "Country", 100),
-    p_location: employeeLocation(value.location),
-    p_timesheet_entries: timesheetSource(value.timesheetEntries),
+    p_location,
+    p_timesheet_entries,
     p_expected_weekly_hours: weeklyHours(value.expectedWeeklyHours),
     p_address: optionalText(value.address, "Address", 500),
     p_date_of_birth: optionalDate(value.dateOfBirth, "Date of birth"),
