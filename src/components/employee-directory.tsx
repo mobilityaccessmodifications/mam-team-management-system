@@ -1238,8 +1238,8 @@ function EmployeeEditor({
             <input type="number" min={0} max={168} step="any" value={editor.draft.expectedWeeklyHours}
               placeholder="e.g. 38; leave blank if unknown" onChange={(event) => onChange("expectedWeeklyHours", event.target.value)} />
           </Field>
-          <Field label="Contract type" required={isCreate}>
-            <select value={editor.draft.contractType} onChange={(event) => onChange("contractType", event.target.value)} required={isCreate}>
+          <Field label="Contract type">
+            <select value={editor.draft.contractType} onChange={(event) => onChange("contractType", event.target.value)}>
               <option value="">Not set</option>
               <option value="permanent">Permanent</option>
               <option value="fixed_term">Fixed-Term</option>
