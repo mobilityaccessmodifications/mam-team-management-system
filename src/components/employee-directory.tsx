@@ -539,7 +539,9 @@ export function EmployeeDirectory({
   const creatingEmployee = activeEditor?.mode === "create";
   const selectedCompany = activeEditor?.draft.company;
   const selectedTeam = activeEditor?.draft.teamName;
-  const teamManagerDefault = creatingEmployee && teamManagerPreview?.scope === teamManagerScope
+  // The same department mapping powers the Accounts Report Team Lead column.
+  // Load it for existing profiles too, without changing their org-chart parent.
+  const teamManagerDefault = Boolean(activeEditor) && teamManagerPreview?.scope === teamManagerScope
     && teamManagerPreview.company === selectedCompany && teamManagerPreview.teamName === selectedTeam
     ? teamManagerPreview.result : null;
   const managerOptions = records.filter((record) => record.isActive && record.company === selectedCompany);
@@ -548,7 +550,7 @@ export function EmployeeDirectory({
     : !teamManagerDefault || "error" in teamManagerDefault || teamManagerDefault.status === "invalid");
 
   useEffect(() => {
-    if (!creatingEmployee || !selectedCompany || !selectedTeam) return;
+    if (!activeEditor || !selectedCompany || !selectedTeam) return;
     let cancelled = false;
     const scope = teamManagerScope;
     void getEmployeeTeamManagerDefault({ company: selectedCompany, teamName: selectedTeam }).then((result) => {
@@ -562,7 +564,7 @@ export function EmployeeDirectory({
       }
     });
     return () => { cancelled = true; };
-  }, [creatingEmployee, selectedCompany, selectedTeam, teamManagerScope]);
+  }, [Boolean(activeEditor), selectedCompany, selectedTeam, teamManagerScope]);
 
   useDialogFocus(
     Boolean(activeEditor) && isMobileSheet && !endDatePrompt && !deleteTarget,
@@ -1146,6 +1148,19 @@ function EmployeeEditor({
               {EMPLOYEE_TEAMS.map((team) => <option key={team} value={team}>{team}</option>)}
             </select>
           </Field>
+          <Field label="Team Leader (Department)">
+            <output className={styles.teamLeaderValue} aria-live="polite">
+              {!editor.draft.teamName ? "Select a team"
+                : !teamManagerDefault ? "Loading team leader…"
+                : "error" in teamManagerDefault ? "Team leader unavailable"
+                : teamManagerDefault.status === "valid" ? teamManagerDefault.managerName
+                : "No team leader assigned"}
+            </output>
+            <small className={styles.teamLeaderHint}>Assigned to this department; separate from the org-chart reporting manager.</small>
+          </Field>
+          {!isCreate && currentRecord ? <Field label="Reports To (Org Chart)">
+            <output className={styles.teamLeaderValue}>{currentRecord.managerName || "No reporting manager assigned"}</output>
+          </Field> : null}
           {isCreate ? <Field label="Reports to">
             <select aria-label="Reports to" value={editor.draft.managerId ?? ""} onChange={(event) => onChange("managerId", event.target.value || null)}>
               <option value="" disabled={!teamManagerDefault || "error" in teamManagerDefault || teamManagerDefault.status === "invalid"}>
