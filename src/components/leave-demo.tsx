@@ -1143,6 +1143,23 @@ export function LeaveDemo({
     ? directoryProfiles.find((profile) => profile.id === previewPersonId)
     : undefined;
   const selectedPreviewPersonId = selectedPreviewCandidate?.id ?? "";
+  // Check the actual target's Accounts Report grant: System Admin preview must
+  // mirror Jackie's tabs, not grant the report to every previewed account.
+  const [previewAccountsReportAccess, setPreviewAccountsReportAccess] = useState<{personId: string; allowed: boolean} | null>(null);
+  useEffect(() => {
+    if (!selectedPreviewPersonId || !directorySupabase) return;
+    let cancelled = false;
+    void directorySupabase.rpc("can_view_accounts_employee_report_for_preview", { p_person_id: selectedPreviewPersonId })
+      .then(({data, error}) => {
+        if (!cancelled) setPreviewAccountsReportAccess({
+          personId: selectedPreviewPersonId,
+          allowed: !error && data === true,
+        });
+      }).catch(() => {
+        if (!cancelled) setPreviewAccountsReportAccess({personId: selectedPreviewPersonId, allowed: false});
+      });
+    return () => { cancelled = true; };
+  }, [selectedPreviewPersonId, directorySupabase]);
   const selectedEmployeeProfileError = selectedEmployeeProfileErrorState?.personId === selectedPreviewPersonId
     ? selectedEmployeeProfileErrorState.message
     : "";
@@ -1347,7 +1364,7 @@ export function LeaveDemo({
   const showManagerDirectory = activeProfile.accessRole === "manager"
     && hasManagerPeopleWorkspace;
   // Separate Account viewing grants do not confer HR, asset or review management.
-  const showCompanyReadOnly = !isPreviewingEmployeeAccess && activeProfile.accessRole === "account"
+  const showCompanyReadOnly = activeProfile.accessRole === "account"
     && activeCapabilities?.can_view_employee_directory === true;
   const showManagerCheckIns = activeProfile.accessRole === "manager"
     && activeCapabilities?.can_view_check_in_workspace === true;
@@ -2152,7 +2169,7 @@ export function LeaveDemo({
                 onSelectedPersonId={(id) => { if (scopeIsCurrent()) setEmployeeDirectorySelectedPersonId(id); }}
                 refreshKey={employeeDirectoryRefreshKey}
                 selectedPersonId={employeeDirectorySelectedPersonId}
-              /> : showCompanyReadOnly ? <CompanyDirectoryReadOnly /> : showManagerDirectory ? <ManagerEmployeeDirectory
+              /> : showCompanyReadOnly ? <CompanyDirectoryReadOnly previewPersonId={isPreviewingEmployeeAccess ? selectedPreviewPersonId : undefined} /> : showManagerDirectory ? <ManagerEmployeeDirectory
                 previewManagerPersonId={previewScopedManagerPersonId}
                 managerPersonId={previewScopedManagerPersonId ?? currentPersonId}
                 onLoadMyDevices={employeeDirectoryDeviceLoader}
@@ -2209,7 +2226,13 @@ export function LeaveDemo({
                     />}
                   />{!isPreviewingEmployeeAccess ? <SubscriptionRequestTasks /> : null}</>
                 : undefined}
-              renderAccountsReport={canViewAccountsReport && !isPreviewingEmployeeAccess ? (openProfile) => <AccountsReport onOpenEmployeeProfile={showHrWorkspace ? openProfile : undefined} /> : undefined}
+              renderAccountsReport={canViewAccountsReport
+                && (!isPreviewingEmployeeAccess || (
+                  previewAccountsReportAccess?.personId === selectedPreviewPersonId
+                  && previewAccountsReportAccess.allowed
+                ))
+                ? (openProfile) => <AccountsReport onOpenEmployeeProfile={showHrWorkspace ? openProfile : undefined} />
+                : undefined}
               renderAccounts={activeCapabilities.can_manage_accounts ? accountsLoading
                 ? <div className={styles.emptyState}><UsersRound size={24} /><strong>Loading accounts</strong></div>
                 : accountsError
@@ -2225,7 +2248,7 @@ export function LeaveDemo({
                 : undefined}
               renderAssetRegister={activeCapabilities?.can_manage_assets
                 ? <AssetRegister />
-                : showCompanyReadOnly ? <CompanyAssetsReadOnly /> : undefined}
+                : showCompanyReadOnly ? <CompanyAssetsReadOnly previewPersonId={isPreviewingEmployeeAccess ? selectedPreviewPersonId : undefined} /> : undefined}
               renderSubscriptionRegister={showSubscriptionRegister
                 ? activeCapabilities?.can_view_subscription_register
                   ? <SubscriptionRegister
