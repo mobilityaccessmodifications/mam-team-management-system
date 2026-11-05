@@ -1150,7 +1150,7 @@ export function LeaveDemo({
     if (!selectedPreviewPersonId || !directorySupabase) return;
     let cancelled = false;
     void directorySupabase.rpc("can_view_accounts_employee_report_for_preview", { p_person_id: selectedPreviewPersonId })
-      .then(({data, error}) => {
+      .then(({data, error}: { data: boolean | null; error: { message?: string } | null }) => {
         if (!cancelled) setPreviewAccountsReportAccess({
           personId: selectedPreviewPersonId,
           allowed: !error && data === true,
