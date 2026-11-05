@@ -38,7 +38,7 @@ function SafeTable({ headings, rows }: { headings: string[]; rows: (string | nul
   </div>;
 }
 
-function useCompanyReadOnlyRows<T>(rpcName: "list_people_company_directory_readonly" | "list_people_company_assets_readonly") {
+function useCompanyReadOnlyRows<T>(rpcName: "list_people_company_directory_readonly" | "list_people_company_assets_readonly", previewPersonId?: string) {
   const [rows, setRows] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -46,7 +46,12 @@ function useCompanyReadOnlyRows<T>(rpcName: "list_people_company_directory_reado
     let mounted = true;
     const supabase = createClient();
     void (async () => {
-      const { data, error: requestError } = await supabase.rpc(rpcName);
+      const previewRpcName = rpcName === "list_people_company_directory_readonly"
+        ? "list_people_company_directory_readonly_for_preview"
+        : "list_people_company_assets_readonly_for_preview";
+      const { data, error: requestError } = previewPersonId
+        ? await supabase.rpc(previewRpcName, { p_person_id: previewPersonId })
+        : await supabase.rpc(rpcName);
       if (!mounted) return;
       if (requestError || !Array.isArray(data)) {
         setRows([]);
@@ -60,7 +65,7 @@ function useCompanyReadOnlyRows<T>(rpcName: "list_people_company_directory_reado
       if (mounted) { setRows([]); setError("This register could not be loaded."); setLoading(false); }
     });
     return () => { mounted = false; };
-  }, [rpcName]);
+  }, [rpcName, previewPersonId]);
   return { rows, loading, error };
 }
 
@@ -71,8 +76,8 @@ function ReadOnlyHeader({ title, count }: { title: string; count: number }) {
   </header>;
 }
 
-export function CompanyDirectoryReadOnly() {
-  const { rows, loading, error } = useCompanyReadOnlyRows<CompanyDirectoryRow>("list_people_company_directory_readonly");
+export function CompanyDirectoryReadOnly({ previewPersonId }: { previewPersonId?: string }) {
+  const { rows, loading, error } = useCompanyReadOnlyRows<CompanyDirectoryRow>("list_people_company_directory_readonly", previewPersonId);
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => rows.filter((r) => [r.employee_name, r.company, r.department, r.job_title, r.work_location].join(" ").toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())), [rows, query]);
   return <section aria-label="Company-wide employee directory" style={{ padding: 14 }}>
@@ -85,8 +90,8 @@ export function CompanyDirectoryReadOnly() {
   </section>;
 }
 
-export function CompanyAssetsReadOnly() {
-  const { rows, loading, error } = useCompanyReadOnlyRows<CompanyAssetRow>("list_people_company_assets_readonly");
+export function CompanyAssetsReadOnly({ previewPersonId }: { previewPersonId?: string }) {
+  const { rows, loading, error } = useCompanyReadOnlyRows<CompanyAssetRow>("list_people_company_assets_readonly", previewPersonId);
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => rows.filter((r) => [r.asset_code, r.asset_type, r.manufacturer, r.model, r.serial_number, r.assigned_person_name].join(" ").toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())), [rows, query]);
   return <section aria-label="Company-wide assets" style={{ padding: 14 }}>
