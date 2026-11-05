@@ -20,3 +20,28 @@
 .error { color:#ad2c26; }
 .note { color:var(--text-secondary,#6b767b); font-size:11px; line-height:1.6; margin:0; }
 @media(max-width:600px) {.toolbar button { flex:1; }.filters>* { flex:1; min-width:130px; }}
+
+
+/* Employee identity stays visible when reviewing the seven-day work week. */
+.tableWrap table { min-width: 2300px; }
+.tableWrap th:first-child, .tableWrap td.employeeColumn {
+  position: sticky; left: 0; z-index: 2; min-width: 155px;
+  background: var(--surface-raised,#fff);
+  box-shadow: 1px 0 0 var(--surface-border,#e6ebea);
+}
+.tableWrap th:first-child { z-index: 3; background: var(--surface-muted,#f4f7f7); }
+.tableWrap th.dayHeader { min-width: 135px; text-align: center; }
+.dayHeader span, .dayHeader small { display:block; }
+.dayHeader small { font-size: 10px; font-weight: 500; margin-top: 3px; }
+.tableWrap td.dayColumn { min-width: 135px; max-width: 190px; }
+.dayEntries { display: grid; gap: 6px; }
+.dayLeave { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; border-bottom: 1px solid var(--surface-border,#e6ebea); padding-bottom: 5px; }
+.dayLeave:last-child { border-bottom: 0; padding-bottom: 0; }
+.leaveName { font-weight: 750; overflow-wrap: anywhere; }
+.leaveHours { font-weight: 700; font-variant-numeric: tabular-nums; }
+.coverage, .emptyDay { font-size: 10px; color: var(--text-secondary,#6b767b); }
+.dayLeave .approved, .dayLeave .pending, .dayLeave .rejected, .dayLeave .cancelled, .holidayTag {
+  font-size: 10px; padding: 2px 5px; border: 1px solid currentColor;
+  border-radius: 5px; font-weight: 700;
+}
+.holidayTag { color: #5d54a7; }
