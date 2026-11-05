@@ -313,7 +313,7 @@ export function PeopleOperationsDemo({
   /** Opens the selected safe tree node in the HR-only directory detail drawer. */
   onOpenEmployeeDirectoryRecord?: (personId: string) => void;
   renderAccounts?: ReactNode;
-  renderAccountsReport?: ReactNode;
+  renderAccountsReport?: (onOpenProfile: (personId: string) => void) => ReactNode;
   /** System-admin asset register. The component rechecks its own server capability. */
   renderAssetRegister?: ReactNode;
   initialSection?: "assets" | "accounts" | "accounts-report" | "subscriptions" | "tasks" | "performance";
@@ -568,7 +568,11 @@ export function PeopleOperationsDemo({
           setSection("directory");
         } : undefined} /> : null}
         {visibleSection === "accounts" ? renderAccounts : null}
-        {visibleSection === "accounts-report" ? renderAccountsReport : null}
+        {visibleSection === "accounts-report" ? renderAccountsReport?.((personId) => {
+          if (!renderEmployeeDirectory || !onOpenEmployeeDirectoryRecord) return;
+          onOpenEmployeeDirectoryRecord(personId);
+          setSection("directory");
+        }) : null}
         {visibleSection === "assets" ? renderAssetRegister : null}
         {visibleSection === "subscriptions" ? renderSubscriptionRegister : null}
         {visibleSection === "analytics" ? renderAnalyticsApiManagement : null}
