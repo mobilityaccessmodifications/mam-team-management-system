@@ -212,8 +212,8 @@ function weeklyHours(value: unknown): number | null {
 }
 
 function employeeLocation(value: unknown): Exclude<EmployeeLocation, ""> {
-  if (value === "hq" || value === "onsite_trade" || value === "remote_worker" || value === "hybrid") return value;
-  throw new DirectoryInputError("Choose a location: HQ, Onsite Trade, Remote Worker or Hybrid.");
+  if (value === "hq" || value === "onsite_trade" || value === "remote_worker" || value === "hybrid" || value === "overseas") return value;
+  throw new DirectoryInputError("Choose a location: HQ, Onsite Trade, Remote Worker, Hybrid or Overseas.");
 }
 
 function contractType(value: unknown): EmployeeContractType | null {
