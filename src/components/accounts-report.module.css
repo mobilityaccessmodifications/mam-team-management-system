@@ -23,3 +23,7 @@
 .error { color:#a73928; font-size:13px; }
 @media(max-width:800px) { .root { padding:12px; } .filters { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media(max-width:470px) { .filters { grid-template-columns:1fr; } .actions { width:100%; } .actions button { flex:1; justify-content:center; } }
+
+.employeeLink { display:inline; padding:0; border:0; background:none; color:var(--directory-accent-deep,#156c76); font:inherit; font-weight:750; text-align:left; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+.employeeLink:hover { text-decoration-thickness:2px; }
+.employeeLink:focus-visible { outline:2px solid currentColor; outline-offset:3px; border-radius:2px; }
