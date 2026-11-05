@@ -724,21 +724,6 @@ export function EmployeeDirectory({
     event.preventDefault();
     const editorToSave = editor ?? activeEditor;
     if (!editorToSave || saving || committedPersonId) return;
-    if (editorToSave.mode === "create" && !editorToSave.draft.workingWeekdays?.length) {
-      setSaveError("Select at least one usual work day in Work schedule before creating an employee.");
-      return;
-    }
-    if (editorToSave.mode === "create") {
-      const selectedDays = editorToSave.draft.workingWeekdays ?? [];
-      const completedDays = new Set(editorToSave.draft.workingDayTimes
-        .filter(isCompleteWorkTime).map((time) => time.weekday));
-      const missingDays = selectedDays.filter((day) => !completedDays.has(day));
-      if (missingDays.length) {
-        const names = workingDayOptions.filter((day) => missingDays.includes(day.value)).map((day) => day.label);
-        setSaveError(`Enter a start and finish time for each selected work day. Missing: ${names.join(", ")}.`);
-        return;
-      }
-    }
     if (editorToSave.mode === "create" && managerSelectionBlocked) {
       setSaveError("Check the Team Manager or choose a valid manager before saving.");
       return;
@@ -1090,7 +1075,7 @@ function EmployeeEditor({
   const completedDays = selectedDays.filter((day) =>
     isCompleteWorkTime(editor.draft.workingDayTimes.find((time) => time.weekday === day))
   );
-  const scheduleComplete = selectedDays.length > 0 && completedDays.length === selectedDays.length;
+
   const roleEditable = canManageRoles && role !== "system_admin";
   const roleCard = selectedRole && selectedRole in ROLE_PERMISSION_CARDS
     ? ROLE_PERMISSION_CARDS[selectedRole as keyof typeof ROLE_PERMISSION_CARDS] : null;
@@ -1267,16 +1252,17 @@ function EmployeeEditor({
       </fieldset>
 
       <fieldset disabled={saving}>
-        <legend>Work schedule{isCreate ? " * — Required" : ""}</legend>
+        <legend>Work schedule (optional)</legend>
         {isCreate ? <p className={styles.scheduleRequiredHint} role="note">
-          Select your working days and enter start and finish times for every selected day. Both are required before the employee can be created.
+          Working days and hours can be entered now or added later. The employment start date is still required for active new employees.
         </p> : null}
         <div className={styles.scheduleOverview}>
           <span className={styles.scheduleIcon}><CalendarDays size={18} aria-hidden="true" /></span>
           <span className={styles.scheduleCopy}>
             <strong>{workdaySummary(editor.draft.workingWeekdays, editor.draft.workingDayTimes)}</strong>
             {isCreate ? <small className={styles.scheduleCompletionStatus} aria-live="polite">
-              {scheduleComplete ? "Work schedule complete" : `Required: ${completedDays.length} of ${selectedDays.length} selected days have valid hours`}
+              {!selectedDays.length ? "Working days and hours not entered (optional)"
+                : `${completedDays.length} of ${selectedDays.length} selected days have saved hours (optional)`}
             </small> : null}
             <small>{scheduleDateSummary(editor.draft.startedDate, editor.draft.scheduledEmploymentEndDate)}</small>
           </span>
@@ -1288,7 +1274,7 @@ function EmployeeEditor({
             aria-controls="employee-work-schedule-fields"
           >
             {editingSchedule ? <ChevronUp size={15} aria-hidden="true" /> : <Pencil size={15} aria-hidden="true" />}
-            {isCreate ? "Required fields" : editingSchedule ? "Hide" : "Edit"}
+            {isCreate ? "Employment dates and optional hours" : editingSchedule ? "Hide" : "Edit"}
           </button>
         </div>
         {editingSchedule ? <div className={styles.scheduleFields} id="employee-work-schedule-fields">
@@ -1299,8 +1285,8 @@ function EmployeeEditor({
             <input name="scheduledEmploymentEndDate" value={editor.draft.scheduledEmploymentEndDate} onChange={(event) => onChange("scheduledEmploymentEndDate", event.target.value)} type="date" min={editor.draft.startedDate || undefined} />
           </Field>
           <div className={styles.workdayField}>
-            <span id="employee-workdays-label">Usual work days{isCreate ? " *" : ""}</span>
-            <div className={styles.workdayPicker} role="group" aria-labelledby="employee-workdays-label" aria-required={isCreate}>
+            <span id="employee-workdays-label">Usual work days (optional)</span>
+            <div className={styles.workdayPicker} role="group" aria-labelledby="employee-workdays-label">
               {workingDayOptions.map((day) => {
                 const selected = editor.draft.workingWeekdays?.includes(day.value) ?? false;
                 return <button
@@ -1320,11 +1306,11 @@ function EmployeeEditor({
                 ><span>{day.short}</span>{selected ? <Check size={12} aria-hidden="true" /> : null}</button>;
               })}
             </div>
-            {isCreate && !editor.draft.workingWeekdays?.length ? <small role="status">Select at least one work day to create this employee.</small> : null}
+            {isCreate && !editor.draft.workingWeekdays?.length ? <small role="status">No days selected — you can fill this in later.</small> : null}
           </div>
           {editor.draft.workingWeekdays?.length ? <div className={styles.workTimeField}>
-            <span>Daily start and finish times{isCreate ? " * — Required" : " (optional)"}</span>
-            <small>Enter hours for one day, then copy them to all selected days. {isCreate ? "Every selected day needs both a start and finish time." : "You can still adjust days individually or leave times blank for variable hours."}</small>
+            <span>Daily start and finish times (optional)</span>
+            <small>Enter hours for one day, then copy them to all selected days. For variable hours, leave both times blank; if you enter hours, provide both start and finish.</small>
             <div className={styles.workTimeCopyControls}>
               <label>
                 <span>Copy hours from</span>
