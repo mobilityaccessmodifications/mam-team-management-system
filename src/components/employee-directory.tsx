@@ -608,7 +608,13 @@ export function EmployeeDirectory({
   ) {
     const base = editor ?? activeEditor;
     if (!base) return;
-    const changed = updateDraft(base, key, value);
+    let changed = updateDraft(base, key, value);
+    if (key === "timesheetEntries") {
+      const derivedLocation = value === "deputy" ? "hq"
+        : value === "deputy_hubstaff" ? "hybrid"
+        : value === "hubstaff" ? "overseas" : null;
+      if (derivedLocation) changed = updateDraft(changed, "location", derivedLocation);
+    }
     if (base.mode === "create" && (key === "teamName" || key === "company")) {
       invalidateTeamManagerScope();
       setEditor({ ...changed, draft: { ...changed.draft, managerId: null } });
@@ -1175,7 +1181,7 @@ function EmployeeEditor({
             <button type="button" className={styles.secondaryAction} onClick={() => void saveRole()} disabled={saving || roleSaving || refreshRequired || !currentRecord?.isActive || !role || !roleCard || selectedRole === role}>Save role</button>
           </div> : !isCreate && roleLoadError ? <p className={`${styles.fullSpan} ${styles.formError}`} role="alert">{roleLoadError}</p> : null}
           <Field label="Location" required>
-            <select value={editor.draft.location} onChange={(event) => onChange("location", event.target.value as EmployeeLocation)} required aria-required="true">
+            <select value={editor.draft.location} onChange={(event) => onChange("location", event.target.value as EmployeeLocation)} disabled={["deputy", "deputy_hubstaff", "hubstaff"].includes(editor.draft.timesheetEntries)} required aria-required="true">
               <option value="" disabled>Select location</option>
               <option value="hq">HQ</option>
               <option value="onsite_trade">Onsite Trade</option>
@@ -1183,6 +1189,7 @@ function EmployeeEditor({
               <option value="hybrid">Hybrid</option>
               <option value="overseas">Overseas</option>
             </select>
+            {["deputy", "deputy_hubstaff", "hubstaff"].includes(editor.draft.timesheetEntries) ? <small>Location is automatically set from Timesheet Entries.</small> : null}
           </Field>
           <Field label="Company">
             <select value={editor.draft.company} onChange={(event) => onChange("company", event.target.value)}>
