@@ -89,7 +89,7 @@ test('legacy sick copies have stable receipts and never expose balances to the e
       if(failEmployee)throw new Error('synthetic timeout');
     }
     return Response.json({ok:true,sent:failEmployee,alreadySent:!failEmployee,eventKey:payload.eventKey,
-      actualRecipient:payload.audience==='employee'?'employee@example.test':'career@mobilityaccess.com.au,manager@example.test'});
+      actualRecipient:payload.audience==='employee'?'employee@example.test':'careers@mobilityaccess.com.au,manager@example.test'});
   };
   assert.equal((await dispatchLeaveNotificationOutbox()).failed,1);
   assert.equal(acks.at(-1).p_delivered,false);
@@ -158,8 +158,8 @@ test('accepted Careers reviewer receipts finish queued submissions without resen
   let unexpectedRecipient=false;
   globalThis.fetch=async(url,options)=>{
     const body=JSON.parse(options.body);bodies.push(body);
-    const reviewers=row.payload.employeeEmails.includes('career@mobilityaccess.com.au')
-      ? 'manager@example.test':'career@mobilityaccess.com.au,manager@example.test';
+    const reviewers=row.payload.employeeEmails.includes('careers@mobilityaccess.com.au')
+      ? 'manager@example.test':'careers@mobilityaccess.com.au,manager@example.test';
     return Response.json({ok:true,sent:false,alreadySent:true,eventKey:body.eventKey,
       actualRecipient:unexpectedRecipient?'unexpected@example.test':body.audience==='reviewers'?reviewers:row.payload.employeeEmails.slice().sort().join(',')});
   };
@@ -169,7 +169,7 @@ test('accepted Careers reviewer receipts finish queued submissions without resen
   const keys=bodies.map(body=>body.eventKey);
   assert.equal((await run()).sent,1);
   assert.deepEqual(bodies.slice(2).map(body=>body.eventKey),keys);
-  row.payload.employeeEmails.push('career@mobilityaccess.com.au');
+  row.payload.employeeEmails.push('careers@mobilityaccess.com.au');
   assert.equal((await run()).sent,1);
   unexpectedRecipient=true;
   assert.equal((await run()).failed,1);
