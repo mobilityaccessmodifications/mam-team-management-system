@@ -19,7 +19,7 @@ const apps = [
   },
   {
     name: "MAM Drafty Booking",
-    url: "https://mam-drafty-booking-git-feature-public-4cbd5b-ai-7033s-projects.vercel.app/",
+    url: "https://mam-drafty-booking-test.vercel.app/?utm_source=chatgpt.com",
     description: "Coordinate draftsperson appointments and bookings for Major Modifications jobs.",
     initials: "DB",
     accent: "#2563eb",
