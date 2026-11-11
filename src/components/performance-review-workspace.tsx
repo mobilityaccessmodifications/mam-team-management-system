@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
+import dynamic from "next/dynamic";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { mutatePerformanceReview, startPerformanceReview, getPerformanceReviewDocument, reconcilePerformanceReviewOperation } from "@/app/performance-reviews/actions";
 import { loadPerformanceReviews, loadPerformanceReviewMeetingInvitationStatus } from "@/lib/performance-review-load";
@@ -12,6 +13,8 @@ import { QUESTIONS } from "@/lib/performance-review-questions.mjs";
 import type { PerformanceFailure, PerformanceReview, PerformanceSelfReview, PerformanceManagerInput, PerformanceIdentity, PerformanceGoal, PerformanceMeeting, PerformanceMutationInput, PerformanceWorkspace } from "@/lib/performance-review-types";
 import toolbar from "./people-toolbar.module.css";
 import styles from "./performance-review-workspace.module.css";
+
+const AnnualReviewReport = dynamic(() => import("./annual-review-report"));
 
 const REQUIRED = [0, 3, 4, 5, 6, 7, 8, 9, 10];
 const RATED = [0, 1, 2, 6, 7, 8, 9];
@@ -74,6 +77,7 @@ function managerInput(row: PerformanceReview): PerformanceManagerInput | null {
 
 export default function PerformanceReviewWorkspace({ previewPersonId }: { previewPersonId?: string } = {}) {
   const [workspace, setWorkspace] = useState<PerformanceWorkspace | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
   const preview = previewPersonId !== undefined;
   const readOnly = preview && (workspace?.viewerContext.role !== "manager" || workspace.viewerContext.personId !== previewPersonId);
   const [query, setQuery] = useState("");
@@ -523,8 +527,17 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const meetingDisabled = editingBlocked || !selected || selected.audience === "employee" || !selected.capabilities.saveMeeting || Boolean(selected.finalisedAt);
   const heldDisabled = blocked || !selected || selected.audience === "employee" || !selected.capabilities.submitReview || Boolean(selected.finalisedAt);
   const managerActions = selected?.audience === "manager" || selected?.audience === "admin" && (selected.capabilities.saveManager || selected.capabilities.completeManager || selected.capabilities.saveMeeting || selected.capabilities.submitReview);
+  const canViewAnnualReport = !preview && (workspace?.viewerContext.role === "admin" || workspace?.viewerContext.role === "system_admin");
   return <section ref={formRoot} className={styles.workspace} aria-label="Performance reviews" aria-busy={busy || loading}>
-    <header className={styles.toolbar}><h1>Performance reviews</h1></header>
+    <header className={styles.toolbar}>
+      <h1>Performance reviews</h1>
+      {canViewAnnualReport ? <nav className={styles.reportTabs} aria-label="Annual review views">
+        <button type="button" aria-pressed={!reportOpen} onClick={() => setReportOpen(false)}>Reviews</button>
+        <button type="button" aria-pressed={reportOpen} onClick={() => setReportOpen(true)}>Report</button>
+      </nav> : null}
+    </header>
+    {canViewAnnualReport && reportOpen ? <AnnualReviewReport /> : null}
+    <div className={styles.reviewContents} hidden={Boolean(canViewAnnualReport && reportOpen)}>
     {autoSaving ? <p role="status">Saving…</p> : null}
     {message ? <p role={["Saved.", "Submitted.", "Review opened.", "Review created.", "Update confirmed."].includes(message) ? "status" : "alert"}>{message}</p> : null}
     {recoveryVisible ? <button type="button" className={styles.recovery} onClick={() => reload()} disabled={busy}>Reload</button> : null}
@@ -605,5 +618,6 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       </article> : null}
       </div>
     </div> : null}
+    </div>
   </section>;
 }
