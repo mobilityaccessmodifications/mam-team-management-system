@@ -12,7 +12,7 @@ select id,'contact'||right(id::text,1)||'@example.test' from public.internal_org
 insert into private.employee_lifecycle_mail_recipients(slot,person_id,approved_email,company_key,team_name)
 select slot,('20000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,'contact'||i||'@example.test',company,team
 from (values(1,'hr',null,null),(2,'accounts',null,null),(3,'bookkeeper',null,null),(4,'reporting',null,null),(5,'minor','mam','Minor'),(6,'major','mam','Major'),(7,'warehouse','mam','Warehouse'),(8,'equipsy','equipsy','Equipsy')) c(i,slot,company,team);
-insert into private.employee_lifecycle_mail_recipients(slot,approved_email) values('it','external.it@example.test');
+insert into private.employee_lifecycle_mail_recipients(slot,approved_email) values('it','external.it@example.test,penny@mobilityaccess.com.au,steven@mobilityaccess.com.au');
 insert into public.internal_org_people(id,full_name,started_date,is_active) values
 ('30000000-0000-4000-8000-000000000001','Historical Active',current_date,true),
 ('30000000-0000-4000-8000-000000000002','Existing Future',current_date,true),
@@ -38,14 +38,27 @@ select pg_temp.assert_true((select count(*)=1 from private.employee_lifecycle_ma
 begin;
 insert into public.internal_org_people(id,full_name,position_title,started_date,parent_id) values('40000000-0000-4000-8000-000000000001','New Synthetic','Synthetic worker',current_date,'20000000-0000-4000-8000-000000000007');
 select pg_temp.assert_true(not exists(select 1 from private.employee_lifecycle_mail_outbox where person_id='40000000-0000-4000-8000-000000000001'),'creation is deferred until details complete');
-insert into private.employee_directory_details(person_id,team_name,country,employment_type,personal_email,archive_reason) values('40000000-0000-4000-8000-000000000001','Warehouse','Australia','Full Time','private@example.test','Synthetic private reason');
+insert into private.employee_directory_details(person_id,team_name,country,employment_type,personal_email,archive_reason,location,timesheet_entries,working_weekdays,working_day_times,laptop_id) values('40000000-0000-4000-8000-000000000001','Warehouse','Australia','Full Time','private@example.test','Synthetic private reason','hq','deputy',array[1,2,3,4,5],'[{"weekday":1,"start_time":"08:00","end_time":"16:00"}]'::jsonb,'LT-100');
 commit;
 do $$ declare c record; r jsonb; t uuid; begin
   select * into strict c from public.claim_employee_lifecycle_mail('40000000-0000-4000-8000-000000000001');
-  assert c.payload->>'recipient'='contact1@example.test,contact2@example.test,contact3@example.test,contact4@example.test,contact7@example.test,external.it@example.test','warehouse manager included';
+  assert c.payload->>'recipient'='contact1@example.test,contact2@example.test,contact3@example.test,contact4@example.test,contact7@example.test,external.it@example.test,penny@mobilityaccess.com.au,steven@mobilityaccess.com.au','warehouse manager included';
   assert (select array_agg(k order by k) from jsonb_object_keys(c.payload) k)=array['employee','event','eventKey','personId','recipient'];
-  assert c.payload->'employee'=('{"name":"New Synthetic","company":"MAM","role":"Synthetic worker","department":"Warehouse","location":"Australia","employmentType":"Full Time","startDate":"'||to_char(current_date,'YYYY-MM-DD')||'","endDate":null}')::jsonb;
-  assert not (c.payload::text like '%private@example%' or c.payload::text like '%private reason%');
+  assert c.payload->'employee'->>'name'='New Synthetic';
+  assert c.payload->'employee'->>'company'='MAM';
+  assert c.payload->'employee'->>'role'='Synthetic worker';
+  assert c.payload->'employee'->>'department'='Warehouse';
+  assert c.payload->'employee'->>'location'='hq';
+  assert c.payload->'employee'->>'employmentType'='Full Time';
+  assert c.payload->'employee'->>'startDate'=to_char(current_date,'YYYY-MM-DD');
+  assert c.payload->'employee'->>'endDate' is null;
+  assert c.payload->'employee'->>'personalEmail'='private@example.test';
+  assert c.payload->'employee'->>'timesheetEntries'='deputy';
+  assert c.payload->'employee'->'workingWeekdays'='[1,2,3,4,5]'::jsonb;
+  assert c.payload->'employee'->'workingDayTimes'='[{"weekday":1,"start_time":"08:00","end_time":"16:00"}]'::jsonb;
+  assert c.payload->'employee'->>'laptopCode'='LT-100';
+  assert c.payload->'employee'->>'prestartDeadline' is not null;
+  assert c.payload::text not like '%Synthetic private reason%';
   assert not exists(select 1 from public.claim_employee_lifecycle_mail(c.person_id)),'cannot double claim';
   assert not public.finish_employee_lifecycle_mail(c.delivery_id,c.claim_token,true),'finish requires actual receipt';
   assert public.finish_employee_lifecycle_mail(c.delivery_id,c.claim_token,false),'pre-send retry is safe';
@@ -76,7 +89,7 @@ do $$ declare c record; begin
  select * into strict c from public.claim_employee_lifecycle_mail('30000000-0000-4000-8000-000000000001');
  assert c.payload->>'event'='offboarding';
  assert c.payload->'employee'->>'endDate'=to_char(current_date-1,'YYYY-MM-DD');
- assert c.payload->>'recipient'='contact1@example.test,contact2@example.test,contact3@example.test,contact4@example.test,external.it@example.test','unmapped gets core only';
+ assert c.payload->>'recipient'='contact1@example.test,contact2@example.test,contact3@example.test,contact4@example.test,external.it@example.test,penny@mobilityaccess.com.au,steven@mobilityaccess.com.au','unmapped gets core only';
 end $$;
 
 begin;
@@ -210,7 +223,7 @@ select pg_temp.assert_true(not exists(select 1 from public.claim_employee_lifecy
 update public.profiles set account_status='active' where id='10000000-0000-4000-8000-000000000001';
 update private.employee_lifecycle_mail_recipients set approved_email='contact1@example.test' where slot='reporting';
 update private.employee_directory_details set work_email='contact1@example.test' where person_id='20000000-0000-4000-8000-000000000004';
-select pg_temp.assert_true(payload->>'recipient'='contact1@example.test,contact2@example.test,contact3@example.test,contact8@example.test,external.it@example.test','Equipsy fallback and duplicate address removed') from public.claim_employee_lifecycle_mail('60000000-0000-4000-8000-000000000001');
+select pg_temp.assert_true(payload->>'recipient'='contact1@example.test,contact2@example.test,contact3@example.test,contact8@example.test,external.it@example.test,penny@mobilityaccess.com.au,steven@mobilityaccess.com.au','Equipsy fallback and duplicate address removed') from public.claim_employee_lifecycle_mail('60000000-0000-4000-8000-000000000001');
 rollback;
 
 begin;
@@ -248,7 +261,7 @@ do $$ declare team text; person uuid; c record; begin
       values(person,'Other Team Synthetic',current_date,'20000000-0000-4000-8000-000000000007');
     insert into private.employee_directory_details(person_id,team_name) values(person,team);
     select * into strict c from public.claim_employee_lifecycle_mail(person);
-    assert c.payload->>'recipient'='contact1@example.test,contact2@example.test,contact3@example.test,contact4@example.test,contact7@example.test,external.it@example.test',
+    assert c.payload->>'recipient'='contact1@example.test,contact2@example.test,contact3@example.test,contact4@example.test,contact7@example.test,external.it@example.test,penny@mobilityaccess.com.au,steven@mobilityaccess.com.au',
       'approved ancestor must be included regardless of employee team';
     update public.profiles set app_role='employee' where id='10000000-0000-4000-8000-000000000007';
     assert public.reserve_employee_lifecycle_mail(c.payload->>'eventKey',c.payload->>'recipient','',c.claim_token)->>'outcome'='rejected',
@@ -265,7 +278,7 @@ do $$ declare team text; person uuid; c record; begin
     values(person,'Other Company Ancestor Synthetic',current_date,'20000000-0000-4000-8000-000000000008');
   insert into private.employee_directory_details(person_id,team_name) values(person,'Management');
   select * into strict c from public.claim_employee_lifecycle_mail(person);
-  assert c.payload->>'recipient'='contact1@example.test,contact2@example.test,contact3@example.test,contact4@example.test,external.it@example.test',
+  assert c.payload->>'recipient'='contact1@example.test,contact2@example.test,contact3@example.test,contact4@example.test,external.it@example.test,penny@mobilityaccess.com.au,steven@mobilityaccess.com.au',
     'unmapped team with no same-company approved ancestor stays core-only';
 end $$;
 rollback;
