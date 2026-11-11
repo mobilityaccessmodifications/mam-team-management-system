@@ -1,0 +1,32 @@
+.report { display: grid; gap: 18px; min-width: 0; }
+.heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 14px; }
+.heading h2 { margin: 0; font-size: 20px; font-weight: 650; color: var(--text-primary); }
+.heading p { margin: 5px 0 0; color: var(--text-secondary); font-size: 13px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 12px; font: inherit; font-size: 13px; font-weight: 600; background: var(--surface-raised); border: 1px solid var(--surface-border-strong); border-radius: var(--radius-sm); color: var(--text-primary); cursor: pointer; }
+.actions button:disabled { opacity: .55; cursor: not-allowed; }
+.actions button:last-child { background: var(--mam-orange-strong); border-color: var(--mam-orange-strong); color: var(--text-on-inverse); }
+.actions button:focus-visible, .filters :is(input,select):focus-visible { outline: 2px solid var(--mam-orange-strong); outline-offset: 2px; }
+.metrics { display: grid; grid-template-columns: repeat(6,minmax(105px,1fr)); gap: 10px; }
+.metric { display: grid; gap: 5px; padding: 14px; border: 1px solid var(--surface-border); border-radius: var(--radius-md); background: var(--surface-muted); }
+.metric strong { font-size: 23px; font-weight: 700; color: var(--text-primary); }
+.metric span { font-size: 12px; line-height: 1.4; color: var(--text-secondary); }
+.filters { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+.filters label { display: grid; flex: 1 1 150px; gap: 5px; min-width: 120px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.filters input:not([type="checkbox"]), .filters select { width: 100%; min-width: 0; height: 40px; padding: 8px; background: var(--surface-raised); color: var(--text-primary); border: 1px solid var(--surface-border-strong); border-radius: var(--radius-sm); font: inherit; font-size: 13px; }
+.search { display: flex; align-items: center; gap: 6px; padding-left: 8px; border: 1px solid var(--surface-border-strong); border-radius: var(--radius-sm); }
+.search input { border: 0 !important; outline: 0; }
+.filters .checkbox { display: flex; flex: 0 1 180px; flex-direction: row; align-items: center; min-height: 40px; gap: 8px; font-size: 12px; }
+.checkbox input { width: 16px; height: 16px; flex: none; accent-color: var(--mam-orange-strong); }
+.caption { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.tableScroll { overflow: auto; max-width: 100%; max-height: 620px; border: 1px solid var(--surface-border); border-radius: var(--radius-md); }
+.table { width: 100%; min-width: 1360px; border-collapse: collapse; text-align: left; font-size: 12px; }
+.table th, .table td { padding: 11px 10px; vertical-align: middle; border-bottom: 1px solid var(--surface-border); white-space: nowrap; }
+.table thead th { position: sticky; top: 0; z-index: 1; color: var(--text-secondary); background: var(--surface-muted); font-weight: 650; }
+.table tbody tr:hover { background: var(--surface-warm); }
+.table tbody th { font-weight: 600; color: var(--text-primary); }
+.table tbody th small { display: block; margin-top: 3px; color: var(--text-secondary); }
+.status { display: inline-block; padding: 5px 9px; border-radius: 999px; font-weight: 600; background: var(--surface-muted); color: var(--text-primary); }
+.error { margin: 0; color: var(--danger-strong); font-size: 13px; }
+@media (max-width: 1000px) { .metrics { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media (max-width: 520px) { .metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .filters label { flex-basis: 100%; } .actions { width: 100%; } }
