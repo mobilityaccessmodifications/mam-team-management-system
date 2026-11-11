@@ -69,3 +69,9 @@
 @media (max-width: 760px) { .workspace { padding: 16px; } .columns { grid-template-columns: minmax(0, 1fr); } .card { padding: 16px; } .startLayout { grid-template-columns: minmax(0, 1fr); } .employeeSidebar { border-right: 0; border-bottom: 1px solid var(--surface-border); } .employeeList { max-height: 320px; } .workspace .searchField input[type="search"] { font-size: 16px; } .reviewPanel { min-height: 340px; padding: 16px; } }
 
 @media (max-width: 480px) { .goalDates { grid-template-columns: minmax(0, 1fr); } }
+
+.reviewContents { display: contents; }
+.reviewContents[hidden] { display: none; }
+.reportTabs { display: flex; gap: 6px; margin-left: auto; padding: 4px; border: 1px solid var(--surface-border); border-radius: var(--radius-md); background: var(--surface-muted); }
+.workspace .reportTabs button { min-height: 36px; border: 0; padding: 7px 12px; background: transparent; color: var(--text-secondary); }
+.workspace .reportTabs button[aria-pressed="true"] { background: var(--surface-raised); color: var(--mam-orange-dark); box-shadow: var(--shadow-xs); }
