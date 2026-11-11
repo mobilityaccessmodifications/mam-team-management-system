@@ -91,7 +91,7 @@ export function buildEmployeeLifecycleEmail({ kind, employee, preview = false })
     ? ['Set up the employee in the selected timesheet system(s): '+selectedSystems+'.','Confirm applicable payroll or accounts setup is ready by the deadline.']
     : ['Remove or archive the employee from applicable timesheet system(s): '+selectedSystems+'.','Confirm payroll/accounts access is removed by the final working day.'];
   const itRows = noIt ? [['IT access','No IT access required']] : [
-    ['Team Lead',teamLead],['Employee',name],['Laptop code to configure',recorded(employee?.laptopCode)],
+    ['Team Lead',teamLead],['Employee',name],['MAM/Equipsy email account name','Team Leader to confirm'],['Laptop code to configure',recorded(employee?.laptopCode)],
     ['OneDrive needed','Team Leader to confirm'],['SharePoint folders requiring access','Team Leader to confirm'],
     [deadlineLabel,deadline],
   ];
