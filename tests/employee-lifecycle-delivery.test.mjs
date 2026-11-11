@@ -13,7 +13,7 @@ const recipient=['core1','core2','core3','core4','core5','manager'].map(v=>v+'@e
 const secret='synthetic-notification-secret-0123456789abcdef';
 const base='https://mam-team-management-system-ten.vercel.app';
 function payload(event='onboarding') {return {version:1,event,eventKey:`employee-lifecycle:${id}:${event}`,personId:id,deliveryId:id,claimToken:token,recipient,
-  employee:{name:'Synthetic <Employee>',company:'MAM',role:'Installer',department:'Warehouse',location:'Australia',employmentType:'Full-time',startDate:'2026-11-02',endDate:event==='offboarding'?'2026-11-30':null}};}
+  employee:{name:'Synthetic <Employee>',company:'MAM',role:'Installer',department:'Warehouse',location:'onsite_trade',employmentType:'full_time',startDate:'2026-11-02',endDate:event==='offboarding'?'2026-11-30':null,personalEmail:'employee@example.invalid',timesheetEntries:'aroflo',workingWeekdays:[1,2,3,4,5],workingDayTimes:[{weekday:1,start_time:'08:00',end_time:'16:00'}],teamLeader:'Sample Lead',laptopCode:'LT-001',prestartDeadline:'2026-10-30'}};}
 const provider={accepted:true,messageId:null,requestId:null,statusCode:202};
 const receipt=(p,duplicate=false)=>({...(duplicate?{outcome:'duplicate'}:{}),ok:true,sent:!duplicate,alreadySent:duplicate,eventKey:p.eventKey,actualRecipient:p.recipient,actualCcRecipients:'',providerReceipt:provider});
 const builder=spawnSync('python3',['-B','scripts/build-employee-lifecycle-workflow.py'],{encoding:'utf8'});
@@ -56,7 +56,10 @@ test('both approved templates send one HTML message to exact six recipients afte
     assert.equal(mail.toRecipients.map(r=>r.emailAddress.address).join(','),recipient);
     assert.deepEqual(mail.ccRecipients,[]);assert.deepEqual(mail.bccRecipients,[]);
     assert.match(mail.body.content,/Not all items below apply/);assert.match(mail.body.content,/Synthetic &lt;Employee&gt;/);
-    assert.doesNotMatch(mail.body.content,/PREVIEW|<Employee>|archive_reason|personal_email/);
+    assert.doesNotMatch(mail.body.content,/PREVIEW|<Employee>|archive_reason/);
+    assert.match(mail.body.content,/No IT access required/);
+    assert.match(mail.body.content,/AroFlo/);
+    assert.match(mail.body.content,/Friday/);
     assert.equal(h.calls[0].body.claimToken,token);
   }
 });
