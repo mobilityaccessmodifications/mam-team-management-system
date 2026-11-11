@@ -5,7 +5,7 @@ if ($input.all().length !== 1 || !Object.hasOwn($json, 'body')) return reject();
 const p = $json.body;
 if (!closed(p, ['version','event','eventKey','personId','recipient','employee','deliveryId','claimToken'])) return reject();
 const e = p.employee;
-if (!closed(e,['name','company','role','department','location','employmentType','startDate','endDate'])) return reject();
+if (!closed(e,['name','company','role','department','location','employmentType','startDate','endDate','personalEmail','timesheetEntries','workingWeekdays','workingDayTimes','teamLeader','laptopCode','prestartDeadline'])) return reject();
 const uuid = v => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
 const text = v => typeof v === 'string' && v.length <= 200 && !/[\u0000-\u001f\u007f]/.test(v);
 const date = v => {
@@ -15,12 +15,12 @@ const date = v => {
 };
 const addresses = typeof p.recipient === 'string' ? p.recipient.split(',') : [];
 if (p.version !== 1 || !['onboarding','offboarding'].includes(p.event) || !uuid(p.personId) || !uuid(p.deliveryId) || !uuid(p.claimToken)
-  || p.eventKey !== `employee-lifecycle:${p.deliveryId}:${p.event}` || addresses.length < 5 || addresses.length > 6
+  || p.eventKey !== `employee-lifecycle:${p.deliveryId}:${p.event}` || addresses.length < 5 || addresses.length > 8
   || p.recipient !== [...new Set(addresses)].sort().join(',')
   || addresses.some(a => a !== a.trim().toLowerCase() || a.length > 254 || !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(a) || /[\u0000-\u001f\u007f]/.test(a))
-  || ![e.name,e.company,e.role,e.department,e.location,e.employmentType].every(text) || !e.name.trim()
+  || ![e.name,e.company,e.role,e.department,e.location,e.employmentType,e.personalEmail,e.timesheetEntries,e.teamLeader,e.laptopCode].every(text) || !e.name.trim()
   || !['MAM','Equipsy'].includes(e.company) || !date(p.event === 'onboarding' ? e.startDate : e.endDate)
-  || (e.startDate !== null && !date(e.startDate)) || (e.endDate !== null && !date(e.endDate))) return reject();
+  || (e.startDate !== null && !date(e.startDate)) || (e.endDate !== null && !date(e.endDate)) || (e.prestartDeadline !== null && !date(e.prestartDeadline)) || !Array.isArray(e.workingWeekdays) || e.workingWeekdays.length > 7 || e.workingWeekdays.some(d => !Number.isInteger(d) || d < 1 || d > 7) || !Array.isArray(e.workingDayTimes) || e.workingDayTimes.length > 7 || e.workingDayTimes.some(d => !d || typeof d !== 'object' || !Number.isInteger(d.weekday) || !/^\d{2}:\d{2}$/.test(d.start_time) || !/^\d{2}:\d{2}$/.test(d.end_time))) return reject();
 const mail = buildEmployeeLifecycleEmail({kind:p.event, employee:e});
 return [{json: {valid: true, eventKey:p.eventKey, recipient:p.recipient, cc:'',
   reserveBody:{action:'reserve',eventKey:p.eventKey,recipient:p.recipient,cc:'',legacyEventKey:null,claimToken:p.claimToken},
