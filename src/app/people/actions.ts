@@ -522,7 +522,10 @@ export async function createEmployeeDirectoryRecord(
     }
     if (values.p_manager_id !== null) {
       const manager = await findEmployeeDirectoryRecord(supabase, values.p_manager_id);
-      if (manager.personId !== values.p_manager_id || !manager.isActive || manager.company !== values.p_company_key) {
+      if (manager.personId !== values.p_manager_id || !manager.isActive
+        || (manager.company !== values.p_company_key
+          && !(values.p_company_key === "equipsy" && values.p_team_name === "Warehouse"
+            && manager.personId === (await resolveTeamManagerDefault(supabase, "equipsy", "Warehouse")).managerId))) {
         throw new DirectoryInputError("Choose a valid manager and try again.");
       }
     } else {
