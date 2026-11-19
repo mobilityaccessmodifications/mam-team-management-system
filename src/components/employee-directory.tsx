@@ -543,7 +543,11 @@ export function EmployeeDirectory({
   const teamManagerDefault = creatingEmployee && teamManagerPreview?.scope === teamManagerScope
     && teamManagerPreview.company === selectedCompany && teamManagerPreview.teamName === selectedTeam
     ? teamManagerPreview.result : null;
-  const managerOptions = records.filter((record) => record.isActive && record.company === selectedCompany);
+  const managerOptions = records.filter((record) => record.isActive && (
+    record.company === selectedCompany
+    || (creatingEmployee && selectedCompany === "equipsy" && selectedTeam === "Warehouse"
+      && record.personId === teamManagerDefault?.managerId)
+  ));
   const managerSelectionBlocked = creatingEmployee && (activeEditor.draft.managerId
     ? !managerOptions.some((record) => record.personId === activeEditor.draft.managerId)
     : !teamManagerDefault || "error" in teamManagerDefault || teamManagerDefault.status === "invalid");
