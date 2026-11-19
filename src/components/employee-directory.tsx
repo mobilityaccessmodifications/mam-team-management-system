@@ -546,7 +546,9 @@ export function EmployeeDirectory({
   const managerOptions = records.filter((record) => record.isActive && (
     record.company === selectedCompany
     || (creatingEmployee && selectedCompany === "equipsy" && selectedTeam === "Warehouse"
-      && record.personId === teamManagerDefault?.managerId)
+      && teamManagerDefault && !("error" in teamManagerDefault)
+      && teamManagerDefault.status === "valid"
+      && record.personId === teamManagerDefault.managerId)
   ));
   const managerSelectionBlocked = creatingEmployee && (activeEditor.draft.managerId
     ? !managerOptions.some((record) => record.personId === activeEditor.draft.managerId)
