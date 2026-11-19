@@ -516,6 +516,7 @@ export async function createEmployeeDirectoryRecord(
   try {
     const { supabase } = await requireDirectoryMutationManager();
     const values = validateDraft(input);
+    const workStation = optionalText(input.workStation, "Work station", 200);
     const { p_contract_type: selectedContractType, ...directoryValues } = values;
     if (values.p_is_active) {
       if (!values.p_started_date) throw new DirectoryInputError("A start date is required for a new active employee.");
@@ -552,6 +553,15 @@ export async function createEmployeeDirectoryRecord(
     let warning = selectedContractType === null
       ? undefined
       : await saveContractClassification(supabase, personId, selectedContractType);
+    if (workStation) {
+      const createdDetailVersion = Number((Array.isArray(data) ? data[0] : null)?.detail_version);
+      const { error: stationError } = await supabase.rpc("update_employee_work_station", {
+        p_person_id: personId,
+        p_work_station: workStation,
+        p_expected_detail_version: createdDetailVersion,
+      });
+      if (stationError) warning = [warning, "Employee saved, but Work station could not be saved. Open the employee profile to add it. Do not recreate the employee."].filter(Boolean).join(" ");
+    }
     const record = await readSavedDirectoryRecord(supabase, personId);
     if (values.p_is_active && (values.p_work_email || values.p_personal_email)) {
       try {
@@ -587,8 +597,25 @@ export async function updateEmployeeDirectoryRecord(
     }
     const { supabase } = await requireDirectoryMutationManager();
     const values = validateDraft(inputValue);
+    const workStation = optionalText(inputValue.workStation, "Work station", 200);
     const { p_contract_type: selectedContractType, ...directoryValues } = values;
     const currentRecord = await findEmployeeDirectoryRecord(supabase, inputValue.personId);
+    const otherFieldsUnchanged = Object.keys(inputValue)
+      .filter((key) => !["workStation", "personId", "personVersion", "detailVersion"].includes(key))
+      .every((key) => JSON.stringify(inputValue[key]) === JSON.stringify((currentRecord as unknown as Record<string, unknown>)[key]));
+    if (otherFieldsUnchanged) {
+      if ((workStation ?? "") !== currentRecord.workStation) {
+        const { error: stationError } = await supabase.rpc("update_employee_work_station", {
+          p_person_id: inputValue.personId,
+          p_work_station: workStation,
+          p_expected_detail_version: version(inputValue.detailVersion),
+        });
+        if (stationError) return { error: mutationErrorMessage(stationError) };
+      }
+      const record = await readSavedDirectoryRecord(supabase, inputValue.personId);
+      revalidatePath("/");
+      return { record };
+    }
     directoryValues.p_manager_id = currentRecord.managerId;
     let { data, error } = await supabase.rpc("update_employee_directory_record_with_profile_extras", {
       ...directoryValues,
@@ -603,8 +630,17 @@ export async function updateEmployeeDirectoryRecord(
     scheduleEmployeeLifecycleMail(personId);
     // The directory change is already committed; report a classification
     // failure against the fresh record instead of failing the whole save.
-    const warning = await saveContractClassification(supabase, personId, selectedContractType);
-    const record = await readSavedDirectoryRecord(supabase, personId);
+    let warning = await saveContractClassification(supabase, personId, selectedContractType);
+    let record = await readSavedDirectoryRecord(supabase, personId);
+    if ((workStation ?? "") !== record.workStation) {
+      const { error: stationError } = await supabase.rpc("update_employee_work_station", {
+        p_person_id: personId,
+        p_work_station: workStation,
+        p_expected_detail_version: record.detailVersion,
+      });
+      if (stationError) warning = [warning, "Employee saved, but Work station could not be saved. Refresh and try editing that field."].filter(Boolean).join(" ");
+      else record = await readSavedDirectoryRecord(supabase, personId);
+    }
     revalidatePath("/");
     return warning ? { record, warning } : { record };
   } catch (error) {
