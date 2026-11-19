@@ -69,7 +69,7 @@ begin
   end if;
   return jsonb_build_object('status','valid','managerId',configured_manager,'managerName',manager_name);
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.create_employee_directory_record(p_first_name text, p_last_name text, p_work_email text, p_personal_email text, p_phone text, p_position_title text, p_team_name text, p_manager_id uuid, p_country text, p_date_of_birth date, p_started_date date, p_scheduled_employment_end_date date, p_company_key text, p_is_active boolean, p_laptop_supplied text, p_laptop_id text, p_mouse_id text, p_keyboard_id text, p_asset_tags text[], p_sort_order integer DEFAULT 0)
