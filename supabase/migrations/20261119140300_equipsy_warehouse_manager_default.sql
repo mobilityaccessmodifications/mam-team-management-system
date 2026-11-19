@@ -287,5 +287,4 @@ begin
 
   return query select v_person.id, v_person.version, v_detail.version;
 end;
-$function$
-
+$function$;
