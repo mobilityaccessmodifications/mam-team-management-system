@@ -136,6 +136,7 @@ const emptyDraft: EmployeeDirectoryDraft = {
   location: "",
   timesheetEntries: "",
   expectedWeeklyHours: "",
+  workStation: "",
   address: "",
   dateOfBirth: "",
   startedDate: "",
@@ -168,6 +169,7 @@ function toDraft(record: EmployeeDirectoryRecord): EmployeeDirectoryDraft {
     location: record.location,
     timesheetEntries: record.timesheetEntries,
     expectedWeeklyHours: record.expectedWeeklyHours,
+    workStation: record.workStation,
     address: record.address,
     dateOfBirth: record.dateOfBirth,
     startedDate: record.startedDate,
@@ -1180,6 +1182,9 @@ function EmployeeEditor({
               <option value="hybrid">Hybrid</option>
               <option value="overseas">Overseas</option>
             </select>
+          </Field>
+          <Field label="Work station (optional)">
+            <input value={editor.draft.workStation} onChange={(event) => onChange("workStation", event.target.value)} maxLength={200} placeholder="e.g. Desk 12, Warehouse bench 3" />
           </Field>
           <Field label="Company">
             <select value={editor.draft.company} onChange={(event) => onChange("company", event.target.value)}>
