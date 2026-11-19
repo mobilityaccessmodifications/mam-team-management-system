@@ -39,6 +39,7 @@ export type EmployeeDirectoryRecord = {
   location: EmployeeLocation;
   timesheetEntries: EmployeeTimesheetEntries;
   expectedWeeklyHours: string;
+  workStation: string;
   address: string;
   dateOfBirth: string;
   startedDate: string;
@@ -69,6 +70,7 @@ export type EmployeeDirectoryDraft = {
   location: EmployeeLocation;
   timesheetEntries: EmployeeTimesheetEntries;
   expectedWeeklyHours: string;
+  workStation: string;
   address: string;
   dateOfBirth: string;
   startedDate: string;
