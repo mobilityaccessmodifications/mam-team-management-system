@@ -33,6 +33,7 @@ type DirectoryRpcRow = {
   location?: string | null;
   timesheet_entries?: string | null;
   expected_weekly_hours?: number | string | null;
+  work_station?: string | null;
   address: string | null;
   date_of_birth: string | null;
   started_date: string | null;
@@ -192,6 +193,7 @@ function toRecord(row: DirectoryRpcRow, contractType: EmployeeContractType | "")
     location: location(row.location),
     timesheetEntries: timesheetEntries(row.timesheet_entries),
     expectedWeeklyHours: expectedWeeklyHours(row.expected_weekly_hours),
+    workStation: optionalText(row.work_station),
     address: optionalText(row.address),
     dateOfBirth: optionalText(row.date_of_birth),
     startedDate: optionalText(row.started_date),
@@ -257,6 +259,20 @@ async function listProfileExtras(supabase: Awaited<ReturnType<typeof createClien
   return extras;
 }
 
+async function listWorkStations(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const { data, error } = await supabase.rpc("list_employee_work_stations");
+  if (error || !Array.isArray(data)) throw new Error(GENERIC_LOAD_ERROR);
+  const stations = new Map<string, string>();
+  for (const row of data) {
+    if (!row || typeof row.person_id !== "string" || !UUID_PATTERN.test(row.person_id)
+      || (row.work_station !== null && typeof row.work_station !== "string")) {
+      throw new Error(GENERIC_LOAD_ERROR);
+    }
+    stations.set(row.person_id, optionalText(row.work_station));
+  }
+  return stations;
+}
+
 async function listLocations(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data, error } = await supabase.rpc("list_employee_directory_locations");
   if (error || !Array.isArray(data)) throw new Error(GENERIC_LOAD_ERROR);
@@ -310,9 +326,9 @@ export async function listEmployeeDirectoryRecordsWithClient(
   supabase: Awaited<ReturnType<typeof createClient>>,
 ) {
   // The two reads are independent, so neither waits for the other.
-  const [rows, contractTypes, locations, profileExtras] = await Promise.all([listDirectoryRows(supabase), listContractTypes(supabase), listLocations(supabase), listProfileExtras(supabase)]);
+  const [rows, contractTypes, locations, profileExtras, workStations] = await Promise.all([listDirectoryRows(supabase), listContractTypes(supabase), listLocations(supabase), listProfileExtras(supabase), listWorkStations(supabase)]);
   return rows
-    .map((row) => toRecord({ ...row, location: locations.get(row.person_id) ?? "", ...(profileExtras.get(row.person_id) ?? {}) }, contractTypes.get(row.person_id) ?? ""))
+    .map((row) => toRecord({ ...row, location: locations.get(row.person_id) ?? "", work_station: workStations.get(row.person_id) ?? "", ...(profileExtras.get(row.person_id) ?? {}) }, contractTypes.get(row.person_id) ?? ""))
     .sort((first, second) => first.fullName.localeCompare(second.fullName));
 }
 
@@ -321,12 +337,13 @@ export async function findEmployeeDirectoryRecord(
   personId: string,
 ) {
   if (!UUID_PATTERN.test(personId)) throw new Error(GENERIC_LOAD_ERROR);
-  const [row, contractTypes, locationResult, extrasResult] = await Promise.all([
+  const [row, contractTypes, locationResult, extrasResult, stationResult] = await Promise.all([
     getDirectoryRow(supabase, personId),
     listContractTypes(supabase),
     supabase.rpc("get_employee_directory_location", { p_person_id: personId }),
     supabase.rpc("get_employee_directory_profile_extras", { p_person_id: personId }),
+    supabase.rpc("get_employee_work_station", { p_person_id: personId }),
   ]);
-  if (locationResult.error || extrasResult.error || !Array.isArray(extrasResult.data) || extrasResult.data.length !== 1) throw new Error(GENERIC_LOAD_ERROR);
-  return toRecord({ ...row, location: locationResult.data, ...extrasResult.data[0] }, contractTypes.get(personId) ?? "");
+  if (locationResult.error || extrasResult.error || stationResult.error || !Array.isArray(extrasResult.data) || extrasResult.data.length !== 1) throw new Error(GENERIC_LOAD_ERROR);
+  return toRecord({ ...row, location: locationResult.data, work_station: stationResult.data, ...extrasResult.data[0] }, contractTypes.get(personId) ?? "");
 }
