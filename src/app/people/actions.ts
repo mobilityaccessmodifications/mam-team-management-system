@@ -522,10 +522,12 @@ export async function createEmployeeDirectoryRecord(
     }
     if (values.p_manager_id !== null) {
       const manager = await findEmployeeDirectoryRecord(supabase, values.p_manager_id);
+      const warehouseDefault = values.p_company_key === "equipsy" && values.p_team_name === "Warehouse"
+        ? await resolveTeamManagerDefault(supabase, "equipsy", "Warehouse") : null;
+      const isConfiguredWarehouseManager = warehouseDefault && warehouseDefault.status === "valid"
+        && manager.personId === warehouseDefault.managerId;
       if (manager.personId !== values.p_manager_id || !manager.isActive
-        || (manager.company !== values.p_company_key
-          && !(values.p_company_key === "equipsy" && values.p_team_name === "Warehouse"
-            && manager.personId === (await resolveTeamManagerDefault(supabase, "equipsy", "Warehouse")).managerId))) {
+        || (manager.company !== values.p_company_key && !isConfiguredWarehouseManager)) {
         throw new DirectoryInputError("Choose a valid manager and try again.");
       }
     } else {
