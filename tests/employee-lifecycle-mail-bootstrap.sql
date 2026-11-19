@@ -12,7 +12,8 @@ create function auth.uid() returns uuid language sql stable as $$ select nullif(
 create table auth.users(id uuid primary key);
 create table public.profiles(id uuid primary key,account_status text,app_role text);
 create table public.internal_org_people(id uuid primary key default gen_random_uuid(),node_kind text default 'person',company_key text default 'mam',full_name text,position_title text,auth_user_id uuid,parent_id uuid,started_date date,is_active boolean default true);
-create table private.employee_directory_details(person_id uuid primary key,work_email text,personal_email text,team_name text,country text,employment_type text,scheduled_employment_end_date date,archive_reason text);
+create table private.employee_directory_details(person_id uuid primary key,work_email text,personal_email text,team_name text,country text,employment_type text,scheduled_employment_end_date date,archive_reason text,location text,timesheet_entries text,working_weekdays integer[],working_day_times jsonb,laptop_id text);
+create table private.victorian_public_holidays(holiday_date date primary key,holiday_name text);
 create table private.scheduled_employee_offboarding(person_id uuid primary key,end_date date not null,reason text,scheduled_at timestamptz default clock_timestamp());
 revoke all on schema private from public,anon,authenticated;
 create table private.confirmed_test_purge_schema(singleton boolean primary key default true check(singleton),schema_hash text not null);

@@ -21,7 +21,7 @@ export function lifecycleMailEnabled() {
 export function lifecycleClaim(raw: unknown, personId: string | null) {
   const r = closed(raw, ["delivery_id", "person_id", "claim_token", "payload"]);
   const p = closed(r.payload, ["event", "eventKey", "personId", "recipient", "employee"]);
-  const e = closed(p.employee, ["name", "company", "role", "department", "location", "employmentType", "startDate", "endDate"]);
+  const e = closed(p.employee, ["name", "company", "role", "department", "location", "employmentType", "startDate", "endDate", "personalEmail", "timesheetEntries", "workingWeekdays", "workingDayTimes", "teamLeader", "laptopCode", "prestartDeadline"]);
   const addresses = typeof p.recipient === "string" ? p.recipient.split(",") : [];
   const text = (v: unknown) => typeof v === "string" && v.length <= 200 && !/[\u0000-\u001f\u007f]/.test(v);
   const date = (v: unknown) => {
@@ -32,12 +32,12 @@ export function lifecycleClaim(raw: unknown, personId: string | null) {
   if (!uuid(r.delivery_id) || !uuid(r.person_id) || !uuid(r.claim_token) || (personId !== null && personId !== r.person_id)
     || p.personId !== r.person_id || !["onboarding", "offboarding"].includes(p.event as string)
     || p.eventKey !== `employee-lifecycle:${r.delivery_id}:${p.event}`
-    || addresses.length < 5 || addresses.length > 6 || p.recipient !== [...new Set(addresses)].sort().join(",")
+    || addresses.length < 5 || addresses.length > 8 || p.recipient !== [...new Set(addresses)].sort().join(",")
     || addresses.some(a => a !== a.toLowerCase().trim() || a.length > 254 || !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(a) || /[\u0000-\u001f\u007f]/.test(a))
-    || ![e.name,e.company,e.role,e.department,e.location,e.employmentType].every(text) || !(e.name as string).trim()
+    || ![e.name,e.company,e.role,e.department,e.location,e.employmentType,e.personalEmail,e.timesheetEntries,e.teamLeader,e.laptopCode].every(text) || !(e.name as string).trim()
     || !["MAM", "Equipsy"].includes(e.company as string)
     || !date(p.event === "onboarding" ? e.startDate : e.endDate)
-    || (e.startDate !== null && !date(e.startDate)) || (e.endDate !== null && !date(e.endDate))) throw Error("invalid_claim");
+    || (e.startDate !== null && !date(e.startDate)) || (e.endDate !== null && !date(e.endDate)) || (e.prestartDeadline !== null && !date(e.prestartDeadline)) || !Array.isArray(e.workingWeekdays) || e.workingWeekdays.length > 7 || e.workingWeekdays.some((d: unknown) => !Number.isInteger(d) || (d as number) < 1 || (d as number) > 7) || !Array.isArray(e.workingDayTimes) || e.workingDayTimes.length > 7 || e.workingDayTimes.some((d: unknown) => !d || typeof d !== "object" || !Number.isInteger((d as {weekday:number}).weekday) || !/^\d{2}:\d{2}$/.test(String((d as {start_time:string}).start_time)) || !/^\d{2}:\d{2}$/.test(String((d as {end_time:string}).end_time)))) throw Error("invalid_claim");
   return { deliveryId: r.delivery_id, claimToken: r.claim_token, recipient: p.recipient, eventKey: p.eventKey,
     payload: { version: 1, ...p, deliveryId: r.delivery_id, claimToken: r.claim_token } };
 }
