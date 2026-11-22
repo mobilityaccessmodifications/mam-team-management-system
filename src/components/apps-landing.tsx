@@ -81,6 +81,20 @@ export function AppsLanding({ company, isManagement }: { company: "mam" | "equip
         <h1 id="apps-landing-title" style={{ fontSize: "clamp(25px, 3vw, 34px)", fontWeight: 750, letterSpacing: "-0.035em", margin: 0 }}>MAM &amp; Equipsy Apps</h1>
         <p style={{ marginTop: 10, color: "var(--muted, #64748b)", maxWidth: 650, lineHeight: 1.55 }}>Quick access to the systems we use across our teams.</p>
       </div>
+      <div style={{ margin: "0 0 20px" }}>
+        <h2 style={{ margin: "0 0 12px", fontSize: 22, fontWeight: 750 }}>People &amp; Culture</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 245px), 1fr))", gap: 16 }}>
+          <a href="https://forms.cloud.microsoft/r/KuqVLGjQVW" target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", flexDirection: "column", minHeight: 194, textDecoration: "none", color: "inherit", border: "1px solid var(--line, #dce1e7)", borderRadius: 16, padding: 20, background: "var(--surface, #fff)", boxShadow: "0 2px 12px rgba(19,35,56,.045)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 17 }}>
+              <span style={{ width: 44, height: 44, borderRadius: 12, display: "grid", placeItems: "center", background: "#2563eb", color: "#fff", fontWeight: 800, fontSize: 13 }}>1:1</span>
+              <ExternalLink size={17} aria-hidden="true" style={{ opacity: 0.6 }} />
+            </div>
+            <strong style={{ fontSize: 17, marginBottom: 7 }}>Employee 1 on 1</strong>
+            <span style={{ fontSize: 13.5, lineHeight: 1.55, color: "var(--muted, #64748b)" }}>Complete the employee check-in form before your monthly one-on-one meeting.</span>
+          </a>
+        </div>
+      </div>
       {showMamApps ? <>
       <h2 style={{ margin: "0 0 16px", fontSize: 22, fontWeight: 750 }}>MAM &amp; Shared Apps</h2>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 245px), 1fr))", gap: 16 }}>
