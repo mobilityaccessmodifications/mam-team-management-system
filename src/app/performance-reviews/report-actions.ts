@@ -17,7 +17,7 @@ function errorMessage(error: unknown) {
 async function readReport(year: string, includeInactive: boolean): Promise<AnnualReviewReport> {
   if (!yearValue(year) || typeof includeInactive !== "boolean") throw new Error("Invalid report filters.");
   const { supabase, capabilities } = await requirePerformanceReviewActor();
-  if (!["admin", "system_admin"].includes(capabilities.app_role)) {
+  if (!["manager", "admin", "system_admin"].includes(capabilities.app_role)) {
     throw new PerformanceReviewAccessError("forbidden");
   }
 
@@ -62,7 +62,7 @@ function excelValue(value: string | number | boolean | null | undefined): string
 function excelRow(row: AnnualReviewReportRow) {
   return [
     row.employeeName, row.company, row.department, row.jobTitle,
-    row.managerName ?? "", row.reviewYear,
+    row.employmentStartDate ?? "", row.managerName ?? "", row.reviewYear,
     excelValue(row.eligible === null ? "Unknown" : row.eligible),
     excelValue(row.reviewTriggered), row.triggeredBy ?? "", row.triggeredDate ?? "",
     excelValue(row.employeeCompleted), row.employeeCompletionDate ?? "",
@@ -88,7 +88,7 @@ export async function exportAnnualReviewExcel(
       ? report.rows.filter(row => selected.has(row.employeeId))
       : [];
     const headers = [
-      "Employee", "Company", "Department", "Job title", "Manager", "Review year",
+      "Employee", "Company", "Department", "Job title", "Employment start date", "Manager", "Review year",
       "Eligible", "Review triggered", "Triggered by", "Date triggered",
       "Employee completed", "Employee completion date", "Manager completed",
       "Manager completion date", "Due date", "Status", "Employee record",
