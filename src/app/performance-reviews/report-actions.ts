@@ -1,6 +1,6 @@
 "use server";
 
-import { requirePerformanceReviewActor, PerformanceReviewAccessError } from "@/lib/performance-review-auth";
+import { requirePerformanceReviewActor, requirePerformanceReviewManagerDelegate, PerformanceReviewAccessError } from "@/lib/performance-review-auth";
 import { buildXlsxWorkbook } from "@/lib/xlsx-export";
 import type { AnnualReviewExcelResult, AnnualReviewReport, AnnualReviewReportResult, AnnualReviewReportRow } from "@/lib/annual-review-report-types";
 
@@ -14,9 +14,11 @@ function errorMessage(error: unknown) {
   return "Annual review reporting is unavailable. Please try again.";
 }
 
-async function readReport(year: string, includeInactive: boolean): Promise<AnnualReviewReport> {
+async function readReport(year: string, includeInactive: boolean, previewPersonId?: string): Promise<AnnualReviewReport> {
   if (!yearValue(year) || typeof includeInactive !== "boolean") throw new Error("Invalid report filters.");
-  const { supabase, capabilities } = await requirePerformanceReviewActor();
+  const { supabase, capabilities } = previewPersonId === undefined
+    ? await requirePerformanceReviewActor()
+    : await requirePerformanceReviewManagerDelegate(previewPersonId);
   if (!["manager", "admin", "system_admin"].includes(capabilities.app_role)) {
     throw new PerformanceReviewAccessError("forbidden");
   }
@@ -40,14 +42,53 @@ async function readReport(year: string, includeInactive: boolean): Promise<Annua
       || typeof row.managerCompleted !== "boolean")) {
     throw new Error("Annual review reporting returned invalid data.");
   }
-  return report;
+  if (previewPersonId === undefined) return report;
+
+  // Super Admin "Change profile" is a manager-scoped preview, not an HR report.
+  // The normal HR report is broad for the real System Admin actor; obtain
+  // exactly the selected manager's authorised candidate IDs and filter on
+  // the server BEFORE returning any row or export to the browser.
+  const { data: delegated, error: delegateError, status: delegateStatus } = await supabase.rpc(
+    "performance_review_workspace_for_delegate", { p_person_id: previewPersonId },
+  );
+  if (delegateError || delegateStatus >= 400 || !delegated || typeof delegated !== "object"
+    || Array.isArray(delegated) || !("viewerContext" in delegated) || !("startablePeople" in delegated)) {
+    throw new PerformanceReviewAccessError("forbidden");
+  }
+  const context = delegated.viewerContext, startable = delegated.startablePeople;
+  if (!context || typeof context !== "object" || Array.isArray(context)
+    || !("personId" in context) || context.personId !== previewPersonId
+    || !("role" in context) || context.role !== "manager" || !Array.isArray(startable)
+    || startable.some(person => !person || typeof person !== "object" || !("id" in person)
+      || typeof person.id !== "string" || !/^[0-9a-f-]{36}$/i.test(person.id))) {
+    throw new PerformanceReviewAccessError("forbidden");
+  }
+  const allowed = new Set(startable.map(person => (person as { id: string }).id));
+  const rows = report.rows.filter(row => allowed.has(row.employeeId));
+  return {
+    ...report,
+    rows,
+    summary: {
+      totalEmployees: rows.length,
+      triggered: rows.filter(row => row.reviewTriggered).length,
+      notTriggered: rows.filter(row => row.status === "Not Triggered").length,
+      notEligible: rows.filter(row => row.status === "Not Eligible").length,
+      employeeCompleted: rows.filter(row => row.employeeCompleted).length,
+      managerCompleted: rows.filter(row => row.managerCompleted).length,
+      awaitingBoth: rows.filter(row => row.status === "Awaiting Both").length,
+      awaitingEmployee: rows.filter(row => row.status === "Awaiting Employee").length,
+      awaitingManager: rows.filter(row => row.status === "Awaiting Manager").length,
+      awaitingFinalisation: rows.filter(row => row.status === "Awaiting Finalisation").length,
+      finalised: rows.filter(row => row.status === "Finalised").length,
+    },
+  };
 }
 
-export async function loadAnnualReviewReport(year: string, includeInactive: boolean): Promise<AnnualReviewReportResult> {
+export async function loadAnnualReviewReport(year: string, includeInactive: boolean, previewPersonId?: string): Promise<AnnualReviewReportResult> {
   if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return { ok: false, message: "Performance reviews are not available." };
   if (!yearValue(year) || typeof includeInactive !== "boolean") return { ok: false, message: "Select a valid review year." };
   try {
-    return { ok: true, report: await readReport(year, includeInactive) };
+    return { ok: true, report: await readReport(year, includeInactive, previewPersonId) };
   } catch (error) {
     return { ok: false, message: errorMessage(error) };
   }
@@ -72,7 +113,7 @@ function excelRow(row: AnnualReviewReportRow) {
 }
 
 export async function exportAnnualReviewExcel(
-  year: string, includeInactive: boolean, selectedEmployeeIds: string[],
+  year: string, includeInactive: boolean, selectedEmployeeIds: string[], previewPersonId?: string,
 ): Promise<AnnualReviewExcelResult> {
   if (process.env.MAM_PERFORMANCE_REVIEW_ENABLED !== "true") return { ok: false, message: "Performance reviews are not available." };
   if (!yearValue(year) || typeof includeInactive !== "boolean"
@@ -82,7 +123,7 @@ export async function exportAnnualReviewExcel(
   }
   try {
     // Fetch a fresh authorised projection; never accept employee names or statuses from the browser.
-    const report = await readReport(year, includeInactive);
+    const report = await readReport(year, includeInactive, previewPersonId);
     const selected = new Set(selectedEmployeeIds);
     const rows = selectedEmployeeIds.length
       ? report.rows.filter(row => selected.has(row.employeeId))
