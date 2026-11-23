@@ -31,6 +31,7 @@ export function LeaveRequestDialog({
   leavePriority,
   formLeaveType,
   availableLeaveTypes,
+  employmentType,
   formStartDate,
   formEndDate,
   formError,
@@ -55,6 +56,7 @@ export function LeaveRequestDialog({
   formLeaveType: string;
   availableLeaveTypes: LeaveWorkspaceData["availableLeaveTypes"];
   hasPaidLeaveEntitlement: boolean;
+  employmentType: LeaveWorkspaceData["employmentType"];
   formStartDate: string;
   formEndDate: string;
   formError: string;
