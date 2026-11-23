@@ -6,6 +6,8 @@ import dynamic from "next/dynamic";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { mutatePerformanceReview, startPerformanceReview, getPerformanceReviewDocument, reconcilePerformanceReviewOperation } from "@/app/performance-reviews/actions";
 import { loadPerformanceReviews, loadPerformanceReviewMeetingInvitationStatus } from "@/lib/performance-review-load";
+import { loadAnnualReviewReport } from "@/app/performance-reviews/report-actions";
+import type { AnnualReviewReportRow } from "@/lib/annual-review-report-types";
 import { buildPerformanceReviewDownload } from "@/lib/performance-review-document";
 import { createClient } from "@/lib/supabase/client";
 import { completePerformanceGoals, meetingEndMillis } from "@/lib/performance-review-rules";
@@ -71,6 +73,22 @@ function reviewPeople(data: PerformanceWorkspace | null): PerformanceIdentity[] 
   return data ? [...new Map([...data.startablePeople, ...data.reviews.map(row => row.employee)].map(person => [person.id, person])).values()] : [];
 }
 
+function reviewStatus(row: PerformanceReview | undefined) {
+  if (!row) return "Not Triggered";
+  if (row.audience !== "employee" && row.finalisedAt) return "Finalised";
+  const managerCompleted = row.audience !== "employee" && Boolean(row.managerCompletedAt);
+  if (row.selfSubmittedAt && managerCompleted) return "Awaiting Finalisation";
+  if (row.selfSubmittedAt) return "Awaiting Manager";
+  if (managerCompleted) return "Awaiting Employee";
+  return "Awaiting Both";
+}
+
+function displayStartDate(date: string | null | undefined) {
+  if (!date) return "Not recorded";
+  const [year, month, day] = date.slice(0, 10).split("-");
+  return year && month && day ? `${day}/${month}/${year}` : "Not recorded";
+}
+
 function managerInput(row: PerformanceReview): PerformanceManagerInput | null {
   return row.audience === "employee" ? null : { answers: [...row.managerAnswers], ratings: [...row.ratings], summary: row.summary, overallRating: row.overallRating, managerNote: row.managerNote, goals: (row.goals ?? []).map(goal => ({ ...goal })) };
 }
@@ -78,6 +96,7 @@ function managerInput(row: PerformanceReview): PerformanceManagerInput | null {
 export default function PerformanceReviewWorkspace({ previewPersonId }: { previewPersonId?: string } = {}) {
   const [workspace, setWorkspace] = useState<PerformanceWorkspace | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
+  const [statusReport, setStatusReport] = useState<{ scope: string; rows: AnnualReviewReportRow[] } | null>(null);
   const preview = previewPersonId !== undefined;
   const readOnly = preview && (workspace?.viewerContext.role !== "manager" || workspace.viewerContext.personId !== previewPersonId);
   const [query, setQuery] = useState("");
@@ -124,6 +143,26 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const invitationSent = invitationScope !== null && confirmedInvitation === invitationScope;
   const invitationRequested = !!selected && selected.audience !== "employee" && Boolean(selected.managerCompletedAt);
   const invitationStarted = invitationRequested || invitationSent;
+  const canViewAnnualReport = !preview && ["manager", "admin", "system_admin"].includes(workspace?.viewerContext.role ?? "");
+  const statusCycle = startDraft.cycle || String(newReviewDraft().cycle);
+  const reportScope = workspace && canViewAnnualReport
+    ? [workspace.viewerContext.actorUserId, workspace.viewerContext.personId ?? "", workspace.viewerContext.role, statusCycle].join(":") : "";
+  useEffect(() => {
+    if (!reportScope) return;
+    let active = true;
+    loadAnnualReviewReport(statusCycle, false).then(result => {
+      if (active) setStatusReport(result.ok ? { scope: reportScope, rows: result.report.rows } : null);
+    }).catch(() => { if (active) setStatusReport(null); });
+    return () => { active = false; };
+  }, [reportScope, statusCycle]);
+  const reportRows = statusReport?.scope === reportScope ? statusReport.rows : [];
+  const reportByPerson = new Map(reportRows.map(row => [row.employeeId, row]));
+  const statusFor = (personId: string) => {
+    const reportRow = reportByPerson.get(personId);
+    if (reportRow) return reportRow.status;
+    return reviewStatus(workspace?.reviews.find(row => row.employee.id === personId && row.cycle === statusCycle));
+  };
+  const startDateFor = (personId: string) => displayStartDate(reportByPerson.get(personId)?.employmentStartDate);
   const people = reviewPeople(workspace);
   const search = query.trim().toLocaleLowerCase();
   const filteredPeople = people.filter(person => [person.name, person.jobTitle, person.team, person.company].join(" ").toLocaleLowerCase().includes(search));
@@ -527,7 +566,6 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const meetingDisabled = editingBlocked || !selected || selected.audience === "employee" || !selected.capabilities.saveMeeting || Boolean(selected.finalisedAt);
   const heldDisabled = blocked || !selected || selected.audience === "employee" || !selected.capabilities.submitReview || Boolean(selected.finalisedAt);
   const managerActions = selected?.audience === "manager" || selected?.audience === "admin" && (selected.capabilities.saveManager || selected.capabilities.completeManager || selected.capabilities.saveMeeting || selected.capabilities.submitReview);
-  const canViewAnnualReport = !preview && (workspace?.viewerContext.role === "admin" || workspace?.viewerContext.role === "system_admin");
   return <section ref={formRoot} className={styles.workspace} aria-label="Performance reviews" aria-busy={busy || loading}>
     <header className={styles.toolbar}>
       <h1>Performance reviews</h1>
@@ -558,13 +596,20 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
         choose(row ?? null); setStartYear(Number(draft.cycle)); setStartDraft(current => ({ employeePersonId: person.id, cycle, dueDate: current.dueDate || draft.dueDate }));
       }}>
         <span className={styles.avatar} aria-hidden="true">{person.name.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join("")}</span>
-        <span className={styles.employeeDetails}><strong>{person.name}</strong><span>{person.jobTitle} · {person.team}</span></span>
+        <span className={styles.employeeDetails}>
+           <span className={styles.employeeNameLine}><strong>{person.name}</strong><span className={styles.reviewStatus}>{statusFor(person.id)}</span></span>
+           <span>{person.jobTitle} · {person.team}</span>
+         </span>
         <span className={styles.company}>{person.company}</span>
       </button>)}</nav>
       {filteredPeople.length === 0 ? <p className={styles.listState} role="status">No employees match that search.</p> : null}
       </aside>
       <div className={styles.reviewPanel}>
-        {startPerson ? <header><h2>{startPerson.name} — {startPerson.company}</h2><p>{startPerson.jobTitle} · {startPerson.team}</p></header> : null}
+        {startPerson ? <header>
+           <div className={styles.selectedHeading}><h2>{startPerson.name} — {startPerson.company}</h2><span className={styles.reviewStatus}>{statusFor(startPerson.id)}</span></div>
+           <p>{startPerson.jobTitle} · {startPerson.team}</p>
+           <p className={styles.employmentStart}>Company start date: <strong>{startDateFor(startPerson.id)}</strong></p>
+         </header> : null}
         {startPerson ? <label className={styles.cycle}>Cycle<select name="start-cycle" disabled={(busy || operation !== null) && !autoSaving} value={startDraft.cycle} onChange={async event => {
           const cycle = event.target.value;
           if (epoch.current !== generation || ((busyRef.current || operationRef.current) && !autoPromise.current)) return;
@@ -581,7 +626,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
         </form> : null}
       {selected ? <article className={styles.card}>
         {selected.capabilities.downloadDocument ? <button type="button" disabled={busy} onClick={() => download()}>Download Word</button> : null}
-        <p>{selected.cycle} · {selected.dueDate} · {selected.selfStatus === "awaiting_employee" ? "Awaiting employee" : "Manager review"}</p>
+        <p>{selected.cycle} · Due {selected.dueDate} · <strong>{statusFor(selected.employee.id)}</strong></p>
         {selected.audience === "employee" ? <form aria-label="Self assessment" onBlur={() => flush.current()} onSubmit={event => { event.preventDefault(); void run("submit_self"); }}><h2>Self assessment</h2>
           {QUESTIONS[selected.employee.company].map((prompt: string, index: number) => <label key={prompt}>{prompt}<textarea name={`self-${index}`} maxLength={8000} value={answers[index] ?? ""} disabled={selfDisabled} onChange={event => { if (!selfDisabled && epoch.current === generation) { editSelf(index, event.target.value); } }} /></label>)}
           {selected.audience === "employee" ? <div className={styles.toolbar}><button type="button" disabled={selfDisabled} onClick={() => run("save_self")}>Save self draft</button><button type="submit" className={selected.selfSubmittedAt ? styles.submittedButton : undefined} disabled={blocked || !selected.capabilities.submitSelf || Boolean(selected.selfSubmittedAt)}>{selected.selfSubmittedAt ? "Self assessment submitted" : "Submit self assessment"}</button></div> : null}
