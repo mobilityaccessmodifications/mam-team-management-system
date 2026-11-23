@@ -55,7 +55,7 @@ const HEADERS = [
   "Manager completion date", "Due date", "Status", "Employee record",
 ];
 
-export default function AnnualReviewReport() {
+export default function AnnualReviewReport({ previewPersonId }: { previewPersonId?: string } = {}) {
   const [year, setYear] = useState(currentYear);
   const [includeInactive, setIncludeInactive] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
@@ -70,7 +70,7 @@ export default function AnnualReviewReport() {
 
   useEffect(() => {
     let active = true;
-    loadAnnualReviewReport(year, includeInactive).then(result => {
+    loadAnnualReviewReport(year, includeInactive, previewPersonId).then(result => {
       if (!active) return;
       if (result.ok) {
         setReport(result.report);
@@ -85,7 +85,7 @@ export default function AnnualReviewReport() {
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, [year, includeInactive, refreshKey]);
+  }, [year, includeInactive, refreshKey, previewPersonId]);
 
   const rows = report?.reviewYear === year && report.includesInactive === includeInactive ? report.rows : [];
   const companies = useMemo(() => [...new Set(rows.map(row => row.company).filter(Boolean))].sort(), [rows]);
@@ -116,7 +116,7 @@ export default function AnnualReviewReport() {
     setExporting(true);
     setMessage("");
     try {
-      const result = await exportAnnualReviewExcel(year, includeInactive, filteredRows.map(row => row.employeeId));
+      const result = await exportAnnualReviewExcel(year, includeInactive, filteredRows.map(row => row.employeeId), previewPersonId);
       if (!result.ok) {
         setMessage(result.message);
         return;
