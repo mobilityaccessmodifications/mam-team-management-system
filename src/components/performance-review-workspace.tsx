@@ -158,9 +158,9 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const reportRows = statusReport?.scope === reportScope ? statusReport.rows : [];
   const reportByPerson = new Map(reportRows.map(row => [row.employeeId, row]));
   const statusFor = (personId: string) => {
-    const reportRow = reportByPerson.get(personId);
-    if (reportRow) return reportRow.status;
-    return reviewStatus(workspace?.reviews.find(row => row.employee.id === personId && row.cycle === statusCycle));
+    const currentReview = workspace?.reviews.find(row => row.employee.id === personId && row.cycle === statusCycle);
+    if (currentReview) return reviewStatus(currentReview);
+    return reportByPerson.get(personId)?.status ?? "Not Triggered";
   };
   const startDateFor = (personId: string) => displayStartDate(reportByPerson.get(personId)?.employmentStartDate);
   const people = reviewPeople(workspace);
@@ -606,9 +606,8 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
       </aside>
       <div className={styles.reviewPanel}>
         {startPerson ? <header>
-           <div className={styles.selectedHeading}><h2>{startPerson.name} — {startPerson.company}</h2><span className={styles.reviewStatus}>{statusFor(startPerson.id)}</span></div>
+           <div className={styles.selectedHeading}><h2>{startPerson.name} — {startPerson.company}</h2><span className={styles.reviewStatus}>{statusFor(startPerson.id)}</span><span className={styles.employmentStart}>Company start date: <strong>{startDateFor(startPerson.id)}</strong></span></div>
            <p>{startPerson.jobTitle} · {startPerson.team}</p>
-           <p className={styles.employmentStart}>Company start date: <strong>{startDateFor(startPerson.id)}</strong></p>
          </header> : null}
         {startPerson ? <label className={styles.cycle}>Cycle<select name="start-cycle" disabled={(busy || operation !== null) && !autoSaving} value={startDraft.cycle} onChange={async event => {
           const cycle = event.target.value;
