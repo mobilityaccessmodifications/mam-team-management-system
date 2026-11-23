@@ -9,7 +9,6 @@ import { LEAVE_ATTACHMENT_ACCEPT } from "@/lib/leave-attachments";
 import { START_TIME_OPTIONS, END_TIME_OPTIONS } from "@/lib/leave-request-options";
 import { sickEvidenceDeadline, type LeavePriorityWorkspace } from "@/lib/leave-priority";
 import { getVictorianPublicHolidays } from "@/lib/victorian-public-holidays";
-import { LEAVE_NOTICE_MESSAGE, requiresLeaveNotice } from "@/lib/leave-notice";
 import { leaveDateRangeError } from "@/lib/leave-date-range";
 import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, UNCONFIRMED_ACCRUAL_MESSAGE, requestedLeaveHours, annualLeaveLimitGuidance, type AnnualLeaveProjection } from "@/lib/leave-request-balance";
 import styles from "@/components/leave-demo.module.css";
@@ -113,7 +112,7 @@ export function LeaveRequestDialog({
   return (
     <>
     <ModalBackdrop className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeLeaveRequestForm()}>
-      <section inert={formError === LEAVE_NOTICE_MESSAGE || balanceError} className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
+      <section inert={balanceError} className={styles.modal} ref={leaveRequestDialogRef} role="dialog" aria-modal="true" aria-labelledby="new-request-title" tabIndex={-1}>
         <header><div><h2 id="new-request-title">Request leave</h2></div><button type="button" onClick={closeLeaveRequestForm} aria-label="Close request form"><X size={19} /></button></header>
         <div className={styles.formPerson}>
           <span className={styles.avatarOrange}>{leaveRequestPersonInitials}</span>
@@ -153,11 +152,6 @@ export function LeaveRequestDialog({
             setFormError(dateRangeError);
             return;
           }
-          if (requiresLeaveNotice({ employmentType, leaveType: formLeaveType, startDate: formStartDate, onBehalfOf })) {
-            event.preventDefault();
-            setFormError(LEAVE_NOTICE_MESSAGE);
-            return;
-          }
           if (formLeaveType === "Annual leave" && (projectionLoading || !projection || projection.status === "unavailable")) {
             event.preventDefault();
             setFormError(UNAVAILABLE_BALANCE_MESSAGE);
@@ -195,12 +189,12 @@ export function LeaveRequestDialog({
             <small className={styles.privacyNote}>Visible to your approver and HR.</small>
           </div>
           </details>
-          {formError && formError !== LEAVE_NOTICE_MESSAGE ? <p className={styles.formError} role="alert">{formError}</p> : null}
+          {formError ? <p className={styles.formError} role="alert">{formError}</p> : null}
           <footer><button className={styles.secondaryButton} type="button" onClick={closeLeaveRequestForm} disabled={isMutating}>Cancel</button><button ref={sendButtonRef} className={styles.primaryButton} type="submit" disabled={isMutating || projectionLoading}>{isMutating ? "Saving…" : projectionLoading ? "Calculating…" : "Send request"}</button></footer>
         </form>
       </section>
     </ModalBackdrop>
-    {formError === LEAVE_NOTICE_MESSAGE || balanceError ? <LeaveNoticeDialog limitGuidance={balanceError ? limitGuidance : null} message={formError === INSUFFICIENT_BALANCE_MESSAGE ? `${formError} Projection date: ${formStartDate}. See the balance breakdown and calculation in your request form.` : formError} title={balanceError ? (formError === INSUFFICIENT_BALANCE_MESSAGE ? "Not enough balance" : "Balance unavailable") : "Speak to your manager"} returnFocusRef={sendButtonRef} onClose={() => setFormError("")} /> : null}
+    {balanceError ? <LeaveNoticeDialog limitGuidance={balanceError ? limitGuidance : null} message={formError === INSUFFICIENT_BALANCE_MESSAGE ? `${formError} Projection date: ${formStartDate}. See the balance breakdown and calculation in your request form.` : formError} title={balanceError ? (formError === INSUFFICIENT_BALANCE_MESSAGE ? "Not enough balance" : "Balance unavailable") : "Speak to your manager"} returnFocusRef={sendButtonRef} onClose={() => setFormError("")} /> : null}
     </>
   );
 }
