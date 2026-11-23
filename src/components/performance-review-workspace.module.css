@@ -75,3 +75,12 @@
 .reportTabs { display: flex; gap: 6px; margin-left: auto; padding: 4px; border: 1px solid var(--surface-border); border-radius: var(--radius-md); background: var(--surface-muted); }
 .workspace .reportTabs button { min-height: 36px; border: 0; padding: 7px 12px; background: transparent; color: var(--text-secondary); }
 .workspace .reportTabs button[aria-pressed="true"] { background: var(--surface-raised); color: var(--mam-orange-dark); box-shadow: var(--shadow-xs); }
+
+/* Concise status and employment details in the performance review workspace. */
+.employeeNameLine { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.employeeNameLine > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reviewStatus { display: inline-flex; align-items: center; flex-shrink: 0; max-width: 100%; padding: 3px 8px; border-radius: 999px; background: var(--surface-warm); border: 1px solid var(--surface-border); color: var(--text-secondary); font-size: 11px; font-weight: 650; line-height: 1.25; white-space: normal; }
+.selectedHeading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.selectedHeading h2 { margin: 0; }
+.reviewPanel > header .employmentStart { font-size: 13px; }
+.reviewPanel > header .employmentStart strong { font-weight: 650; color: var(--text-primary); }
