@@ -1,7 +1,6 @@
 import "server-only";
 import { createHash, createHmac, randomUUID, randomBytes, createCipheriv, createDecipheriv, timingSafeEqual } from "node:crypto";
 import { normalizeAllowlistPhone } from "./openclaw-allowlist";
-import { LEAVE_NOTICE_MESSAGE, requiresLeaveNotice } from "./leave-notice";
 
 // Protocol logic is shared by the route and synthetic transaction tests.
 export const LEAVE_BRIDGE_PATH = "/api/internal/integrations/openclaw/leave";
@@ -91,17 +90,6 @@ function fields(value: unknown, employee?: Employee, now = Date.now(), requiredN
     if ((v.leaveType === undefined || v.leaveType === "") && availableLeaveTypes.length === 1) v = { ...v, leaveType: "Unpaid leave" };
     else if (typeof v.leaveType === "string" && TYPES.includes(v.leaveType) && !availableLeaveTypes.includes(v.leaveType)) {
       return { missing: ["leaveType"], availableLeaveTypes, instruction: "That leave type is not available. Ask whether the employee wants Unpaid leave instead; do not silently change their choice." };
-    }
-  }
-  // Check as soon as type and start are known, even before an end date/time.
-  // Identity/classification came from the signed sender's authoritative lookup,
-  // never from model-selected fields. Reuse the portal's calendar-day policy.
-  if (employee && typeof v.leaveType === "string" && TYPES.includes(v.leaveType)
-    && v.startDate !== undefined && v.startDate !== "") {
-    const startDate = date(v.startDate);
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Melbourne", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(now));
-    if (requiresLeaveNotice({ employmentType: employee.employmentType, leaveType: v.leaveType, startDate, onBehalfOf: false }, today)) {
-      return { missing: [], instruction: `${LEAVE_NOTICE_MESSAGE} Explain this to the employee in English. This request is blocked: do not collect more details, send a confirmation summary, ask for Confirm, or claim submission. Do not change the dates or leave type to bypass the rule. Only prepare again if the employee explicitly changes their request. You cannot log leave on their behalf or grant an exception.` };
     }
   }
   if (v.employeeNote !== undefined && v.employeeNote !== null && typeof v.employeeNote !== "string") fail("invalid_request");
