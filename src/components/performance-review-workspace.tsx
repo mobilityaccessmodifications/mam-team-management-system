@@ -143,18 +143,18 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
   const invitationSent = invitationScope !== null && confirmedInvitation === invitationScope;
   const invitationRequested = !!selected && selected.audience !== "employee" && Boolean(selected.managerCompletedAt);
   const invitationStarted = invitationRequested || invitationSent;
-  const canViewAnnualReport = !preview && ["manager", "admin", "system_admin"].includes(workspace?.viewerContext.role ?? "");
+  const canViewAnnualReport = ["manager", "admin", "system_admin"].includes(workspace?.viewerContext.role ?? "") && (!preview || workspace?.viewerContext.role === "manager");
   const statusCycle = startDraft.cycle || String(newReviewDraft().cycle);
   const reportScope = workspace && canViewAnnualReport
     ? [workspace.viewerContext.actorUserId, workspace.viewerContext.personId ?? "", workspace.viewerContext.role, statusCycle].join(":") : "";
   useEffect(() => {
     if (!reportScope) return;
     let active = true;
-    loadAnnualReviewReport(statusCycle, false).then(result => {
+    loadAnnualReviewReport(statusCycle, false, previewPersonId).then(result => {
       if (active) setStatusReport(result.ok ? { scope: reportScope, rows: result.report.rows } : null);
     }).catch(() => { if (active) setStatusReport(null); });
     return () => { active = false; };
-  }, [reportScope, statusCycle]);
+  }, [reportScope, statusCycle, previewPersonId]);
   const reportRows = statusReport?.scope === reportScope ? statusReport.rows : [];
   const reportByPerson = new Map(reportRows.map(row => [row.employeeId, row]));
   const statusFor = (personId: string) => {
@@ -574,7 +574,7 @@ export default function PerformanceReviewWorkspace({ previewPersonId }: { previe
         <button type="button" aria-pressed={reportOpen} onClick={() => setReportOpen(true)}>Report</button>
       </nav> : null}
     </header>
-    {canViewAnnualReport && reportOpen ? <AnnualReviewReport /> : null}
+    {canViewAnnualReport && reportOpen ? <AnnualReviewReport previewPersonId={previewPersonId} /> : null}
     <div className={styles.reviewContents} hidden={Boolean(canViewAnnualReport && reportOpen)}>
     {autoSaving ? <p role="status">Saving…</p> : null}
     {message ? <p role={["Saved.", "Submitted.", "Review opened.", "Review created.", "Update confirmed."].includes(message) ? "status" : "alert"}>{message}</p> : null}
