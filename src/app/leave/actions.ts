@@ -1,6 +1,5 @@
 "use server";
 
-import { LEAVE_NOTICE_MESSAGE } from "@/lib/leave-notice";
 import { leaveDateRangeError, MAX_LEAVE_SPAN_DAYS } from "@/lib/leave-date-range";
 import { INSUFFICIENT_BALANCE_MESSAGE, UNAVAILABLE_BALANCE_MESSAGE, UNCONFIRMED_ACCRUAL_MESSAGE, type AnnualLeaveProjection } from "@/lib/leave-request-balance";
 import { dispatchLeaveNotificationsForRequest } from "@/lib/leave-notification-outbox";
@@ -724,8 +723,7 @@ function userFacingSubmitError(error: unknown) {
       ? error.message
       : "";
   if (
-    message === LEAVE_NOTICE_MESSAGE
-    || message === INSUFFICIENT_BALANCE_MESSAGE
+    message === INSUFFICIENT_BALANCE_MESSAGE
     || message === UNAVAILABLE_BALANCE_MESSAGE
     || message === UNCONFIRMED_ACCRUAL_MESSAGE
     || message === "Choose a valid leave type."
