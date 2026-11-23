@@ -39,7 +39,7 @@ function downloadFile(contents: BlobPart, mimeType: string, filename: string) {
 
 function reportCells(row: AnnualReviewReportRow): (string | number | boolean | null)[] {
   return [
-    row.employeeName, row.company, row.department, row.jobTitle, row.managerName,
+    row.employeeName, row.company, row.department, row.jobTitle, row.employmentStartDate, row.managerName,
     row.reviewYear, row.eligible === null ? "Unknown" : row.eligible,
     row.reviewTriggered, row.triggeredBy, row.triggeredDate,
     row.employeeCompleted, row.employeeCompletionDate, row.managerCompleted,
@@ -49,7 +49,7 @@ function reportCells(row: AnnualReviewReportRow): (string | number | boolean | n
 }
 
 const HEADERS = [
-  "Employee", "Company", "Department", "Job title", "Manager", "Review year",
+  "Employee", "Company", "Department", "Job title", "Employment start date", "Manager", "Review year",
   "Eligible", "Review triggered", "Triggered by", "Date triggered",
   "Employee completed", "Employee completion date", "Manager completed",
   "Manager completion date", "Due date", "Status", "Employee record",
@@ -136,7 +136,7 @@ export default function AnnualReviewReport() {
 
   return <section className={styles.report} aria-label="Annual review report">
     <div className={styles.heading}>
-      <div><h2>Annual Review Report</h2><p>All employees, review activity and submission dates from People Hub.</p></div>
+      <div><h2>Annual Review Report</h2><p>Review status, start dates and submission activity for employees you can access.</p></div>
       <div className={styles.actions}>
         <button type="button" onClick={refresh} disabled={loading} aria-label="Refresh annual review report"><RefreshCw size={16} aria-hidden="true" /> Refresh</button>
         <button type="button" disabled={loading || !report} onClick={downloadCsv}><Download size={16} aria-hidden="true" /> Export CSV</button>
@@ -187,7 +187,7 @@ export default function AnnualReviewReport() {
       <div className={styles.tableScroll}>
         <table className={styles.table}>
           <thead><tr>
-            <th scope="col">Employee</th><th scope="col">Company</th><th scope="col">Department</th>
+            <th scope="col">Employee</th><th scope="col">Start date</th><th scope="col">Company</th><th scope="col">Department</th>
             <th scope="col">Manager</th><th scope="col">Triggered?</th><th scope="col">Triggered by</th>
             <th scope="col">Date triggered</th><th scope="col">Employee completed?</th>
             <th scope="col">Employee date</th><th scope="col">Manager completed?</th>
@@ -195,7 +195,7 @@ export default function AnnualReviewReport() {
           </tr></thead>
           <tbody>{filteredRows.map(row => <tr key={row.employeeId}>
             <th scope="row">{row.employeeName}{!row.employeeActive ? <small>Inactive</small> : null}</th>
-            <td>{row.company}</td><td>{row.department || "—"}</td><td>{row.managerName || "—"}</td>
+            <td>{dateText(row.employmentStartDate)}</td><td>{row.company}</td><td>{row.department || "—"}</td><td>{row.managerName || "—"}</td>
             <td>{row.reviewTriggered ? "Yes" : "No"}</td><td>{row.triggeredBy || "—"}</td>
             <td>{dateText(row.triggeredDate)}</td><td>{row.employeeCompleted ? "Yes" : "No"}</td>
             <td>{dateText(row.employeeCompletionDate)}</td><td>{row.managerCompleted ? "Yes" : "No"}</td>
