@@ -19,16 +19,16 @@ function claimedPayload(raw: unknown, reviewId: string | null) {
   const p = closed(row.payload, ["event", "eventKey", "reviewId", "reviewCode", "cycle", "dueDate", "recipient", "employeeName", "managerName", ...(hasCc ? ["cc"] : [])]);
   const cc = hasCc ? p.cc : "";
   const recipients = typeof p.recipient === "string" ? p.recipient.split(",") : [];
-  const expectedCc = p.event === "manager-invited" || recipients.includes("careers@mobilityaccess.com.au") ? "" : "careers@mobilityaccess.com.au";
+  const expectedCc = p.event === "manager-invited" || p.event === "manager-completed" || recipients.includes("careers@mobilityaccess.com.au") ? "" : "careers@mobilityaccess.com.au";
   const name = (v: unknown) => typeof v === "string" && v.trim().length > 0 && v.length <= 8000 && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffe\uffff]/.test(v);
   if (!performanceMailUuid(row.delivery_id) || !performanceMailUuid(row.review_id) || !performanceMailUuid(row.claim_token)
     || (reviewId !== null && row.review_id !== reviewId) || p.reviewId !== row.review_id
-    || !["started", "self-submitted", "manager-invited"].includes(p.event as string) || p.eventKey !== `performance-review:${row.review_id}:${p.event}`
+    || !["started", "self-submitted", "manager-invited", "manager-completed"].includes(p.event as string) || p.eventKey !== `performance-review:${row.review_id}:${p.event}`
     || typeof p.reviewCode !== "string" || !/^PR-[0-9]{4}-[1-9][0-9]*$/.test(p.reviewCode)
     || typeof p.cycle !== "string" || !/^[0-9]{4}$/.test(p.cycle)
     || typeof p.dueDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(p.dueDate)
-    || ((hasCc || p.event === "manager-invited") && cc !== expectedCc)
-    || (p.event === "manager-invited" && (!hasCc || recipients.includes("careers@mobilityaccess.com.au")))
+    || ((hasCc || (p.event === "manager-invited" || p.event === "manager-completed")) && cc !== expectedCc)
+    || (p.event === "manager-invited" && (!hasCc || recipients.includes("careers@mobilityaccess.com.au"))) || (p.event === "manager-completed" && (!hasCc || p.recipient !== "careers@mobilityaccess.com.au"))
     || !name(p.employeeName) || !name(p.managerName) || typeof p.recipient !== "string"
     || recipients.length !== (p.event === "manager-invited" ? 2 : 1)
     || p.recipient !== [...new Set(recipients)].sort().join(",")
